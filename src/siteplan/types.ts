@@ -43,8 +43,9 @@ export type LineKind = 'wall' | 'fence' | 'edging';
 export interface LineItem extends ItemBase {
   kind: LineKind;
   catalogId: string;
+  /** A closed run repeats its first point as its last. */
   points: Vec2[];
-  /** Height in meters. Edging ignores it. */
+  /** Height in meters, up to 6.5 for walls and 3.5 for fences. Edging ignores it. */
   height: number;
 }
 

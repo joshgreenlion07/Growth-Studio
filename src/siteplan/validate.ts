@@ -28,11 +28,16 @@ function vec(v: unknown): Vec2 | null {
   return null;
 }
 
-function pts(v: unknown, min: number): Vec2[] | null {
+/**
+ * A list of points. Polygons close themselves, so a repeated closing point is
+ * dropped. For a line (`closedRun`) it is kept: a wall, fence or curb whose
+ * last point repeats the first is a closed run, and the repeat is what draws
+ * the closing segment.
+ */
+function pts(v: unknown, min: number, closedRun = false): Vec2[] | null {
   if (!Array.isArray(v)) return null;
   const out = v.map(vec).filter((p): p is Vec2 => p !== null);
-  // Drop a repeated closing point.
-  if (out.length > 2) {
+  if (out.length > 2 && !closedRun) {
     const a = out[0], b = out[out.length - 1];
     if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) out.pop();
   }
@@ -162,7 +167,7 @@ export function cleanPlan(input: unknown): CleanResult {
   }
 
   for (const it of arr(o.lines)) {
-    const points = pts(it.points, 2);
+    const points = pts(it.points, 2, true);
     if (!points) continue;
     const kind = it.kind === 'fence' || it.kind === 'edging' ? it.kind : 'wall';
     const use = kind;
@@ -170,7 +175,8 @@ export function cleanPlan(input: unknown): CleanResult {
     const l: LineItem = {
       ...base(it, kind), kind, points,
       catalogId: pickMaterial(it.catalogId, use, fallback, warnings, 'Line material'),
-      height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, 3.5),
+      // Retaining walls run up to 20 ft (6.1 m); fences and curbs stay under 3.5 m.
+      height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : 3.5),
     };
     plan.lines.push(l);
   }

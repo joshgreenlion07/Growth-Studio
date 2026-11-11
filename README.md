@@ -37,6 +37,47 @@ npm run build:artifact   # dist/growth-studio.html and dist/index.html
 ANTHROPIC_API_KEY=... npm run server   # dist/ plus plan reading at /api/read-plan
 ```
 
+## Embedding
+Another page can show the 3D view in an iframe and send it a plan. Area
+Planner does this.
+
+Open the built page with `?embed=1` (for example
+`https://<host>/index.html?embed=1`). Embed mode shows only the 3D scene, its
+control dock and a Save image button, and fills the frame. It starts with an
+empty yard and the note "Draw areas in the Design tab to see them here" until
+a plan with at least one area, line or water item arrives.
+
+Messages use `window.postMessage`:
+
+| Direction | Message |
+| --- | --- |
+| Studio to parent, once it has started | `{ source: 'growth-studio', type: 'ready' }` |
+| Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit }` |
+| Studio to parent, after each plan it applies | `{ source: 'growth-studio', type: 'built', ok: true }` or `{ source: 'growth-studio', type: 'built', ok: false, message }` |
+
+- `plan` is SitePlan JSON (`src/siteplan/types.ts`), in meters. It is cleaned
+  by `cleanPlan` first, so missing fields get defaults. When the cleanup
+  changed or dropped something, the `built` reply also carries
+  `warnings: string[]`. `site.streetEdge` and `structures` can be left out.
+- `name` is used for the saved image's file name.
+- `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
+  camera where it is as long as `site.boundary` is unchanged. If the boundary
+  changed, the view is re-framed anyway, so nobody is left looking at bare
+  ground. The first plan is always framed.
+- Messages that arrive within 150 ms of each other are applied as one
+  rebuild, using the newest plan. Each rebuild gets one `built` reply.
+- Wait for `ready` before sending. It is sent to any parent (`'*'`) and holds
+  no private data. `built` goes only to the origin that sent the plan.
+- A wall, fence or curb drawn as a closed shape is a line whose last point
+  repeats its first. Walls can be up to 6.5 m tall.
+- Plans are accepted only from the iframe's parent, and only from the origins
+  listed in `EMBED_ALLOWED_PARENT_ORIGINS` in `src/app/main.ts`: local
+  development (`http://localhost:*`, `http://127.0.0.1:*`),
+  `https://area-planner*.vercel.app`, and `https://greenlionlandscape.com` and
+  its subdomains. Anything else is ignored silently.
+- If the iframe has a `sandbox` attribute, it needs `allow-scripts`, and
+  `allow-downloads` for Save image.
+
 ## Next steps
 1. Replace the starter catalog with Green Lion's plant list (names, container
    sizes, mature sizes) and the paver and wall lines it installs.
