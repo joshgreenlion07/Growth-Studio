@@ -234,9 +234,11 @@ function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, h
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
       if (hole) {
-        const cx = area.minX + ((area.maxX - area.minX) * (i + 0.5)) / nx;
-        const cz = area.minY + ((area.maxY - area.minY) * (j + 0.5)) / ny;
-        if (cx > hole.minX && cx < hole.maxX && cz > hole.minY && cz < hole.maxY) continue;
+        // Leave out only cells that sit fully inside the hole. Cells that straddle its
+        // edge stay, so no gap opens between this mesh and the one that fills the hole.
+        const x0 = area.minX + ((area.maxX - area.minX) * i) / nx, x1 = area.minX + ((area.maxX - area.minX) * (i + 1)) / nx;
+        const z0 = area.minY + ((area.maxY - area.minY) * j) / ny, z1 = area.minY + ((area.maxY - area.minY) * (j + 1)) / ny;
+        if (x0 >= hole.minX && x1 <= hole.maxX && z0 >= hole.minY && z1 <= hole.maxY) continue;
       }
       const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
       idx.push(a, c, b, b, c, d);
@@ -343,6 +345,8 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 
   const ring = new THREE.Mesh(gridGeometry(far, 2.0, gm.height, area), surroundMat);
   ring.receiveShadow = true;
   ring.name = 'surround-ground';
+  // The ring tucks a few millimeters under the site ground where the two overlap.
+  ring.position.y = -0.004;
   group.add(ring);
 
   return {

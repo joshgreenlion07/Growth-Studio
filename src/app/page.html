@@ -167,7 +167,21 @@ textarea { width: 100%; min-height: 70px; border: 1px solid var(--line); backgro
   .actions .btn-optional { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Embed mode (?embed=1): another page shows the studio in an iframe and sends it a plan.
+   Only the 3D scene and its control dock are shown, and they fill the frame. */
+html.embed header.top, html.embed #mobile-tabs, html.embed aside.plan-pane { display: none !important; }
+html.embed body { overflow: hidden; }
+html.embed .app { height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+html.embed .app > .body { display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+html.embed main.work { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+html.embed section.scene-pane { display: grid !important; position: fixed; inset: 0; height: auto; min-height: 0; }
+html.embed .dock { max-height: 50vh; overflow: auto; }
+.dock-end { margin-left: auto; }
+#embed-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; pointer-events: none; }
+#embed-note p { margin: 0; max-width: 34em; padding: 10px 16px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; text-align: center; }
 </style>
+<script>if (/[?&]embed=1(?:&|$)/.test(location.search)) document.documentElement.classList.add('embed');</script>
 
 <div class="app">
   <header class="top">
@@ -224,6 +238,7 @@ textarea { width: 100%; min-height: 70px; border: 1px solid var(--line); backgro
           <div id="loading">Building the yard…</div>
           <div id="scene-error" hidden></div>
           <div id="views" aria-label="Camera views"></div>
+          <div id="embed-note" role="status" hidden><p></p></div>
           <div id="updating" hidden>Updating 3D…</div>
         </div>
         <div class="dock">

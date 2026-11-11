@@ -44,7 +44,14 @@ const claude = (window as unknown as { claude?: Claude }).claude;
 /* ------------------------------------------------------------------ */
 /* App state                                                           */
 
-let plan: SitePlan = SAMPLES[0].make();
+/** Embed mode (`?embed=1`): the 3D view alone, in an iframe, fed a plan by the parent page. */
+const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+if (EMBED) document.documentElement.classList.add('embed');
+
+/** Embed mode starts with a bare lot, so no sample yard flashes before the parent's plan arrives. */
+const emptyYard = () => cleanPlan({ site: { name: 'Yard', boundary: [[0, 0], [18, 0], [18, 14], [0, 14]] } }).plan;
+
+let plan: SitePlan = EMBED ? emptyYard() : SAMPLES[0].make();
 let planName = plan.site.name;
 const history: string[] = [];
 let future: string[] = [];
@@ -53,7 +60,7 @@ let editor: PlanEditor;
 let rebuildTimer = 0;
 let sample: SampleFn | null = null;
 let downloads: Downloads | null = null;
-let isSample = true;
+let isSample = !EMBED;
 
 function snapshot() {
   history.push(JSON.stringify(plan));
@@ -95,7 +102,9 @@ function bootStudio() {
     studio = new Studio(host);
   } catch (e) {
     $('#scene-error').hidden = false;
-    $('#scene-error').textContent = 'This browser could not start 3D (WebGL). The plan view still works. Try Chrome or Edge on a computer for the full 3D view.';
+    $('#scene-error').textContent = EMBED
+      ? 'This browser could not start 3D (WebGL). Try Chrome or Edge on a computer for the 3D view.'
+      : 'This browser could not start 3D (WebGL). The plan view still works. Try Chrome or Edge on a computer for the full 3D view.';
     console.error(e);
     return;
   }
@@ -378,7 +387,7 @@ function renderInspector() {
     const l = plan.lines.find((x) => x.id === sel.id)!;
     box.append(h('h3', { text: l.kind === 'fence' ? 'Fence' : l.kind === 'wall' ? 'Wall' : 'Curb or edging' }), confirmAI(l) ?? '');
     box.append(field('Style', selectEl('l-mat', matOptions(l.kind), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
-    if (l.kind !== 'edging') box.append(field('Height', numInput('l-h', ft(l.height), 0.25, 0.5, 10, (v) => { snapshot(); l.height = toM(v); changed(); })));
+    if (l.kind !== 'edging') box.append(field('Height', numInput('l-h', ft(l.height), 0.25, 0.5, l.kind === 'wall' ? 21 : 10, (v) => { snapshot(); l.height = toM(v); changed(); })));
     box.append(h('p', { class: 'muted', text: `${Math.round(ft(polylineLength(l.points)))} linear ft` }), del);
     return;
   }
@@ -642,12 +651,140 @@ function setMood(m: Mood) {
 
 function setYears(y: number) {
   studio?.setYears(y);
-  editor.years = y;
-  editor.draw();
+  if (!EMBED) {
+    editor.years = y;
+    editor.draw();
+  }
   $<HTMLInputElement>('#growth').value = String(y);
   $('#growth-out').textContent = y === 0 ? 'At install' : y >= 10 ? '10 years' : `${+y.toFixed(1)} year${y === 1 ? '' : 's'}`;
   document.querySelectorAll<HTMLButtonElement>('#growth-steps button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.y! === y)));
-  if (editor.selected?.list === 'plants') renderInspector();
+  if (!EMBED && editor.selected?.list === 'plants') renderInspector();
+}
+
+/** The scene controls under the 3D view. Used by the full app and by embed mode. */
+function initDock() {
+  // Growth.
+  const growth = $<HTMLInputElement>('#growth');
+  growth.addEventListener('input', () => setYears(+growth.value));
+  document.querySelectorAll<HTMLButtonElement>('#growth-steps button').forEach((b) => b.addEventListener('click', () => setYears(+b.dataset.y!)));
+
+  // Light.
+  const moods = $('#moods');
+  for (const m of MOODS) {
+    const b = h('button', { type: 'button', 'data-mood': m.id, text: m.label });
+    b.addEventListener('click', () => setMood(m.id));
+    moods.append(b);
+  }
+  const month = $<HTMLSelectElement>('#month');
+  month.addEventListener('change', () => studio?.setDate(new Date(new Date().getFullYear(), +month.value, 21)));
+
+  // Camera and quality.
+  $<HTMLSelectElement>('#quality').addEventListener('change', (e) => studio?.setQuality((e.target as HTMLSelectElement).value as Quality));
+  $<HTMLInputElement>('#dof').addEventListener('change', (e) => studio?.setLens({ dof: (e.target as HTMLInputElement).checked }));
+  $<HTMLInputElement>('#fstop').addEventListener('input', (e) => studio?.setLens({ fStop: +(e.target as HTMLInputElement).value }));
+  $<HTMLInputElement>('#wind').addEventListener('input', (e) => studio?.setWind(+(e.target as HTMLInputElement).value));
+  $<HTMLInputElement>('#motion').addEventListener('change', (e) => studio?.setMotion((e.target as HTMLInputElement).checked));
+
+  $('#btn-image').addEventListener('click', exportImage);
+}
+
+/* ------------------------------------------------------------------ */
+/* Embed mode                                                           */
+
+/**
+ * Pages allowed to send a plan to the embedded studio (matched against the
+ * full `event.origin` of each message). Messages from anywhere else are
+ * ignored silently. Add a line here when Area Planner gets a new home.
+ */
+const EMBED_ALLOWED_PARENT_ORIGINS: RegExp[] = [
+  /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, // local development, any port
+  /^https:\/\/area-planner-beta\.vercel\.app$/, // Area Planner beta
+  /^https:\/\/area-planner[a-z0-9-]*\.vercel\.app$/, // Area Planner production and preview deployments
+  /^https:\/\/([a-z0-9-]+\.)*greenlionlandscape\.com$/, // Green Lion's own site and subdomains
+];
+
+const EMBED_EMPTY_NOTE = 'Draw areas in the Design tab to see them here';
+/** Messages that arrive closer together than this are applied as one rebuild. */
+const EMBED_DEBOUNCE_MS = 150;
+
+let embedPending: { plan: unknown; name: string; refit: boolean } | null = null;
+let embedTimer = 0;
+let embedOrigin = '';
+let embedBooted = false;
+let embedBuilt = false;
+
+function embedNote(text: string | null) {
+  const box = $('#embed-note');
+  box.hidden = !text;
+  $('p', box).textContent = text ?? '';
+}
+
+function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] } = {}) {
+  if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'built', ok, ...extra }, embedOrigin);
+}
+
+function onEmbedMessage(e: MessageEvent) {
+  if (e.source !== window.parent || !EMBED_ALLOWED_PARENT_ORIGINS.some((re) => re.test(e.origin))) return;
+  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown } | null;
+  if (!d || typeof d !== 'object' || d.source !== 'area-planner' || d.type !== 'siteplan') return;
+  embedOrigin = e.origin;
+  // Keep only the newest plan. A refit asked for by any message in the burst still happens.
+  embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit };
+  clearTimeout(embedTimer);
+  if (studio) $('#updating').hidden = false;
+  embedTimer = window.setTimeout(applyEmbedPlan, EMBED_DEBOUNCE_MS);
+}
+
+function applyEmbedPlan() {
+  // A plan that arrives before the studio has started waits for it.
+  if (!embedBooted || !embedPending) return;
+  const next = embedPending;
+  embedPending = null;
+  $('#updating').hidden = true;
+  if (!studio) return embedReply(false, { message: 'This browser could not start 3D (WebGL).' });
+  if (!next.plan || typeof next.plan !== 'object') return embedReply(false, { message: 'The message did not include a plan.' });
+  try {
+    const res = cleanPlan(next.plan);
+    // Without a refit the camera stays put, but only while the lot outline is the same.
+    // The parent's origin moves with what is drawn, so a new outline means every
+    // coordinate may have shifted and the old camera could be looking at bare ground.
+    const sameLot = JSON.stringify(res.plan.site.boundary) === JSON.stringify(plan.site.boundary);
+    plan = res.plan;
+    planName = next.name.trim().slice(0, 80) || plan.site.name;
+    studio.setPlan(plan, embedBuilt && !next.refit && sameLot);
+    embedBuilt = true;
+    embedNote(plan.zones.length + plan.lines.length + plan.water.length ? null : EMBED_EMPTY_NOTE);
+    embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
+  } catch (e) {
+    console.error(e);
+    embedNote('This plan could not be shown in 3D.');
+    embedReply(false, { message: 'The plan could not be built in 3D.' });
+  }
+}
+
+function initEmbed() {
+  initDock();
+  // Save image is the one top-bar action kept; it moves into the dock.
+  $('.dock').append(h('div', { class: 'dock-group dock-end' }, $('#btn-image')));
+  embedNote(EMBED_EMPTY_NOTE);
+  window.addEventListener('message', onEmbedMessage);
+
+  const boot = () => {
+    if (embedBooted) return;
+    bootStudio();
+    setYears(3);
+    setMood('afternoon');
+    embedBooted = true;
+    // Tell the parent it can send a plan. Nothing private is in this message.
+    window.parent.postMessage({ source: 'growth-studio', type: 'ready' }, '*');
+    applyEmbedPlan();
+  };
+  // The timer covers a frame that is not being painted yet (a hidden tab or panel).
+  requestAnimationFrame(boot);
+  window.setTimeout(boot, 400);
+
+  if (claude?.use) claude.use('downloads').then((d) => { downloads = (d as Downloads) ?? null; }).catch(() => {});
+  (window as unknown as { __gs: unknown }).__gs = { get studio() { return studio; }, get plan() { return plan; } };
 }
 
 function init() {
@@ -713,27 +850,7 @@ function init() {
   document.querySelectorAll<HTMLButtonElement>('#tools [data-tool]').forEach((b) => b.addEventListener('click', () => setToolKey(b.dataset.tool as ToolKey)));
   setToolKey('select');
 
-  // Growth.
-  const growth = $<HTMLInputElement>('#growth');
-  growth.addEventListener('input', () => setYears(+growth.value));
-  document.querySelectorAll<HTMLButtonElement>('#growth-steps button').forEach((b) => b.addEventListener('click', () => setYears(+b.dataset.y!)));
-
-  // Light.
-  const moods = $('#moods');
-  for (const m of MOODS) {
-    const b = h('button', { type: 'button', 'data-mood': m.id, text: m.label });
-    b.addEventListener('click', () => setMood(m.id));
-    moods.append(b);
-  }
-  const month = $<HTMLSelectElement>('#month');
-  month.addEventListener('change', () => studio?.setDate(new Date(new Date().getFullYear(), +month.value, 21)));
-
-  // Camera and quality.
-  $<HTMLSelectElement>('#quality').addEventListener('change', (e) => studio?.setQuality((e.target as HTMLSelectElement).value as Quality));
-  $<HTMLInputElement>('#dof').addEventListener('change', (e) => studio?.setLens({ dof: (e.target as HTMLInputElement).checked }));
-  $<HTMLInputElement>('#fstop').addEventListener('input', (e) => studio?.setLens({ fStop: +(e.target as HTMLInputElement).value }));
-  $<HTMLInputElement>('#wind').addEventListener('input', (e) => studio?.setWind(+(e.target as HTMLInputElement).value));
-  $<HTMLInputElement>('#motion').addEventListener('change', (e) => studio?.setMotion((e.target as HTMLInputElement).checked));
+  initDock();
 
   // Underlay.
   $<HTMLInputElement>('#underlay-on').addEventListener('change', (e) => {
@@ -748,7 +865,6 @@ function init() {
   // Top bar.
   $<HTMLInputElement>('#project-name').addEventListener('change', (e) => { planName = (e.target as HTMLInputElement).value; plan.site.name = planName; });
   $('#btn-read').addEventListener('click', openDialog);
-  $('#btn-image').addEventListener('click', exportImage);
   $('#btn-save').addEventListener('click', () => saveFile(`${slug(planName)}.siteplan.json`, JSON.stringify(plan, null, 2)));
   const openInput = $<HTMLInputElement>('#open-file');
   $('#btn-open').addEventListener('click', () => openInput.click());
@@ -843,4 +959,5 @@ function init() {
   void clone;
 }
 
-init();
+if (EMBED) initEmbed();
+else init();

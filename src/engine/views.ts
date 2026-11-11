@@ -20,7 +20,7 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
   const B = plan.site.boundary;
   const b = bounds(B);
   const c = centroid(B);
-  const R = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 2;
+  let R = Math.max(b.maxX - b.minX, b.maxY - b.minY) / 2;
   const views: CameraView[] = [];
   const street = streetFrame(plan);
   const house = plan.structures.find((s) => s.kind === 'house');
@@ -28,6 +28,8 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
   // The open yard: where people will stand. If a house is on the lot, the
   // yard center is the lot center pushed away from the house.
   let yard: Vec2 = c;
+  /** What the top-down view is centered on. */
+  let top: Vec2 = c;
   if (house) {
     const hc = centroid(house.polygon);
     const d: Vec2 = [c[0] - hc[0], c[1] - hc[1]];
@@ -43,6 +45,28 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
     const l = Math.hypot(...d) || 1;
     from = [d[0] / l, d[1] / l];
   } else if (street) from = street.out;
+  else {
+    // A plan drawn on its own, with no house or street to orient by: look from the bottom
+    // of the plan so left and right match the drawing, and frame what was drawn, not the whole lot.
+    from = [0, -1];
+    const drawn: Vec2[] = [
+      ...plan.zones.flatMap((z) => z.polygon),
+      ...plan.lines.flatMap((l) => l.points),
+      ...plan.water.flatMap((w) => w.polygon ?? w.points ?? []),
+      ...plan.features.map((f) => f.position),
+      ...plan.plants.map((p) => p.position),
+    ];
+    if (drawn.length) {
+      const d = bounds(drawn);
+      yard = [(d.minX + d.maxX) / 2, (d.minY + d.maxY) / 2];
+      top = yard;
+      // Wide enough that the corner nearest the overview camera stays in the picture.
+      R = Math.max(Math.hypot(d.maxX - d.minX, d.maxY - d.minY) * 0.85, 3);
+    }
+    // Stand far enough back that the overview clears the tallest wall or fence.
+    const tallest = Math.max(0, ...plan.lines.filter((l) => l.kind !== 'edging').map((l) => l.height));
+    R = Math.max(R, (tallest - 0.5) / 0.8);
+  }
 
   const side: Vec2 = [-from[1], from[0]];
   views.push({
@@ -116,6 +140,6 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
   }
 
   views.push({ id: 'low', label: 'Ground level', eye: V(yard[0] + from[0] * R * 0.75, 0.55, yard[1] + from[1] * R * 0.75), target: V(yard[0] - from[0] * R, 1.0, yard[1] - from[1] * R), fov: 58 });
-  views.push({ id: 'plan', label: 'Top down', eye: V(c[0], R * 2.6 + 6, c[1] + 0.01), target: V(c[0], 0, c[1]), fov: 45 });
+  views.push({ id: 'plan', label: 'Top down', eye: V(top[0], R * 2.6 + 6, top[1] + 0.01), target: V(top[0], 0, top[1]), fov: 45 });
   return views;
 }
