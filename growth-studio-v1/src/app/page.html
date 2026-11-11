@@ -1,0 +1,313 @@
+<title>Growth Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a site-plan workbench. Plan and inspector on the left, the 3D scene fills the rest,
+   with one solid control dock along its bottom edge. */
+:root {
+  --paper: #f2f0eb;
+  --panel: #fbfaf7;
+  --ink: #1e2621;
+  --ink-2: #5a625c;
+  --line: #d8d4cb;
+  --accent: #2f5b3b;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ece4;
+  --warn: #a8670f;
+  --warn-soft: #f7ead3;
+  --danger: #9d2f25;
+  --scene: #c9d4dc;
+  --font-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --plan-paper: #f7f6f2;
+  --plan-grid: #e7e4dd;
+  --plan-ink: #2b332d;
+  --plan-ink-2: #8b8f86;
+  --plan-accent: #2f5b3b;
+  --plan-warn: #c27a10;
+  --plan-water: #5d97b0;
+  --plan-select: #1f6fd1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #141816; --panel: #1b201d; --ink: #e8ebe7; --ink-2: #a2aaa3; --line: #323a35;
+    --accent: #86b892; --accent-ink: #10150f; --accent-soft: #24332a; --warn: #e3a64b; --warn-soft: #3a2f1c; --danger: #e2786b; --scene: #222a2e;
+    --plan-paper: #1a1f1c; --plan-grid: #262d29; --plan-ink: #dfe4de; --plan-ink-2: #7f877f; --plan-accent: #86b892; --plan-warn: #e3a64b; --plan-water: #6aa8c2; --plan-select: #6aa7ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #141816; --panel: #1b201d; --ink: #e8ebe7; --ink-2: #a2aaa3; --line: #323a35;
+  --accent: #86b892; --accent-ink: #10150f; --accent-soft: #24332a; --warn: #e3a64b; --warn-soft: #3a2f1c; --danger: #e2786b; --scene: #222a2e;
+  --plan-paper: #1a1f1c; --plan-grid: #262d29; --plan-ink: #dfe4de; --plan-ink-2: #7f877f; --plan-accent: #86b892; --plan-warn: #e3a64b; --plan-water: #6aa8c2; --plan-select: #6aa7ff;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.4 var(--font-ui); overflow: hidden; }
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--plan-select); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+.app > .body { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+header.top {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.brand { display: flex; flex-direction: column; line-height: 1.05; margin-right: 6px; }
+.brand b { font-weight: 700; letter-spacing: 0.01em; font-size: 15px; }
+.brand span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-2); }
+.project { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 260px; }
+#project-name { min-width: 0; flex: 1; border: 1px solid transparent; background: transparent; padding: 5px 7px; border-radius: 4px; font-weight: 600; }
+#project-name:hover, #project-name:focus { border-color: var(--line); background: var(--paper); }
+.badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 6px; border: 1px solid var(--warn); color: var(--warn); border-radius: 3px; white-space: nowrap; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 6px 11px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn-primary:hover { border-color: var(--ink); }
+.btn-small { padding: 3px 8px; font-size: 13px; }
+.btn-danger { color: var(--danger); }
+select { border: 1px solid var(--line); background: var(--panel); padding: 5px 6px; border-radius: 4px; max-width: 100%; }
+
+main.work { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; min-height: 0; }
+aside.plan-pane { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--panel); min-height: 0; }
+aside.plan-pane > * { flex: 0 0 auto; }
+#tools { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+#tools button { border: 1px solid var(--line); background: transparent; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 13px; }
+#tools button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+#tool-options { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--paper); flex-wrap: wrap; }
+#tool-options select { flex: 1 1 140px; }
+#plan { position: relative; flex: 1 1 auto !important; min-height: 220px; overflow: hidden; }
+.plan-canvas { display: block; touch-action: none; }
+#plan-status { font-size: 12px; color: var(--ink-2); padding: 6px 10px; border-top: 1px solid var(--line); min-height: 2.6em; }
+.row { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
+.row input[type="number"] { width: 6em; }
+#inspector { max-height: 40%; min-height: 110px; overflow: auto; padding: 10px 12px 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+#inspector h3 { margin: 0; font-size: 15px; }
+.field { display: grid; gap: 3px; }
+.field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+.field-hint { font-size: 12px; color: var(--ink-2); }
+.field input[type="text"] { border: 1px solid var(--line); background: var(--paper); padding: 5px 7px; border-radius: 4px; }
+.num { display: inline-flex; align-items: center; gap: 6px; }
+.num input { width: 7em; border: 1px solid var(--line); background: var(--paper); padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.unit { font-size: 12px; color: var(--ink-2); font-family: var(--font-mono); }
+.check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.muted { color: var(--ink-2); font-size: 13px; margin: 0; }
+.ai-note { margin: 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 13px; display: grid; gap: 6px; justify-items: start; }
+.ai-note p { margin: 0; }
+.ai-note.is-low { border-left-color: var(--warn); background: var(--warn-soft); }
+table.mini { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
+table.mini th, table.mini td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+table.mini th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 500; }
+.num-cell { font-family: var(--font-mono); text-align: right !important; }
+
+section.scene-pane { position: relative; min-width: 0; min-height: 0; background: var(--scene); display: grid; grid-template-rows: 1fr auto; }
+#scene { position: relative; min-height: 0; overflow: hidden; }
+#views { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+.view-btn { pointer-events: auto; border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; }
+.view-btn:hover, .view-btn[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
+#updating { position: absolute; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
+#loading, #scene-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); padding: 24px; text-align: center; }
+#scene-error { background: var(--paper); }
+.dock { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: flex-end; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
+.dock-group { display: grid; gap: 5px; min-width: 0; }
+.dock-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-2); display: flex; justify-content: space-between; gap: 10px; }
+.dock-label output { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; border-right: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.growth { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#growth { width: 170px; accent-color: var(--accent); }
+.cam { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.cam input[type="range"] { width: 90px; accent-color: var(--accent); }
+
+#mobile-tabs { display: none; }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel); padding: 9px 14px; border-radius: 4px; max-width: min(560px, calc(100% - 32px)); font-size: 13px; z-index: 20; }
+#toast[data-kind="warn"] { background: var(--warn); color: #1d1405; }
+
+dialog { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 0; width: min(720px, calc(100% - 24px)); max-height: calc(100% - 24px); }
+dialog::backdrop { background: rgba(10, 12, 11, 0.45); }
+.dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.dlg-head h2 { margin: 0; font-size: 17px; }
+.dlg-body { padding: 14px 16px; display: grid; gap: 12px; overflow: auto; }
+.dlg-foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+#read-drop { border: 1.5px dashed var(--line); border-radius: 6px; padding: 18px; text-align: center; display: grid; gap: 6px; justify-items: center; }
+#read-drop.is-over { border-color: var(--accent); background: var(--accent-soft); }
+#read-preview-wrap { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+#read-preview { display: block; width: 100%; }
+.kinds { display: flex; gap: 16px; flex-wrap: wrap; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+textarea { width: 100%; min-height: 70px; border: 1px solid var(--line); background: var(--paper); padding: 6px 8px; border-radius: 4px; resize: vertical; }
+#read-status { min-height: 1.4em; color: var(--ink-2); font-size: 13px; margin: 0; flex: 1 1 200px; }
+.plant-tables { display: grid; gap: 16px; }
+.plant-tables h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100%; }
+  .app > .body { display: block; }
+  main.work { grid-template-columns: 1fr; }
+  #mobile-tabs { display: flex; padding: 6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); gap: 6px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  #mobile-tabs button { flex: 1; border: 1px solid var(--line); background: transparent; padding: 7px; border-radius: 4px; }
+  #mobile-tabs button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+  body[data-pane="plan"] .scene-pane { display: none; }
+  body:not([data-pane="plan"]) .plan-pane { display: none; }
+  aside.plan-pane { border-right: 0; }
+  #plan { height: 60vh; }
+  #inspector { max-height: none; }
+  section.scene-pane { height: calc(100vh - 150px); min-height: 420px; }
+  .actions .btn-optional { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><b>Green Lion</b><span>Growth Studio</span></div>
+    <div class="project">
+      <input id="project-name" type="text" aria-label="Project name">
+      <span id="sample-badge" class="badge">Sample</span>
+    </div>
+    <div class="actions">
+      <select id="sample-select" aria-label="Open a sample yard"><option value="" disabled selected>Samples</option></select>
+      <button id="btn-new" class="btn btn-optional" type="button">New</button>
+      <button id="btn-open" class="btn btn-optional" type="button">Open</button>
+      <button id="btn-save" class="btn" type="button">Save plan</button>
+      <button id="btn-undo" class="btn btn-optional" type="button" title="Undo (Ctrl+Z)">Undo</button>
+      <button id="btn-plantlist" class="btn" type="button">Plant list</button>
+      <button id="btn-image" class="btn" type="button">Save image</button>
+      <button id="btn-read" class="btn btn-primary" type="button">Read a plan or photo</button>
+      <input id="open-file" type="file" accept=".json,application/json" hidden>
+    </div>
+  </header>
+  <div class="body">
+    <nav id="mobile-tabs" aria-label="Switch view">
+      <button type="button" data-pane="scene" aria-pressed="true">3D view</button>
+      <button type="button" data-pane="plan" aria-pressed="false">Plan</button>
+    </nav>
+    <main class="work">
+      <aside class="plan-pane" aria-label="Plan">
+        <div id="tools" role="toolbar" aria-label="Plan tools">
+          <button type="button" data-tool="select">Select</button>
+          <button type="button" data-tool="area">Area</button>
+          <button type="button" data-tool="line">Fence, wall, curb</button>
+          <button type="button" data-tool="water">Water</button>
+          <button type="button" data-tool="plant">Plant</button>
+          <button type="button" data-tool="feature">Feature</button>
+          <button type="button" data-tool="boundary">Property line</button>
+          <button type="button" data-tool="scale">Scale</button>
+        </div>
+        <div id="tool-options" hidden></div>
+        <div id="plan"></div>
+        <div id="plan-status"></div>
+        <div id="underlay-row" class="row" hidden>
+          <label class="check"><input id="underlay-on" type="checkbox" checked> Show plan image</label>
+          <input id="underlay-op" type="range" min="0.1" max="1" step="0.05" value="0.55" aria-label="Plan image opacity">
+        </div>
+        <div id="scale-row" class="row" hidden>
+          <span>That line is</span>
+          <span class="num"><input id="scale-ft" type="number" min="0.5" step="0.5" inputmode="decimal" aria-label="Length in feet"><span class="unit">ft</span></span>
+          <button id="scale-apply" class="btn btn-small" type="button">Set scale</button>
+        </div>
+        <div id="inspector" aria-live="polite"></div>
+      </aside>
+      <section class="scene-pane" aria-label="3D view">
+        <div id="scene">
+          <div id="loading">Building the yard…</div>
+          <div id="scene-error" hidden></div>
+          <div id="views" aria-label="Camera views"></div>
+          <div id="updating" hidden>Updating 3D…</div>
+        </div>
+        <div class="dock">
+          <div class="dock-group">
+            <div class="dock-label"><span>Growth</span><output id="growth-out">3 years</output></div>
+            <div class="growth">
+              <div class="seg" id="growth-steps" role="group" aria-label="Plant age">
+                <button type="button" data-y="0">Install</button>
+                <button type="button" data-y="1">1 yr</button>
+                <button type="button" data-y="3">3 yr</button>
+                <button type="button" data-y="5">5 yr</button>
+                <button type="button" data-y="10">10 yr</button>
+              </div>
+              <input id="growth" type="range" min="0" max="10" step="0.25" value="3" aria-label="Years after install">
+            </div>
+          </div>
+          <div class="dock-group">
+            <div class="dock-label"><span>Light</span></div>
+            <div class="growth">
+              <div class="seg" id="moods" role="group" aria-label="Time of day"></div>
+              <select id="month" aria-label="Month">
+                <option value="2">March</option><option value="5" selected>June</option><option value="8">September</option><option value="11">December</option>
+              </select>
+            </div>
+          </div>
+          <div class="dock-group">
+            <div class="dock-label"><span>Camera</span></div>
+            <div class="cam">
+              <label class="check"><input id="dof" type="checkbox" checked> Focus blur</label>
+              <label class="check">f/<input id="fstop" type="range" min="1.4" max="16" step="0.1" value="4" aria-label="Aperture"></label>
+              <label class="check">Wind <input id="wind" type="range" min="0" max="1.5" step="0.05" value="0.55" aria-label="Wind"></label>
+              <label class="check"><input id="motion" type="checkbox" checked> Motion</label>
+              <select id="quality" aria-label="Render quality">
+                <option value="draft">Draft</option><option value="balanced" selected>Balanced</option><option value="max">Maximum</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<dialog id="read-dialog" aria-labelledby="read-title">
+  <div class="dlg-head"><h2 id="read-title">Read a plan or photo</h2><button class="btn btn-small" type="button" data-close>Close</button></div>
+  <div class="dlg-body">
+    <div id="read-drop">
+      <strong>Drop a blueprint or yard photo here</strong>
+      <span class="muted">PDF, JPG or PNG. For a PDF, the first page is used.</span>
+      <label class="btn">Choose a file<input id="read-file" type="file" accept="image/*,application/pdf" hidden></label>
+    </div>
+    <div id="read-preview-wrap" hidden><img id="read-preview" alt="The uploaded plan"></div>
+    <div class="kinds" role="radiogroup" aria-label="What is it">
+      <label class="check"><input type="radio" name="read-kind" value="blueprint" checked> Landscape plan or blueprint</label>
+      <label class="check"><input type="radio" name="read-kind" value="photo"> Photo of the yard</label>
+    </div>
+    <div class="two">
+      <label class="field"><span class="field-label">Lot width (optional)</span><span class="num"><input id="read-w" type="number" min="1" step="1" inputmode="decimal"><span class="unit">ft</span></span></label>
+      <label class="field"><span class="field-label">Lot depth (optional)</span><span class="num"><input id="read-d" type="number" min="1" step="1" inputmode="decimal"><span class="unit">ft</span></span></label>
+    </div>
+    <label class="field"><span class="field-label">Notes for the reader</span><textarea id="read-notes" placeholder="For example: back yard only. Patio is gray pavers with a charcoal border. Plants along the fence are Italian cypress."></textarea></label>
+    <p id="read-ai-note" class="ai-note is-low" hidden>Reading plans automatically uses Claude and works when this page is open in the Claude app. Here you can still lay the image under the plan and trace it.</p>
+  </div>
+  <div class="dlg-foot">
+    <p id="read-status" aria-live="polite"></p>
+    <button id="read-stop" class="btn" type="button" hidden>Stop</button>
+    <button id="read-trace" class="btn" type="button" disabled>Trace it by hand</button>
+    <button id="read-go" class="btn btn-primary" type="button" disabled>Read the plan</button>
+  </div>
+</dialog>
+
+<dialog id="plant-dialog" aria-labelledby="plant-title">
+  <div class="dlg-head"><h2 id="plant-title">Plant and material list</h2><button class="btn btn-small" type="button" data-close>Close</button></div>
+  <div class="dlg-body plant-tables">
+    <div>
+      <h3>Plants · <span id="plant-total"></span></h3>
+      <table class="mini"><thead><tr><th>Plant</th><th class="num-cell">Qty</th><th>Size</th><th class="num-cell">At 5 yr (H × W)</th></tr></thead><tbody id="plant-list-body"></tbody></table>
+    </div>
+    <div>
+      <h3>Surfaces and lines</h3>
+      <table class="mini"><thead><tr><th>Material</th><th class="num-cell">Amount</th></tr></thead><tbody id="material-list-body"></tbody></table>
+    </div>
+    <p class="muted">Quantities come from the plan as drawn. Plant sizes are typical starting values until Green Lion's own plant list is loaded.</p>
+  </div>
+</dialog>
+
+<div id="toast" role="status" hidden></div>

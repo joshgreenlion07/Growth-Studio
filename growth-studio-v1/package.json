@@ -1,0 +1,28 @@
+{
+  "name": "green-lion-growth-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Green Lion Growth Studio: turn a landscape plan or yard photo into a 3D scene of the finished install, with plants growing from install to 5 years.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "build:artifact": "node scripts/build-artifact.mjs",
+    "check": "tsc --noEmit",
+    "server": "node server/read-plan-server.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.2.108",
+    "three": "0.186.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "0.71.0",
+    "@types/three": "0.185.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.1"
+  }
+}

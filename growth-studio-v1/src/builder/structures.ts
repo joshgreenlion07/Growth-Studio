@@ -1,0 +1,223 @@
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { centroid, pointInPolygon } from '../siteplan/geometry';
+import type { ExistingStructure, Vec2 } from '../siteplan/types';
+import { roofTile, stucco } from '../engine/textures';
+import { pbrMaterial, plainMaterial, segmentBox } from './materials';
+import { slab } from './hardscape';
+
+/** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. */
+
+export interface StructureBuild {
+  object: THREE.Group;
+  surfaces: THREE.Mesh[];
+  /** Window glass materials, lit at night. */
+  glass: THREE.MeshStandardMaterial[];
+  /** Porch light positions for night lighting. */
+  porchLights: THREE.Vector3[];
+  dispose(): void;
+}
+
+/** Oriented rectangle if the polygon is (close to) one. */
+function asRect(poly: Vec2[]): { c: Vec2; ax: Vec2; w: number; d: number } | null {
+  if (poly.length !== 4) return null;
+  const e = (i: number): Vec2 => [poly[(i + 1) % 4][0] - poly[i][0], poly[(i + 1) % 4][1] - poly[i][1]];
+  for (let i = 0; i < 4; i++) {
+    const a = e(i), b = e((i + 1) % 4);
+    const cos = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b));
+    if (Math.abs(cos) > 0.05) return null;
+  }
+  const a = e(0), b = e(1);
+  const la = Math.hypot(...a), lb = Math.hypot(...b);
+  const c = centroid(poly);
+  return la >= lb ? { c, ax: [a[0] / la, a[1] / la], w: la, d: lb } : { c, ax: [b[0] / lb, b[1] / lb], w: lb, d: la };
+}
+
+/** Hip roof over an oriented rectangle, UVs in meters along the slope. */
+function hipRoof(r: { c: Vec2; ax: Vec2; w: number; d: number }, y: number, overhang: number, pitch: number): THREE.BufferGeometry {
+  const W = r.w / 2 + overhang, D = r.d / 2 + overhang;
+  const rise = D * pitch;
+  const ridge = Math.max(0, W - D);
+  const P = (u: number, v: number, h: number) => new THREE.Vector3(r.c[0] + r.ax[0] * u - r.ax[1] * v, y + h, r.c[1] + r.ax[1] * u + r.ax[0] * v);
+  const e = [P(-W, -D, 0), P(W, -D, 0), P(W, D, 0), P(-W, D, 0)];
+  const k = [P(-ridge, 0, rise), P(ridge, 0, rise)];
+  const pos: number[] = [], uv: number[] = [];
+  const slope = Math.hypot(D, rise);
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, ua: [number, number], ub: [number, number], uc: [number, number]) => {
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    uv.push(...ua, ...ub, ...uc);
+  };
+  // Long faces (two triangles each), short faces (one triangle each).
+  tri(e[0], k[0], e[1], [0, 0], [W - ridge, slope], [2 * W, 0]);
+  tri(e[1], k[0], k[1], [2 * W, 0], [W - ridge, slope], [W + ridge, slope]);
+  tri(e[2], k[1], e[3], [0, 0], [W - ridge, slope], [2 * W, 0]);
+  tri(e[3], k[1], k[0], [2 * W, 0], [W - ridge, slope], [W + ridge, slope]);
+  const sl2 = Math.hypot(W - ridge, rise);
+  tri(e[1], k[1], e[2], [0, 0], [D, sl2], [2 * D, 0]);
+  tri(e[3], k[0], e[0], [0, 0], [D, sl2], [2 * D, 0]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  // Make every face point up.
+  const n = g.getAttribute('normal');
+  if (n.getY(0) < 0) {
+    const p = g.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i += 3) {
+      const x = p.getX(i + 1), yy = p.getY(i + 1), z = p.getZ(i + 1);
+      p.setXYZ(i + 1, p.getX(i + 2), p.getY(i + 2), p.getZ(i + 2));
+      p.setXYZ(i + 2, x, yy, z);
+      const uvA = g.getAttribute('uv') as THREE.BufferAttribute;
+      const u1 = uvA.getX(i + 1), v1 = uvA.getY(i + 1);
+      uvA.setXY(i + 1, uvA.getX(i + 2), uvA.getY(i + 2));
+      uvA.setXY(i + 2, u1, v1);
+    }
+    g.computeVertexNormals();
+  }
+  return g;
+}
+
+/** Window positions along each wall: every ~3.4 m, skipping the corners. */
+function openings(poly: Vec2[]): { a: Vec2; dir: Vec2; out: Vec2; len: number; edge: number }[] {
+  const out: { a: Vec2; dir: Vec2; out: Vec2; len: number; edge: number }[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const dir: Vec2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    // Outward normal: whichever side of the wall's midpoint is outside.
+    let o: Vec2 = [dir[1], -dir[0]];
+    const mid: Vec2 = [(a[0] + b[0]) / 2 + o[0] * 0.05, (a[1] + b[1]) / 2 + o[1] * 0.05];
+    if (pointInPolygon(mid, poly)) o = [-o[0], -o[1]];
+    out.push({ a, dir, out: o, len, edge: i });
+  }
+  return out;
+}
+
+export function buildStructures(structures: ExistingStructure[], siteCenter: Vec2): StructureBuild {
+  const group = new THREE.Group();
+  group.name = 'structures';
+  const surfaces: THREE.Mesh[] = [];
+  const glassMats: THREE.MeshStandardMaterial[] = [];
+  const porchLights: THREE.Vector3[] = [];
+  const geos: THREE.BufferGeometry[] = [];
+  const wallMat = pbrMaterial('stucco', stucco());
+  const roofMat = pbrMaterial('roof', roofTile());
+  const trimMat = plainMaterial('trim', { color: '#ece8e0', roughness: 0.6 });
+  const frameMat = plainMaterial('frame', { color: '#2d2c2a', roughness: 0.5, metalness: 0.3 });
+  const glass = new THREE.MeshStandardMaterial({ color: '#1b2226', roughness: 0.04, metalness: 0.0, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb46a'), emissiveIntensity: 0 });
+  glassMats.push(glass);
+
+  for (const s of structures) {
+    const poly = s.polygon;
+    const H = s.height;
+    const walls = slab(poly, -0.1, H, 0);
+    geos.push(walls);
+    const wm = new THREE.Mesh(walls, wallMat);
+    wm.castShadow = true;
+    wm.receiveShadow = true;
+    wm.userData.itemId = s.id;
+    group.add(wm);
+    surfaces.push(wm);
+
+    // Roof.
+    const rect = asRect(poly);
+    let roof: THREE.BufferGeometry;
+    if (rect && s.roof === 'hip') roof = hipRoof(rect, H, 0.55, s.kind === 'shed' ? 0.4 : 0.36);
+    else roof = slab(poly, H, H + 0.25, 0);
+    geos.push(roof);
+    const rm = new THREE.Mesh(roof, s.roof === 'hip' && rect ? roofMat : trimMat);
+    rm.castShadow = true;
+    rm.receiveShadow = true;
+    group.add(rm);
+    if (rect && s.roof === 'hip') {
+      // Fascia and soffit.
+      const W = rect.w / 2 + 0.55, D = rect.d / 2 + 0.55;
+      const P = (u: number, v: number): Vec2 => [rect.c[0] + rect.ax[0] * u - rect.ax[1] * v, rect.c[1] + rect.ax[1] * u + rect.ax[0] * v];
+      const ring = [P(-W, -D), P(W, -D), P(W, D), P(-W, D)];
+      const fascia: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < 4; i++) fascia.push(segmentBox(ring[i], ring[(i + 1) % 4], 0.05, H - 0.2, H + 0.02, 0.03));
+      const soffit = slab(ring, H - 0.2, H - 0.18, 0);
+      fascia.push(soffit.toNonIndexed());
+      const fg = mergeGeometries(fascia.map((g) => g.toNonIndexed()), false);
+      if (fg) {
+        geos.push(fg);
+        const fm = new THREE.Mesh(fg, trimMat);
+        fm.castShadow = true;
+        group.add(fm);
+      }
+    }
+
+    // Windows and a sliding door on the wall facing the yard.
+    const sides = openings(poly);
+    let doorEdge = -1, best = -Infinity;
+    sides.forEach((sd, i) => {
+      const mid: Vec2 = [sd.a[0] + sd.dir[0] * sd.len / 2, sd.a[1] + sd.dir[1] * sd.len / 2];
+      const toSite: Vec2 = [siteCenter[0] - mid[0], siteCenter[1] - mid[1]];
+      const score = (toSite[0] * sd.out[0] + toSite[1] * sd.out[1]) + sd.len * 0.1;
+      if (score > best) {
+        best = score;
+        doorEdge = i;
+      }
+    });
+    const frames: THREE.BufferGeometry[] = [];
+    const panes: THREE.BufferGeometry[] = [];
+    for (const sd of sides) {
+      if (s.kind === 'shed' && sd.edge !== doorEdge) continue;
+      const n = Math.max(1, Math.floor((sd.len - 1.2) / 3.4));
+      const slots: { t: number; w: number; h0: number; h1: number }[] = [];
+      if (sd.edge === doorEdge) {
+        slots.push({ t: sd.len / 2, w: s.kind === 'house' ? 2.4 : 1.0, h0: 0.02, h1: 2.1 });
+        for (const d of [-1, 1]) {
+          const lp: Vec2 = [sd.a[0] + sd.dir[0] * (sd.len / 2 + d * 1.6) + sd.out[0] * 0.08, sd.a[1] + sd.dir[1] * (sd.len / 2 + d * 1.6) + sd.out[1] * 0.08];
+          porchLights.push(new THREE.Vector3(lp[0], 2.0, lp[1]));
+        }
+        for (let k = 0; k < n; k++) {
+          const t = ((k + 0.5) / n) * sd.len;
+          if (Math.abs(t - sd.len / 2) > 2.2) slots.push({ t, w: 1.5, h0: 0.95, h1: 2.15 });
+        }
+      } else if (s.kind === 'house') {
+        for (let k = 0; k < n; k++) slots.push({ t: ((k + 0.5) / n) * sd.len, w: 1.4, h0: 0.95, h1: 2.15 });
+      }
+      for (const sl of slots) {
+        const p0: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t - sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t - sl.w / 2)];
+        const p1: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t + sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t + sl.w / 2)];
+        const off = (p: Vec2, d: number): Vec2 => [p[0] + sd.out[0] * d, p[1] + sd.out[1] * d];
+        panes.push(segmentBox(off(p0, 0.01), off(p1, 0.01), 0.02, sl.h0, sl.h1));
+        // Frame: four bars plus a center mullion.
+        const bar = 0.06;
+        frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h1 - bar, sl.h1, bar));
+        frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h0, sl.h0 + bar, bar));
+        const mid: Vec2 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
+        for (const q of [p0, mid, p1]) {
+          const qa: Vec2 = [q[0] - sd.dir[0] * bar / 2, q[1] - sd.dir[1] * bar / 2];
+          const qb: Vec2 = [q[0] + sd.dir[0] * bar / 2, q[1] + sd.dir[1] * bar / 2];
+          frames.push(segmentBox(off(qa, 0.04), off(qb, 0.04), 0.06, sl.h0, sl.h1));
+        }
+        if (sl.h0 > 0.5) frames.push(segmentBox(off(p0, 0.06), off(p1, 0.06), 0.1, sl.h0 - 0.05, sl.h0, 0.08));
+      }
+    }
+    const fg = mergeGeometries(frames, false);
+    if (fg) {
+      geos.push(fg);
+      const fm = new THREE.Mesh(fg, frameMat);
+      fm.castShadow = true;
+      group.add(fm);
+    }
+    const pg = mergeGeometries(panes, false);
+    if (pg) {
+      geos.push(pg);
+      group.add(new THREE.Mesh(pg, glass));
+    }
+  }
+
+  return {
+    object: group,
+    surfaces,
+    glass: glassMats,
+    porchLights,
+    dispose() {
+      for (const g of geos) g.dispose();
+      glass.dispose();
+    },
+  };
+}
