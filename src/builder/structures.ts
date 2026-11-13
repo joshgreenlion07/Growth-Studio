@@ -104,7 +104,6 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
   const roofMat = pbrMaterial('roof', roofTile());
   const trimMat = plainMaterial('trim', { color: '#ece8e0', roughness: 0.6 });
   const frameMat = plainMaterial('frame', { color: '#2d2c2a', roughness: 0.5, metalness: 0.3 });
-  const coverMat = plainMaterial('coverRoof', { color: '#a79f92', roughness: 0.9 });
   const doorMat = plainMaterial('door', { color: '#4a3524', roughness: 0.55 });
   const glass = new THREE.MeshStandardMaterial({ color: '#1b2226', roughness: 0.04, metalness: 0.0, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb46a'), emissiveIntensity: 0 });
   glassMats.push(glass);
@@ -151,10 +150,10 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         group.add(pm);
         surfaces.push(pm);
       }
-      // The roof deck is a muted tan so it does not glare in full sun; the beams keep the house trim color.
+      // The roof deck is tiled like the house roof; the beams keep the house trim color.
       const roofGeo = slab(poly, H, H + 0.16, 0);
       geos.push(roofGeo);
-      const deck = new THREE.Mesh(roofGeo, coverMat);
+      const deck = new THREE.Mesh(roofGeo, roofMat);
       deck.castShadow = true;
       deck.receiveShadow = true;
       deck.userData.itemId = s.id;
@@ -187,7 +186,8 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     if (rect && s.roof === 'hip') roof = hipRoof(rect, H, 0.55, s.kind === 'shed' ? 0.4 : 0.36);
     else roof = slab(poly, H, H + 0.25, 0);
     geos.push(roof);
-    const rm = new THREE.Mesh(roof, s.roof === 'hip' && rect ? roofMat : trimMat);
+    // Every roof is tiled, flat ones too: a pale flat roof glares in full sun and washes out the view.
+    const rm = new THREE.Mesh(roof, roofMat);
     rm.castShadow = true;
     rm.receiveShadow = true;
     group.add(rm);
