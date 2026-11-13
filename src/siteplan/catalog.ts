@@ -276,6 +276,8 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'border-charcoal', name: 'Charcoal soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#55534f', '#4a4845', '#3e3c3a'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
   M({ id: 'border-charcoal-wide', name: 'Charcoal border, 6x12', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#55534f', '#4a4845', '#3e3c3a'], pattern: { kind: 'soldier', sizes: [[6, 12]], joint: 0.15 }, thickness: 0.06 }),
   M({ id: 'border-tan', name: 'Tan soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#a8916f', '#97805f', '#86704f'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-gray', name: 'Gray soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#8f8c87', '#7c7a76', '#6a6865'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-light', name: 'Light soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#d6d0c4', '#c6bfb2', '#b3ab9e'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
   // Walls
   M({ id: 'wall-tan-charcoal-cap', name: 'Tan block, charcoal cap', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d2c3a4', '#c4b392', '#b5a383'], wall: { face: 'smoothBlock', cap: '#3d3d3d' } }),
   M({ id: 'wall-gray-block', name: 'Gray block, gray cap', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#a3a09a', '#8f8c87', '#7c7a76'], wall: { face: 'splitFace', cap: '#9c9a95' } }),
@@ -299,6 +301,90 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'curb-charcoal', name: 'Charcoal curb', use: 'edging', group: 'Edging', recipe: 'curb', palette: ['#55534f', '#4a4845'], matches: 'Belgard Melville curb style' }),
   M({ id: 'steel-edging', name: 'Steel edging', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#4a3a2e', '#3a2d24'] }),
 ];
+
+/* ------------------------------------------------------------------ */
+/* Belgard lines Green Lion installs                                    */
+/* ------------------------------------------------------------------ */
+/* Color names are Belgard's. The four colors per entry are averages read from Belgard's own swatch
+   thumbnails (lightest to darkest), so they are close, not exact; no Belgard image ships with the app.
+   Catalina Grana: 3-piece large set for the main course, and its 6 x 9 border piece for the edge. */
+type Blend = [string, string[]];
+const CATALINA_GRANA: Blend[] = [
+  ['Amaretto', ['#b89f88', '#ac937b', '#a38972', '#997e67']],
+  ['Anthracite', ['#5e5a59', '#555150', '#504c4b', '#4c4847']],
+  ['Aspen', ['#b8a083', '#b39c7f', '#af987b', '#a89074']],
+  ['Bella', ['#7f6e5e', '#7a695a', '#776657', '#6e6053']],
+  ['Brown Beige Charcoal', ['#92857e', '#877b74', '#80746e', '#786d67']],
+  ['Cream Tan Brown', ['#917c6a', '#897463', '#85705e', '#7f6a59']],
+  ['Gray Charcoal', ['#83827e', '#7b7a76', '#747370', '#6a6966']],
+  ['Gray Charcoal Tan', ['#867f77', '#817870', '#7d746b', '#766e67']],
+  ['Hickory', ['#7d7369', '#7b7066', '#796e64', '#766b62']],
+  ['Linen', ['#9e8e7d', '#998979', '#968676', '#928272']],
+  ['Midnight', ['#4c4b49', '#4a4947', '#484745', '#474644']],
+  ['Montecito', ['#a6906f', '#a18b69', '#9d8766', '#988261']],
+  ['Napoli', ['#ac998c', '#9f8c7e', '#958375', '#857468']],
+  ['Rainier', ['#7b6f63', '#766b60', '#73685d', '#70655b']],
+  ['Rio', ['#7e766c', '#776e65', '#736a61', '#6e655c']],
+  ['Riviera', ['#9c958b', '#938c83', '#8d867c', '#847d74']],
+  ['Scandina Gray', ['#bfbbb6', '#b2aea9', '#aca8a3', '#a3a09a']],
+  ['Sepia', ['#aa977f', '#a6927b', '#a48f78', '#a08b74']],
+  ['Shaded Gray', ['#8b8680', '#88837d', '#86817b', '#827d77']],
+  ['Sierra', ['#74625a', '#705f57', '#6e5d55', '#6a5952']],
+  ['Slate', ['#6d6966', '#676361', '#635f5d', '#5d5957']],
+  ['Sonoran Gray', ['#7a706c', '#716763', '#6d635f', '#675d5a']],
+  ['Tan Brown Charcoal', ['#837264', '#7c6c60', '#78685e', '#73645a']],
+  ['Tan Red Charcoal', ['#8d6d59', '#876754', '#846350', '#80604d']],
+  ['Titanium', ['#b2aea3', '#9d9a91', '#8e8c85', '#807f78']],
+  ['Toscana', ['#89735d', '#826d58', '#7d6954', '#776450']],
+  ['Victorian', ['#887a67', '#857663', '#827462', '#7b6e5d']],
+];
+const AB_CLASSIC: Blend[] = [
+  ['Brown Beige Charcoal', ['#8f7f74', '#807166', '#75675c', '#66594f']],
+  ['Buff', ['#8b7b67', '#847560', '#7f705b', '#776854']],
+  ['Charcoal', ['#6f675f', '#655d55', '#5e574e', '#544d45']],
+  ['Dakota Blend', ['#b29482', '#a48674', '#987b6a', '#856a5c']],
+  ['Danville Blend', ['#b09882', '#a28871', '#967d67', '#826c5a']],
+  ['Driftwood', ['#7f756a', '#776e63', '#72695e', '#675f55']],
+  ['Granite Gray', ['#74706b', '#64605b', '#595551', '#433f3b']],
+  ['Gray', ['#a1a2a3', '#989998', '#919393', '#85888a']],
+  ['Gray Charcoal Tan', ['#8f8473', '#7f7466', '#746a5d', '#635b50']],
+  ['Grey', ['#8d8d8b', '#838481', '#7d7d7a', '#727370']],
+  ['Mocha', ['#988774', '#8f7d6a', '#887664', '#7a6959']],
+  ['Pewter Blend', ['#b5b3a8', '#a19e95', '#8d8a83', '#74726c']],
+  ['Rocky Mountain', ['#89786a', '#6f5e53', '#5f4f44', '#47392f']],
+  ['Sable', ['#979289', '#827d75', '#716d66', '#58544d']],
+  ['Sable Blend', ['#979289', '#817c75', '#716c66', '#58544d']],
+  ['Silverado', ['#838382', '#797979', '#727273', '#68696a']],
+  ['Tan', ['#a28b74', '#947d65', '#89735d', '#7a654f']],
+  ['Tan Brown Charcoal', ['#948271', '#837363', '#77695a', '#66584c']],
+  ['Thunderhead', ['#9c9488', '#8d857b', '#837b72', '#746d64']],
+  ['Toccoa', ['#8e7e69', '#837562', '#786d60', '#6b6359']],
+];
+const EASTON_STONE: Blend[] = [
+  ['Amaretto', ['#d7bba1', '#ccaf96', '#bea38b', '#aa8d76']],
+  ['Anthracite', ['#605c58', '#5b5754', '#575350', '#4f4b48']],
+  ['Bella', ['#97816d', '#887665', '#7a6c60', '#675d56']],
+  ['Danville Beige', ['#a69485', '#a08d7e', '#9a8777', '#8e7b6d']],
+  ['Hickory', ['#80756a', '#786c61', '#72665c', '#695d52']],
+  ['Lueders Gray', ['#958e84', '#8c867d', '#868077', '#7e786f']],
+  ['Midnight', ['#6b6864', '#5f5b58', '#5a5653', '#54504d']],
+  ['Napoli', ['#a6978a', '#97897d', '#8e8175', '#7e736a']],
+  ['Rainier', ['#82776a', '#7b7063', '#766c60', '#6d6256']],
+  ['Rio', ['#92918a', '#888881', '#81817b', '#75756f']],
+  ['Shaded Gray', ['#807b74', '#7a746d', '#766f69', '#6c665f']],
+  ['Sierra', ['#8f7a6a', '#867264', '#816e60', '#796659']],
+  ['Slate', ['#a39f96', '#928e89', '#898580', '#7e7a77']],
+  ['Victorian', ['#9a8d78', '#928571', '#8d806d', '#786c5a']],
+];
+const slugOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const CATALINA_SIZES: [number, number][] = [[6, 12], [9, 12], [12, 12]];
+const BELGARD: MaterialSpec[] = [
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'textured' }, thickness: 0.06, matches: 'Belgard Catalina Grana' })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, matches: 'Belgard Catalina Grana' })),
+  ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic' })),
+  ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone' })),
+];
+MATERIALS.push(...BELGARD);
 
 /* ------------------------------------------------------------------ */
 /* Features                                                             */

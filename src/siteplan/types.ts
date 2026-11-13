@@ -31,7 +31,7 @@ export interface Zone extends ItemBase {
   /** Mass planting: fill this bed with one plant at a spacing (meters). */
   fill?: { catalogId: string; spacing: number };
   /** Hardscape: a soldier-course border band around the edge. */
-  border?: { catalogId: string; width: number };
+  border?: { catalogId: string; width: number; /** soldier (default): long side across the band. sailor: long side along the edge. */ course?: 'soldier' | 'sailor' };
   /** Small lights set into the border, every ~2.4 m. */
   borderLights?: boolean;
   /** Beds: a raised planter with walls of this material and height (m). */
@@ -47,6 +47,8 @@ export interface LineItem extends ItemBase {
   points: Vec2[];
   /** Height in meters, up to 6.5 for walls and 3.5 for fences. Edging ignores it. */
   height: number;
+  /** Walls: cap color. 'same' matches the block, 'midnight' is a dark charcoal cap. Left out, the block's own cap. */
+  cap?: 'same' | 'midnight';
 }
 
 export type WaterKind = 'pond' | 'pool' | 'fountain' | 'stream' | 'pondless';

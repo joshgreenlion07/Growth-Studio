@@ -51,7 +51,8 @@ Messages use `window.postMessage`:
 
 | Direction | Message |
 | --- | --- |
-| Studio to parent, once it has started | `{ source: 'growth-studio', type: 'ready' }` |
+| Studio to parent, once it has started | `{ source: 'growth-studio', type: 'ready', materials }` |
+| Studio to parent, when the scene is clicked | `{ source: 'growth-studio', type: 'select', id }` |
 | Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit }` |
 | Studio to parent, after each plan it applies | `{ source: 'growth-studio', type: 'built', ok: true }` or `{ source: 'growth-studio', type: 'built', ok: false, message }` |
 
@@ -64,6 +65,12 @@ Messages use `window.postMessage`:
   A structure of kind `cover` is a roofed patio on posts. A pool can carry
   `coping` (width in meters, 0 for none) and is cut out of any paving that
   fully surrounds it.
+- `materials` lists the paver, border and wall looks the parent can offer:
+  `{ id, name, use, line }[]`, where `line` is the product line it is modeled
+  on (for example "Belgard Catalina Grana"). `select` carries the id of the
+  plan item that was clicked, or `null` for bare ground.
+- A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
+  pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
