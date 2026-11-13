@@ -141,7 +141,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
           for (let j = 1; j < k; j++) post([a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k]);
         }
       }
-      const pg = mergeGeometries(parts, false);
+      const pg = parts.length ? mergeGeometries(parts, false) : null;
       if (pg) {
         geos.push(pg);
         const pm = new THREE.Mesh(pg, wallMat);
@@ -160,7 +160,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
       deck.userData.itemId = s.id;
       group.add(deck);
       surfaces.push(deck);
-      const bg = mergeGeometries(beams.map((g) => g.toNonIndexed()), false);
+      const bg = beams.length ? mergeGeometries(beams.map((g) => g.toNonIndexed()), false) : null;
       if (bg) {
         geos.push(bg);
         const bm = new THREE.Mesh(bg, trimMat);
@@ -228,7 +228,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     const marked = new Map<number, { t: number; w: number; h0: number; h1: number; solid?: boolean }[]>();
     let lit = false;
     for (const op of s.openings ?? []) {
-      let bestSide = -1, bd = 2.0, bt = 0;
+      let bestSide = -1, bd = 3.0, bt = 0;
       sides.forEach((sd, i) => {
         const t = Math.max(0, Math.min(sd.len, (op.at[0] - sd.a[0]) * sd.dir[0] + (op.at[1] - sd.a[1]) * sd.dir[1]));
         const d = Math.hypot(op.at[0] - sd.a[0] - sd.dir[0] * t, op.at[1] - sd.a[1] - sd.dir[1] * t);
@@ -293,19 +293,20 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         if (sl.h0 > 0.5) frames.push(segmentBox(off(p0, 0.06), off(p1, 0.06), 0.1, sl.h0 - 0.05, sl.h0, 0.08));
       }
     }
-    const fg = mergeGeometries(frames, false);
+    // A house can have only doors, only windows, or no openings at all: merge only what exists.
+    const fg = frames.length ? mergeGeometries(frames, false) : null;
     if (fg) {
       geos.push(fg);
       const fm = new THREE.Mesh(fg, frameMat);
       fm.castShadow = true;
       group.add(fm);
     }
-    const pg = mergeGeometries(panes, false);
+    const pg = panes.length ? mergeGeometries(panes, false) : null;
     if (pg) {
       geos.push(pg);
       group.add(new THREE.Mesh(pg, glass));
     }
-    const dg = mergeGeometries(doors, false);
+    const dg = doors.length ? mergeGeometries(doors, false) : null;
     if (dg) {
       geos.push(dg);
       group.add(new THREE.Mesh(dg, doorMat));
