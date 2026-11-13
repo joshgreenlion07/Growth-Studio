@@ -67,6 +67,8 @@ export interface WaterFeature extends ItemBase {
   falls?: number;
   /** Underwater lights at the falls, lit at dusk and night. */
   lights?: boolean;
+  /** Pool: coping width in meters. 0 means no coping. Left out, the pool gets the standard 0.25 m coping. */
+  coping?: number;
 }
 
 export interface PlantPlacement extends ItemBase {
@@ -84,12 +86,24 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
 }
 
+/** A door or window the designer marked on a wall. */
+export interface StructureOpening {
+  kind: 'door' | 'window';
+  /** Center of the opening, on or near a wall. It is moved onto the nearest wall. */
+  at: Vec2;
+  /** Width in meters. */
+  width: number;
+}
+
 export interface ExistingStructure extends ItemBase {
-  kind: 'house' | 'garage' | 'shed';
+  /** A cover is a roofed patio on posts (a California patio): no walls. */
+  kind: 'house' | 'garage' | 'shed' | 'cover';
   polygon: Vec2[];
-  /** Wall height in meters. */
+  /** Wall height in meters. For a cover, the height of the underside of the roof. */
   height: number;
   roof: 'hip' | 'flat';
+  /** Marked doors and windows. When present, no automatic ones are added. */
+  openings?: StructureOpening[];
 }
 
 export interface SiteInfo {

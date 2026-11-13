@@ -59,6 +59,11 @@ Messages use `window.postMessage`:
   by `cleanPlan` first, so missing fields get defaults. When the cleanup
   changed or dropped something, the `built` reply also carries
   `warnings: string[]`. `site.streetEdge` and `structures` can be left out.
+- Area Planner sends a drawn house as a `structures` item with `openings`
+  (the doors and windows marked on it; each is moved onto the nearest wall).
+  A structure of kind `cover` is a roofed patio on posts. A pool can carry
+  `coping` (width in meters, 0 for none) and is cut out of any paving that
+  fully surrounds it.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

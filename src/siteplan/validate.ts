@@ -134,12 +134,21 @@ export function cleanPlan(input: unknown): CleanResult {
   for (const it of arr(o.structures)) {
     const polygon = pts(it.polygon, 3);
     if (!polygon || area(polygon) < 2) continue;
-    const kind = it.kind === 'garage' || it.kind === 'shed' ? it.kind : 'house';
+    const kind = it.kind === 'garage' || it.kind === 'shed' || it.kind === 'cover' ? it.kind : 'house';
     const st: ExistingStructure = {
       ...base(it, kind), kind, polygon,
-      height: num(it.height, kind === 'shed' ? 2.4 : 3.0, 2, 9),
-      roof: it.roof === 'flat' ? 'flat' : 'hip',
+      height: num(it.height, kind === 'shed' ? 2.4 : kind === 'cover' ? 2.7 : 3.0, 2, 9),
+      roof: kind === 'cover' || it.roof === 'flat' ? 'flat' : 'hip',
     };
+    if (kind !== 'cover' && Array.isArray(it.openings)) {
+      st.openings = [];
+      for (const op of arr(it.openings).slice(0, 80)) {
+        const at = vec(op.at);
+        if (!at) continue;
+        const ok = op.kind === 'door' ? 'door' : 'window';
+        st.openings.push({ kind: ok, at, width: num(op.width, ok === 'door' ? 0.9 : 1.2, 0.3, 8) });
+      }
+    }
     plan.structures.push(st);
   }
 
@@ -198,6 +207,7 @@ export function cleanPlan(input: unknown): CleanResult {
       if (!polygon || area(polygon) < 0.2) continue;
       w.polygon = polygon;
       if (kind === 'pool' && it.ledge === true) w.ledge = true;
+      if (kind === 'pool' && it.coping !== undefined && it.coping !== null) w.coping = num(it.coping, 0.25, 0, 1);
     }
     plan.water.push(w);
   }

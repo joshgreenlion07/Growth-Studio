@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { centroid, pointInPolygon } from '../siteplan/geometry';
+import { centroid, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import type { ExistingStructure, Vec2 } from '../siteplan/types';
 import { roofTile, stucco } from '../engine/textures';
 import { pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { slab } from './hardscape';
 
-/** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. */
+/** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. Covers: a patio roof on posts. */
 
 export interface StructureBuild {
   object: THREE.Group;
@@ -104,12 +104,74 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
   const roofMat = pbrMaterial('roof', roofTile());
   const trimMat = plainMaterial('trim', { color: '#ece8e0', roughness: 0.6 });
   const frameMat = plainMaterial('frame', { color: '#2d2c2a', roughness: 0.5, metalness: 0.3 });
+  const coverMat = plainMaterial('coverRoof', { color: '#a79f92', roughness: 0.9 });
+  const doorMat = plainMaterial('door', { color: '#4a3524', roughness: 0.55 });
   const glass = new THREE.MeshStandardMaterial({ color: '#1b2226', roughness: 0.04, metalness: 0.0, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb46a'), emissiveIntensity: 0 });
   glassMats.push(glass);
 
+  const houses = structures.filter((x) => x.kind !== 'cover');
   for (const s of structures) {
     const poly = s.polygon;
     const H = s.height;
+    if (s.kind === 'cover') {
+      // A California patio: stucco columns at the corners away from the house, beams, and a solid flat roof.
+      const c = centroid(poly);
+      const free = poly.map((p) => !houses.some((h) => pointInPolygon(p, h.polygon) || distToEdge(p, h.polygon) < 0.45));
+      const allOpen = !free.some((f) => f);   // nothing free: treat every corner as a post corner
+      const isFree = (i: number) => allOpen || free[i];
+      const parts: THREE.BufferGeometry[] = [];
+      const beams: THREE.BufferGeometry[] = [];
+      const post = (p: Vec2) => {
+        const d: Vec2 = [c[0] - p[0], c[1] - p[1]];
+        const l = Math.hypot(d[0], d[1]) || 1;
+        const q: Vec2 = [p[0] + (d[0] / l) * 0.22, p[1] + (d[1] / l) * 0.22];
+        parts.push(segmentBox([q[0] - 0.15, q[1]], [q[0] + 0.15, q[1]], 0.3, -0.05, H - 0.26));
+      };
+      const n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const a = poly[i], b = poly[(i + 1) % n];
+        if (isFree(i)) post(a);
+        const openEdge = isFree(i) || isFree((i + 1) % n);
+        if (!openEdge) continue;
+        beams.push(segmentBox(a, b, 0.16, H - 0.28, H));
+        // Long open sides get a post about every 4 m.
+        if (isFree(i) && isFree((i + 1) % n)) {
+          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          const k = Math.ceil(len / 4.2);
+          for (let j = 1; j < k; j++) post([a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k]);
+        }
+      }
+      const pg = mergeGeometries(parts, false);
+      if (pg) {
+        geos.push(pg);
+        const pm = new THREE.Mesh(pg, wallMat);
+        pm.castShadow = true;
+        pm.receiveShadow = true;
+        pm.userData.itemId = s.id;
+        group.add(pm);
+        surfaces.push(pm);
+      }
+      // The roof deck is a muted tan so it does not glare in full sun; the beams keep the house trim color.
+      const roofGeo = slab(poly, H, H + 0.16, 0);
+      geos.push(roofGeo);
+      const deck = new THREE.Mesh(roofGeo, coverMat);
+      deck.castShadow = true;
+      deck.receiveShadow = true;
+      deck.userData.itemId = s.id;
+      group.add(deck);
+      surfaces.push(deck);
+      const bg = mergeGeometries(beams.map((g) => g.toNonIndexed()), false);
+      if (bg) {
+        geos.push(bg);
+        const bm = new THREE.Mesh(bg, trimMat);
+        bm.castShadow = true;
+        bm.receiveShadow = true;
+        bm.userData.itemId = s.id;
+        group.add(bm);
+        surfaces.push(bm);
+      }
+      continue;
+    }
     const walls = slab(poly, -0.1, H, 0);
     geos.push(walls);
     const wm = new THREE.Mesh(walls, wallMat);
@@ -161,11 +223,46 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     });
     const frames: THREE.BufferGeometry[] = [];
     const panes: THREE.BufferGeometry[] = [];
+    const doors: THREE.BufferGeometry[] = [];
+    // Doors and windows the designer marked: each goes on the wall nearest its mark.
+    const marked = new Map<number, { t: number; w: number; h0: number; h1: number; solid?: boolean }[]>();
+    let lit = false;
+    for (const op of s.openings ?? []) {
+      let bestSide = -1, bd = 2.0, bt = 0;
+      sides.forEach((sd, i) => {
+        const t = Math.max(0, Math.min(sd.len, (op.at[0] - sd.a[0]) * sd.dir[0] + (op.at[1] - sd.a[1]) * sd.dir[1]));
+        const d = Math.hypot(op.at[0] - sd.a[0] - sd.dir[0] * t, op.at[1] - sd.a[1] - sd.dir[1] * t);
+        if (d < bd) {
+          bd = d;
+          bestSide = i;
+          bt = t;
+        }
+      });
+      if (bestSide < 0) continue;
+      const sd = sides[bestSide];
+      const w = Math.min(op.width, sd.len - 0.3);
+      if (w < 0.3) continue;
+      const t = Math.max(w / 2 + 0.15, Math.min(sd.len - w / 2 - 0.15, bt));
+      const top = Math.min(2.15, H - 0.25);
+      const list = marked.get(bestSide) ?? [];
+      // A door up to 1.5 m wide is a solid door; wider ones are sliding glass.
+      list.push(op.kind === 'door' ? { t, w, h0: 0.02, h1: Math.min(2.1, top), solid: w <= 1.5 } : { t, w, h0: Math.min(0.95, top - 0.6), h1: top });
+      marked.set(bestSide, list);
+      if (op.kind === 'door' && !lit) {
+        lit = true;
+        for (const d of [-1, 1]) {
+          const lp: Vec2 = [sd.a[0] + sd.dir[0] * (t + d * (w / 2 + 0.4)) + sd.out[0] * 0.08, sd.a[1] + sd.dir[1] * (t + d * (w / 2 + 0.4)) + sd.out[1] * 0.08];
+          porchLights.push(new THREE.Vector3(lp[0], 2.0, lp[1]));
+        }
+      }
+    }
     for (const sd of sides) {
-      if (s.kind === 'shed' && sd.edge !== doorEdge) continue;
+      if (!s.openings && s.kind === 'shed' && sd.edge !== doorEdge) continue;
       const n = Math.max(1, Math.floor((sd.len - 1.2) / 3.4));
-      const slots: { t: number; w: number; h0: number; h1: number }[] = [];
-      if (sd.edge === doorEdge) {
+      const slots: { t: number; w: number; h0: number; h1: number; solid?: boolean }[] = [];
+      if (s.openings) {
+        slots.push(...(marked.get(sd.edge) ?? []));
+      } else if (sd.edge === doorEdge) {
         slots.push({ t: sd.len / 2, w: s.kind === 'house' ? 2.4 : 1.0, h0: 0.02, h1: 2.1 });
         for (const d of [-1, 1]) {
           const lp: Vec2 = [sd.a[0] + sd.dir[0] * (sd.len / 2 + d * 1.6) + sd.out[0] * 0.08, sd.a[1] + sd.dir[1] * (sd.len / 2 + d * 1.6) + sd.out[1] * 0.08];
@@ -182,13 +279,13 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         const p0: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t - sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t - sl.w / 2)];
         const p1: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t + sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t + sl.w / 2)];
         const off = (p: Vec2, d: number): Vec2 => [p[0] + sd.out[0] * d, p[1] + sd.out[1] * d];
-        panes.push(segmentBox(off(p0, 0.01), off(p1, 0.01), 0.02, sl.h0, sl.h1));
+        (sl.solid ? doors : panes).push(segmentBox(off(p0, 0.01), off(p1, 0.01), 0.02, sl.h0, sl.h1));
         // Frame: four bars plus a center mullion.
         const bar = 0.06;
         frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h1 - bar, sl.h1, bar));
         frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h0, sl.h0 + bar, bar));
         const mid: Vec2 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
-        for (const q of [p0, mid, p1]) {
+        for (const q of sl.solid ? [p0, p1] : [p0, mid, p1]) {
           const qa: Vec2 = [q[0] - sd.dir[0] * bar / 2, q[1] - sd.dir[1] * bar / 2];
           const qb: Vec2 = [q[0] + sd.dir[0] * bar / 2, q[1] + sd.dir[1] * bar / 2];
           frames.push(segmentBox(off(qa, 0.04), off(qb, 0.04), 0.06, sl.h0, sl.h1));
@@ -207,6 +304,11 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     if (pg) {
       geos.push(pg);
       group.add(new THREE.Mesh(pg, glass));
+    }
+    const dg = mergeGeometries(doors, false);
+    if (dg) {
+      geos.push(dg);
+      group.add(new THREE.Mesh(dg, doorMat));
     }
   }
 

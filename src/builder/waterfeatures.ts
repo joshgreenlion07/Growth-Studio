@@ -8,7 +8,7 @@ import { poolTile } from '../engine/textures';
 import { WATER_LEVEL, type GroundModel } from './ground';
 import { catalogMaterial, pbrMaterial, segmentBox } from './materials';
 import { rockField, type RockSpot } from './rocks';
-import { slab } from './hardscape';
+import { outsetPolygon, poolCoping, slab } from './hardscape';
 
 /** Ponds, streams, pools and fountains. */
 
@@ -252,11 +252,10 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
         m.receiveShadow = true;
         group.add(m);
       }
-      // Coping around the edge.
-      const coping: THREE.BufferGeometry[] = [];
-      for (let i = 0; i < poly.length; i++) coping.push(segmentBox(poly[i], poly[(i + 1) % poly.length], 0.5, -0.02, 0.06, 0.25));
-      const cop = mergeGeometries(coping, false);
-      if (cop) {
+      // Coping: a ring from just over the water's edge out to the coping width. A pool can have none.
+      const cw = poolCoping(w);
+      if (cw > 0.02) {
+        const cop = slab(outsetPolygon(poly, cw), -0.02, 0.085, 0.006, [poly]);
         geos.push(cop);
         const m = new THREE.Mesh(cop, catalogMaterial('concrete-smooth'));
         m.receiveShadow = true;
