@@ -12,6 +12,7 @@
  * `matches` names the manufacturer product line a surface is modeled after;
  * the app draws its own look-alike textures, not manufacturer images.
  */
+import { BELGARD_LINES } from './belgard';
 
 export type PlantForm =
   | 'shadeTree'
@@ -118,6 +119,14 @@ export interface MaterialSpec {
   thickness?: number;
   /** Manufacturer line this look is modeled on, if any. */
   matches?: string;
+  /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
+  maker?: string;
+  line?: string;
+  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb';
+  /** The color name alone, without the line name. */
+  color?: string;
+  /** A border made to go with a main-course color; not listed on its own. */
+  auto?: boolean;
   placeholder: true;
 }
 
@@ -379,10 +388,25 @@ const EASTON_STONE: Blend[] = [
 const slugOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const CATALINA_SIZES: [number, number][] = [[6, 12], [9, 12], [12, 12]];
 const BELGARD: MaterialSpec[] = [
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'textured' }, thickness: 0.06, matches: 'Belgard Catalina Grana' })),
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, matches: 'Belgard Catalina Grana' })),
-  ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic' })),
-  ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone' })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'textured' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `border-of-catalina-grana-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, matches: 'Belgard Catalina Grana', auto: n !== 'Midnight' })),
+  ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic', maker: 'Belgard', line: 'AB Classic', shelf: 'Retaining walls', color: n })),
+  ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone', maker: 'Belgard', line: 'Easton Stone', shelf: 'Garden walls', color: n })),
+  // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
+  ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette]): MaterialSpec[] => {
+    const id = `${L.slug}-${slugOf(n)}`;
+    const tags = { matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: L.shelf, color: n };
+    if (L.shelf === 'Pavers') {
+      const sizes = L.sizes ?? CATALINA_SIZES;
+      return [
+        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: sizes.length > 1 ? { kind: 'ashlar', sizes, joint: 0.2, face: 'textured' } : { kind: 'running', sizes, joint: 0.2, face: 'textured' }, thickness: 0.06, ...tags }),
+        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true }),
+      ];
+    }
+    if (L.shelf === 'Curb') return [M({ id, name: `${L.name}, ${n}`, use: 'edging', group: 'Edging', recipe: 'curb', palette: palette.slice(1, 3), ...tags })];
+    return [M({ id, name: `${L.name}, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, ...tags })];
+  })),
 ];
 MATERIALS.push(...BELGARD);
 

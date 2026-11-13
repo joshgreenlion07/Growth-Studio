@@ -66,8 +66,11 @@ Messages use `window.postMessage`:
   `coping` (width in meters, 0 for none) and is cut out of any paving that
   fully surrounds it.
 - `materials` lists the paver, border and wall looks the parent can offer:
-  `{ id, name, use, line }[]`, where `line` is the product line it is modeled
-  on (for example "Belgard Catalina Grana"). `select` carries the id of the
+  `{ id, name, use, maker, line, shelf, color, sw }[]`: who makes it, its
+  product line, the catalogue shelf it sits on (Pavers, Retaining walls,
+  Garden walls, Curb), the color name alone and one swatch color. Generic
+  looks have an empty `maker`. Each maker paver color also has a matching
+  border, `border-of-<id>`, which is not listed. `select` carries the id of the
   plan item that was clicked, or `null` for bare ground.
 - A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
   pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.

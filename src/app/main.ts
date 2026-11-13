@@ -779,7 +779,8 @@ function initEmbed() {
     embedBooted = true;
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
-    const looks = MATERIALS.filter((m) => (m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall').map((m) => ({ id: m.id, name: m.name, use: m.use, line: m.matches ?? '' }));
+    const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || (m.use === 'edging' && m.recipe === 'curb')))
+      .map((m) => ({ id: m.id, name: m.name, use: m.use, maker: m.maker ?? '', line: m.line ?? '', shelf: m.shelf ?? (m.use === 'wall' ? 'Retaining walls' : m.use === 'edging' ? 'Curb' : 'Pavers'), color: m.color ?? m.name, sw: m.palette[1] ?? m.palette[0] }));
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onPick = (id) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
     applyEmbedPlan();
