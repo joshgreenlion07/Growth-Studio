@@ -758,7 +758,9 @@ function applyEmbedPlan() {
   } catch (e) {
     console.error(e);
     embedNote('This plan could not be shown in 3D.');
-    embedReply(false, { message: 'The plan could not be built in 3D.' });
+    // Pass the reason along so the parent page can show what went wrong.
+    const why = e instanceof Error ? e.message : String(e);
+    embedReply(false, { message: `The plan could not be built in 3D (${why.slice(0, 160)}).` });
   }
 }
 
