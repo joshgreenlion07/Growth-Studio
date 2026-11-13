@@ -39,6 +39,18 @@ export function slab(poly: Vec2[], y0: number, y1: number, bevel = 0.008, holes:
   return g;
 }
 
+/** Grow a simple polygon outward by `d` meters (the mirror image of insetPolygon). */
+export function outsetPolygon(poly: Vec2[], d: number): Vec2[] {
+  if (!(d > 0)) return poly;
+  const inner = insetPolygon(poly, d);
+  return poly.map((p, i) => [2 * p[0] - inner[i][0], 2 * p[1] - inner[i][1]] as Vec2);
+}
+
+/** Pool width of coping in meters: the plan's own, or the standard 0.25 m. */
+export function poolCoping(w: { coping?: number }): number {
+  return w.coping === undefined ? 0.25 : Math.max(0, w.coping);
+}
+
 /** Inset a simple polygon by `d` meters (mitered corners, limited on sharp angles). */
 export function insetPolygon(poly: Vec2[], d: number): Vec2[] {
   const n = poly.length;
@@ -139,6 +151,9 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
   const geos: THREE.BufferGeometry[] = [];
   const lightGeo: THREE.BufferGeometry[] = [];
   const glowMat = new THREE.MeshStandardMaterial({ color: '#d8d3c8', emissive: new THREE.Color('#ffd49a'), emissiveIntensity: 0, roughness: 0.3, metalness: 0.4 });
+  // Pools sit on top of paving: each pool (with its coping) is cut out of any paving that surrounds it.
+  const poolCuts: Vec2[][] = [];
+  for (const w of plan.water) if (w.kind === 'pool' && w.polygon) poolCuts.push(outsetPolygon(w.polygon, poolCoping(w)));
 
   plan.zones.forEach((z: Zone, i) => {
     if (z.kind === 'hardscape') {
@@ -172,7 +187,8 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
           }
         }
       }
-      const g = slab(field, -0.06, t + 0.0005, bev);
+      const holes = poolCuts.filter((h) => h.every((p) => pointInPolygon(p, field)));
+      const g = slab(field, -0.06, t + 0.0005, bev, holes);
       geos.push(g);
       const mesh = new THREE.Mesh(g, catalogMaterial(z.catalogId));
       mesh.receiveShadow = true;
