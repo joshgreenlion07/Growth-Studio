@@ -97,7 +97,7 @@ function norm(v: Vec2): Vec2 {
  * Soldier-course border: one quad per edge with UVs running along the edge,
  * so the pavers stand perpendicular to every side of the patio.
  */
-function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number): THREE.BufferGeometry {
+function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false): THREE.BufferGeometry {
   const pos: number[] = [], uv: number[] = [], nor: number[] = [], idx: number[] = [];
   const n = outer.length;
   let along = 0;
@@ -113,7 +113,9 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number): TH
       nor.push(0, 1, 0);
       // u runs along the edge, v across the band: the soldier texture's
       // long side (v) points into the patio.
-      uv.push(along + alongOf(p), across(p));
+      // Sailor course: turn the texture a quarter so the pavers' long side runs along the edge.
+      if (sailor) uv.push(across(p), along + alongOf(p));
+      else uv.push(along + alongOf(p), across(p));
     }
     idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
     // Outer face down to the base.
@@ -122,7 +124,8 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number): TH
     for (const [p, yy] of [[a, y], [b, y], [b, y0], [a, y0]] as [Vec2, number][]) {
       pos.push(p[0], yy, p[1]);
       nor.push(nrm[0], 0, nrm[1]);
-      uv.push(along + alongOf(p), y - yy);
+      if (sailor) uv.push(y - yy, along + alongOf(p));
+      else uv.push(along + alongOf(p), y - yy);
     }
     idx.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
     along += len;
@@ -165,7 +168,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
         const w = Math.max(0.08, Math.min(0.6, z.border.width));
         const inner = insetPolygon(z.polygon, w);
         field = inner;
-        const bg = borderGeometry(z.polygon, inner, t, -0.06);
+        const bg = borderGeometry(z.polygon, inner, t, -0.06, z.border.course === 'sailor');
         geos.push(bg);
         const bm = new THREE.Mesh(bg, catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide }));
         bm.receiveShadow = true;
@@ -225,9 +228,12 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
 /* Raised planters and walls                                            */
 /* ------------------------------------------------------------------ */
 
-function capMaterial(wallId: string): THREE.MeshStandardMaterial {
+/** Midnight: the dark charcoal used for contrast caps and borders. */
+const MIDNIGHT = '#4a4947';
+
+function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshStandardMaterial {
   const spec = materialById.get(wallId);
-  const cap = spec?.wall?.cap ?? '#8f8c87';
+  const cap = choice === 'midnight' ? MIDNIGHT : choice === 'same' ? (spec?.palette[1] ?? spec?.palette[0] ?? '#8f8c87') : (spec?.wall?.cap ?? '#8f8c87');
   if (spec?.wall?.face === 'plaster') return catalogMaterial(wallId);
   return plainMaterial(`cap-${cap}`, { color: cap, roughness: 0.55 });
 }
@@ -338,7 +344,7 @@ function buildLine(l: LineItem, height: (p: Vec2) => number, geos: THREE.BufferG
       const face = spec?.wall?.face ?? 'splitFace';
       const thick = face === 'plaster' ? 0.25 : 0.3;
       put('wall', catalogMaterial(l.catalogId), segmentBox(a, b, thick, y0, l.height, thick / 2));
-      if (face !== 'plaster') put('cap', capMaterial(l.catalogId), segmentBox(a, b, thick + 0.07, l.height, l.height + 0.06, thick / 2 + 0.035));
+      if (face !== 'plaster') put('cap', capMaterial(l.catalogId, l.cap), segmentBox(a, b, thick + 0.07, l.height, l.height + 0.06, thick / 2 + 0.035));
       else put('cap', catalogMaterial(l.catalogId), segmentBox(a, b, thick + 0.04, l.height, l.height + 0.05, thick / 2 + 0.02));
     } else if (l.kind === 'fence') {
       fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);

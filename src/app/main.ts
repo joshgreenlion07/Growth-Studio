@@ -778,7 +778,10 @@ function initEmbed() {
     setMood('afternoon');
     embedBooted = true;
     // Tell the parent it can send a plan. Nothing private is in this message.
-    window.parent.postMessage({ source: 'growth-studio', type: 'ready' }, '*');
+    // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
+    const looks = MATERIALS.filter((m) => (m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall').map((m) => ({ id: m.id, name: m.name, use: m.use, line: m.matches ?? '' }));
+    window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
+    if (studio) studio.onPick = (id) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
     applyEmbedPlan();
   };
   // The timer covers a frame that is not being painted yet (a hidden tab or panel).

@@ -166,6 +166,7 @@ export function cleanPlan(input: unknown): CleanResult {
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };
+      if (bd.course === 'sailor') z.border.course = 'sailor';
       if (it.borderLights === true) z.borderLights = true;
     }
     const rs = it.raised as Record<string, unknown> | undefined;
@@ -187,6 +188,7 @@ export function cleanPlan(input: unknown): CleanResult {
       // Retaining walls run up to 20 ft (6.1 m); fences and curbs stay under 3.5 m.
       height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : 3.5),
     };
+    if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
     plan.lines.push(l);
   }
 

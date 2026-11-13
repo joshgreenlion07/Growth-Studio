@@ -62,6 +62,8 @@ export class Studio {
   state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: 'balanced', wind: 0.55, motion: true };
   onViewsChanged: (views: CameraView[]) => void = () => {};
   onFrameStats: (fps: number) => void = () => {};
+  /** A click (not a drag) on the scene: the id of the plan item under it, or null for bare ground. */
+  onPick: (id: string | null) => void = () => {};
   private fpsAcc = 0;
   private fpsN = 0;
 
@@ -116,7 +118,10 @@ export class Studio {
     let down: { x: number; y: number } | null = null;
     this.renderer.domElement.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
     this.renderer.domElement.addEventListener('pointerup', (e) => {
-      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) this.focusAt(e.clientX, e.clientY);
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
+        this.focusAt(e.clientX, e.clientY);
+        this.onPick(this.pickAt(e.clientX, e.clientY));
+      }
       down = null;
     });
 
@@ -321,6 +326,22 @@ export class Studio {
     if (!v) return;
     this.manualFocus = null;
     this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: performance.now(), dur: 1400 };
+  }
+
+  private pickAt(cx: number, cy: number): string | null {
+    if (!this.build) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    // Walls and curbs are not focus surfaces, so the hardscape group is tested as well. Only the
+    // nearest thing under the pointer counts: a click on the lawn must not pick a wall behind it.
+    const hard = this.build.root.getObjectByName('hardscape');
+    const hit = this.raycaster.intersectObjects(hard ? [...this.build.surfaces, hard] : this.build.surfaces, true)[0];
+    for (let o: THREE.Object3D | null = hit ? hit.object : null; o; o = o.parent) {
+      const id = o.userData?.itemId;
+      if (typeof id === 'string') return id;
+    }
+    return null;
   }
 
   private focusAt(cx: number, cy: number) {
