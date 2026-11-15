@@ -16,7 +16,12 @@ finished-work photos in `reference/green-lion-style/`.
   and the runtime that ties it together (`studio.ts`).
 - `src/builder/` — SitePlan to 3D: ground splat, turf, hardscape with borders,
   walls and fences, water features and waterfalls, structures, features,
-  procedural plants, and the neighborhood context.
+  procedural plants, and the neighborhood context. Every catalog plant has
+  its own builder file under `src/builder/species/<group>/<catalog-id>.ts`,
+  listed in `species/registry.ts` and built on the shared toolkit in
+  `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and
+  keeps a generic builder per plant form as the fallback for a new catalog
+  plant that has no file yet.
 - `src/app/` — the UI: page markup and styles (`page.html`), app logic
   (`main.ts`), the 2D plan editor (`planeditor.ts`), the plan reader prompt
   (`reader.ts`) and PDF import (`pdf.ts`).

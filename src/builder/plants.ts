@@ -5,18 +5,18 @@ import type { PlantPlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL, foliageDepthMaterial, growthUniforms, patchFoliage, type FoliageOptions, type GrowthUniforms } from '../engine/foliage';
 import { LEAF_CELL, aoDisc, bark, leafAtlas, leafCellUV } from '../engine/textures';
 import { GeoBuilder, card, tube } from './geobuilder';
+import type { SpeciesGeo, SpeciesLook } from './species/kit';
+import { SPECIES } from './species/registry';
 
 /**
  * Procedural plants. Each catalog plant becomes one geometry set at mature
  * size; every placement of it is an instance. Growth from install to
  * maturity happens in the vertex shader (see engine/foliage.ts).
+ *
+ * Each catalog plant has its own builder under species/ (see
+ * species/registry.ts). The form builders in this file are the fallback for
+ * a catalog plant that has no file of its own yet.
  */
-
-interface SpeciesGeo {
-  wood?: THREE.BufferGeometry;
-  leaves: THREE.BufferGeometry;
-  flowers?: THREE.BufferGeometry;
-}
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0);
@@ -447,6 +447,12 @@ const geoCache = new Map<string, SpeciesGeo>();
 export function speciesGeometry(spec: PlantSpec): SpeciesGeo {
   let g = geoCache.get(spec.id);
   if (g) return g;
+  const own = SPECIES[spec.id];
+  if (own) {
+    g = own(spec);
+    geoCache.set(spec.id, g);
+    return g;
+  }
   switch (spec.form) {
     case 'shadeTree':
       g = tree(spec, { trunks: 1, trunkFrac: 0.32, limbs: 5, limbAngle: 0.75, canopyCenter: 0.62, canopyRy: 0.36, clusters: 420, cardSize: 0.62, cell: LEAF_CELL.broad, cardsPerCluster: 5 });
@@ -519,39 +525,42 @@ export interface PlantLayer {
   dispose(): void;
 }
 
-function foliageOpts(spec: PlantSpec, growth: GrowthUniforms, part: 'leaf' | 'wood' | 'flower'): FoliageOptions {
+function foliageOpts(spec: PlantSpec, growth: GrowthUniforms, part: 'leaf' | 'wood' | 'flower', look: SpeciesLook = {}): FoliageOptions {
   const tree = spec.group === 'Trees';
   const grassy = spec.form === 'grass' || spec.form === 'perennial' || spec.form === 'fern';
   const stiff = spec.form === 'agave';
   return {
     growth,
-    bend: part === 'wood' ? (tree ? 0.12 : 0.1) : stiff ? 0.01 : tree ? 0.22 : grassy ? 0.16 : spec.form === 'tropical' ? 0.12 : 0.07,
-    flutter: part === 'wood' || stiff ? 0 : grassy ? 0.012 : 0.02,
-    translucency: part === 'wood' ? 0 : part === 'flower' ? 0.25 : stiff ? 0.08 : spec.form === 'grass' ? 0.2 : 0.4,
+    bend: look.bend !== undefined ? (part === 'wood' ? look.bend * 0.55 : look.bend) : part === 'wood' ? (tree ? 0.12 : 0.1) : stiff ? 0.01 : tree ? 0.22 : grassy ? 0.16 : spec.form === 'tropical' ? 0.12 : 0.07,
+    flutter: part === 'wood' ? 0 : look.flutter !== undefined ? look.flutter : stiff ? 0 : grassy ? 0.012 : 0.02,
+    translucency: part === 'wood' ? 0 : part === 'flower' ? 0.25 : look.translucency !== undefined ? look.translucency : stiff ? 0.08 : spec.form === 'grass' ? 0.2 : 0.4,
   };
 }
 
-function makeLeafMaterial(spec: PlantSpec, growth: GrowthUniforms, part: 'leaf' | 'flower', textured: boolean) {
-  const o = foliageOpts(spec, growth, part);
+function makeLeafMaterial(spec: PlantSpec, growth: GrowthUniforms, part: 'leaf' | 'flower', map: THREE.Texture | null, look: SpeciesLook = {}) {
+  const o = foliageOpts(spec, growth, part, look);
+  const textured = !!map;
+  const cut = look.alphaTest ?? 0.45;
   const m = new THREE.MeshStandardMaterial({
-    map: textured ? leafAtlas() : null,
+    map,
     vertexColors: true,
-    alphaTest: textured ? 0.45 : 0,
+    alphaTest: textured ? cut : 0,
     alphaToCoverage: textured,
     side: THREE.DoubleSide,
-    roughness: part === 'flower' ? 0.75 : 0.62,
+    roughness: part === 'flower' ? 0.75 : look.leafRoughness ?? 0.62,
     metalness: 0,
     envMapIntensity: 0.9,
   });
   patchFoliage(m, o);
-  const depth = foliageDepthMaterial(o, textured ? leafAtlas() : undefined, textured ? 0.45 : 0);
+  const depth = foliageDepthMaterial(o, map ?? undefined, textured ? cut : 0);
   return { m, depth };
 }
 
-function makeWoodMaterial(spec: PlantSpec, growth: GrowthUniforms) {
-  const o = foliageOpts(spec, growth, 'wood');
-  const b = bark();
-  const m = new THREE.MeshStandardMaterial({ map: b.map, normalMap: b.normalMap, roughness: 0.95, color: new THREE.Color('#d9d2c8') });
+function makeWoodMaterial(spec: PlantSpec, growth: GrowthUniforms, geo: SpeciesGeo) {
+  const o = foliageOpts(spec, growth, 'wood', geo.look);
+  const b = geo.bark ?? bark();
+  // A plant's own bark texture carries its true color; the shared bark is warmed slightly.
+  const m = new THREE.MeshStandardMaterial({ map: b.map, normalMap: b.normalMap ?? null, roughness: 0.95, vertexColors: true, color: new THREE.Color(geo.bark ? '#ffffff' : '#d9d2c8') });
   patchFoliage(m, o);
   return { m, depth: foliageDepthMaterial(o) };
 }
@@ -614,14 +623,17 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     };
 
     const isTree = spec.group === 'Trees';
-    const lm = makeLeafMaterial(spec, growth, 'leaf', spec.form !== 'grass' && spec.form !== 'perennial' && spec.form !== 'agave' && spec.form !== 'tropical');
-    addMesh(geo.leaves, lm.m, lm.depth, spec.form !== 'groundcover' && spec.form !== 'annuals', 'leaves');
+    const look = geo.look ?? {};
+    const legacyTextured = spec.form !== 'grass' && spec.form !== 'perennial' && spec.form !== 'agave' && spec.form !== 'tropical';
+    const leafMap = geo.leafMap !== undefined ? geo.leafMap : legacyTextured ? leafAtlas() : null;
+    const lm = makeLeafMaterial(spec, growth, 'leaf', leafMap, look);
+    addMesh(geo.leaves, lm.m, lm.depth, look.leafShadows ?? (spec.form !== 'groundcover' && spec.form !== 'annuals'), 'leaves');
     if (geo.wood) {
-      const wm = makeWoodMaterial(spec, growth);
-      addMesh(geo.wood, wm.m, wm.depth, isTree, 'wood');
+      const wm = makeWoodMaterial(spec, growth, geo);
+      addMesh(geo.wood, wm.m, wm.depth, look.woodShadows ?? isTree, 'wood');
     }
     if (geo.flowers) {
-      const fm = makeLeafMaterial(spec, growth, 'flower', true);
+      const fm = makeLeafMaterial(spec, growth, 'flower', geo.flowerMap !== undefined ? geo.flowerMap : leafAtlas(), look);
       addMesh(geo.flowers, fm.m, fm.depth, false, 'flowers');
     }
     const aoGeo = new THREE.PlaneGeometry(spec.matureSpread * 1.25, spec.matureSpread * 1.25).rotateX(-Math.PI / 2);
@@ -635,10 +647,26 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     list.forEach((p, i) => {
       const r = rng(p.id);
       const y = groundHeight(p.position);
-      const sc = (p.scale ?? 1) * (0.9 + r() * 0.2);
+      const sc = (p.scale ?? 1) * (look.hedge ? 1 : 0.9 + r() * 0.2);
       t.set(p.position[0], y, p.position[1]);
-      q.setFromAxisAngle(UP, r() * Math.PI * 2);
-      s.set(sc, sc * (0.92 + r() * 0.16), sc);
+      let heading = r() * Math.PI * 2;
+      const tall = look.hedge ? 1 : 0.92 + r() * 0.16;
+      if (look.hedge) {
+        // Face along the row: toward the nearest placement of the same plant.
+        let best = Infinity;
+        heading = 0;
+        for (const o of list) {
+          if (o === p) continue;
+          const dx = o.position[0] - p.position[0], dz = o.position[1] - p.position[1];
+          const d = dx * dx + dz * dz;
+          if (d < best && d > 1e-6) {
+            best = d;
+            heading = -Math.atan2(dz, dx);
+          }
+        }
+      }
+      q.setFromAxisAngle(UP, heading);
+      s.set(sc, sc * tall, sc);
       m4.compose(t, q, s);
       for (const im of mats) {
         if (im === ao) {
