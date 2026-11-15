@@ -18,7 +18,7 @@ import * as THREE from 'three';
  *   RB / LB      rise / sink       E / Q (fly)
  *   Hold LS      faster            Shift
  *   A            walk / fly        V
- *   X            measurements      M
+ *   X            measurements      M     (off, totals, every edge)
  *   Y            back to start     Home
  *   D-pad ← →    saved views (orbit only)
  *

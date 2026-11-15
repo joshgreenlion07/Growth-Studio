@@ -6,6 +6,7 @@ import { cleanPlan } from '../siteplan/validate';
 import { expandPlants } from '../builder/build';
 import { groundModel } from '../builder/ground';
 import { Studio } from '../engine/studio';
+import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
 import type { Quality } from '../engine/post';
 import { PlanEditor, type Tool } from './planeditor';
@@ -109,9 +110,9 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
-  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X shows measurements.');
+  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements.');
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
-  studio.onMeasureChanged = (on) => $('#btn-measure').setAttribute('aria-pressed', String(on));
+  studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.setPlan(plan);
   $('#loading').hidden = true;
@@ -712,7 +713,7 @@ function initFullscreen() {
 
   let on = false, raf = 0, last = -1;
   let pose: ReturnType<Studio['savePose']> | null = null;
-  $('#btn-measure').addEventListener('click', () => studio?.setMeasurements(!studio.measure.visible));
+  document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.addEventListener('click', () => studio?.setMeasureMode(b.dataset.mode as MeasureMode)));
   document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'walk' | 'fly')));
   const tick = () => {
     raf = requestAnimationFrame(tick);

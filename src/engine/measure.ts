@@ -5,15 +5,18 @@ import { centroid, fmtFeet, signedArea } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 
 /**
- * Measurements overlay: edge lengths drawn on the ground, area of each surface,
- * and the size of walls, fences, structures, features and hand-placed plants.
+ * Measurements overlay, in two levels:
+ *   totals  the area of each surface, the total length of each wall, fence and
+ *           curb run (walls and fences with their height), and the size of
+ *           structures, features and hand-placed plants. Outlines, no edge labels.
+ *   edges   all of that plus every straight run labeled, end ticks and lot lines.
  *
  * Lines are 3D (drawn on top of everything so grass never hides them); labels
  * are HTML placed over the canvas each frame, nearest and most important first,
  * skipping any that would overlap one already placed.
  */
 
-type LabelKind = 'area' | 'object' | 'edge' | 'lot';
+type LabelKind = 'area' | 'object' | 'plant' | 'edge' | 'lot';
 interface Label {
   el: HTMLDivElement;
   pos: THREE.Vector3;
@@ -22,7 +25,10 @@ interface Label {
   h: number;
 }
 
-const PRIORITY: Record<LabelKind, number> = { area: 0, object: 1, edge: 2, lot: 3 };
+// When labels collide the lower number wins: areas, then walls, runs and structures, then plants.
+const PRIORITY: Record<LabelKind, number> = { area: 0, object: 1, plant: 2, edge: 3, lot: 4 };
+export type MeasureMode = 'off' | 'totals' | 'edges';
+export const MEASURE_MODES: MeasureMode[] = ['off', 'totals', 'edges'];
 const LIFT = 0.09; // above hardscape so the lines sit on the surface
 const sqft = (m2: number) => Math.round(m2 * 10.7639).toLocaleString('en-US');
 
@@ -37,6 +43,7 @@ export class Measurements {
   };
   private v = new THREE.Vector3();
   private shown = false;
+  private detail = false;
 
   constructor(container: HTMLElement) {
     this.group.name = 'measurements';
@@ -52,10 +59,20 @@ export class Measurements {
     return this.shown;
   }
 
+  get mode(): MeasureMode {
+    return !this.shown ? 'off' : this.detail ? 'edges' : 'totals';
+  }
+
+  /** Show or hide the overlay; call rebuild() after changing between totals and edges. */
+  setMode(mode: MeasureMode) {
+    this.shown = mode !== 'off';
+    this.detail = mode === 'edges';
+    this.group.visible = this.shown;
+    this.layer.hidden = !this.shown;
+  }
+
   setVisible(on: boolean) {
-    this.shown = on;
-    this.group.visible = on;
-    this.layer.hidden = !on;
+    this.setMode(on ? (this.detail ? 'edges' : 'totals') : 'off');
   }
 
   /** Rebuild every line and label from the plan and the built scene (call after a rebuild or growth change). */
@@ -63,8 +80,8 @@ export class Measurements {
     this.clear();
     const gy = (p: Vec2) => Math.max(0, build.gm.height(p));
 
-    // Lot lines, dashed.
-    if (plan.site.boundary.length > 2) this.outline(plan.site.boundary, true, gy, 'lot');
+    // Lot lines, dashed (every-edge view only).
+    if (this.detail && plan.site.boundary.length > 2) this.outline(plan.site.boundary, true, gy, 'lot');
 
     // Surfaces: edge lengths and area.
     for (const z of plan.zones) {
@@ -88,18 +105,24 @@ export class Measurements {
       }
     }
 
-    // Walls, fences, edging: each straight run, plus height.
+    // Walls, fences, edging: the total length of each run (walls and fences with their height),
+    // and in the every-edge view each straight run as well.
     for (const l of plan.lines) {
       if (l.points.length < 2) continue;
       const tall = l.kind !== 'edging' ? l.height : 0;
       this.outline(l.points, false, gy, 'edge', tall);
-      if (tall > 0) {
-        const mid = l.points[Math.floor((l.points.length - 1) / 2)];
-        const nxt = l.points[Math.floor((l.points.length - 1) / 2) + 1];
-        const m: Vec2 = [(mid[0] + nxt[0]) / 2, (mid[1] + nxt[1]) / 2];
-        const name = l.kind === 'wall' ? 'Wall' : 'Fence';
-        this.label(`${name} · ${fmtFeet(tall)} tall`, new THREE.Vector3(m[0], gy(m) + tall + 0.25, m[1]), 'object');
+      let total = 0;
+      for (let i = 0; i < l.points.length - 1; i++) total += Math.hypot(l.points[i + 1][0] - l.points[i][0], l.points[i + 1][1] - l.points[i][1]);
+      // the label sits halfway along the whole run
+      let m: Vec2 = l.points[0], walked = 0;
+      for (let i = 0; i < l.points.length - 1; i++) {
+        const a = l.points[i], b = l.points[i + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (walked + seg >= total / 2) { const t = seg ? (total / 2 - walked) / seg : 0; m = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; break; }
+        walked += seg;
       }
+      const name = l.kind === 'wall' ? 'Wall' : l.kind === 'fence' ? 'Fence' : (materialById.get(l.catalogId)?.name.split(',')[0] ?? 'Edging');
+      const text = tall > 0 ? `${name} · ${fmtFeet(tall)} tall\n${fmtFeet(total)} long` : `${name}\n${fmtFeet(total)} long`;
+      this.label(text, new THREE.Vector3(m[0], gy(m) + tall + 0.25, m[1]), 'object');
     }
 
     // Houses, garages, sheds, covers.
@@ -137,7 +160,7 @@ export class Measurements {
       const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
       const k = p.scale ?? 1;
       const h = sz.height * k, s = sz.spread * k;
-      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'object');
+      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'plant');
     }
 
     for (const o of this.group.children) o.renderOrder = 999;
@@ -167,6 +190,8 @@ export class Measurements {
         start = i;
       }
     }
+    // The totals view keeps the outline only; edge lengths and end ticks are for the every-edge view.
+    if (!this.detail) return;
     for (const r of runs) {
       if (r.len < 0.9) continue;
       const m: Vec2 = [(r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2];
@@ -192,7 +217,7 @@ export class Measurements {
 
   private label(text: string, pos: THREE.Vector3, kind: LabelKind) {
     const el = document.createElement('div');
-    el.className = `measure-label ml-${kind}`;
+    el.className = `measure-label ml-${kind === 'plant' ? 'object' : kind}`;
     const [head, ...rest] = text.split('\n');
     el.append(head);
     for (const r of rest) {
