@@ -10,7 +10,7 @@ import { GLOBAL } from './foliage';
 import { PostPipeline, type LensSettings, type Quality } from './post';
 import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from './sky';
 import { setMaxAnisotropy } from './textures';
-import { Measurements } from './measure';
+import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, WATER_LAYER_SKIP } from './water';
@@ -68,7 +68,7 @@ export class Studio {
   private viewIndex = 0;
   private navMode: NavMode = 'orbit';
   onNavModeChanged: (mode: NavMode) => void = () => {};
-  onMeasureChanged: (on: boolean) => void = () => {};
+  onMeasureChanged: (mode: MeasureMode) => void = () => {};
   state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: 'balanced', wind: 0.55, motion: true };
   onViewsChanged: (views: CameraView[]) => void = () => {};
   onFrameStats: (fps: number) => void = () => {};
@@ -156,7 +156,8 @@ export class Studio {
         this.setNavMode(this.navMode === 'walk' ? 'fly' : 'walk');
         this.nav.pulse(80, 0.45);
       },
-      toggleMeasure: () => this.setMeasurements(!this.measure.visible),
+      // M or controller X steps through Off, Totals, Every edge.
+      toggleMeasure: () => this.setMeasureMode(MEASURE_MODES[(MEASURE_MODES.indexOf(this.measure.mode) + 1) % MEASURE_MODES.length]),
     });
     this.measure = new Measurements(container);
     this.scene.add(this.measure.group);
@@ -417,11 +418,16 @@ export class Studio {
     this.camera.lookAt(this.controls.target);
   }
 
+  setMeasureMode(mode: MeasureMode) {
+    if (mode === this.measure.mode) return;
+    this.measure.setMode(mode);
+    if (mode !== 'off' && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
+    this.onMeasureChanged(mode);
+  }
+
+  /** On shows the totals view. */
   setMeasurements(on: boolean) {
-    if (on === this.measure.visible) return;
-    if (on && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
-    this.measure.setVisible(on);
-    this.onMeasureChanged(on);
+    this.setMeasureMode(on ? 'totals' : 'off');
   }
 
   /** The current camera, to put it back later. */

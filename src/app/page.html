@@ -134,6 +134,10 @@ section.scene-pane { position: relative; min-width: 0; min-height: 0; background
 .scene-tools button { border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .scene-tools button:hover, .scene-tools button[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
 #nav-modes { display: none; gap: 1px; }
+#measure-modes { display: flex; gap: 1px; align-items: stretch; }
+#measure-modes span { background: rgba(20, 24, 22, 0.72); color: #c9cec8; font-size: 11px; padding: 4px 7px; border-radius: 3px 0 0 3px; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; }
+#measure-modes button { border-radius: 0; }
+#measure-modes button:last-child { border-radius: 0 3px 3px 0; }
 #nav-modes button:first-child { border-radius: 3px 0 0 3px; }
 #nav-modes button:last-child { border-radius: 0 3px 3px 0; }
 section.scene-pane.fs #nav-modes { display: flex; }
@@ -276,10 +280,15 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
               <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
               <button type="button" data-mode="fly" aria-pressed="false" title="Fly freely (V or controller A)">Fly</button>
             </div>
-            <button id="btn-measure" type="button" aria-pressed="false" title="Show measurements (M or controller X)">Measurements</button>
+            <div id="measure-modes" role="group" aria-label="Measurements" title="Measurements (M or controller X steps through them)">
+              <span>Measure</span>
+              <button type="button" data-mode="off" aria-pressed="true" title="No measurements">Off</button>
+              <button type="button" data-mode="totals" aria-pressed="false" title="Area of each surface, total length of each run, wall height">Totals</button>
+              <button type="button" data-mode="edges" aria-pressed="false" title="Every edge length as well">Every edge</button>
+            </div>
             <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F)">Full screen</button>
           </div>
-          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements · <kbd>Esc</kbd> exit</div>
+          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>Esc</kbd> exit</div>
           <div id="height-meter" aria-hidden="true">
             <div class="hm-scale" id="hm-scale"><div class="hm-mark" id="hm-mark"></div></div>
             <div class="hm-read" role="status" aria-live="off"><span>Height</span><b id="hm-value">0 ft</b></div>
