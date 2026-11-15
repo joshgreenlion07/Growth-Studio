@@ -189,6 +189,7 @@ export function cleanPlan(input: unknown): CleanResult {
       height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : 3.5),
     };
     if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
+    if (kind === 'fence' && (it.topper === 'lattice' || it.topper === 'cap')) l.topper = it.topper;
     plan.lines.push(l);
   }
 
