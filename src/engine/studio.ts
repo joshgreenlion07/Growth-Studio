@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SitePlan } from '../siteplan/types';
-import { bounds } from '../siteplan/geometry';
+import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import { buildScene, type SceneBuild } from '../builder/build';
 import { WATER_LEVEL } from '../builder/ground';
 import { setFlames } from '../builder/features';
@@ -10,6 +10,8 @@ import { GLOBAL } from './foliage';
 import { PostPipeline, type LensSettings, type Quality } from './post';
 import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from './sky';
 import { setMaxAnisotropy } from './textures';
+import { Measurements } from './measure';
+import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, WATER_LAYER_SKIP } from './water';
 
@@ -59,6 +61,14 @@ export class Studio {
   private resizeObs: ResizeObserver;
   private disposed = false;
   views: CameraView[] = [];
+  /** Controller, keyboard and first-person movement; see navigation.ts for the controls. */
+  readonly nav: Navigation;
+  /** Lengths, areas and sizes drawn over the scene. */
+  readonly measure: Measurements;
+  private viewIndex = 0;
+  private navMode: NavMode = 'orbit';
+  onNavModeChanged: (mode: NavMode) => void = () => {};
+  onMeasureChanged: (on: boolean) => void = () => {};
   state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: 'balanced', wind: 0.55, motion: true };
   onViewsChanged: (views: CameraView[]) => void = () => {};
   onFrameStats: (fps: number) => void = () => {};
@@ -114,6 +124,43 @@ export class Studio {
       this.manualFocus = null;
     });
 
+    this.nav = new Navigation({
+      camera: this.camera,
+      target: this.controls.target,
+      canvas: this.renderer.domElement,
+      mode: () => this.navMode,
+      groundAt: (x, z) => this.groundAt(x, z),
+      onTakeOver: () => {
+        this.tween = null;
+        this.manualFocus = null;
+      },
+      stepView: (d) => {
+        if (!this.views.length) return;
+        this.viewIndex = (this.viewIndex + d + this.views.length) % this.views.length;
+        this.goTo(this.views[this.viewIndex].id);
+        this.nav.pulse();
+      },
+      home: () => {
+        if (this.navMode === 'orbit') {
+          if (!this.views.length) return;
+          this.viewIndex = 0;
+          this.goTo(this.views[0].id);
+        } else {
+          this.placeWalker();
+          this.setNavMode('walk');
+        }
+        this.nav.pulse();
+      },
+      toggleFly: () => {
+        if (this.navMode === 'orbit') return;
+        this.setNavMode(this.navMode === 'walk' ? 'fly' : 'walk');
+        this.nav.pulse(80, 0.45);
+      },
+      toggleMeasure: () => this.setMeasurements(!this.measure.visible),
+    });
+    this.measure = new Measurements(container);
+    this.scene.add(this.measure.group);
+
     // Tap to focus.
     let down: { x: number; y: number } | null = null;
     this.renderer.domElement.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
@@ -146,6 +193,7 @@ export class Studio {
     this.build.setYears(this.state.years);
     this.views = generateViews(plan, this.build.gm.height);
     this.onViewsChanged(this.views);
+    if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
     this.updateSky(true);
     this.assignNightLights();
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
@@ -162,6 +210,7 @@ export class Studio {
   setYears(y: number) {
     this.state.years = y;
     this.build?.setYears(y);
+    if (this.plan && this.build && this.measure.visible) this.measure.rebuild(this.plan, this.build, y);
   }
 
   setMood(m: Mood) {
@@ -321,9 +370,78 @@ export class Studio {
     this.post.focus = this.focusTarget;
   }
 
+  /* First person ------------------------------------------------- */
+
+  get mode(): NavMode {
+    return this.navMode;
+  }
+
+  /** orbit: the mouse orbit view. walk: first person at eye height. fly: first person, free height. */
+  setNavMode(m: NavMode) {
+    if (m === this.navMode) return;
+    const from = this.navMode;
+    this.navMode = m;
+    this.tween = null;
+    this.controls.enabled = m === 'orbit';
+    if (from === 'orbit' && m !== 'orbit') {
+      this.placeWalker();
+    } else if (m === 'orbit') {
+      // Give the orbit a sensible pivot a few meters ahead on the ground.
+      const dir = this.controls.target.clone().sub(this.camera.position).normalize();
+      const t = this.camera.position.clone().addScaledVector(dir, 8);
+      t.y = Math.max(t.y, this.groundAt(t.x, t.z));
+      this.controls.target.copy(t);
+      this.camera.fov = 50;
+      this.camera.updateProjectionMatrix();
+    }
+    this.onNavModeChanged(m);
+  }
+
+  /** Stand at ground level at the edge of the yard, looking across it. */
+  private placeWalker() {
+    const low = this.views.find((v) => v.id === 'low') ?? this.views[0];
+    const eye = low ? low.eye.clone() : this.camera.position.clone();
+    const look = low ? low.target.clone().sub(low.eye) : this.controls.target.clone().sub(this.camera.position);
+    look.y = 0;
+    if (look.lengthSq() < 1e-6) look.set(0, 0, -1);
+    look.normalize();
+    // Never start inside a house or shed: step forward until clear of every structure.
+    const blocked = (x: number, z: number) => (this.plan?.structures ?? []).some((st) => st.kind !== 'cover' && st.polygon.length > 2 && (pointInPolygon([x, z], st.polygon) || distToEdge([x, z], st.polygon) < 0.8));
+    for (let i = 0; i < 200 && blocked(eye.x, eye.z); i++) eye.addScaledVector(look, 0.25);
+    eye.y = this.groundAt(eye.x, eye.z) + EYE_HEIGHT;
+    this.camera.position.copy(eye);
+    this.controls.target.copy(eye).addScaledVector(look, 3);
+    this.controls.target.y -= 0.35; // a slight downward glance
+    this.camera.fov = 60;
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(this.controls.target);
+  }
+
+  setMeasurements(on: boolean) {
+    if (on === this.measure.visible) return;
+    if (on && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
+    this.measure.setVisible(on);
+    this.onMeasureChanged(on);
+  }
+
+  /** The current camera, to put it back later. */
+  savePose() {
+    return { eye: this.camera.position.clone(), target: this.controls.target.clone(), fov: this.camera.fov };
+  }
+
+  restorePose(p: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }) {
+    this.jumpTo({ id: 'saved', label: 'Saved', eye: p.eye, target: p.target, fov: p.fov });
+  }
+
+  private groundAt(x: number, z: number) {
+    return this.build ? Math.max(0, this.build.gm.height([x, z])) : 0;
+  }
+
   goTo(id: string) {
+    if (this.navMode !== 'orbit') this.setNavMode('orbit');
     const v = this.views.find((x) => x.id === id);
     if (!v) return;
+    this.viewIndex = this.views.indexOf(v);
     this.manualFocus = null;
     this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: performance.now(), dur: 1400 };
   }
@@ -365,6 +483,13 @@ export class Studio {
     this.focusTarget = hit ? hit.distance : this.camera.position.distanceTo(this.controls.target);
   }
 
+  /** Camera height above the ground right under it, in meters. */
+  heightAboveGround(): number {
+    const p = this.camera.position;
+    const g = this.build ? Math.max(0, this.build.gm.height([p.x, p.z])) : 0;
+    return Math.max(0, p.y - g);
+  }
+
   private keepAboveGround() {
     if (!this.build) return;
     const p = this.camera.position;
@@ -398,7 +523,9 @@ export class Studio {
       this.camera.updateProjectionMatrix();
       if (k >= 1) this.tween = null;
     }
-    this.controls.update();
+    this.nav.update(dt);
+    if (this.navMode === 'orbit') this.controls.update();
+    else this.camera.lookAt(this.controls.target);
     this.keepAboveGround();
     this.sky.mesh.position.copy(this.camera.position);
 
@@ -419,6 +546,7 @@ export class Studio {
       this.camera.updateMatrixWorld();
       this.mirror.render(this.renderer, this.scene, this.camera, this.build.water.surfaces);
     }
+    this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     this.post.render(this.scene, this.camera, t);
 
     const fps = dt > 0 ? 1 / dt : 60;
@@ -477,6 +605,7 @@ export class Studio {
     this.envRT?.dispose();
     this.pmrem.dispose();
     this.controls.dispose();
+    this.measure.dispose();
     disposeMaterialCache();
     this.renderer.dispose();
     this.renderer.domElement.remove();

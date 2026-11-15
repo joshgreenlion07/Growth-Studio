@@ -13,7 +13,10 @@ finished-work photos in `reference/green-lion-style/`.
   PBR textures (`textures.ts`, `surfaces.ts`), plant growth and wind shaders
   (`foliage.ts`), water and planar reflections (`water.ts`), camera look with
   focus blur, bloom and grade (`post.ts`), generated camera views (`views.ts`),
-  and the runtime that ties it together (`studio.ts`).
+  controller, keyboard and first-person walk / fly movement (`navigation.ts`),
+  the measurements overlay (`measure.ts`), and the runtime that ties it
+  together (`studio.ts`). Full screen (button or F) switches to walk mode and
+  shows the height meter; leaving it restores the orbit camera.
 - `src/builder/` — SitePlan to 3D: ground splat, turf, hardscape with borders,
   walls and fences, water features and waterfalls, structures, features,
   procedural plants, and the neighborhood context. Every catalog plant has
