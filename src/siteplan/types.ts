@@ -49,6 +49,8 @@ export interface LineItem extends ItemBase {
   height: number;
   /** Walls: cap color. 'same' matches the block, 'midnight' is a dark charcoal cap. Left out, the block's own cap. */
   cap?: 'same' | 'midnight';
+  /** Fences: a topper added above the fence height. Left out, none. */
+  topper?: 'lattice' | 'cap';
 }
 
 export type WaterKind = 'pond' | 'pool' | 'fountain' | 'stream' | 'pondless';

@@ -457,6 +457,23 @@ function fenceSegment(style: FenceStyle, l: LineItem, a: Vec2, b: Vec2, y0: numb
       break;
     }
   }
+  // Topper above the fence height: a 1 ft cedar lattice band with a cap, or a plain cap rail.
+  // Styles that already carry one (lattice top, board-on-board cap) are left as they are.
+  if (l.topper === 'lattice' && style !== 'grayLattice') {
+    const lat = 0.3, top = H + lat;
+    const latticeMat = plainMaterial('lattice-cedar', { color: '#b47a46', roughness: 0.8, alphaMap: latticeAlpha(), alphaTest: 0.5, side: THREE.DoubleSide });
+    const lg = segmentBox(a, b, 0.02, H + 0.03, top, 0);
+    const uv = lg.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 0.3, uv.getY(i) / 0.3);
+    put('topper-lattice', latticeMat, lg, true);
+    put('topper-rail', cedar, segmentBox(a, b, 0.09, H, H + 0.04, 0.03));
+    put('topper-cap', cedar, segmentBox(a, b, 0.12, top, top + 0.04, 0.05));
+    const posts: THREE.BufferGeometry[] = [];
+    postsAlong(a, b, 0.1, H, top + 0.02, posts);
+    posts.forEach((p) => put('topper-post', cedar, p));
+  } else if (l.topper === 'cap' && style !== 'boardOnBoard' && style !== 'grayLattice') {
+    put('topper-cap', cedar, segmentBox(a, b, 0.14, H, H + 0.04, 0.05));
+  }
 }
 
 export { materialTextures };
