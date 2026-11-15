@@ -220,6 +220,7 @@ export function cleanPlan(input: unknown): CleanResult {
     const p: PlantPlacement = { ...base(it, 'plant'), catalogId: pickPlant(it.catalogId, warnings), position };
     if (it.existing === true) p.existing = true;
     if (it.scale !== undefined) p.scale = num(it.scale, 1, 0.6, 1.4);
+    if (typeof it.container === 'string' && ['1g', '2g', '5g', '15g', '24b', '36b', '48b'].includes(it.container)) p.container = it.container as PlantPlacement['container'];
     plan.plants.push(p);
   }
 

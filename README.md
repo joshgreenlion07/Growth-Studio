@@ -74,6 +74,9 @@ Messages use `window.postMessage`:
   plan item that was clicked, or `null` for bare ground.
 - A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
   pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.
+- A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
+  nursery container it is installed from. It sets the install size and where the
+  plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

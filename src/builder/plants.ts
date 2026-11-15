@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLANTS, growthAt, plantById, sizeAt, type PlantSpec } from '../siteplan/catalog';
+import { PLANTS, curveAt, plantById, sizeAt, type ContainerId, type PlantSpec } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { PlantPlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL, foliageDepthMaterial, growthUniforms, patchFoliage, type FoliageOptions, type GrowthUniforms } from '../engine/foliage';
@@ -514,6 +514,8 @@ interface Group {
   spec: PlantSpec;
   existing: boolean;
   growth: GrowthUniforms;
+  /** Nursery container these were installed from; undefined is the catalog's own. */
+  container?: ContainerId;
 }
 
 export interface PlantLayer {
@@ -593,7 +595,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
   for (const p of placements) {
     const spec = plantById.get(p.catalogId);
     if (!spec) continue;
-    const key = `${spec.id}|${p.existing ? 1 : 0}`;
+    const key = `${spec.id}|${p.existing ? 1 : 0}|${p.container ?? ''}`;
     const list = byKey.get(key) ?? [];
     list.push(p);
     byKey.set(key, list);
@@ -601,11 +603,11 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
 
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
   for (const [key, list] of byKey) {
-    const [id, ex] = key.split('|');
+    const [id, ex, cont] = key.split('|');
     const spec = plantById.get(id)!;
     const geo = speciesGeometry(spec);
     const growth = growthUniforms();
-    const group: Group = { spec, existing: ex === '1', growth };
+    const group: Group = { spec, existing: ex === '1', growth, container: (cont || undefined) as ContainerId | undefined };
     groups.push(group);
     const mats: THREE.InstancedMesh[] = [];
 
@@ -690,8 +692,9 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     setYears(years: number) {
       for (const g of groups) {
         const yrs = g.existing ? g.spec.yearsToMature : years;
-        g.growth.uGrow.value = growthAt(g.spec, yrs);
-        const sz = sizeAt(g.spec, yrs);
+        // Fullness follows the plant's place on its growth curve, so a boxed tree starts fuller than a 5 gal.
+        g.growth.uGrow.value = Math.max(0, curveAt(g.spec, yrs, g.container));
+        const sz = sizeAt(g.spec, yrs, g.container);
         g.growth.uSize.value.set(sz.spread / g.spec.matureSpread, sz.height / g.spec.matureHeight);
       }
       // Keep proxies sized for autofocus.

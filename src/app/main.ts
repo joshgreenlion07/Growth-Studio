@@ -753,7 +753,7 @@ function applyEmbedPlan() {
     planName = next.name.trim().slice(0, 80) || plan.site.name;
     studio.setPlan(plan, embedBuilt && !next.refit && sameLot);
     embedBuilt = true;
-    embedNote(plan.zones.length + plan.lines.length + plan.water.length ? null : EMBED_EMPTY_NOTE);
+    embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length ? null : EMBED_EMPTY_NOTE);
     embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
   } catch (e) {
     console.error(e);
