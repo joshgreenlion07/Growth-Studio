@@ -80,6 +80,8 @@ export interface PlantPlacement extends ItemBase {
   existing?: boolean;
   /** Optional size multiplier, 0.6 to 1.4. */
   scale?: number;
+  /** Nursery container it is installed from ('1g', '2g', '5g', '15g', '24b', '36b', '48b'). Left out, the catalog's own. */
+  container?: '1g' | '2g' | '5g' | '15g' | '24b' | '36b' | '48b';
 }
 
 export interface FeaturePlacement extends ItemBase {

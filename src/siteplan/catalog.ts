@@ -473,17 +473,98 @@ export function materialsFor(use: MaterialUse): MaterialSpec[] {
   return MATERIALS.filter((m) => m.use === use);
 }
 
-/** Growth fraction (0 at install, 1 at maturity) after `years`. */
-export function growthAt(spec: PlantSpec, years: number): number {
-  const t = Math.max(0, years) / spec.yearsToMature;
+/* ------------------------------------------------------------------ */
+/* Nursery container sizes                                              */
+/* ------------------------------------------------------------------ */
+/* A plant can be installed from a smaller or larger container than the one its catalog entry lists.
+   The catalog's install size is for its own `container`; other containers scale from it:
+   - Trees follow typical trade sizes for a standard tree, in feet (height, spread):
+     1 gal 2.5 x 0.8, 2 gal 3.5 x 1, 5 gal 5 x 1.5, 15 gal 8 x 3, 24" box 10.5 x 5, 36" box 13 x 7,
+     48" box 16 x 9. (ANSI Z60.1 pairs a 24" box with 1.5-2.5" caliper, 36" with 2.5-3.5", 48" with 3.5-5".)
+   - Everything else scales by container: 1 gal 1.0, 2 gal 1.3, 5 gal 1.8, 15 gal 3.0 (a 1 gal shrub is
+     roughly 8-24" tall, a 5 gal about twice that).
+   No container starts above 90% of the mature size. A bigger container is an older plant: it starts
+   further along the same growth curve, so it reaches mature size sooner, and a smaller one later. */
+export type ContainerId = 'pot' | '1g' | '2g' | '5g' | '15g' | '24b' | '36b' | '48b';
+export const CONTAINERS: { id: ContainerId; label: string }[] = [
+  { id: '1g', label: '1 gal' }, { id: '2g', label: '2 gal' }, { id: '5g', label: '5 gal' }, { id: '15g', label: '15 gal' },
+  { id: '24b', label: '24" box' }, { id: '36b', label: '36" box' }, { id: '48b', label: '48" box' },
+];
+const TREE_FT: Record<string, [number, number]> = { '1g': [2.5, 0.8], '2g': [3.5, 1], '5g': [5, 1.5], '15g': [8, 3], '24b': [10.5, 5], '36b': [13, 7], '48b': [16, 9] };
+const POT_SCALE: Record<string, number> = { pot: 0.6, '1g': 1, '2g': 1.3, '5g': 1.8, '15g': 3, '24b': 3.8, '36b': 4.6, '48b': 5.4 };
+
+/** The container the catalog's install size is for. Pots and flats are 'pot'. */
+export function defaultContainer(spec: PlantSpec): ContainerId {
+  const c = spec.container.toLowerCase();
+  if (c.includes('48')) return '48b';
+  if (c.includes('36')) return '36b';
+  if (c.includes('24')) return '24b';
+  if (c.startsWith('15')) return '15g';
+  if (c.startsWith('5')) return '5g';
+  if (c.startsWith('2 ')) return '2g';
+  if (c.startsWith('1 ')) return '1g';
+  return 'pot';
+}
+
+/** Containers a plant is offered in: trees up to a 48" box, shrubs, succulents and tropicals up to
+    15 gal, and grasses, perennials and groundcover up to 5 gal. */
+export function containersFor(spec: PlantSpec): ContainerId[] {
+  const ids: ContainerId[] = spec.group === 'Trees' ? ['1g', '2g', '5g', '15g', '24b', '36b', '48b']
+    : spec.group === 'Shrubs' || spec.group === 'Succulents' || spec.group === 'Tropicals' ? ['1g', '2g', '5g', '15g'] : ['1g', '2g', '5g'];
+  return defaultContainer(spec) === 'pot' ? ['pot', ...ids] : ids;
+}
+
+/** Height and spread in meters at install from a given container. */
+export function installSize(spec: PlantSpec, container?: ContainerId): { height: number; spread: number } {
+  const def = defaultContainer(spec);
+  const c = container ?? def;
+  if (c === def) return { height: spec.installHeight, spread: spec.installSpread };
+  let rh: number, rs: number;
+  if (spec.group === 'Trees' && TREE_FT[c] && TREE_FT[def]) {
+    rh = TREE_FT[c][0] / TREE_FT[def][0];
+    rs = TREE_FT[c][1] / TREE_FT[def][1];
+  } else {
+    rh = rs = (POT_SCALE[c] ?? 1) / (POT_SCALE[def] ?? 1);
+  }
+  return {
+    height: Math.min(spec.installHeight * rh, Math.max(spec.installHeight, spec.matureHeight * 0.9)),
+    spread: Math.min(spec.installSpread * rs, Math.max(spec.installSpread, spec.matureSpread * 0.9)),
+  };
+}
+
+/** Where a container's install height sits on the catalog growth curve, as a fraction of yearsToMature
+    (0 = the catalog container, below 0 = younger, above 0 = older) and its curve value. */
+function headStart(spec: PlantSpec, container?: ContainerId): { t0: number; g0: number } {
+  const span = spec.matureHeight - spec.installHeight;
+  if (!container || !(span > 0)) return { t0: 0, g0: 0 };
+  const g0 = Math.min(0.97, (installSize(spec, container).height - spec.installHeight) / span);
+  return { t0: 1 - Math.pow(1 - g0, 1 / 1.6), g0 };
+}
+
+/** Position on the catalog growth curve after `years` from install: 0 at the catalog container's
+    install size, 1 at maturity. It can start below 0 (a smaller container) or above 0 (a larger one). */
+export function curveAt(spec: PlantSpec, years: number, container?: ContainerId): number {
+  const t = headStart(spec, container).t0 + Math.max(0, years) / spec.yearsToMature;
   return 1 - Math.pow(1 - Math.min(t, 1), 1.6);
 }
 
+/** Growth fraction (0 at install, 1 at maturity) after `years`. */
+export function growthAt(spec: PlantSpec, years: number, container?: ContainerId): number {
+  const { g0 } = headStart(spec, container);
+  return Math.max(0, Math.min(1, (curveAt(spec, years, container) - g0) / (1 - g0)));
+}
+
+/** Years from install to roughly mature size, for a given container. */
+export function yearsToMatureFrom(spec: PlantSpec, container?: ContainerId): number {
+  return spec.yearsToMature * (1 - headStart(spec, container).t0);
+}
+
 /** Height and spread in meters after `years`. */
-export function sizeAt(spec: PlantSpec, years: number): { height: number; spread: number } {
-  const g = growthAt(spec, years);
+export function sizeAt(spec: PlantSpec, years: number, container?: ContainerId): { height: number; spread: number } {
+  const g = growthAt(spec, years, container);
+  const at = installSize(spec, container);
   return {
-    height: spec.installHeight + (spec.matureHeight - spec.installHeight) * g,
-    spread: spec.installSpread + (spec.matureSpread - spec.installSpread) * g,
+    height: at.height + (spec.matureHeight - at.height) * g,
+    spread: at.spread + (spec.matureSpread - at.spread) * g,
   };
 }
