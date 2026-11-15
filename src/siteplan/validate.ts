@@ -1,7 +1,7 @@
 import { FEATURES, LEGACY_IDS, MATERIALS, PLANTS, featureById, materialById, plantById } from './catalog';
 import { area, uid } from './geometry';
 import type {
-  ExistingStructure, FeaturePlacement, ItemSource, LineItem, PlantPlacement, SitePlan, Vec2, WaterFeature, Zone,
+  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, SitePlan, Vec2, WaterFeature, Zone,
 } from './types';
 
 export interface CleanResult {
@@ -232,6 +232,23 @@ export function cleanPlan(input: unknown): CleanResult {
     const f: FeaturePlacement = { ...base(it, 'feature'), catalogId: id, position, rotationDeg: num(it.rotationDeg, 0, -360, 360) };
     plan.features.push(f);
   }
+
+  const models: ModelPlacement[] = [];
+  for (const it of arr(o.models)) {
+    const polygon = pts(it.polygon, 3);
+    if (!polygon || area(polygon) < 0.02 || typeof it.asset !== 'string' || !it.asset || it.asset.length > 200) continue;
+    const m: ModelPlacement = {
+      ...base(it, 'model'),
+      polygon,
+      asset: it.asset,
+      kind: it.kind === 'image' ? 'image' : 'glb',
+      turn: (((Math.round(num(it.turn, 0)) % 4) + 4) % 4) as ModelPlacement['turn'],
+      fit: it.fit === 'stretch' ? 'stretch' : 'contain',
+    };
+    if (it.height !== undefined && it.height !== null) m.height = num(it.height, 1, 0.1, 12);
+    models.push(m);
+  }
+  if (models.length) plan.models = models;
 
   return { plan, warnings: [...new Set(warnings)] };
 }

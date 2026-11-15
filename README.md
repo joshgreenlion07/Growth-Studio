@@ -55,6 +55,9 @@ Messages use `window.postMessage`:
 | Studio to parent, when the scene is clicked | `{ source: 'growth-studio', type: 'select', id }` |
 | Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit }` |
 | Studio to parent, after each plan it applies | `{ source: 'growth-studio', type: 'built', ok: true }` or `{ source: 'growth-studio', type: 'built', ok: false, message }` |
+| Studio to parent, when the plan names an uploaded file it does not have | `{ source: 'growth-studio', type: 'need-asset', id }` |
+| Parent to studio, in answer | `{ source: 'area-planner', type: 'asset', id, kind: 'glb' or 'image', data: Blob }` (`data: null` when the parent no longer has the file) |
+| Studio to parent, once that file is read | `{ source: 'growth-studio', type: 'asset', id, ok: true }` or `{ ..., ok: false, message }` |
 
 - `plan` is SitePlan JSON (`src/siteplan/types.ts`), in meters. It is cleaned
   by `cleanPlan` first, so missing fields get defaults. When the cleanup
@@ -77,6 +80,16 @@ Messages use `window.postMessage`:
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
   plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
+- `plan.models` places a designer's own rendering on a drawn footprint:
+  `{ id, polygon, asset, kind: 'glb' | 'image', height?, turn: 0-3, fit: 'contain' | 'stretch' }`.
+  The file is not in the plan. `asset` is an id; the studio asks for each file
+  once per plan with `need-asset` and shows a plain block on the footprint
+  until it arrives. A `.glb` is sized to the box the footprint sits in
+  (`contain` keeps its proportions, `stretch` fills the drawn width, depth and
+  `height` exactly) with its front (+z) on the long side that faces down the
+  page; `turn` adds quarter turns. An `image` stands up as a flat board across
+  the footprint. Files over 60 MB and Draco-compressed models are refused with
+  a message. A file is forgotten when a later plan no longer names it.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

@@ -783,12 +783,16 @@ const EMBED_ALLOWED_PARENT_ORIGINS: RegExp[] = [
 const EMBED_EMPTY_NOTE = 'Draw areas in the Design tab to see them here';
 /** Messages that arrive closer together than this are applied as one rebuild. */
 const EMBED_DEBOUNCE_MS = 150;
+/** Largest uploaded model or picture the embed will read. */
+const EMBED_ASSET_MAX_BYTES = 60 * 1024 * 1024;
 
 let embedPending: { plan: unknown; name: string; refit: boolean } | null = null;
 let embedTimer = 0;
 let embedOrigin = '';
 let embedBooted = false;
 let embedBuilt = false;
+/** Uploaded files already asked for since the last plan, so a rebuild does not ask twice. */
+const embedAsked = new Set<string>();
 
 function embedNote(text: string | null) {
   const box = $('#embed-note');
@@ -802,8 +806,19 @@ function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] 
 
 function onEmbedMessage(e: MessageEvent) {
   if (e.source !== window.parent || !EMBED_ALLOWED_PARENT_ORIGINS.some((re) => re.test(e.origin))) return;
-  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown } | null;
-  if (!d || typeof d !== 'object' || d.source !== 'area-planner' || d.type !== 'siteplan') return;
+  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; id?: unknown; kind?: unknown; data?: unknown } | null;
+  if (!d || typeof d !== 'object' || d.source !== 'area-planner') return;
+  if (d.type === 'asset') {
+    // An uploaded file the plan names, sent in answer to `need-asset`. `data: null` means the parent no longer has it.
+    if (typeof d.id !== 'string') return;
+    const id = d.id, origin = e.origin;
+    const reply = (ok: boolean, message?: string) => window.parent.postMessage({ source: 'growth-studio', type: 'asset', id, ok, ...(message ? { message } : {}) }, origin);
+    if (!(d.data instanceof Blob) || !studio) return reply(false, 'The file was not sent.');
+    if (d.data.size > EMBED_ASSET_MAX_BYTES) return reply(false, 'This file is too large to show in 3D (the limit is 60 MB).');
+    studio.addAsset(id, d.kind === 'image' ? 'image' : 'glb', d.data).then(() => reply(true), (err) => reply(false, err instanceof Error ? err.message : String(err)));
+    return;
+  }
+  if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
   // Keep only the newest plan. A refit asked for by any message in the burst still happens.
   embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit };
@@ -828,9 +843,10 @@ function applyEmbedPlan() {
     const sameLot = JSON.stringify(res.plan.site.boundary) === JSON.stringify(plan.site.boundary);
     plan = res.plan;
     planName = next.name.trim().slice(0, 80) || plan.site.name;
+    embedAsked.clear();
     studio.setPlan(plan, embedBuilt && !next.refit && sameLot);
     embedBuilt = true;
-    embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length ? null : EMBED_EMPTY_NOTE);
+    embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length + (plan.models?.length ?? 0) ? null : EMBED_EMPTY_NOTE);
     embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
   } catch (e) {
     console.error(e);
@@ -859,6 +875,11 @@ function initEmbed() {
     const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || (m.use === 'edging' && m.recipe === 'curb')))
       .map((m) => ({ id: m.id, name: m.name, use: m.use, maker: m.maker ?? '', line: m.line ?? '', shelf: m.shelf ?? (m.use === 'wall' ? 'Retaining walls' : m.use === 'edging' ? 'Curb' : 'Pavers'), color: m.color ?? m.name, sw: m.palette[1] ?? m.palette[0] }));
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
+    if (studio) studio.onNeedAsset = (id) => {
+      if (!embedOrigin || embedAsked.has(id)) return;
+      embedAsked.add(id);
+      window.parent.postMessage({ source: 'growth-studio', type: 'need-asset', id }, embedOrigin);
+    };
     if (studio) studio.onPick = (id) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
     applyEmbedPlan();
   };

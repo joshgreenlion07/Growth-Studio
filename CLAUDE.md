@@ -19,6 +19,8 @@ finished-work photos in `reference/green-lion-style/`.
   shows the height meter; leaving it restores the orbit camera.
 - `src/builder/` — SitePlan to 3D: ground splat, turf, hardscape with borders,
   walls and fences, water features and waterfalls, structures, features,
+  uploaded models (`models.ts`: a designer's own .glb or picture placed on a
+  drawn footprint; the file arrives apart from the SitePlan),
   procedural plants, and the neighborhood context. Every catalog plant has
   its own builder file under `src/builder/species/<group>/<catalog-id>.ts`,
   listed in `species/registry.ts` and built on the shared toolkit in
@@ -42,6 +44,9 @@ finished-work photos in `reference/green-lion-style/`.
   plans loading (see `LEGACY_IDS` in the catalog).
 - No hardcoded scene coordinates in `engine/`. Views, water, sun and lights
   come from the SitePlan.
+- Uploaded models (`plan.models`) are the one place outside files appear in a
+  scene. They come from the person using the app, are never bundled, and the
+  SitePlan carries only their id.
 - No image files ship with the app. Surfaces are drawn by recipes in
   `engine/surfaces.ts`. Manufacturer photos (Belgard, Basalite) are color and
   pattern references only; do not embed them.

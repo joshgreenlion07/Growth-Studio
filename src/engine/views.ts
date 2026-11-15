@@ -3,6 +3,7 @@ import { featureById } from '../siteplan/catalog';
 import { bounds, centroid, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 import { SIDEWALK, streetFrame } from '../builder/context';
+import { modelHeight, modelPoints } from '../builder/models';
 
 /** Camera views generated from the SitePlan instead of typed coordinates. */
 
@@ -54,6 +55,7 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
       ...plan.lines.flatMap((l) => l.points),
       ...plan.water.flatMap((w) => w.polygon ?? w.points ?? []),
       ...plan.features.map((f) => f.position),
+      ...modelPoints(plan.models),
       ...plan.plants.map((p) => p.position),
     ];
     if (drawn.length) {
@@ -64,7 +66,7 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
       R = Math.max(Math.hypot(d.maxX - d.minX, d.maxY - d.minY) * 0.85, 3);
     }
     // Stand far enough back that the overview clears the tallest wall or fence.
-    const tallest = Math.max(0, ...plan.lines.filter((l) => l.kind !== 'edging').map((l) => l.height));
+    const tallest = Math.max(0, ...plan.lines.filter((l) => l.kind !== 'edging').map((l) => l.height), ...(plan.models ?? []).map(modelHeight));
     R = Math.max(R, (tallest - 0.5) / 0.8);
   }
 
