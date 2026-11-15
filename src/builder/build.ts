@@ -9,6 +9,7 @@ import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { buildGround, groundModel, type GroundModel } from './ground';
 import { buildHardscape } from './hardscape';
+import { buildModels, type ModelAssets } from './models';
 import { buildPlants, type PlantLayer } from './plants';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
@@ -22,6 +23,8 @@ export interface SceneBuild {
   plants: PlantLayer;
   water: WaterBuild;
   features: FeatureBuild;
+  /** Uploaded-model files the plan names that have not arrived yet. */
+  missingAssets: string[];
   /** Solid surfaces for autofocus and camera collision. */
   surfaces: THREE.Object3D[];
   nightLights: NightLight[];
@@ -52,7 +55,7 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
   return out;
 }
 
-export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } }): SceneBuild {
+export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } }, assets: ModelAssets | null = null): SceneBuild {
   const root = new THREE.Group();
   root.name = 'yard';
   const gm = groundModel(plan);
@@ -63,6 +66,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   const water = buildWater(plan, gm, mirror, sky);
   const features = buildFeatures(plan.features, gm.height);
+  const models = buildModels(plan.models ?? [], gm.height, assets);
 
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
@@ -77,6 +81,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
         if (Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy) < (l.kind === 'wall' ? 0.2 : 0.06)) return true;
       }
     }
+    for (const m of plan.models ?? []) if (pointInPolygon(p, m.polygon)) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
@@ -89,7 +94,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
   const plants = buildPlants(placements, gm.height, quality !== 'draft');
 
-  root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, plants.object);
+  root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {
     // Lawn blades are left out of reflections for speed.
     turf.object.layers.set(WATER_LAYER_SKIP);
@@ -108,7 +113,8 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     plants,
     water,
     features,
-    surfaces: [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...plants.proxies],
+    missingAssets: models.missing,
+    surfaces: [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...models.surfaces, ...plants.proxies],
     nightLights,
     glow: [...structs.glass, ...features.glow, ...hard.glow],
     fallMats: [...water.fallMats, ...features.fallMats],
@@ -123,6 +129,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       structs.dispose();
       water.dispose();
       features.dispose();
+      models.dispose();
       turf.dispose();
       plants.dispose();
     },

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SitePlan } from '../siteplan/types';
 import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import { buildScene, type SceneBuild } from '../builder/build';
+import { ModelAssets, type AssetKind } from '../builder/models';
 import { WATER_LEVEL } from '../builder/ground';
 import { setFlames } from '../builder/features';
 import { disposeMaterialCache } from '../builder/materials';
@@ -74,6 +75,10 @@ export class Studio {
   onFrameStats: (fps: number) => void = () => {};
   /** A click (not a drag) on the scene: the id of the plan item under it, or null for bare ground. */
   onPick: (id: string | null) => void = () => {};
+  /** Uploaded-model files that have been handed over (see builder/models.ts). */
+  private assets = new ModelAssets();
+  /** The plan names an uploaded file that has not been handed over yet. */
+  onNeedAsset: (id: string) => void = () => {};
   private fpsAcc = 0;
   private fpsN = 0;
 
@@ -189,7 +194,8 @@ export class Studio {
       this.scene.remove(this.build.root);
       this.build.dispose();
     }
-    this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms);
+    this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
+    this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
     this.scene.add(this.build.root);
     this.build.setYears(this.state.years);
     this.views = generateViews(plan, this.build.gm.height);
@@ -198,6 +204,17 @@ export class Studio {
     this.updateSky(true);
     this.assignNightLights();
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+    for (const id of this.build.missingAssets) this.onNeedAsset(id);
+  }
+
+  /**
+   * Hand over an uploaded file the plan names. The scene is rebuilt in place
+   * (camera kept) when the current plan uses it. Rejects with a plain reason
+   * when the file cannot be read.
+   */
+  async addAsset(id: string, kind: AssetKind, data: Blob): Promise<void> {
+    await this.assets.add(id, kind, data);
+    if (!this.disposed && this.plan?.models?.some((m) => m.asset === id)) this.setPlan(this.plan, true);
   }
 
   get currentPlan() {
@@ -606,6 +623,7 @@ export class Studio {
     cancelAnimationFrame(this.raf);
     this.resizeObs.disconnect();
     this.build?.dispose();
+    this.assets.dispose();
     this.post.dispose();
     this.mirror.dispose();
     this.envRT?.dispose();

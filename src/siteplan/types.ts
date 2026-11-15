@@ -86,6 +86,27 @@ export interface PlantPlacement extends ItemBase {
   container?: '1g' | '2g' | '5g' | '15g' | '24b' | '36b' | '48b';
 }
 
+/**
+ * A designer's own rendering of a feature (a water wall, a rock waterfall),
+ * placed on a footprint drawn in the plan. The file is not part of the plan:
+ * `asset` names it, and the page that owns the plan hands it over separately
+ * (see "Embedding" in the README).
+ */
+export interface ModelPlacement extends ItemBase {
+  /** The drawn footprint. The model is sized to the box this sits in. */
+  polygon: Vec2[];
+  /** Id of the uploaded file. */
+  asset: string;
+  /** glb: a 3D model. image: a picture, shown as a standing board across the footprint. */
+  kind: 'glb' | 'image';
+  /** Overall height in meters. Left out, it follows the model's own proportions. */
+  height?: number;
+  /** Quarter turns clockwise from above. 0 puts the front on the long side that faces down the page. */
+  turn: 0 | 1 | 2 | 3;
+  /** contain (default): keep the model's proportions inside the footprint. stretch: fill the drawn size exactly. */
+  fit: 'contain' | 'stretch';
+}
+
 export interface FeaturePlacement extends ItemBase {
   catalogId: string;
   position: Vec2;
@@ -133,6 +154,8 @@ export interface SitePlan {
   water: WaterFeature[];
   plants: PlantPlacement[];
   features: FeaturePlacement[];
+  /** Uploaded models. Left out of plans saved before they existed. */
+  models?: ModelPlacement[];
 }
 
 export const EMPTY_PLAN = (): SitePlan => ({
