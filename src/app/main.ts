@@ -109,6 +109,10 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X shows measurements.');
+  studio.nav.onDisconnect = () => toast('Controller disconnected.');
+  studio.onMeasureChanged = (on) => $('#btn-measure').setAttribute('aria-pressed', String(on));
+  studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.setPlan(plan);
   $('#loading').hidden = true;
 }
@@ -686,6 +690,79 @@ function initDock() {
   $<HTMLInputElement>('#motion').addEventListener('change', (e) => studio?.setMotion((e.target as HTMLInputElement).checked));
 
   $('#btn-image').addEventListener('click', exportImage);
+  initFullscreen();
+}
+
+/* ------------------------------------------------------------------ */
+/* Full screen and the height meter                                     */
+
+const HM_MAX_FT = 700;
+/** Square-root scale, so the first 50 ft (where most yard views are) get room and the top still fits. */
+const hmPos = (ft: number) => Math.sqrt(Math.min(HM_MAX_FT, Math.max(0, ft)) / HM_MAX_FT) * 100;
+
+function initFullscreen() {
+  const pane = $('section.scene-pane');
+  const btn = $<HTMLButtonElement>('#btn-fullscreen');
+  const scale = $('#hm-scale'), mark = $('#hm-mark'), value = $('#hm-value');
+  for (const ft of [0, 10, 25, 50, 100, 200, 400, 700]) {
+    const t = h('div', { class: 'hm-tick', text: `${ft} ft` });
+    t.style.bottom = `${hmPos(ft)}%`;
+    scale.append(t);
+  }
+
+  let on = false, raf = 0, last = -1;
+  let pose: ReturnType<Studio['savePose']> | null = null;
+  $('#btn-measure').addEventListener('click', () => studio?.setMeasurements(!studio.measure.visible));
+  document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'walk' | 'fly')));
+  const tick = () => {
+    raf = requestAnimationFrame(tick);
+    if (!studio) return;
+    const ft = Math.round(studio.heightAboveGround() * 3.28084);
+    if (ft === last) return;
+    last = ft;
+    value.textContent = `${ft} ft`;
+    mark.style.bottom = `${hmPos(ft)}%`;
+  };
+  const set = (v: boolean) => {
+    if (v === on) return;
+    on = v;
+    pane.classList.toggle('fs', on);
+    // Full screen opens in first person at eye height; leaving it puts the camera back where it was.
+    if (studio) {
+      if (on) {
+        pose = studio.savePose();
+        studio.setNavMode('walk');
+      } else {
+        studio.setNavMode('orbit');
+        if (pose) studio.restorePose(pose);
+        pose = null;
+      }
+    }
+    btn.textContent = on ? 'Exit full screen' : 'Full screen';
+    btn.setAttribute('aria-pressed', String(on));
+    cancelAnimationFrame(raf);
+    last = -1;
+    if (on) tick();
+    window.dispatchEvent(new Event('resize'));
+  };
+  const toggle = () => {
+    if (!on) {
+      set(true);
+      // The real Fullscreen API where the browser allows it; the fixed layout above works without it.
+      pane.requestFullscreen?.().catch(() => {});
+    } else {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      set(false);
+    }
+  };
+  btn.addEventListener('click', toggle);
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && on) set(false); });
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggle(); }
+    else if (e.key === 'Escape' && on && !document.fullscreenElement) set(false);
+  });
 }
 
 /* ------------------------------------------------------------------ */
