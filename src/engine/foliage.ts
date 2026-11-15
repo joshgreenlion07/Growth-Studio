@@ -118,6 +118,20 @@ export function patchFoliage<M extends THREE.MeshStandardMaterial>(mat: M, o: Fo
          uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uTranslucency;`,
       )
       .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+         #ifdef USE_MAP
+         {
+           // Keep leaf cutouts from thinning out with distance: smaller mip
+           // levels average alpha down, so raise it back by the mip level.
+           vec2 gsTex = vec2(textureSize(map, 0));
+           vec2 gsDx = dFdx(vMapUv * gsTex), gsDy = dFdy(vMapUv * gsTex);
+           float gsLod = max(0.0, 0.5 * log2(max(dot(gsDx, gsDx), dot(gsDy, gsDy))));
+           diffuseColor.a *= 1.0 + gsLod * 0.3;
+         }
+         #endif`,
+      )
+      .replace(
         '#include <lights_fragment_end>',
         `#include <lights_fragment_end>
          {
