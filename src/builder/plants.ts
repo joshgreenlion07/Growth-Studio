@@ -635,8 +635,8 @@ export const LOD2_PIXELS = 32;
 
 /** Detail levels: share of leaf cards kept (each grown to keep the crown full), share of larger pieces kept, share of twigs kept, smallest limb kept (share of the largest). */
 const LEVELS = {
-  1: { keep: 0.4, grow: 1 / Math.sqrt(0.4), keepBig: 0.55, twigs: 0.25, limb: 0.2, limbKeep: 0.5 },
-  2: { keep: 0.14, grow: 2.1, keepBig: 0.3, twigs: 0, limb: 0.35, limbKeep: 0.15 },
+  1: { keep: 0.4, grow: 1 / Math.sqrt(0.4), keepBig: 1, twigs: 0.25, limb: 0.2, limbKeep: 0.5 },
+  2: { keep: 0.14, grow: 2.1, keepBig: 0.5, twigs: 0, limb: 0.35, limbKeep: 0.15 },
 };
 
 const lodCache = new WeakMap<THREE.BufferGeometry, Map<number, THREE.BufferGeometry>>();
@@ -644,9 +644,10 @@ const lodCache = new WeakMap<THREE.BufferGeometry, Map<number, THREE.BufferGeome
 /**
  * A lower-detail copy of a plant part for shadows, reflections and far plants.
  * Plant geometry is made of small separate pieces (leaf cards, blades, branch
- * tubes). Leaf and flower parts keep about 40% of their cards, each grown so
- * the crown stays about as dense; larger pieces (blades, broad leaves) keep
- * about half. Wood keeps its trunk and limbs and drops most twigs.
+ * tubes). At level 1, leaf and flower parts keep about 40% of their cards, each
+ * grown so the crown stays about as dense, and every larger piece (blades, broad
+ * leaves); wood keeps its trunk and limbs and drops most twigs. Level 2, for
+ * plants only a few dozen pixels tall, keeps far fewer (see LEVELS).
  */
 export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | 'flower', level: 1 | 2 = 1): THREE.BufferGeometry {
   let levels = lodCache.get(geo);
