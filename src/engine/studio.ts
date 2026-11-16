@@ -68,6 +68,11 @@ export class Studio {
   private mirror: PlanarMirror;
   private build: SceneBuild | null = null;
   private plan: SitePlan | null = null;
+  /**
+   * A copy of the plan as the yard was last built from it. Callers may edit their plan object in
+   * place before handing it over again, so what a new plan changes is judged against this copy.
+   */
+  private builtPlan: SitePlan | null = null;
   private skyNow: SkyState | null = null;
   private clock = new THREE.Clock();
   private raf = 0;
@@ -104,8 +109,8 @@ export class Studio {
   /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
   private shadowPassCam = new THREE.PerspectiveCamera(10, 1, 1, 2);
   private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
-  /** How much larger than the view an exported still is, so its plants get the detail its size needs. */
-  private stillScale = 1;
+  /** While an exported still is drawn: how much larger than the view it is, so its plants get the detail its size needs. */
+  private stillScale: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
@@ -220,10 +225,17 @@ export class Studio {
   /* -------------------------------------------------------------- */
 
   setPlan(plan: SitePlan, keepCamera = false) {
+    this.applyPlan(plan, keepCamera, true);
+  }
+
+  /** `restyle` false always rebuilds the whole yard (a new quality or uploaded file). */
+  private applyPlan(plan: SitePlan, keepCamera: boolean, restyle: boolean) {
+    const copy = JSON.parse(JSON.stringify(plan)) as SitePlan;
     // A new paving or wall material (the 3D material picker) rebuilds only the paving and lines.
-    if (this.build && this.plan && hardscapeOnlyChange(this.plan, plan)) {
+    if (restyle && this.build && this.builtPlan && hardscapeOnlyChange(this.builtPlan, copy)) {
       this.plan = plan;
       this.build.restyleHardscape(plan);
+      this.builtPlan = copy;
       this.build.root.getObjectByName('hardscape')?.traverse((o) => {
         if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
       });
@@ -234,12 +246,15 @@ export class Studio {
       return;
     }
     this.plan = plan;
+    // Until the new yard is built, nothing may be restyled.
+    this.builtPlan = null;
     if (this.build) {
       this.scene.remove(this.build.root);
       this.build.dispose();
     }
     this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
     this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
+    this.builtPlan = copy;
     // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
     this.build.root.traverse((o) => {
       if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
@@ -263,7 +278,7 @@ export class Studio {
    */
   async addAsset(id: string, kind: AssetKind, data: Blob): Promise<void> {
     await this.assets.add(id, kind, data);
-    if (!this.disposed && this.plan?.models?.some((m) => m.asset === id)) this.setPlan(this.plan, true);
+    if (!this.disposed && this.plan?.models?.some((m) => m.asset === id)) this.applyPlan(this.plan, true, false);
   }
 
   get currentPlan() {
@@ -316,7 +331,7 @@ export class Studio {
     if (q === this.state.quality) return;
     this.state.quality = q;
     this.applyQuality();
-    if (this.plan) this.setPlan(this.plan, true);
+    if (this.plan) this.applyPlan(this.plan, true, false);
   }
 
   currentHour(): number {
@@ -618,8 +633,12 @@ export class Studio {
       }
     }
 
-    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
-    const lodScale = (this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1) * this.stillScale;
+    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller);
+    // an exported still always gets the detail its own size needs.
+    const lodScale = this.stillScale ?? (this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1);
+    // Plants are culled against this frame's view: the camera has just moved (controls, tween,
+    // first person), and its world matrix is otherwise brought up to date only when it is drawn.
+    this.camera.updateMatrixWorld();
     this.build?.plants.update?.(this.camera, this.container.clientHeight * lodScale);
     // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
     // moves the leaves at a steady rate rather than every frame.
@@ -692,7 +711,7 @@ export class Studio {
     try {
       this.renderFrame(0);
     } finally {
-      this.stillScale = 1;
+      this.stillScale = null;
     }
     const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
     this.renderer.setPixelRatio(pr0);
