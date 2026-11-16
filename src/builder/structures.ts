@@ -3,8 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { centroid, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import type { ExistingStructure, Vec2 } from '../siteplan/types';
 import { roofTile, stucco } from '../engine/textures';
-import { pbrMaterial, plainMaterial, segmentBox } from './materials';
-import { slab } from './hardscape';
+import { boxUV, pbrMaterial, plainMaterial, segmentBox } from './materials';
+import { insetPolygon, slab } from './hardscape';
 
 /** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. Covers: a patio roof on posts. */
 
@@ -102,7 +102,9 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
   const geos: THREE.BufferGeometry[] = [];
   const wallMat = pbrMaterial('stucco', stucco());
   const roofMat = pbrMaterial('roof', roofTile());
-  const trimMat = plainMaterial('trim', { color: '#ece8e0', roughness: 0.6 });
+  // Painted fascia and soffit: flat paint, no whiter than the stucco. A near-white satin trim went past the bloom
+  // threshold in full sun and read as a glowing bar along the eaves.
+  const trimMat = plainMaterial('trim-matte', { color: '#d9d3c8', roughness: 0.92 });
   const frameMat = plainMaterial('frame', { color: '#2d2c2a', roughness: 0.5, metalness: 0.3 });
   const doorMat = plainMaterial('door', { color: '#4a3524', roughness: 0.55 });
   const glass = new THREE.MeshStandardMaterial({ color: '#1b2226', roughness: 0.04, metalness: 0.0, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb46a'), emissiveIntensity: 0 });
@@ -114,10 +116,23 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     const H = s.height;
     if (s.kind === 'cover') {
       // A California patio: stucco columns at the corners away from the house, beams, and a solid flat roof.
+      // With `walls`, a California room: solid stucco walls on the chosen edges, open (posts and a header) on the rest.
       const c = centroid(poly);
+      const n = poly.length;
       const free = poly.map((p) => !houses.some((h) => pointInPolygon(p, h.polygon) || distToEdge(p, h.polygon) < 0.45));
       const allOpen = !free.some((f) => f);   // nothing free: treat every corner as a post corner
       const isFree = (i: number) => allOpen || free[i];
+      // An edge against a house wall never gets its own wall: the house's wall is already there.
+      const againstHouse = (i: number) => {
+        const a = poly[i], b = poly[(i + 1) % n];
+        const m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        return !isFree(i) && !isFree((i + 1) % n) && houses.some((h) => pointInPolygon(m, h.polygon) || distToEdge(m, h.polygon) < 0.45);
+      };
+      const wall = (i: number) => !!s.walls?.[((i % n) + n) % n] && !againstHouse(((i % n) + n) % n);
+      const room = poly.some((_, i) => wall(i));
+      const openEdgeAt = (i: number) => isFree(((i % n) + n) % n) || isFree((((i + 1) % n) + n) % n);
+      // Walls and headers are mitered into whichever neighbor along the outline is one too.
+      const hasBand = (i: number) => wall(i) || (room && openEdgeAt(i));
       const parts: THREE.BufferGeometry[] = [];
       const beams: THREE.BufferGeometry[] = [];
       const post = (p: Vec2) => {
@@ -126,21 +141,44 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         const q: Vec2 = [p[0] + (d[0] / l) * 0.22, p[1] + (d[1] / l) * 0.22];
         parts.push(segmentBox([q[0] - 0.15, q[1]], [q[0] + 0.15, q[1]], 0.3, -0.05, H - 0.26));
       };
-      const n = poly.length;
+      // Room walls and headers sit inside the outline, their outer face on the edge.
+      const WT = 0.2;
+      const inner = room ? insetPolygon(poly, WT) : [];
+      const inward = (i: number): Vec2 => {
+        const a = poly[i], b = poly[(i + 1) % n];
+        const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        let o: Vec2 = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+        if (!pointInPolygon([(a[0] + b[0]) / 2 + o[0] * 0.05, (a[1] + b[1]) / 2 + o[1] * 0.05], poly)) o = [-o[0], -o[1]];
+        return o;
+      };
+      /** A prism along edge i, inside the outline: mitered where the next piece along the outline is one too, square otherwise. */
+      const band = (i: number, joinPrev: boolean, joinNext: boolean, y0: number, y1: number) => {
+        const j = (i + 1) % n, a = poly[i], b = poly[j], o = inward(i);
+        const ai: Vec2 = joinPrev ? inner[i] : [a[0] + o[0] * WT, a[1] + o[1] * WT];
+        const bi: Vec2 = joinNext ? inner[j] : [b[0] + o[0] * WT, b[1] + o[1] * WT];
+        const g = slab([a, b, bi, ai], y0, y1, 0);
+        return boxUV(g.index ? g.toNonIndexed() : g);
+      };
       for (let i = 0; i < n; i++) {
         const a = poly[i], b = poly[(i + 1) % n];
-        if (isFree(i)) post(a);
-        const openEdge = isFree(i) || isFree((i + 1) % n);
-        if (!openEdge) continue;
-        beams.push(segmentBox(a, b, 0.16, H - 0.28, H));
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (wall(i)) {
+          // Ground to the roof deck. Corners where two walls meet are mitered into one.
+          parts.push(band(i, hasBand(i - 1), hasBand(i + 1), -0.05, H));
+          continue;
+        }
+        // A wall end stands in for the column at that corner.
+        if (isFree(i) && !wall(i - 1)) post(a);
+        if (!openEdgeAt(i)) continue;
+        // A deeper header over the open side of a room, flush with the walls and joined to them.
+        if (room) parts.push(band(i, hasBand(i - 1), hasBand(i + 1), H - 0.4, H)); else beams.push(segmentBox(a, b, 0.16, H - 0.28, H));
         // Long open sides get a post about every 4 m.
         if (isFree(i) && isFree((i + 1) % n)) {
-          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
           const k = Math.ceil(len / 4.2);
           for (let j = 1; j < k; j++) post([a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k]);
         }
       }
-      const pg = parts.length ? mergeGeometries(parts, false) : null;
+      const pg = parts.length ? mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)), false) : null;
       if (pg) {
         geos.push(pg);
         const pm = new THREE.Mesh(pg, wallMat);
@@ -150,7 +188,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         group.add(pm);
         surfaces.push(pm);
       }
-      // The roof deck is tiled like the house roof; the beams keep the house trim color.
+      // The roof deck is tiled like the house roof; the beams are painted stucco like the columns.
       const roofGeo = slab(poly, H, H + 0.16, 0);
       geos.push(roofGeo);
       const deck = new THREE.Mesh(roofGeo, roofMat);
@@ -162,7 +200,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
       const bg = beams.length ? mergeGeometries(beams.map((g) => g.toNonIndexed()), false) : null;
       if (bg) {
         geos.push(bg);
-        const bm = new THREE.Mesh(bg, trimMat);
+        const bm = new THREE.Mesh(bg, wallMat);
         bm.castShadow = true;
         bm.receiveShadow = true;
         bm.userData.itemId = s.id;

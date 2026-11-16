@@ -131,7 +131,7 @@ export interface StructureOpening {
 }
 
 export interface ExistingStructure extends ItemBase {
-  /** A cover is a roofed patio on posts (a California patio): no walls. */
+  /** A cover is a roofed patio on posts (a California patio). With `walls` it becomes a California room. */
   kind: 'house' | 'garage' | 'shed' | 'cover';
   polygon: Vec2[];
   /** Wall height in meters. For a cover, the height of the underside of the roof. */
@@ -139,6 +139,12 @@ export interface ExistingStructure extends ItemBase {
   roof: 'hip' | 'flat';
   /** Marked doors and windows. When present, no automatic ones are added. */
   openings?: StructureOpening[];
+  /**
+   * Covers only: one entry per polygon edge, edge i running from polygon[i] to polygon[(i + 1) % n].
+   * true is a solid stucco wall along that edge from the ground to the roof; false (or left out) is open,
+   * on posts. An edge against a house wall is never walled. Left out, the cover is open on every side.
+   */
+  walls?: boolean[];
 }
 
 export interface SiteInfo {

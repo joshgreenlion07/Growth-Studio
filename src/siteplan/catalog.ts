@@ -262,6 +262,8 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'lawn', name: 'Natural lawn', use: 'turf', group: 'Turf', recipe: 'lawn', palette: ['#5f8a38', '#3f6328'] }),
   M({ id: 'putting-green', name: 'Putting green turf', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#8fb53a', '#729a2c'] }),
   M({ id: 'artificial-turf', name: 'Artificial turf', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#567a30', '#355322'] }),
+  // Area Planner's synthetic grass: one even, bright green blade, no patches or thatch, so it reads as artificial.
+  M({ id: 'synthetic-turf', name: 'Synthetic grass', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#76a63e', '#5c8f30'] }),
   // Mulch and rock
   M({ id: 'black-mulch', name: 'Black mulch', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#3a342f', '#221e1b'] }),
   M({ id: 'brown-mulch', name: 'Red-brown bark', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#6e4a2f', '#4a3121'] }),

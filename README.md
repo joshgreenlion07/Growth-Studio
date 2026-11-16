@@ -67,7 +67,15 @@ Messages use `window.postMessage`:
   `warnings: string[]`. `site.streetEdge` and `structures` can be left out.
 - Area Planner sends a drawn house as a `structures` item with `openings`
   (the doors and windows marked on it; each is moved onto the nearest wall).
-  A structure of kind `cover` is a roofed patio on posts. A pool can carry
+  A structure of kind `cover` is a roofed patio on posts. A cover can carry
+  `walls: boolean[]` to make it a California room: one entry per polygon edge,
+  edge `i` running from `polygon[i]` to `polygon[(i + 1) % n]`. `true` is a
+  solid stucco wall along that edge from the ground to the roof, built inside
+  the outline; `false` is open, on posts under a header. Send `false` for an
+  edge against the house (an edge along a house wall is never walled anyway).
+  Without `walls` the cover is open on every side, as before. A `walls` array
+  that is not all booleans or does not have one entry per edge is ignored
+  with a warning, and the cover is shown open. A pool can carry
   `coping` (width in meters, 0 for none) and is cut out of any paving that
   fully surrounds it.
 - `materials` lists the paver, border and wall looks the parent can offer:
@@ -77,6 +85,11 @@ Messages use `window.postMessage`:
   looks have an empty `maker`. Each maker paver color also has a matching
   border, `border-of-<id>`, which is not listed. `select` carries the id of the
   plan item that was clicked, or `null` for bare ground.
+- A turf zone with `catalogId: 'synthetic-turf'` is synthetic grass: an even,
+  bright artificial turf, labeled "Synthetic grass". `lawn` is natural grass.
+  An unknown turf id that names synthetic, artificial, fake or astro turf falls
+  back to synthetic grass; any other unknown turf id falls back to `lawn`, with a
+  warning.
 - A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
   pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.
 - A fence line can carry `topper: 'lattice' | 'cap'`, added above its height.

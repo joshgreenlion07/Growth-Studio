@@ -411,6 +411,15 @@ function lawnSet(spec: MaterialSpec): PBRSet {
 
 function turfSet(spec: MaterialSpec): PBRSet {
   const [acc, base] = pal(spec);
+  if (spec.id === 'synthetic-turf') {
+    // Synthetic grass: an even pile of fine blades in one green, no thatch or patches.
+    return paint(512, 2, 4, (u, v) => {
+      const fine = vnoise(u * 260, v * 260, 260, 3);
+      const blade = vnoise(u * 520, v * 160, 520, 6);
+      const c = mulRGB(mixRGB(base, acc, 0.55 + fine * 0.12), 0.96 + blade * 0.08);
+      return { h: fine * 0.5 + blade * 0.5, c, r: 0.8 };
+    });
+  }
   return paint(512, 2, 4, (u, v) => {
     const fine = vnoise(u * 220, v * 220, 220, 3);
     const thatch = vnoise(u * 400, v * 400, 400, 8);
