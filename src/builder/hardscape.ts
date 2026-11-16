@@ -246,7 +246,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
       }
       const g = slab(field, -0.06, t + 0.0005, bev);
       geos.push(g);
-      const mesh = new THREE.Mesh(g, mat(catalogMaterial(z.catalogId)));
+      const mesh = new THREE.Mesh(g, mat(catalogMaterial(z.catalogId, {}, z.laying)));
       mesh.receiveShadow = true;
       mesh.castShadow = t > 0.15;
       if (cut && pools.cutDepth) mesh.customDepthMaterial = pools.cutDepth;
@@ -254,7 +254,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const fg = cutFaces(pools.cutLines, z.polygon, -0.06, t - 0.001);
         if (fg) {
           geos.push(fg);
-          const fm = new THREE.Mesh(fg, catalogMaterial(z.catalogId, { side: THREE.DoubleSide }));
+          const fm = new THREE.Mesh(fg, catalogMaterial(z.catalogId, { side: THREE.DoubleSide }, z.laying));
           fm.receiveShadow = true;
           group.add(fm);
         }

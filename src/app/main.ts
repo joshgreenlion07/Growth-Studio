@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, materialById, plantById, sizeAt, type FeatureGroup, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, LAYING_NAMES, MATERIALS, PLANTS, featureById, isThreePiece, materialById, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -353,8 +353,15 @@ function renderInspector() {
     const z = plan.zones.find((x) => x.id === sel.id)!;
     const use: MaterialUse = z.kind === 'turf' ? 'turf' : z.kind === 'bed' ? 'bed' : 'hardscape';
     box.append(h('h3', { text: z.kind === 'turf' ? 'Lawn or turf' : z.kind === 'bed' ? 'Planting bed' : 'Patio or path' }), confirmAI(z) ?? '');
-    box.append(field('Material', selectEl('z-mat', matOptions(use), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed(); }, 'Material')));
+    box.append(field('Material', selectEl('z-mat', matOptions(use), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
     if (z.kind === 'hardscape') {
+      if (isThreePiece(materialById.get(z.catalogId))) {
+        box.append(field('Laying pattern', selectEl('z-laying', (['a', 'b', 'random'] as LayingPattern[]).map((k) => ({ value: k, label: LAYING_NAMES[k] })), z.laying ?? 'a', (v) => {
+          snapshot();
+          z.laying = v as LayingPattern;
+          changed();
+        }, 'Laying pattern'), 'Belgard 3-piece patterns for the 6 x 12, 9 x 12 and 12 x 12 set.'));
+      }
       box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border')], z.border?.catalogId ?? '', (v) => {
         snapshot();
         z.border = v ? { catalogId: v, width: z.border?.width ?? 0.2 } : undefined;
@@ -885,7 +892,7 @@ function initEmbed() {
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
     const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb')))
-      .map((m) => ({ id: m.id, name: m.name, use: m.use, maker: m.maker ?? '', line: m.line ?? '', shelf: m.shelf ?? (m.use === 'wall' ? 'Retaining walls' : m.use === 'edging' ? 'Curb' : m.use === 'fence' ? 'Fences' : 'Pavers'), color: m.color ?? m.name, sw: m.palette[1] ?? m.palette[0] }));
+      .map((m) => ({ id: m.id, name: m.name, use: m.use, maker: m.maker ?? '', line: m.line ?? '', shelf: m.shelf ?? (m.use === 'wall' ? 'Retaining walls' : m.use === 'edging' ? 'Curb' : m.use === 'fence' ? 'Fences' : 'Pavers'), color: m.color ?? m.name, sw: m.palette[1] ?? m.palette[0] , ...(isThreePiece(m) ? { laying: true } : {}) }));
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
