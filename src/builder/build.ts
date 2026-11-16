@@ -8,7 +8,8 @@ import type { Quality } from '../engine/post';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { buildGround, groundModel, WATER_LEVEL, type GroundModel } from './ground';
-import { buildHardscape, lineMoves, lineRuns, lineThickness, stepsFootprint } from './hardscape';
+import { buildHardscape, stepsFootprint } from './hardscape';
+import { lineCenter, lineThickness } from './linepath';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, type PlantLayer } from './plants';
 import { poolLayout, type PoolLayout } from './pools';
@@ -60,11 +61,14 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
   return out;
 }
 
-/** Every wall, fence, curb and edging segment where it is built, with half its thickness. */
+/** Every wall, fence, curb and edging segment where it is built (walls and curbs along their
+    moved, mitered center line), with half its thickness. */
 function lineBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
-  return plan.lines.flatMap((l) =>
-    l.kind === 'steps' ? [] : lineRuns(l, lineMoves(l, plan.zones)).map(([a, b]) => ({ a, b, half: lineThickness(l) / 2 })),
-  );
+  return plan.lines.flatMap((l) => {
+    if (l.kind === 'steps') return [];
+    const c = lineCenter(l, plan.zones), half = lineThickness(l) / 2;
+    return c.slice(1).map((b, i) => ({ a: c[i], b, half }));
+  });
 }
 
 export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } }, assets: ModelAssets | null = null): SceneBuild {

@@ -6,6 +6,7 @@ import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { latticeAlpha, materialTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { catalogMaterial, plainMaterial, segmentBox } from './materials';
+import { bandGeometry, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
 
 /**
@@ -458,98 +459,6 @@ function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geo
   return g;
 }
 
-/** Thickness in meters of a line that is built as a solid body: a wall or a concrete curb. 0 for the rest. */
-export function lineThickness(l: LineItem): number {
-  const spec = materialById.get(l.catalogId);
-  if (l.kind === 'wall') return (spec?.wall?.face ?? 'splitFace') === 'plaster' ? 0.25 : 0.3;
-  if (l.kind === 'edging' && spec?.recipe === 'curb') return 0.15;
-  return 0;
-}
-
-/**
- * How much a surface must stay in view at a point, for choosing the side of a boundary a wall
- * stands on: paving first (raised paving above lower paving), then lawn, then beds and gravel,
- * then bare ground. Paving is a slab that covers any zone drawn over it, so it counts wherever
- * it is; among the other zones the later one wins, as on the ground.
- */
-function surfaceRank(zones: Zone[], p: Vec2): number {
-  let paving = 0, top: Zone | null = null;
-  for (const z of zones) {
-    if (!pointInPolygon(p, z.polygon)) continue;
-    if (z.kind === 'hardscape') paving = Math.max(paving, 3 + (z.elevation ?? 0));
-    top = z;
-  }
-  return paving || (top ? (top.kind === 'turf' ? 2 : 1) : 0);
-}
-
-/**
- * How far each straight piece of a wall or curb moves sideways off the drawn line, one value per
- * segment, along the segment's left normal. A piece that runs along the boundary between two
- * surfaces moves by half its thickness onto the one that matters less, so its face is flush with
- * the drawn line and the paving's border (or the lawn's edge) on the other side stays in view. A
- * piece with the same surface on both sides stays centered on the line, and so do fences and steel
- * edging. The surfaces are read a little off the line on each side, never on it, because the
- * line's points usually are the surfaces' own points.
- */
-export function lineMoves(l: LineItem, zones: Zone[]): number[] {
-  const thick = lineThickness(l);
-  const moves: number[] = [];
-  for (let i = 0; i < l.points.length - 1; i++) {
-    const a = l.points[i], b = l.points[i + 1];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (!thick || len < 1e-6) {
-      moves.push(0);
-      continue;
-    }
-    const n: Vec2 = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
-    const off = thick / 2 + 0.06;
-    let score = 0;
-    for (const t of [0.15, 0.35, 0.5, 0.65, 0.85]) {
-      const q: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-      const left = surfaceRank(zones, [q[0] + n[0] * off, q[1] + n[1] * off]);
-      const right = surfaceRank(zones, [q[0] - n[0] * off, q[1] - n[1] * off]);
-      if (left > right + 0.02) score++;
-      else if (right > left + 0.02) score--;
-    }
-    // Away from the side that must stay in view, a few millimeters clear of the line.
-    moves.push(score > 0 ? -(thick / 2 + 0.004) : score < 0 ? thick / 2 + 0.004 : 0);
-  }
-  return moves;
-}
-
-/**
- * The [start, end] of each segment of a line moved sideways by `moves` (see lineMoves), plus
- * `extra` meters further the same way on each moved segment. Where either of two neighbors moved,
- * both end at the point their center lines cross, so the pieces meet at the corner.
- */
-export function lineRuns(l: LineItem, moves: number[], extra = 0): [Vec2, Vec2][] {
-  const runs: [Vec2, Vec2][] = [];
-  for (let i = 0; i < l.points.length - 1; i++) {
-    const a = l.points[i], b = l.points[i + 1];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const n: Vec2 = len > 1e-6 ? [-(b[1] - a[1]) / len, (b[0] - a[0]) / len] : [0, 0];
-    const m = moves[i] ? moves[i] + Math.sign(moves[i]) * extra : 0;
-    runs.push([[a[0] + n[0] * m, a[1] + n[1] * m], [b[0] + n[0] * m, b[1] + n[1] * m]]);
-  }
-  const reach = Math.max(0.3, lineThickness(l) * 3);
-  for (let i = 0; i + 1 < runs.length; i++) {
-    if (!moves[i] && !moves[i + 1]) continue;
-    const [a1, b1] = runs[i], [a2, b2] = runs[i + 1];
-    const d1: Vec2 = [b1[0] - a1[0], b1[1] - a1[1]], d2: Vec2 = [b2[0] - a2[0], b2[1] - a2[1]];
-    const l1 = Math.hypot(d1[0], d1[1]), l2 = Math.hypot(d2[0], d2[1]);
-    const cross = d1[0] * d2[1] - d1[1] * d2[0];
-    // Nearly straight on: no clean crossing, and the pieces overlap at their ends anyway.
-    if (l1 < 1e-6 || l2 < 1e-6 || Math.abs(cross) < 0.05 * l1 * l2) continue;
-    const s = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / cross;
-    const x: Vec2 = [a1[0] + d1[0] * s, a1[1] + d1[1] * s];
-    const corner = l.points[i + 1];
-    if (Math.hypot(x[0] - corner[0], x[1] - corner[1]) > reach) continue;
-    runs[i][1] = x;
-    runs[i + 1][0] = x;
-  }
-  return runs;
-}
-
 function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {
   const g = new THREE.Group();
   g.name = `line-${l.id}`;
@@ -562,31 +471,32 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     buckets.set(key, b);
   };
 
-  // Walls and curbs are built where lineMoves puts them; everything else on the drawn line. A
-  // moved wall's cap overhangs only on the side away from the line, so it leaves the border showing.
-  const moves = lineMoves(l, zones);
-  const runs = lineRuns(l, moves);
-  const face = spec?.wall?.face ?? 'splitFace';
-  const over = face === 'plaster' ? 0.02 : 0.035;
-  const capRuns = l.kind === 'wall' ? lineRuns(l, moves, over) : runs;
-  for (let i = 0; i < l.points.length - 1; i++) {
-    const a = l.points[i], b = l.points[i + 1];
-    const [ra, rb] = runs[i], [ca, cb] = capRuns[i];
-    const y0 = Math.min(height(a), height(b), 0) - 0.08;
+  // Walls and curbs are one continuous mitered body along the path linePath gives them (moved off
+  // the line onto the surface that matters less); fences and steel edging go segment by segment.
+  if (l.kind === 'wall' || (l.kind === 'edging' && spec?.recipe === 'curb')) {
+    const path = linePath(l, zones);
+    if (path.pts.length < 2) return g;
+    const y0 = path.pts.map((p) => Math.min(height(p), 0) - 0.08);
+    const half = path.thick / 2;
     if (l.kind === 'wall') {
-      const thick = lineThickness(l);
-      put('wall', catalogMaterial(l.catalogId), segmentBox(ra, rb, thick, y0, l.height, thick / 2));
-      const cap = segmentBox(ca, cb, thick + over * 2, l.height, l.height + (face === 'plaster' ? 0.05 : 0.06), thick / 2 + over);
+      const face = spec?.wall?.face ?? 'splitFace';
+      const over = face === 'plaster' ? 0.02 : 0.035;
+      put('wall', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map(() => l.height)));
+      // The cap overhangs both faces of a centered wall, and the wall's open ends; as the wall
+      // moves off the line its overhang shifts to the far side, so the near edge stays flush.
+      const f = (d: number) => Math.max(-1, Math.min(1, path.move ? d / path.move : 0));
+      const capTop = l.height + (face === 'plaster' ? 0.05 : 0.06);
+      const cap = bandGeometry(extendPath(path, over), (d) => d - half - over * (1 - f(d)), (d) => d + half + over * (1 + f(d)), path.pts.map(() => l.height), path.pts.map(() => capTop));
       put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
-    } else if (l.kind === 'fence') {
-      fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
     } else {
-      const top = Math.max(height(a), height(b));
-      if (spec?.recipe === 'curb') {
-        put('curb', catalogMaterial(l.catalogId), segmentBox(ra, rb, 0.15, y0, top + 0.07, 0.075));
-      } else {
-        put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, top + 0.03, 0.004), false);
-      }
+      put('curb', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map((p) => height(p) + 0.07), true));
+    }
+  } else {
+    for (let i = 0; i < l.points.length - 1; i++) {
+      const a = l.points[i], b = l.points[i + 1];
+      const y0 = Math.min(height(a), height(b), 0) - 0.08;
+      if (l.kind === 'fence') fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
+      else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }
   }
   for (const [, b] of buckets) {
