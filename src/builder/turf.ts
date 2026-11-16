@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { materialById } from '../siteplan/catalog';
-import { bounds, pointInPolygon, rng } from '../siteplan/geometry';
+import { bounds, rng } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 import { GLOBAL, foliageDepthMaterial, patchFoliage } from '../engine/foliage';
 import { GeoBuilder } from './geobuilder';
@@ -58,7 +58,7 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'b
     for (let y = b.minY; y < b.maxY; y += step) {
       for (let x = b.minX; x < b.maxX; x += step) {
         const p: Vec2 = [x + (r() - 0.5) * step, y + (r() - 0.5) * step];
-        if (!pointInPolygon(p, z.polygon)) continue;
+        // The zone on top at p is this one only when p is inside it.
         if (gm.zoneAt(p) !== z) continue;
         if (blocked(p)) continue;
         const c = base.clone().lerp(acc, synthetic ? 0.4 + r() * 0.3 : r()).multiplyScalar(synthetic ? 0.92 + r() * 0.12 : 0.8 + r() * 0.35);

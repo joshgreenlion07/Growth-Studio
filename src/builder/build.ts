@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { featureById, plantById } from '../siteplan/catalog';
-import { centroid, distToEdge, distToSegment, pointInPolygon, scatterInPolygon } from '../siteplan/geometry';
+import { centroid, scatterInPolygon } from '../siteplan/geometry';
+import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
@@ -44,7 +45,10 @@ export interface SceneBuild {
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
 export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] {
   const out: PlantPlacement[] = [...plan.plants];
-  const bodies = lineBodies(plan);
+  const bodies = bodyGrid(lineBodies(plan));
+  // Placed plants by position, so each candidate checks only its neighbors.
+  const taken = new PointGrid(1);
+  for (const q of out) taken.add(q.position[0], q.position[1]);
   for (const z of plan.zones) {
     if (!z.fill) continue;
     const spec = plantById.get(z.fill.catalogId);
@@ -53,12 +57,18 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
     pts.forEach((p, i) => {
       if (gm.zoneAt(p) !== z) return;
       if (gm.inWater(p, 0.3)) return;
-      if (bodies.some((s) => s.half > 0.05 && distToSegment(p, s.a, s.b) < s.half + 0.1)) return;
-      if (out.some((q) => Math.hypot(q.position[0] - p[0], q.position[1] - p[1]) < z.fill!.spacing * 0.7)) return;
+      if (bodies.grid.someWithin(p[0], p[1], bodies.maxHalf + 0.1, (k, d) => bodies.list[k].half > 0.05 && d < bodies.list[k].half + 0.1)) return;
+      if (taken.anyWithin(p[0], p[1], z.fill!.spacing * 0.7)) return;
       out.push({ id: `${z.id}-fill-${i}`, catalogId: spec.id, position: p, source: z.source });
+      taken.add(p[0], p[1]);
     });
   }
   return out;
+}
+
+/** Line bodies in a segment grid, tagged with their index in `list`. */
+function bodyGrid(list: { a: Vec2; b: Vec2; half: number }[]) {
+  return { list, grid: new SegmentGrid(list.map((s, tag) => ({ a: s.a, b: s.b, tag }))), maxHalf: list.reduce((m, s) => Math.max(m, s.half), 0) };
 }
 
 /** Every wall, fence, curb and edging segment where it is built (walls and curbs along their
@@ -85,15 +95,19 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const features = buildFeatures(plan.features, gm.height);
   const models = buildModels(plan.models ?? [], gm.height, assets);
 
-  const bodies = lineBodies(plan);
+  const bodies = bodyGrid(lineBodies(plan));
+  // Everything turf blades stay off, indexed once: they are tested for every blade.
+  const structIdx = plan.structures.filter((s) => s.polygon.length >= 3).map((s) => new PolygonIndex(s.polygon));
+  const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones)));
+  const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
     const z = gm.zoneAt(p);
     if (z && z.kind !== 'turf') return true;
-    for (const s of plan.structures) if (pointInPolygon(p, s.polygon) || distToEdge(p, s.polygon) < 0.05) return true;
-    for (const l of plan.lines) if (l.kind === 'steps' && stepsFootprint(l, plan.zones).some((q) => pointInPolygon(p, q))) return true;
-    for (const s of bodies) if (distToSegment(p, s.a, s.b) < Math.max(0.06, s.half + 0.05)) return true;
-    for (const m of plan.models ?? []) if (pointInPolygon(p, m.polygon)) return true;
+    for (const s of structIdx) if (inBounds(s.box, p[0], p[1], 0.05) && (s.contains(p[0], p[1]) || s.dist(p[0], p[1], 0.05) < 0.05)) return true;
+    if (stepsIdx.any(p[0], p[1])) return true;
+    if (bodies.grid.someWithin(p[0], p[1], Math.max(0.06, bodies.maxHalf + 0.05), (k, d) => d < Math.max(0.06, bodies.list[k].half + 0.05))) return true;
+    if (modelIdx.any(p[0], p[1])) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;

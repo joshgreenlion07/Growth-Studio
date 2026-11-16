@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { bounds, distToEdge, pointInPolygon, signedArea, type Bounds } from '../siteplan/geometry';
+import { bounds, signedArea, type Bounds } from '../siteplan/geometry';
+import { PolygonIndex } from '../siteplan/spatial';
 import type { SitePlan, Vec2, WaterFeature } from '../siteplan/types';
 import { outsetPolygon, poolCoping, zoneTop } from './hardscape';
 
@@ -51,10 +52,10 @@ export interface PoolLayout {
   dispose(): void;
 }
 
-/** Signed distance to a polygon outline: negative inside. */
-function signedDist(p: Vec2, poly: Vec2[]): number {
-  const d = distToEdge(p, poly);
-  return pointInPolygon(p, poly) ? -d : d;
+/** Signed distance to a polygon outline, negative inside; beyond `max` it is plus or minus Infinity. */
+function signedDist(x: number, y: number, poly: PolygonIndex, max: number): number {
+  const d = poly.dist(x, y, max);
+  return poly.contains(x, y) ? -d : d;
 }
 
 /**
@@ -67,16 +68,20 @@ function poolLevel(plan: SitePlan, outer: Vec2[]): { lift: number; deck: number 
   const b = bounds(outer);
   const step = Math.max(0.08, Math.sqrt(Math.abs(signedArea(outer))) / 24);
   const pts: Vec2[] = [];
+  const oi = new PolygonIndex(outer);
   for (let y = b.minY - band + step / 2; y < b.maxY + band; y += step) {
     for (let x = b.minX - band + step / 2; x < b.maxX + band; x += step) {
-      const p: Vec2 = [x, y];
-      if (pointInPolygon(p, outer) || distToEdge(p, outer) < band) pts.push(p);
+      if (oi.contains(x, y) || oi.dist(x, y, band) < band) pts.push([x, y]);
     }
   }
+  const pb = bounds(pts.length ? pts : outer);
   const share: number[] = plan.zones.map((z) => {
     if (z.kind !== 'hardscape' || !pts.length) return 0;
+    const zi = new PolygonIndex(z.polygon);
+    const zb = zi.box;
+    if (zb.maxX < pb.minX || zb.minX > pb.maxX || zb.maxY < pb.minY || zb.minY > pb.maxY) return 0;
     let n = 0;
-    for (const p of pts) if (pointInPolygon(p, z.polygon)) n++;
+    for (const p of pts) if (zi.contains(p[0], p[1])) n++;
     return n / pts.length;
   });
   let lift = 0, deck = 0;
@@ -102,7 +107,8 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
     pools.push({ water: w, poly: w.polygon, coping, outer, lift, top, level: lift + waterLevel - 0.03 });
   });
   const byId = new Map(pools.map((p) => [p.water.id, p]));
-  const cutAt = (p: Vec2) => pools.some((pl) => pointInPolygon(p, pl.outer) && distToEdge(p, pl.outer) > TUCK);
+  const outerIdx = pools.map((pl) => new PolygonIndex(pl.outer));
+  const cutAt = (p: Vec2) => outerIdx.some((o) => o.contains(p[0], p[1]) && o.dist(p[0], p[1], TUCK) > TUCK);
 
   if (!pools.length) {
     return { pools, byId, touches: () => false, cutAt, cutLines: [], cutMaterial: (m) => m, cutDepth: null, patchGround() {}, dispose() {} };
@@ -119,19 +125,21 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
   area.maxY = area.minY + H * texel;
   const data = new Uint8Array(W * H * 2).fill(255);
   const enc = (d: number) => Math.round((Math.max(-1, Math.min(1, d / RANGE)) * 0.5 + 0.5) * 255);
-  for (const pl of pools) {
-    const b = bounds(pl.outer);
+  pools.forEach((pl, k) => {
+    const outerI = outerIdx[k], polyI = new PolygonIndex(pl.poly);
+    const b = outerI.box;
     const i0 = Math.max(0, Math.floor((b.minX - RANGE - area.minX) / texel)), i1 = Math.min(W - 1, Math.ceil((b.maxX + RANGE - area.minX) / texel));
     const j0 = Math.max(0, Math.floor((b.minY - RANGE - area.minY) / texel)), j1 = Math.min(H - 1, Math.ceil((b.maxY + RANGE - area.minY) / texel));
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
-        const p: Vec2 = [area.minX + (i + 0.5) * texel, area.minY + (j + 0.5) * texel];
+        const x = area.minX + (i + 0.5) * texel, y = area.minY + (j + 0.5) * texel;
         const o = (j * W + i) * 2;
-        data[o] = Math.min(data[o], enc(signedDist(p, pl.outer)));
-        data[o + 1] = Math.min(data[o + 1], enc(signedDist(p, pl.poly)));
+        // Stored distances stop at RANGE, so edges farther away are not searched for.
+        data[o] = Math.min(data[o], enc(signedDist(x, y, outerI, RANGE)));
+        data[o + 1] = Math.min(data[o + 1], enc(signedDist(x, y, polyI, RANGE)));
       }
     }
-  }
+  });
   const map = new THREE.DataTexture(data, W, H, THREE.RGFormat);
   map.magFilter = map.minFilter = THREE.LinearFilter;
   map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
