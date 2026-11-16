@@ -112,6 +112,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Phones and tablets start at a lighter quality; show it in the picker.
+  $<HTMLSelectElement>('#quality').value = studio.state.quality;
   studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements.');
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));

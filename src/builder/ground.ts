@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { materialById } from '../siteplan/catalog';
-import { bounds, distToEdge, distToPolyline, fallProfile, pointInPolygon, projectOnPolyline, type Bounds } from '../siteplan/geometry';
+import { bounds, distToPolyline, fallProfile, projectOnPolyline, type Bounds } from '../siteplan/geometry';
+import { PolygonIndex, PolygonSet, inBounds } from '../siteplan/spatial';
 import type { SitePlan, Vec2, Zone } from '../siteplan/types';
 import type { PBRSet } from '../engine/textures';
 import { materialTextures, soilTextures } from '../engine/surfaces';
 import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
+import type { Quality } from '../engine/post';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -52,15 +54,28 @@ export function groundModel(plan: SitePlan): GroundModel {
   const street = streetFrame(plan);
   const streetW = SIDEWALK * 2 + CURB * 2 + ROAD;
 
+  // Spatial lookups: every ground vertex asks which zone it is in and how far it is from edges.
+  const zoneSet = new PolygonSet(plan.zones.map((z) => z.polygon));
   const zoneAt = (p: Vec2): Zone | null => {
-    for (let i = plan.zones.length - 1; i >= 0; i--) if (pointInPolygon(p, plan.zones[i].polygon)) return plan.zones[i];
-    return null;
+    const i = zoneSet.lastContaining(p[0], p[1]);
+    return i < 0 ? null : plan.zones[i];
   };
+  const siteIdx = new PolygonIndex(plan.site.boundary);
+  const bedIdx = new Map(beds.map((z) => [z, zoneSet.items[plan.zones.indexOf(z)]]));
+  // Water, each with the box beyond which it has no effect on the ground or on inWater.
+  const waterIdx = water.map((w) => {
+    const poly = w.polygon && w.polygon.length >= 3 ? new PolygonIndex(w.polygon) : null;
+    const half = (w.width ?? 0.8) / 2;
+    const run = w.points && w.points.length ? bounds(w.points) : null;
+    const prof = (w.kind === 'stream' || w.kind === 'pondless') && w.points ? fallProfile(w, WATER_LEVEL) : null;
+    const reach = Math.max(half + 1.6, 1.8);
+    return { w, poly, half, run, prof, reach };
+  });
 
   const inWater = (p: Vec2, pad = 0) => {
-    for (const w of water) {
-      if (w.polygon && (pointInPolygon(p, w.polygon) || (pad > 0 && distToEdge(p, w.polygon) < pad))) return true;
-      if (w.points && distToPolyline(p, w.points) < (w.width ?? 0.8) / 2 + pad) return true;
+    for (const { w, poly, half, run } of waterIdx) {
+      if (poly && inBounds(poly.box, p[0], p[1], pad) && (poly.contains(p[0], p[1]) || (pad > 0 && poly.dist(p[0], p[1], pad) < pad))) return true;
+      if (w.points && run && inBounds(run, p[0], p[1], half + pad) && distToPolyline(p, w.points) < half + pad) return true;
     }
     return false;
   };
@@ -68,9 +83,9 @@ export function groundModel(plan: SitePlan): GroundModel {
   const terrain = (p: Vec2, dig: boolean): number => {
     let h = 0;
     // Gentle relief outside the property.
-    const outside = !pointInPolygon(p, plan.site.boundary);
+    const outside = !siteIdx.contains(p[0], p[1]);
     if (outside) {
-      const d = distToEdge(p, plan.site.boundary);
+      const d = siteIdx.dist(p[0], p[1]);
       let k = Math.min(1, Math.max(0, (d - 5) / 15));
       if (street) {
         const c = streetCoords(street, p);
@@ -82,30 +97,25 @@ export function groundModel(plan: SitePlan): GroundModel {
     } else {
       // Planting beds are mounded slightly; raised planters are filled near the top.
       const top = zoneAt(p);
-      for (const z of beds) {
-        if (top !== z) continue;
-        if (z.raised && pointInPolygon(p, z.polygon)) {
-          h = Math.max(h, z.raised.height - 0.07);
-          continue;
-        }
-        if (pointInPolygon(p, z.polygon)) {
-          const d = distToEdge(p, z.polygon);
-          const mat = materialById.get(z.catalogId);
-          const k = z.raised ? 0 : mat?.recipe === 'mulch' ? 0.07 : 0.025;
-          h = Math.max(h, k * Math.min(1, d / 1.2));
+      if (top && top.kind === 'bed') {
+        if (top.raised) h = Math.max(h, top.raised.height - 0.07);
+        else {
+          // The mound levels off 1.2 m in, so edges farther than that need not be found.
+          const d = Math.min(1.2, bedIdx.get(top)!.dist(p[0], p[1], 1.2));
+          const k = materialById.get(top.catalogId)?.recipe === 'mulch' ? 0.07 : 0.025;
+          h = Math.max(h, k * (d / 1.2));
         }
       }
     }
-    for (const w of water) {
-      if (w.kind === 'pond' && w.polygon && pointInPolygon(p, w.polygon)) {
-        const d = distToEdge(p, w.polygon);
-        h = Math.min(h, WATER_LEVEL - 0.04 - w.depth * Math.pow(Math.min(1, d / 1.3), 0.8));
-      } else if (w.kind === 'pool' && w.polygon && pointInPolygon(p, w.polygon)) {
+    for (const { w, poly, half, run, prof: wprof, reach } of waterIdx) {
+      if (w.kind === 'pond' && poly && poly.contains(p[0], p[1])) {
+        const d = Math.min(1.3, poly.dist(p[0], p[1], 1.3));
+        h = Math.min(h, WATER_LEVEL - 0.04 - w.depth * Math.pow(d / 1.3, 0.8));
+      } else if (w.kind === 'pool' && poly && poly.contains(p[0], p[1])) {
         if (dig) h = Math.min(h, -w.depth - 0.15);
-      } else if ((w.kind === 'stream' || w.kind === 'pondless') && w.points) {
-        const half = (w.width ?? 0.8) / 2;
+      } else if ((w.kind === 'stream' || w.kind === 'pondless') && w.points && run && wprof && inBounds(run, p[0], p[1], reach)) {
         const pr = projectOnPolyline(p, w.points);
-        const prof = fallProfile(w, WATER_LEVEL);
+        const prof = wprof;
         const lvl = prof.level(pr.t);
         // A planted berm carries the raised run; it fades out 1.6 m from the bank.
         const bank = Math.max(0, lvl + 0.08);
@@ -222,18 +232,24 @@ function splatTextures(plan: SitePlan, area: Bounds, ppm: number, layers: string
 
 function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, hole?: Bounds): THREE.BufferGeometry {
   const nx = Math.ceil((area.maxX - area.minX) / step), ny = Math.ceil((area.maxY - area.minY) / step);
-  const pos: number[] = [];
-  const uv: number[] = [];
-  const idx: number[] = [];
-  for (let j = 0; j <= ny; j++) {
-    for (let i = 0; i <= nx; i++) {
+  const pos = new Float32Array((nx + 1) * (ny + 1) * 3);
+  const uv = new Float32Array((nx + 1) * (ny + 1) * 2);
+  const p: Vec2 = [0, 0];
+  for (let j = 0, v = 0; j <= ny; j++) {
+    for (let i = 0; i <= nx; i++, v++) {
       const x = area.minX + ((area.maxX - area.minX) * i) / nx;
       const z = area.minY + ((area.maxY - area.minY) * j) / ny;
-      pos.push(x, height([x, z]), z);
+      p[0] = x;
+      p[1] = z;
+      pos[v * 3] = x;
+      pos[v * 3 + 1] = height(p);
+      pos[v * 3 + 2] = z;
       // World-space UVs keep the normal-map tangent frame aligned with x and z.
-      uv.push(x, z);
+      uv[v * 2] = x;
+      uv[v * 2 + 1] = z;
     }
   }
+  const idx: number[] = [];
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
       if (hole) {
@@ -248,11 +264,78 @@ function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, h
     }
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  g.userData.grid = { nx, ny };
   return g;
+}
+
+/**
+ * Ray hits on a grid mesh from gridGeometry, walking only the cells under the ray (in order,
+ * so the first cell with a hit holds the nearest one) instead of testing every triangle.
+ * Autofocus and picking cast a ray at the ground several times a second.
+ */
+function gridRaycast(mesh: THREE.Mesh, area: Bounds, nx: number, ny: number) {
+  const ray = new THREE.Ray(), inv = new THREE.Matrix4(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3(), hit = new THREE.Vector3();
+  const sx = (area.maxX - area.minX) / nx, sz = (area.maxY - area.minY) / ny;
+  mesh.raycast = (raycaster, intersects) => {
+    const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    inv.copy(mesh.matrixWorld).invert();
+    ray.copy(raycaster.ray).applyMatrix4(inv);
+    const o = ray.origin, dir = ray.direction;
+    // Where the ray's ground track enters and leaves the grid.
+    let t0 = 0, t1 = Infinity;
+    for (const [oo, dd, lo, hi] of [[o.x, dir.x, area.minX, area.maxX], [o.z, dir.z, area.minY, area.maxY]]) {
+      if (Math.abs(dd) < 1e-12) {
+        if (oo < lo || oo > hi) return;
+      } else {
+        const ta = (lo - oo) / dd, tb = (hi - oo) / dd;
+        t0 = Math.max(t0, Math.min(ta, tb));
+        t1 = Math.min(t1, Math.max(ta, tb));
+      }
+    }
+    if (t0 > t1) return;
+    const vx = (i: number, j: number, v: THREE.Vector3) => v.fromBufferAttribute(pos, j * (nx + 1) + i);
+    const cellHit = (i: number, j: number): number => {
+      vx(i, j, a);
+      vx(i + 1, j, b);
+      vx(i, j + 1, c);
+      vx(i + 1, j + 1, d);
+      let best = Infinity;
+      if (ray.intersectTriangle(a, c, b, false, hit)) best = Math.min(best, hit.distanceTo(o));
+      if (ray.intersectTriangle(b, c, d, false, hit)) best = Math.min(best, hit.distanceTo(o));
+      return best;
+    };
+    // Step through the cells under the ray (Amanatides and Woo).
+    const ex = o.x + dir.x * t0, ez = o.z + dir.z * t0;
+    let i = Math.max(0, Math.min(nx - 1, Math.floor((ex - area.minX) / sx)));
+    let j = Math.max(0, Math.min(ny - 1, Math.floor((ez - area.minY) / sz)));
+    const stepI = dir.x > 0 ? 1 : -1, stepJ = dir.z > 0 ? 1 : -1;
+    const dtx = Math.abs(dir.x) > 1e-12 ? sx / Math.abs(dir.x) : Infinity, dtz = Math.abs(dir.z) > 1e-12 ? sz / Math.abs(dir.z) : Infinity;
+    let tx = Math.abs(dir.x) > 1e-12 ? (area.minX + (i + (stepI > 0 ? 1 : 0)) * sx - o.x) / dir.x : Infinity;
+    let tz = Math.abs(dir.z) > 1e-12 ? (area.minY + (j + (stepJ > 0 ? 1 : 0)) * sz - o.z) / dir.z : Infinity;
+    for (let guard = 0; guard < nx + ny + 2; guard++) {
+      const dist = cellHit(i, j);
+      if (dist < Infinity) {
+        // Distances are along the local ray; the mesh is only translated, so they hold in world space too.
+        const point = ray.at(dist, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+        const dw = raycaster.ray.origin.distanceTo(point);
+        if (dw >= raycaster.near && dw <= raycaster.far) intersects.push({ distance: dw, point, object: mesh });
+        return;
+      }
+      if (Math.min(tx, tz) > t1) return;
+      if (tx < tz) {
+        i += stepI;
+        tx += dtx;
+      } else {
+        j += stepJ;
+        tz += dtz;
+      }
+      if (i < 0 || j < 0 || i >= nx || j >= ny) return;
+    }
+  };
 }
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
@@ -331,7 +414,7 @@ export interface GroundBuild {
   dispose(): void;
 }
 
-export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'balanced' | 'max', pools: PoolLayout): GroundBuild {
+export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, pools: PoolLayout): GroundBuild {
   const group = new THREE.Group();
   group.name = 'ground';
   const area = gm.area;
@@ -342,6 +425,7 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 
   const site = new THREE.Mesh(gridGeometry(area, step, gm.grade), mat);
   site.receiveShadow = true;
   site.name = 'site-ground';
+  gridRaycast(site, area, site.geometry.userData.grid.nx, site.geometry.userData.grid.ny);
   group.add(site);
 
   // Surroundings: coarser terrain that fades into the haze.

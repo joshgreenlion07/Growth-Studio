@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SitePlan } from '../siteplan/types';
 import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
-import { buildScene, type SceneBuild } from '../builder/build';
+import { buildScene, hardscapeOnlyChange, type SceneBuild } from '../builder/build';
 import { ModelAssets, type AssetKind } from '../builder/models';
 import { WATER_LEVEL } from '../builder/ground';
 import { setFlames } from '../builder/features';
@@ -14,7 +14,7 @@ import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
 import { generateViews, type CameraView } from './views';
-import { PlanarMirror, WATER_LAYER_SKIP } from './water';
+import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
 
 /**
  * The 3D runtime: renderer, lighting, sky, camera, post-processing, and the
@@ -30,6 +30,23 @@ export interface StudioState {
   quality: Quality;
   wind: number;
   motion: boolean;
+}
+
+/** While leaves move in the wind, their shadows are redrawn this often (seconds of animation time). */
+const SHADOW_STEP = 1 / 20;
+
+/**
+ * The quality a session starts at. Phones and tablets (a touch screen as the main pointer, or a
+ * small screen) start at Light; anyone can pick a higher one.
+ */
+export function defaultQuality(): Quality {
+  try {
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const small = Math.min(window.screen?.width ?? 1024, window.screen?.height ?? 1024) < 600;
+    return coarse || small ? 'light' : 'balanced';
+  } catch {
+    return 'balanced';
+  }
 }
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -51,6 +68,11 @@ export class Studio {
   private mirror: PlanarMirror;
   private build: SceneBuild | null = null;
   private plan: SitePlan | null = null;
+  /**
+   * A copy of the plan as the yard was last built from it. Callers may edit their plan object in
+   * place before handing it over again, so what a new plan changes is judged against this copy.
+   */
+  private builtPlan: SitePlan | null = null;
   private skyNow: SkyState | null = null;
   private clock = new THREE.Clock();
   private raf = 0;
@@ -70,7 +92,7 @@ export class Studio {
   private navMode: NavMode = 'orbit';
   onNavModeChanged: (mode: NavMode) => void = () => {};
   onMeasureChanged: (mode: MeasureMode) => void = () => {};
-  state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: 'balanced', wind: 0.55, motion: true };
+  state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: defaultQuality(), wind: 0.55, motion: true };
   onViewsChanged: (views: CameraView[]) => void = () => {};
   onFrameStats: (fps: number) => void = () => {};
   /** A click (not a drag) on the scene: the id of the plan item under it, or null for bare ground. */
@@ -81,6 +103,14 @@ export class Studio {
   onNeedAsset: (id: string) => void = () => {};
   private fpsAcc = 0;
   private fpsN = 0;
+  /** The shadow map is redrawn only when something that casts or lights it changed. */
+  private shadowDirty = true;
+  private shadowTime = -Infinity;
+  /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
+  private shadowPassCam = new THREE.PerspectiveCamera(10, 1, 1, 2);
+  private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  /** While an exported still is drawn: how much larger than the view it is, so its plants get the detail its size needs. */
+  private stillScale: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
@@ -117,6 +147,12 @@ export class Studio {
     this.mirror = new PlanarMirror(WATER_LEVEL, 0.5);
 
     this.camera.layers.enable(WATER_LAYER_SKIP);
+    this.shadowPassCam.layers.set(SHADOW_PASS_LAYER);
+    // The shadow pass collects only the lights its camera sees.
+    this.keyLight.layers.enable(SHADOW_PASS_LAYER);
+    this.shadowPassCam.position.set(0, -1e6, 0);
+    this.shadowPassCam.lookAt(0, -2e6, 0);
+    this.shadowPassCam.updateMatrixWorld();
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -189,13 +225,41 @@ export class Studio {
   /* -------------------------------------------------------------- */
 
   setPlan(plan: SitePlan, keepCamera = false) {
+    this.applyPlan(plan, keepCamera, true);
+  }
+
+  /** `restyle` false always rebuilds the whole yard (a new quality or uploaded file). */
+  private applyPlan(plan: SitePlan, keepCamera: boolean, restyle: boolean) {
+    const copy = JSON.parse(JSON.stringify(plan)) as SitePlan;
+    // A new paving or wall material (the 3D material picker) rebuilds only the paving and lines.
+    if (restyle && this.build && this.builtPlan && hardscapeOnlyChange(this.builtPlan, copy)) {
+      this.plan = plan;
+      this.build.restyleHardscape(plan);
+      this.builtPlan = copy;
+      this.build.root.getObjectByName('hardscape')?.traverse((o) => {
+        if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+      });
+      this.shadowDirty = true;
+      if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
+      this.updateSky(false);
+      if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+      return;
+    }
     this.plan = plan;
+    // Until the new yard is built, nothing may be restyled.
+    this.builtPlan = null;
     if (this.build) {
       this.scene.remove(this.build.root);
       this.build.dispose();
     }
     this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
     this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
+    this.builtPlan = copy;
+    // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
+    this.build.root.traverse((o) => {
+      if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+    });
+    this.shadowDirty = true;
     this.scene.add(this.build.root);
     this.build.setYears(this.state.years);
     this.views = generateViews(plan, this.build.gm.height);
@@ -214,7 +278,7 @@ export class Studio {
    */
   async addAsset(id: string, kind: AssetKind, data: Blob): Promise<void> {
     await this.assets.add(id, kind, data);
-    if (!this.disposed && this.plan?.models?.some((m) => m.asset === id)) this.setPlan(this.plan, true);
+    if (!this.disposed && this.plan?.models?.some((m) => m.asset === id)) this.applyPlan(this.plan, true, false);
   }
 
   get currentPlan() {
@@ -228,6 +292,7 @@ export class Studio {
   setYears(y: number) {
     this.state.years = y;
     this.build?.setYears(y);
+    this.shadowDirty = true;
     if (this.plan && this.build && this.measure.visible) this.measure.rebuild(this.plan, this.build, y);
   }
 
@@ -250,10 +315,12 @@ export class Studio {
   setWind(w: number) {
     this.state.wind = w;
     GLOBAL.uWind.value = w;
+    this.shadowDirty = true;
   }
 
   setMotion(on: boolean) {
     this.state.motion = on;
+    this.shadowDirty = true;
   }
 
   setLens(l: Partial<LensSettings>) {
@@ -264,7 +331,7 @@ export class Studio {
     if (q === this.state.quality) return;
     this.state.quality = q;
     this.applyQuality();
-    if (this.plan) this.setPlan(this.plan, true);
+    if (this.plan) this.applyPlan(this.plan, true, false);
   }
 
   currentHour(): number {
@@ -276,13 +343,14 @@ export class Studio {
   private applyQuality() {
     const q = this.state.quality;
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(q === 'draft' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2));
-    const size = q === 'draft' ? 1024 : q === 'balanced' ? 2048 : 4096;
+    this.renderer.setPixelRatio(q === 'draft' || q === 'light' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2));
+    const size = q === 'draft' || q === 'light' ? 1024 : q === 'balanced' ? 2048 : 4096;
     this.keyLight.shadow.mapSize.set(size, size);
     this.keyLight.shadow.map?.dispose();
     this.keyLight.shadow.map = null;
+    this.shadowDirty = true;
     this.mirror.enabled = q !== 'draft';
-    this.mirror.scale = q === 'max' ? 1 : 0.5;
+    this.mirror.scale = q === 'max' ? 1 : q === 'light' ? 0.25 : 0.5;
     this.post.setQuality(q);
     this.resize();
   }
@@ -321,6 +389,7 @@ export class Studio {
     this.post.exposure = s.exposure;
     this.post.lens.bloom = s.night > 0.3 ? 0.7 : s.sunElevation < 10 ? 0.45 : 0.3;
     this.fitShadow();
+    this.shadowDirty = true;
     if (regenEnv) this.regenEnv();
     // Night accents.
     if (this.build) {
@@ -564,7 +633,17 @@ export class Studio {
       }
     }
 
-    this.renderer.shadowMap.needsUpdate = true;
+    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller);
+    // an exported still always gets the detail its own size needs.
+    const lodScale = this.stillScale ?? (this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1);
+    // Plants are culled against this frame's view: the camera has just moved (controls, tween,
+    // first person), and its world matrix is otherwise brought up to date only when it is drawn.
+    this.camera.updateMatrixWorld();
+    this.build?.plants.update?.(this.camera, this.container.clientHeight * lodScale);
+    // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
+    // moves the leaves at a steady rate rather than every frame.
+    const swaying = this.state.motion && this.state.wind > 0.001;
+    if (this.shadowDirty || (swaying && Math.abs(t - this.shadowTime) >= SHADOW_STEP)) this.renderShadows(t);
     if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
       this.camera.updateMatrixWorld();
       this.mirror.render(this.renderer, this.scene, this.camera, this.build.water.surfaces);
@@ -579,6 +658,23 @@ export class Studio {
       this.fpsAcc = 0;
       this.fpsN = 0;
     }
+  }
+
+  /**
+   * Redraw the sun's shadow map. It is drawn in a pass of its own whose camera sees only the
+   * shadow layer and looks away from the yard, so nothing else is drawn; that lets plants cast
+   * shadows from lower-detail stand-ins the main view never draws.
+   */
+  private renderShadows(t: number) {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    r.shadowMap.needsUpdate = true;
+    r.setRenderTarget(this.shadowPassTarget);
+    r.render(this.scene, this.shadowPassCam);
+    r.setRenderTarget(prev);
+    r.shadowMap.needsUpdate = false;
+    this.shadowDirty = false;
+    this.shadowTime = t;
   }
 
   /** Stop the frame loop (tests and background tabs). */
@@ -610,7 +706,13 @@ export class Studio {
     this.post.setQuality('max');
     this.post.setSize(W, H);
     this.mirror.setSize(W, H);
-    this.renderFrame(0);
+    this.shadowDirty = true;
+    this.stillScale = H / Math.max(1, h0);
+    try {
+      this.renderFrame(0);
+    } finally {
+      this.stillScale = null;
+    }
     const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
     this.renderer.setPixelRatio(pr0);
     this.post.setQuality(q0);
@@ -626,6 +728,7 @@ export class Studio {
     this.assets.dispose();
     this.post.dispose();
     this.mirror.dispose();
+    this.shadowPassTarget.dispose();
     this.envRT?.dispose();
     this.pmrem.dispose();
     this.controls.dispose();

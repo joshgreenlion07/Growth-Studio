@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { featureById, plantById } from '../siteplan/catalog';
-import { centroid, distToEdge, distToSegment, pointInPolygon, scatterInPolygon } from '../siteplan/geometry';
+import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
+import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
@@ -10,6 +11,7 @@ import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { buildGround, groundModel, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint } from './hardscape';
 import { lineCenter, lineThickness } from './linepath';
+import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, type PlantLayer } from './plants';
 import { poolLayout, type PoolLayout } from './pools';
@@ -37,6 +39,11 @@ export interface SceneBuild {
   fallMats: THREE.ShaderMaterial[];
   /** Expanded plant placements, including mass-planted beds. */
   plantCount: number;
+  /**
+   * Rebuild only the paving, walls, curbs, fences and steps for a plan that differs from the
+   * built one in their looks alone (see hardscapeOnlyChange). The rest of the yard is kept.
+   */
+  restyleHardscape(plan: SitePlan): void;
   setYears(years: number): void;
   dispose(): void;
 }
@@ -44,7 +51,10 @@ export interface SceneBuild {
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
 export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] {
   const out: PlantPlacement[] = [...plan.plants];
-  const bodies = lineBodies(plan);
+  const bodies = bodyGrid(lineBodies(plan));
+  // Placed plants by position, so each candidate checks only its neighbors.
+  const taken = new PointGrid(1);
+  for (const q of out) taken.add(q.position[0], q.position[1]);
   for (const z of plan.zones) {
     if (!z.fill) continue;
     const spec = plantById.get(z.fill.catalogId);
@@ -53,12 +63,18 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
     pts.forEach((p, i) => {
       if (gm.zoneAt(p) !== z) return;
       if (gm.inWater(p, 0.3)) return;
-      if (bodies.some((s) => s.half > 0.05 && distToSegment(p, s.a, s.b) < s.half + 0.1)) return;
-      if (out.some((q) => Math.hypot(q.position[0] - p[0], q.position[1] - p[1]) < z.fill!.spacing * 0.7)) return;
+      if (bodies.grid.someWithin(p[0], p[1], bodies.maxHalf + 0.1, (k, d) => bodies.list[k].half > 0.05 && d < bodies.list[k].half + 0.1)) return;
+      if (taken.anyWithin(p[0], p[1], z.fill!.spacing * 0.7)) return;
       out.push({ id: `${z.id}-fill-${i}`, catalogId: spec.id, position: p, source: z.source });
+      taken.add(p[0], p[1]);
     });
   }
   return out;
+}
+
+/** Line bodies in a segment grid, tagged with their index in `list`. */
+function bodyGrid(list: { a: Vec2; b: Vec2; half: number }[]) {
+  return { list, grid: new SegmentGrid(list.map((s, tag) => ({ a: s.a, b: s.b, tag }))), maxHalf: list.reduce((m, s) => Math.max(m, s.half), 0) };
 }
 
 /** Every wall, fence, curb and edging segment where it is built (walls and curbs along their
@@ -71,6 +87,43 @@ function lineBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
   });
 }
 
+/**
+ * True when `next` differs from `prev` only in materials that change nothing outside the
+ * paving and lines themselves: a paving area's material or border (same thickness), a wall,
+ * curb, fence, edging or steps material (same body thickness), a wall cap or a fence topper.
+ * Everything else that depends on those (pool levels, turf and planting clear of walls) then
+ * stays as built.
+ */
+export function hardscapeOnlyChange(prev: SitePlan, next: SitePlan): boolean {
+  if (prev.zones.length !== next.zones.length || prev.lines.length !== next.lines.length) return false;
+  const thick = (id: string) => materialById.get(id)?.thickness ?? 0.07;
+  // Something must have changed: the same plan again (a quality change, an uploaded model) needs a full build.
+  let changed = false;
+  for (let i = 0; i < prev.zones.length; i++) {
+    const a = prev.zones[i], b = next.zones[i];
+    if (a.border?.catalogId !== b.border?.catalogId) changed = true;
+    if (a.catalogId === b.catalogId) continue;
+    changed = true;
+    if (a.kind !== 'hardscape' || b.kind !== 'hardscape' || thick(a.catalogId) !== thick(b.catalogId)) return false;
+  }
+  for (let i = 0; i < prev.lines.length; i++) {
+    const a = prev.lines[i], b = next.lines[i];
+    if (a.cap !== b.cap || a.topper !== b.topper) changed = true;
+    if (a.catalogId === b.catalogId) continue;
+    changed = true;
+    if (a.kind !== b.kind || lineThickness(a) !== lineThickness(b)) return false;
+  }
+  if (!changed) return false;
+  // Otherwise the two must match exactly.
+  const strip = (p: SitePlan) =>
+    JSON.stringify({
+      ...p,
+      zones: p.zones.map((z) => ({ ...z, catalogId: z.kind === 'hardscape' ? '' : z.catalogId, border: z.border && { ...z.border, catalogId: '' } })),
+      lines: p.lines.map((l) => ({ ...l, catalogId: '', cap: undefined, topper: undefined })),
+    });
+  return strip(prev) === strip(next);
+}
+
 export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } }, assets: ModelAssets | null = null): SceneBuild {
   const root = new THREE.Group();
   root.name = 'yard';
@@ -78,22 +131,26 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const ctx = buildContext(plan);
   const pools = poolLayout(plan, WATER_LEVEL);
   const ground = buildGround(plan, gm, quality, pools);
-  const hard = buildHardscape(plan, gm.height, pools);
+  let hard = buildHardscape(plan, gm.height, pools);
   const siteC = centroid(plan.site.boundary);
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   const water = buildWater(plan, gm, mirror, sky, pools);
   const features = buildFeatures(plan.features, gm.height);
   const models = buildModels(plan.models ?? [], gm.height, assets);
 
-  const bodies = lineBodies(plan);
+  const bodies = bodyGrid(lineBodies(plan));
+  // Everything turf blades stay off, indexed once: they are tested for every blade.
+  const structIdx = plan.structures.filter((s) => s.polygon.length >= 3).map((s) => new PolygonIndex(s.polygon));
+  const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones)));
+  const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
     const z = gm.zoneAt(p);
     if (z && z.kind !== 'turf') return true;
-    for (const s of plan.structures) if (pointInPolygon(p, s.polygon) || distToEdge(p, s.polygon) < 0.05) return true;
-    for (const l of plan.lines) if (l.kind === 'steps' && stepsFootprint(l, plan.zones).some((q) => pointInPolygon(p, q))) return true;
-    for (const s of bodies) if (distToSegment(p, s.a, s.b) < Math.max(0.06, s.half + 0.05)) return true;
-    for (const m of plan.models ?? []) if (pointInPolygon(p, m.polygon)) return true;
+    for (const s of structIdx) if (inBounds(s.box, p[0], p[1], 0.05) && (s.contains(p[0], p[1]) || s.dist(p[0], p[1], 0.05) < 0.05)) return true;
+    if (stepsIdx.any(p[0], p[1])) return true;
+    if (bodies.grid.someWithin(p[0], p[1], Math.max(0.06, bodies.maxHalf + 0.05), (k, d) => d < Math.max(0.06, bodies.list[k].half + 0.05))) return true;
+    if (modelIdx.any(p[0], p[1])) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
@@ -104,7 +161,17 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const turf = buildTurf(plan, gm, quality, blocked);
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
-  const plants = buildPlants(placements, gm.height, quality !== 'draft');
+  // Plants show in water reflections only near water: the reflection of one farther off is
+  // small or hidden. Water boxes are padded by three times the plant's height (4 m at least).
+  const waterBoxes = plan.water.map((w) => {
+    const pts = w.polygon ?? w.points ?? [];
+    return pts.length ? { b: bounds(pts), pad: (w.width ?? 0) / 2 } : null;
+  }).filter((x) => !!x);
+  const reflects = (p: Vec2, h: number) => waterBoxes.some(({ b, pad }) => inBounds(b, p[0], p[1], pad + Math.max(4, h * 3)));
+  // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
+  const sb = bounds(plan.site.boundary);
+  const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
+  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
 
   root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {
@@ -119,6 +186,8 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     ...structs.porchLights.slice(0, 2).map((p) => ({ position: p, color: '#ffc27a', intensity: 3.5, distance: 7, flicker: false })),
   ];
 
+  const surfaces = [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...models.surfaces, ...plants.proxies];
+  const glow = [...structs.glass, ...features.glow, ...hard.glow];
   return {
     root,
     gm,
@@ -127,11 +196,25 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     water,
     features,
     missingAssets: models.missing,
-    surfaces: [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...models.surfaces, ...plants.proxies],
+    surfaces,
     nightLights,
-    glow: [...structs.glass, ...features.glow, ...hard.glow],
+    glow,
     fallMats: [...water.fallMats, ...features.fallMats],
     plantCount: placements.length - ctx.trees.length,
+    restyleHardscape(next: SitePlan) {
+      const old = hard;
+      hard = buildHardscape(next, gm.height, pools);
+      root.remove(old.object);
+      root.add(hard.object);
+      const swap = <T>(list: T[], from: T[], to: T[]) => {
+        const keep = list.filter((x) => !from.includes(x));
+        list.length = 0;
+        list.push(...keep, ...to);
+      };
+      swap(surfaces, old.surfaces, hard.surfaces);
+      swap(glow, old.glow, hard.glow);
+      old.dispose();
+    },
     setYears(y: number) {
       plants.setYears(y);
     },
