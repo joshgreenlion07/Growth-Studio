@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SitePlan } from '../siteplan/types';
 import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
-import { buildScene, type SceneBuild } from '../builder/build';
+import { buildScene, hardscapeOnlyChange, type SceneBuild } from '../builder/build';
 import { ModelAssets, type AssetKind } from '../builder/models';
 import { WATER_LEVEL } from '../builder/ground';
 import { setFlames } from '../builder/features';
@@ -218,6 +218,19 @@ export class Studio {
   /* -------------------------------------------------------------- */
 
   setPlan(plan: SitePlan, keepCamera = false) {
+    // A new paving or wall material (the 3D material picker) rebuilds only the paving and lines.
+    if (this.build && this.plan && hardscapeOnlyChange(this.plan, plan)) {
+      this.plan = plan;
+      this.build.restyleHardscape(plan);
+      this.build.root.getObjectByName('hardscape')?.traverse((o) => {
+        if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+      });
+      this.shadowDirty = true;
+      if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
+      this.updateSky(false);
+      if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+      return;
+    }
     this.plan = plan;
     if (this.build) {
       this.scene.remove(this.build.root);
