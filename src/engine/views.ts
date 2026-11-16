@@ -17,6 +17,32 @@ export interface CameraView {
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
+/** Whether segment p-q crosses segment a-b. */
+function crosses(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
+  const side = (u: Vec2, v: Vec2, w: Vec2) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
+  return side(p, q, a) * side(p, q, b) < 0 && side(a, b, p) * side(a, b, q) < 0;
+}
+
+/**
+ * A standing eye inside a California room, with a room wall between it and what it looks at, steps out of
+ * the room toward the target. An eye whose view leaves through an open side stays put: that view is framed by the room.
+ */
+function clearOfRooms(plan: SitePlan, eye: Vec2, target: Vec2): Vec2 {
+  const rooms = plan.structures.filter((s) => s.kind === 'cover' && s.walls?.some((w) => w));
+  const blocked = (e: Vec2) =>
+    rooms.some((s) => pointInPolygon(e, s.polygon) && s.polygon.some((a, i) => s.walls![i] && crosses(e, target, a, s.polygon[(i + 1) % s.polygon.length])));
+  const d: Vec2 = [target[0] - eye[0], target[1] - eye[1]];
+  const len = Math.hypot(...d);
+  if (len < 1e-6 || !blocked(eye)) return eye;
+  const u: Vec2 = [d[0] / len, d[1] / len];
+  for (let t = 0.25; t < len; t += 0.25) {
+    const e: Vec2 = [eye[0] + u[0] * t, eye[1] + u[1] * t];
+    // Past the wall's outer face, with room to spare for the near plane.
+    if (!rooms.some((s) => pointInPolygon(e, s.polygon))) return [e[0] + u[0] * 0.6, e[1] + u[1] * 0.6];
+  }
+  return eye;
+}
+
 export function generateViews(plan: SitePlan, height: (p: Vec2) => number): CameraView[] {
   const B = plan.site.boundary;
   const b = bounds(B);
@@ -97,7 +123,7 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
       if (!best || score > best.score) best = { mid, out, score };
     }
     if (best) {
-      const p: Vec2 = [best.mid[0] + best.out[0] * 1.6, best.mid[1] + best.out[1] * 1.6];
+      const p: Vec2 = clearOfRooms(plan, [best.mid[0] + best.out[0] * 1.6, best.mid[1] + best.out[1] * 1.6], yard);
       views.push({ id: 'house', label: 'From the house', eye: V(p[0], height(p) + 1.65, p[1]), target: V(yard[0], 0.9, yard[1]), fov: 55 });
     }
   }
@@ -141,7 +167,9 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
     views.push({ id: it.id, label: it.label, eye: V(e[0], height(e) + 1.3, e[1]), target: V(it.p[0], height(it.p) + 0.2, it.p[1]), fov: 50 });
   }
 
-  views.push({ id: 'low', label: 'Ground level', eye: V(yard[0] + from[0] * R * 0.75, 0.55, yard[1] + from[1] * R * 0.75), target: V(yard[0] - from[0] * R, 1.0, yard[1] - from[1] * R), fov: 58 });
+  const lowTarget: Vec2 = [yard[0] - from[0] * R, yard[1] - from[1] * R];
+  const low = clearOfRooms(plan, [yard[0] + from[0] * R * 0.75, yard[1] + from[1] * R * 0.75], lowTarget);
+  views.push({ id: 'low', label: 'Ground level', eye: V(low[0], 0.55, low[1]), target: V(lowTarget[0], 1.0, lowTarget[1]), fov: 58 });
   views.push({ id: 'plan', label: 'Top down', eye: V(top[0], R * 2.6 + 6, top[1] + 0.01), target: V(top[0], 0, top[1]), fov: 45 });
   return views;
 }
