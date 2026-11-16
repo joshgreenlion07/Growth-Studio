@@ -338,7 +338,8 @@ export const MATERIALS: MaterialSpec[] = [
 type Blend = [string, string[]];
 const CATALINA_GRANA: Blend[] = [
   ['Amaretto', ['#b89f88', '#ac937b', '#a38972', '#997e67']],
-  ['Anthracite', ['#5e5a59', '#555150', '#504c4b', '#4c4847']],
+  // Anthracite: darker than its swatch average, which read mid-gray in 3D; installed it is a near-black charcoal.
+  ['Anthracite', ['#46423f', '#3e3a38', '#383432', '#322f2d']],
   ['Aspen', ['#b8a083', '#b39c7f', '#af987b', '#a89074']],
   ['Bella', ['#7f6e5e', '#7a695a', '#776657', '#6e6053']],
   ['Brown Beige Charcoal', ['#92857e', '#877b74', '#80746e', '#786d67']],
@@ -408,7 +409,8 @@ const CATALINA_SIZES: [number, number][] = [[6, 12], [9, 12], [12, 12]];
 const BELGARD: MaterialSpec[] = [
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `border-of-catalina-grana-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, auto: true })),
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', auto: n !== 'Midnight' })),
+  // Every Catalina Grana color as its own 6 x 9 border, offered on its own (not only as "same as the main course").
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
   ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic', maker: 'Belgard', line: 'AB Classic', shelf: 'Retaining walls', color: n })),
   ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone', maker: 'Belgard', line: 'Easton Stone', shelf: 'Garden walls', color: n })),
   // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
@@ -420,6 +422,8 @@ const BELGARD: MaterialSpec[] = [
       return [
         M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured' }, thickness: 0.06, ...tags }),
         M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true }),
+        // A line that sells its own border stone (Avalon Slate) offers every color as a border on its own too.
+        ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured' }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
       ];
     }
     if (L.shelf === 'Curb') return [M({ id, name: `${L.name}, ${n}`, use: 'edging', group: 'Edging', recipe: 'curb', palette: palette.slice(1, 3), ...tags })];
