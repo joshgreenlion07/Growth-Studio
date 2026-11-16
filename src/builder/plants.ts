@@ -7,6 +7,7 @@ import { LEAF_CELL, aoDisc, bark, leafAtlas, leafCellUV } from '../engine/textur
 import { GeoBuilder, card, tube } from './geobuilder';
 import type { SpeciesGeo, SpeciesLook } from './species/kit';
 import { SPECIES } from './species/registry';
+import { REFLECTION_ONLY_LAYER, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from '../engine/water';
 
 /**
  * Procedural plants. Each catalog plant becomes one geometry set at mature
@@ -518,7 +519,31 @@ interface Group {
   container?: ContainerId;
 }
 
+/** One plant group's instances when built with levels of detail. */
+interface LodSet {
+  group: Group;
+  n: number;
+  /** Each instance's matrix. */
+  base: Float32Array;
+  /** Each instance's base point. */
+  center: Float32Array;
+  /** Each instance's scale (largest axis). */
+  scale: Float32Array;
+  hi: THREE.InstancedBufferAttribute;
+  lo: THREE.InstancedBufferAttribute;
+  hiMeshes: THREE.InstancedMesh[];
+  loMeshes: THREE.InstancedMesh[];
+  /** Shadow-map meshes: every instance, never rewritten. */
+  staticMeshes: THREE.InstancedMesh[];
+  /** Reflection meshes: the instances near reflecting water. */
+  reflect: THREE.InstancedMesh[];
+  /** Radius around the base that holds the mature plant at scale 1. */
+  radius0: number;
+}
+
 export interface PlantLayer {
+  /** With levels of detail: choose near, far and hidden plants for this camera (call before each frame). */
+  update?(camera: THREE.PerspectiveCamera, viewHeight: number): void;
   object: THREE.Group;
   /** Update every plant for a number of years after install. */
   setYears(years: number): void;
@@ -580,7 +605,143 @@ function makeAOMaterial(growth: GrowthUniforms) {
   return m;
 }
 
-export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2) => number, castShadows: boolean): PlantLayer {
+/* ------------------------------------------------------------------ */
+/* Lower-detail plants                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Layers used by the scene's plants when built with levels of detail. */
+export const PLANT_LAYERS = {
+  /** Seen by the main camera only (left out of reflections). */
+  view: WATER_LAYER_SKIP,
+  /** Seen by the reflection camera only. */
+  reflection: REFLECTION_ONLY_LAYER,
+  /** Drawn only into the sun's shadow map (see Studio.renderShadows). */
+  shadow: SHADOW_PASS_LAYER,
+};
+
+/**
+ * On screen, plants smaller than this many CSS pixels tall (or wide) are drawn
+ * with the lower-detail geometry.
+ */
+export const LOD_PIXELS = 100;
+
+const lodCache = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+
+/**
+ * A lower-detail copy of a plant part for shadows, reflections and far plants.
+ * Plant geometry is made of small separate pieces (leaf cards, blades, branch
+ * tubes). Leaf and flower parts keep about 40% of their cards, each grown so
+ * the crown stays about as dense; larger pieces (blades, broad leaves) keep
+ * about half. Wood keeps its trunk and limbs and drops most twigs.
+ */
+export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | 'flower'): THREE.BufferGeometry {
+  const hit = lodCache.get(geo);
+  if (hit) return hit;
+  const index = geo.index;
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  if (!index || pos.count < 64) {
+    lodCache.set(geo, geo);
+    return geo;
+  }
+  const n = pos.count, I = index.array;
+  // Pieces: vertices joined by triangles.
+  const parent = new Int32Array(n);
+  for (let i = 0; i < n; i++) parent[i] = i;
+  const find = (x: number) => {
+    while (parent[x] !== x) x = parent[x] = parent[parent[x]];
+    return x;
+  };
+  for (let t = 0; t < I.length; t += 3) {
+    const a = find(I[t]), b = find(I[t + 1]), c = find(I[t + 2]);
+    parent[b] = a;
+    parent[find(c)] = a;
+  }
+  const root = new Int32Array(n);
+  const verts = new Map<number, number>();
+  for (let i = 0; i < n; i++) {
+    root[i] = find(i);
+    verts.set(root[i], (verts.get(root[i]) ?? 0) + 1);
+  }
+  // Each piece's center and size.
+  const cx = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const r = root[i];
+    let c = cx.get(r);
+    if (!c) cx.set(r, (c = [0, 0, 0, Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity]));
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    c[0] += x;
+    c[1] += y;
+    c[2] += z;
+    c[3] = Math.min(c[3], x);
+    c[4] = Math.max(c[4], x);
+    c[5] = Math.min(c[5], y);
+    c[6] = Math.max(c[6], y);
+    c[7] = Math.min(c[7], z);
+    c[8] = Math.max(c[8], z);
+  }
+  const extent = (c: number[]) => Math.hypot(c[4] - c[3], c[6] - c[5], c[8] - c[7]);
+  let maxExtent = 0;
+  for (const c of cx.values()) maxExtent = Math.max(maxExtent, extent(c));
+  const r = rng(`lod-${n}-${I.length}`);
+  const CARD = 8, KEEP = 0.4, GROW = 1 / Math.sqrt(KEEP), KEEP_BIG = 0.55;
+  const keep = new Map<number, number>(); // piece -> scale (pieces left out are absent)
+  for (const [k, c] of cx) {
+    const nv = verts.get(k)!;
+    const roll = r();
+    if (part === 'wood') {
+      if (nv <= CARD ? roll < 0.25 : extent(c) >= maxExtent * 0.2 || roll < 0.5) keep.set(k, 1);
+    } else if (nv <= CARD) {
+      if (roll < KEEP) keep.set(k, GROW);
+    } else if (roll < KEEP_BIG) keep.set(k, 1);
+  }
+  const remap = new Int32Array(n).fill(-1);
+  let m = 0;
+  for (let i = 0; i < n; i++) if (keep.has(root[i])) remap[i] = m++;
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(geo.attributes)) {
+    const a = geo.getAttribute(name) as THREE.BufferAttribute;
+    const sz = a.itemSize;
+    const arr = new Float32Array(m * sz);
+    for (let i = 0; i < n; i++) {
+      const j = remap[i];
+      if (j < 0) continue;
+      for (let k = 0; k < sz; k++) arr[j * sz + k] = a.array[i * sz + k] as number;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, sz, a.normalized));
+  }
+  // Grow kept cards about their centers so the crown stays about as full.
+  const op = out.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < n; i++) {
+    const j = remap[i];
+    if (j < 0) continue;
+    const sc = keep.get(root[i])!;
+    if (sc === 1) continue;
+    const c = cx.get(root[i])!, nv = verts.get(root[i])!;
+    const mx = c[0] / nv, my = c[1] / nv, mz = c[2] / nv;
+    op.setXYZ(j, mx + (op.getX(j) - mx) * sc, my + (op.getY(j) - my) * sc, mz + (op.getZ(j) - mz) * sc);
+  }
+  const idx: number[] = [];
+  for (let t = 0; t < I.length; t += 3) if (remap[I[t]] >= 0) idx.push(remap[I[t]], remap[I[t + 1]], remap[I[t + 2]]);
+  out.setIndex(idx);
+  out.computeBoundingSphere();
+  out.computeBoundingBox();
+  lodCache.set(geo, out);
+  return out;
+}
+
+export interface PlantBuildOptions {
+  /**
+   * Build with levels of detail for the 3D view: near plants in full detail,
+   * far ones (and every plant in the shadow map and reflections) with fewer
+   * leaves, and plants out of view skipped. `update` must then be called
+   * before each frame.
+   */
+  lod?: boolean;
+  /** With lod: which plants show in water reflections (near a mirror-like water surface). */
+  reflects?: (p: Vec2, height: number) => boolean;
+}
+
+export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2) => number, castShadows: boolean, options: PlantBuildOptions = {}): PlantLayer {
   const root = new THREE.Group();
   root.name = 'plants';
   const groups: Group[] = [];
@@ -590,6 +751,8 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
   disposables.push(proxyMat);
   const proxyGeo = new THREE.SphereGeometry(1, 8, 6);
   disposables.push(proxyGeo);
+  const lod = !!options.lod;
+  const lodSets: LodSet[] = [];
 
   const byKey = new Map<string, PlantPlacement[]>();
   for (const p of placements) {
@@ -610,18 +773,73 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     const group: Group = { spec, existing: ex === '1', growth, container: (cont || undefined) as ContainerId | undefined };
     groups.push(group);
     const mats: THREE.InstancedMesh[] = [];
+    const n = list.length;
+    // With levels of detail: matrices for near and for far plants in view, rewritten as the camera moves.
+    const set: LodSet | null = lod
+      ? {
+          group,
+          n,
+          base: new Float32Array(n * 16),
+          center: new Float32Array(n * 3),
+          scale: new Float32Array(n),
+          hi: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage),
+          lo: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage),
+          hiMeshes: [],
+          loMeshes: [],
+          staticMeshes: [],
+          reflect: [],
+          radius0: 0,
+        }
+      : null;
 
-    const addMesh = (g: THREE.BufferGeometry, mat: THREE.Material, depth: THREE.Material | null, cast: boolean, name: string) => {
-      const im = new THREE.InstancedMesh(g, mat, list.length);
-      im.name = `${spec.id}-${name}`;
-      im.castShadow = cast && castShadows;
-      im.receiveShadow = true;
-      if (depth) im.customDepthMaterial = depth;
-      im.frustumCulled = false;
-      root.add(im);
-      mats.push(im);
+    const addMesh = (g: THREE.BufferGeometry, mat: THREE.Material, depth: THREE.Material | null, cast: boolean, name: string, part: 'leaf' | 'wood' | 'flower') => {
       disposables.push(mat);
       if (depth) disposables.push(depth);
+      if (!set) {
+        const im = new THREE.InstancedMesh(g, mat, n);
+        im.name = `${spec.id}-${name}`;
+        im.castShadow = cast && castShadows;
+        im.receiveShadow = true;
+        if (depth) im.customDepthMaterial = depth;
+        im.frustumCulled = false;
+        root.add(im);
+        mats.push(im);
+        return;
+      }
+      const lo = lodGeometry(g, part);
+      g.boundingSphere ?? g.computeBoundingSphere();
+      const bs = g.boundingSphere!;
+      set.radius0 = Math.max(set.radius0, bs.center.length() + bs.radius);
+      // In view: full detail near, fewer leaves far. Neither casts shadows or shows in reflections.
+      for (const [gg, attr, out, tag] of [[g, set.hi, set.hiMeshes, 'near'], [lo, set.lo, set.loMeshes, 'far']] as const) {
+        const im = new THREE.InstancedMesh(gg, mat, n);
+        im.name = `${spec.id}-${name}-${tag}`;
+        im.instanceMatrix = attr;
+        im.count = 0;
+        im.visible = false;
+        im.receiveShadow = true;
+        im.frustumCulled = false;
+        im.layers.set(PLANT_LAYERS.view);
+        root.add(im);
+        out.push(im);
+      }
+      // Every plant, lower detail, into the shadow map.
+      if (cast && castShadows) {
+        const im = new THREE.InstancedMesh(lo, mat, n);
+        im.name = `${spec.id}-${name}-shadow`;
+        im.castShadow = true;
+        if (depth) im.customDepthMaterial = depth;
+        im.layers.set(PLANT_LAYERS.shadow);
+        root.add(im);
+        set.staticMeshes.push(im);
+      }
+      // Plants near reflecting water, lower detail, into the reflection.
+      const im = new THREE.InstancedMesh(lo, mat, n);
+      im.name = `${spec.id}-${name}-reflection`;
+      im.receiveShadow = true;
+      im.layers.set(PLANT_LAYERS.reflection);
+      root.add(im);
+      set.reflect.push(im);
     };
 
     const isTree = spec.group === 'Trees';
@@ -629,23 +847,23 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     const legacyTextured = spec.form !== 'grass' && spec.form !== 'perennial' && spec.form !== 'agave' && spec.form !== 'tropical';
     const leafMap = geo.leafMap !== undefined ? geo.leafMap : legacyTextured ? leafAtlas() : null;
     const lm = makeLeafMaterial(spec, growth, 'leaf', leafMap, look);
-    addMesh(geo.leaves, lm.m, lm.depth, look.leafShadows ?? (spec.form !== 'groundcover' && spec.form !== 'annuals'), 'leaves');
+    addMesh(geo.leaves, lm.m, lm.depth, look.leafShadows ?? (spec.form !== 'groundcover' && spec.form !== 'annuals'), 'leaves', 'leaf');
     if (geo.wood) {
       const wm = makeWoodMaterial(spec, growth, geo);
-      addMesh(geo.wood, wm.m, wm.depth, look.woodShadows ?? isTree, 'wood');
+      addMesh(geo.wood, wm.m, wm.depth, look.woodShadows ?? isTree, 'wood', 'wood');
     }
     if (geo.flowers) {
       const fm = makeLeafMaterial(spec, growth, 'flower', geo.flowerMap !== undefined ? geo.flowerMap : leafAtlas(), look);
-      addMesh(geo.flowers, fm.m, fm.depth, false, 'flowers');
+      addMesh(geo.flowers, fm.m, fm.depth, false, 'flowers', 'flower');
     }
     const aoGeo = new THREE.PlaneGeometry(spec.matureSpread * 1.25, spec.matureSpread * 1.25).rotateX(-Math.PI / 2);
     disposables.push(aoGeo);
-    const ao = new THREE.InstancedMesh(aoGeo, makeAOMaterial(growth), list.length);
+    const ao = new THREE.InstancedMesh(aoGeo, makeAOMaterial(growth), n);
     ao.renderOrder = 1;
     ao.frustumCulled = false;
     root.add(ao);
-    mats.push(ao);
 
+    let nRefl = 0;
     list.forEach((p, i) => {
       const r = rng(p.id);
       const y = groundHeight(p.position);
@@ -670,13 +888,21 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
       q.setFromAxisAngle(UP, heading);
       s.set(sc, sc * tall, sc);
       m4.compose(t, q, s);
-      for (const im of mats) {
-        if (im === ao) {
-          m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, sc));
-          im.setMatrixAt(i, m4);
-          m4.compose(t, q, s);
-        } else im.setMatrixAt(i, m4);
+      for (const im of mats) im.setMatrixAt(i, m4);
+      if (set) {
+        m4.toArray(set.base, i * 16);
+        set.center[i * 3] = t.x;
+        set.center[i * 3 + 1] = t.y;
+        set.center[i * 3 + 2] = t.z;
+        set.scale[i] = sc * Math.max(1, tall);
+        for (const im of set.staticMeshes) im.setMatrixAt(i, m4);
+        if (!options.reflects || options.reflects(p.position, spec.matureHeight * sc)) {
+          for (const im of set.reflect) im.setMatrixAt(nRefl, m4);
+          nRefl++;
+        }
       }
+      m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, sc));
+      ao.setMatrixAt(i, m4);
       const proxy = new THREE.Mesh(proxyGeo, proxyMat);
       proxy.userData = { plantId: p.id, spec, growth, scale: sc };
       proxy.position.set(p.position[0], y, p.position[1]);
@@ -684,7 +910,30 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
       root.add(proxy);
     });
     for (const im of mats) im.instanceMatrix.needsUpdate = true;
+    ao.instanceMatrix.needsUpdate = true;
+    if (set) {
+      for (const im of set.staticMeshes) {
+        im.instanceMatrix.needsUpdate = true;
+        // Culled against the sun's view as a whole; the sphere is padded for wind sway.
+        im.computeBoundingSphere();
+        im.boundingSphere!.radius += 1;
+      }
+      for (const im of set.reflect) {
+        im.count = nRefl;
+        im.visible = nRefl > 0;
+        im.instanceMatrix.needsUpdate = true;
+        if (nRefl) {
+          im.computeBoundingSphere();
+          im.boundingSphere!.radius += 1;
+        }
+      }
+      lodSets.push(set);
+    }
   }
+
+  // Per-frame selection of near, far and out-of-view plants.
+  const frustum = new THREE.Frustum(), pv = new THREE.Matrix4(), sphere = new THREE.Sphere(), last = new THREE.Matrix4();
+  let lastPx = 0, sizeVersion = 0, lastSizeVersion = -1;
 
   const layer: PlantLayer = {
     object: root,
@@ -697,6 +946,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         const sz = sizeAt(g.spec, yrs, g.container);
         g.growth.uSize.value.set(sz.spread / g.spec.matureSpread, sz.height / g.spec.matureHeight);
       }
+      sizeVersion++;
       // Keep proxies sized for autofocus.
       for (const p of proxies) {
         const { growth, spec, scale } = p.userData as { growth: GrowthUniforms; spec: PlantSpec; scale: number };
@@ -705,6 +955,47 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         p.scale.set(w / 2, h / 2, w / 2);
         p.position.y = (p.position.y - (p.userData.lastHalf ?? 0)) + h / 2;
         p.userData.lastHalf = h / 2;
+      }
+    },
+    update(camera: THREE.PerspectiveCamera, viewHeight: number) {
+      if (!lodSets.length) return;
+      pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      // Only when the view, the screen size or the plant sizes changed.
+      if (pv.equals(last) && viewHeight === lastPx && sizeVersion === lastSizeVersion) return;
+      last.copy(pv);
+      lastPx = viewHeight;
+      lastSizeVersion = sizeVersion;
+      frustum.setFromProjectionMatrix(pv);
+      const cam = camera.position;
+      // Screen pixels per meter at 1 m distance.
+      const pxPerM = viewHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+      for (const set of lodSets) {
+        const { spec, growth } = set.group;
+        const grow = Math.max(1, growth.uSize.value.x, growth.uSize.value.y);
+        const size = Math.max(spec.matureHeight * growth.uSize.value.y, spec.matureSpread * growth.uSize.value.x);
+        const hi = set.hi.array as Float32Array, lo = set.lo.array as Float32Array;
+        let nh = 0, nl = 0;
+        for (let i = 0; i < set.n; i++) {
+          const k = set.scale[i];
+          // A sphere around the plant's base that holds it at any size up to mature, plus wind sway.
+          sphere.center.set(set.center[i * 3], set.center[i * 3 + 1], set.center[i * 3 + 2]);
+          sphere.radius = set.radius0 * k * grow + 0.4;
+          if (!frustum.intersectsSphere(sphere)) continue;
+          const d = Math.max(0.1, Math.hypot(cam.x - sphere.center.x, cam.y - sphere.center.y - size * k * 0.5, cam.z - sphere.center.z));
+          if ((size * k * pxPerM) / d >= LOD_PIXELS) hi.set(set.base.subarray(i * 16, i * 16 + 16), 16 * nh++);
+          else lo.set(set.base.subarray(i * 16, i * 16 + 16), 16 * nl++);
+        }
+        for (const [attr, meshes, count] of [[set.hi, set.hiMeshes, nh], [set.lo, set.loMeshes, nl]] as const) {
+          for (const im of meshes) {
+            im.count = count;
+            im.visible = count > 0;
+          }
+          if (count) {
+            attr.clearUpdateRanges();
+            attr.addUpdateRange(0, count * 16);
+            attr.needsUpdate = true;
+          }
+        }
       }
     },
     dispose() {

@@ -14,7 +14,7 @@ import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
 import { generateViews, type CameraView } from './views';
-import { PlanarMirror, WATER_LAYER_SKIP } from './water';
+import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
 
 /**
  * The 3D runtime: renderer, lighting, sky, camera, post-processing, and the
@@ -31,6 +31,9 @@ export interface StudioState {
   wind: number;
   motion: boolean;
 }
+
+/** While leaves move in the wind, their shadows are redrawn this often (seconds of animation time). */
+const SHADOW_STEP = 1 / 20;
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -81,6 +84,12 @@ export class Studio {
   onNeedAsset: (id: string) => void = () => {};
   private fpsAcc = 0;
   private fpsN = 0;
+  /** The shadow map is redrawn only when something that casts or lights it changed. */
+  private shadowDirty = true;
+  private shadowTime = -Infinity;
+  /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
+  private shadowPassCam = new THREE.PerspectiveCamera(10, 1, 1, 2);
+  private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
@@ -117,6 +126,12 @@ export class Studio {
     this.mirror = new PlanarMirror(WATER_LEVEL, 0.5);
 
     this.camera.layers.enable(WATER_LAYER_SKIP);
+    this.shadowPassCam.layers.set(SHADOW_PASS_LAYER);
+    // The shadow pass collects only the lights its camera sees.
+    this.keyLight.layers.enable(SHADOW_PASS_LAYER);
+    this.shadowPassCam.position.set(0, -1e6, 0);
+    this.shadowPassCam.lookAt(0, -2e6, 0);
+    this.shadowPassCam.updateMatrixWorld();
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -196,6 +211,11 @@ export class Studio {
     }
     this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
     this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
+    // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
+    this.build.root.traverse((o) => {
+      if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+    });
+    this.shadowDirty = true;
     this.scene.add(this.build.root);
     this.build.setYears(this.state.years);
     this.views = generateViews(plan, this.build.gm.height);
@@ -228,6 +248,7 @@ export class Studio {
   setYears(y: number) {
     this.state.years = y;
     this.build?.setYears(y);
+    this.shadowDirty = true;
     if (this.plan && this.build && this.measure.visible) this.measure.rebuild(this.plan, this.build, y);
   }
 
@@ -250,10 +271,12 @@ export class Studio {
   setWind(w: number) {
     this.state.wind = w;
     GLOBAL.uWind.value = w;
+    this.shadowDirty = true;
   }
 
   setMotion(on: boolean) {
     this.state.motion = on;
+    this.shadowDirty = true;
   }
 
   setLens(l: Partial<LensSettings>) {
@@ -281,6 +304,7 @@ export class Studio {
     this.keyLight.shadow.mapSize.set(size, size);
     this.keyLight.shadow.map?.dispose();
     this.keyLight.shadow.map = null;
+    this.shadowDirty = true;
     this.mirror.enabled = q !== 'draft';
     this.mirror.scale = q === 'max' ? 1 : 0.5;
     this.post.setQuality(q);
@@ -321,6 +345,7 @@ export class Studio {
     this.post.exposure = s.exposure;
     this.post.lens.bloom = s.night > 0.3 ? 0.7 : s.sunElevation < 10 ? 0.45 : 0.3;
     this.fitShadow();
+    this.shadowDirty = true;
     if (regenEnv) this.regenEnv();
     // Night accents.
     if (this.build) {
@@ -564,7 +589,11 @@ export class Studio {
       }
     }
 
-    this.renderer.shadowMap.needsUpdate = true;
+    this.build?.plants.update?.(this.camera, this.container.clientHeight);
+    // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
+    // moves the leaves at a steady rate rather than every frame.
+    const swaying = this.state.motion && this.state.wind > 0.001;
+    if (this.shadowDirty || (swaying && Math.abs(t - this.shadowTime) >= SHADOW_STEP)) this.renderShadows(t);
     if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
       this.camera.updateMatrixWorld();
       this.mirror.render(this.renderer, this.scene, this.camera, this.build.water.surfaces);
@@ -579,6 +608,23 @@ export class Studio {
       this.fpsAcc = 0;
       this.fpsN = 0;
     }
+  }
+
+  /**
+   * Redraw the sun's shadow map. It is drawn in a pass of its own whose camera sees only the
+   * shadow layer and looks away from the yard, so nothing else is drawn; that lets plants cast
+   * shadows from lower-detail stand-ins the main view never draws.
+   */
+  private renderShadows(t: number) {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    r.shadowMap.needsUpdate = true;
+    r.setRenderTarget(this.shadowPassTarget);
+    r.render(this.scene, this.shadowPassCam);
+    r.setRenderTarget(prev);
+    r.shadowMap.needsUpdate = false;
+    this.shadowDirty = false;
+    this.shadowTime = t;
   }
 
   /** Stop the frame loop (tests and background tabs). */
@@ -610,6 +656,7 @@ export class Studio {
     this.post.setQuality('max');
     this.post.setSize(W, H);
     this.mirror.setSize(W, H);
+    this.shadowDirty = true;
     this.renderFrame(0);
     const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
     this.renderer.setPixelRatio(pr0);
@@ -626,6 +673,7 @@ export class Studio {
     this.assets.dispose();
     this.post.dispose();
     this.mirror.dispose();
+    this.shadowPassTarget.dispose();
     this.envRT?.dispose();
     this.pmrem.dispose();
     this.controls.dispose();

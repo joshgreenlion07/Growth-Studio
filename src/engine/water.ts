@@ -7,6 +7,10 @@ import { GLOBAL } from './foliage';
  */
 
 export const WATER_LAYER_SKIP = 1; // objects on this layer are left out of reflections
+/** Objects on this layer show only in reflections (lower-detail stand-ins). */
+export const REFLECTION_ONLY_LAYER = 2;
+/** Shadow casters are also on this layer; the shadow map is drawn in a pass that sees only it. */
+export const SHADOW_PASS_LAYER = 3;
 
 export class PlanarMirror {
   readonly target: THREE.WebGLRenderTarget;
@@ -58,6 +62,7 @@ export class PlanarMirror {
     mc.updateMatrixWorld();
     mc.projectionMatrix.copy(cam.projectionMatrix);
     mc.layers.set(0);
+    mc.layers.enable(REFLECTION_ONLY_LAYER);
 
     this.textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     this.textureMatrix.multiply(mc.projectionMatrix).multiply(mc.matrixWorldInverse);

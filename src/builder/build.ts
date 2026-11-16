@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { featureById, plantById } from '../siteplan/catalog';
-import { centroid, scatterInPolygon } from '../siteplan/geometry';
+import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
@@ -118,7 +118,14 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const turf = buildTurf(plan, gm, quality, blocked);
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
-  const plants = buildPlants(placements, gm.height, quality !== 'draft');
+  // Plants show in water reflections only near water: the reflection of one farther off is
+  // small or hidden. Water boxes are padded by the plant's height a few times over.
+  const waterBoxes = plan.water.map((w) => {
+    const pts = w.polygon ?? w.points ?? [];
+    return pts.length ? { b: bounds(pts), pad: (w.width ?? 0) / 2 } : null;
+  }).filter((x) => !!x);
+  const reflects = (p: Vec2, h: number) => waterBoxes.some(({ b, pad }) => inBounds(b, p[0], p[1], pad + Math.max(6, h * 4)));
+  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects });
 
   root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {
