@@ -6,6 +6,7 @@ import type { PBRSet } from '../engine/textures';
 import { materialTextures, soilTextures } from '../engine/surfaces';
 import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
+import type { PoolLayout } from './pools';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -18,6 +19,8 @@ export interface GroundModel {
   /** Site bounds plus margin, in plan coordinates. */
   area: Bounds;
   height(p: Vec2): number;
+  /** The same, with pools left undug: the ground mesh stays level there and is opened over each pool instead. */
+  grade(p: Vec2): number;
   /** The zone on top at a point (later zones win), or null. */
   zoneAt(p: Vec2): Zone | null;
   inWater(p: Vec2, pad?: number): boolean;
@@ -62,7 +65,7 @@ export function groundModel(plan: SitePlan): GroundModel {
     return false;
   };
 
-  const height = (p: Vec2): number => {
+  const terrain = (p: Vec2, dig: boolean): number => {
     let h = 0;
     // Gentle relief outside the property.
     const outside = !pointInPolygon(p, plan.site.boundary);
@@ -98,7 +101,7 @@ export function groundModel(plan: SitePlan): GroundModel {
         const d = distToEdge(p, w.polygon);
         h = Math.min(h, WATER_LEVEL - 0.04 - w.depth * Math.pow(Math.min(1, d / 1.3), 0.8));
       } else if (w.kind === 'pool' && w.polygon && pointInPolygon(p, w.polygon)) {
-        h = Math.min(h, -w.depth - 0.15);
+        if (dig) h = Math.min(h, -w.depth - 0.15);
       } else if ((w.kind === 'stream' || w.kind === 'pondless') && w.points) {
         const half = (w.width ?? 0.8) / 2;
         const pr = projectOnPolyline(p, w.points);
@@ -123,7 +126,7 @@ export function groundModel(plan: SitePlan): GroundModel {
     return h;
   };
 
-  return { area, height, zoneAt, inWater };
+  return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater };
 }
 
 /* ------------------------------------------------------------------ */
@@ -253,7 +256,7 @@ function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, h
 }
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
-function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[]): THREE.MeshPhysicalMaterial {
+function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout): THREE.MeshPhysicalMaterial {
   const soil = soilTextures();
   const sets: PBRSet[] = [soil, ...layerIds.map((id) => materialTextures(materialById.get(id)!))];
   const roughK = [0.97, ...layerIds.map((id) => {
@@ -314,8 +317,10 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
          nmap.xy *= normalScale;
          normal = normalize(tbn * nmap);`,
       );
+    // The ground is opened along each pool's outline, so the pool's tiled shell shows.
+    pools.patchGround(s);
   };
-  mat.customProgramCacheKey = () => `ground-splat-${layerIds.join(',')}`;
+  mat.customProgramCacheKey = () => `ground-splat-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}`;
   return mat;
 }
 
@@ -326,15 +331,15 @@ export interface GroundBuild {
   dispose(): void;
 }
 
-export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'balanced' | 'max'): GroundBuild {
+export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'balanced' | 'max', pools: PoolLayout): GroundBuild {
   const group = new THREE.Group();
   group.name = 'ground';
   const area = gm.area;
   const layers = groundLayers(plan);
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
-  const mat = splatMaterial(layers, area, splats);
+  const mat = splatMaterial(layers, area, splats, pools);
   const step = quality === 'draft' ? 0.3 : 0.18;
-  const site = new THREE.Mesh(gridGeometry(area, step, gm.height), mat);
+  const site = new THREE.Mesh(gridGeometry(area, step, gm.grade), mat);
   site.receiveShadow = true;
   site.name = 'site-ground';
   group.add(site);
@@ -342,7 +347,7 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 
   // Surroundings: coarser terrain that fades into the haze.
   const far = { minX: area.minX - 80, minY: area.minY - 80, maxX: area.maxX + 80, maxY: area.maxY + 80 };
   const surroundMat = mat; // Splat weights are zero outside, which leaves the soil and dry grass layer.
-  const ring = new THREE.Mesh(gridGeometry(far, 2.0, gm.height, area), surroundMat);
+  const ring = new THREE.Mesh(gridGeometry(far, 2.0, gm.grade, area), surroundMat);
   ring.receiveShadow = true;
   ring.name = 'surround-ground';
   // The ring tucks a few millimeters under the site ground where the two overlap.
