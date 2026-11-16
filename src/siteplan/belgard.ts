@@ -27,7 +27,8 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Sonoran Gray", ['#817b76', '#76706b', '#6e6763', '#5f5854']],
     ["Toscana", ['#837160', '#796959', '#726355', '#665a4e']],
   ] },
-  { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], colors: [
+  // Antiqued Flat Top keeps the textured face (fine aggregate and pores), a close starting point for its look.
+  { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], face: 'textured', colors: [
     ["Cream Tan Brown", ['#897362', '#836d5c', '#7e6957', '#776252']],
     ["Gray Charcoal Tan", ['#7f7971', '#7c736b', '#776e66', '#6e6760']],
     ["Gray/Charcoal", ['#7f7e7b', '#787774', '#6f6e6b', '#61605d']],

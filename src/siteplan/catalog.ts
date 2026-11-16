@@ -334,7 +334,7 @@ export const MATERIALS: MaterialSpec[] = [
 /* ------------------------------------------------------------------ */
 /* Color names are Belgard's. The four colors per entry are averages read from Belgard's own swatch
    thumbnails (lightest to darkest), so they are close, not exact; no Belgard image ships with the app.
-   Catalina Grana: 3-piece large set for the main course, and its 6 x 9 border piece for the edge. */
+   Catalina Grana: 3-piece large set for the main course, and its 6 x 9 border piece for the edge, both with a smooth face. */
 type Blend = [string, string[]];
 const CATALINA_GRANA: Blend[] = [
   ['Amaretto', ['#b89f88', '#ac937b', '#a38972', '#997e67']],
@@ -406,9 +406,9 @@ const EASTON_STONE: Blend[] = [
 const slugOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const CATALINA_SIZES: [number, number][] = [[6, 12], [9, 12], [12, 12]];
 const BELGARD: MaterialSpec[] = [
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'textured' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `border-of-catalina-grana-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true })),
-  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, matches: 'Belgard Catalina Grana', auto: n !== 'Midnight' })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-${slugOf(n)}`, name: `Catalina Grana, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'ashlar', sizes: CATALINA_SIZES, joint: 0.2, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `border-of-catalina-grana-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, auto: true })),
+  ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', auto: n !== 'Midnight' })),
   ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic', maker: 'Belgard', line: 'AB Classic', shelf: 'Retaining walls', color: n })),
   ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone', maker: 'Belgard', line: 'Easton Stone', shelf: 'Garden walls', color: n })),
   // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
