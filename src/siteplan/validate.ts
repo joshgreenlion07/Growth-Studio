@@ -1,7 +1,7 @@
 import { FEATURES, LEGACY_IDS, MATERIALS, PLANTS, featureById, materialById, plantById } from './catalog';
 import { area, uid } from './geometry';
 import type {
-  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, SitePlan, Vec2, WaterFeature, Zone,
+  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, Vec2, WaterFeature, Zone,
 } from './types';
 
 export interface CleanResult {
@@ -259,6 +259,17 @@ export function cleanPlan(input: unknown): CleanResult {
     models.push(m);
   }
   if (models.length) plan.models = models;
+
+  const rulers: Ruler[] = [];
+  for (const it of arr(o.rulers)) {
+    const a = vec(it.a), b = vec(it.b);
+    if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.02) continue;
+    const r: Ruler = { id: typeof it.id === 'string' && it.id ? it.id : uid('ruler'), a, b };
+    if (typeof it.label === 'string' && it.label.trim()) r.label = it.label.trim().slice(0, 60);
+    rulers.push(r);
+    if (rulers.length >= 300) break;
+  }
+  if (rulers.length) plan.rulers = rulers;
 
   return { plan, warnings: [...new Set(warnings)] };
 }
