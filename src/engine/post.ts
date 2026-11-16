@@ -116,7 +116,8 @@ void main(){
 
 const VERT = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
-export type Quality = 'draft' | 'balanced' | 'max';
+/** draft < light (phones and tablets) < balanced < max. */
+export type Quality = 'draft' | 'light' | 'balanced' | 'max';
 
 export class PostPipeline {
   sceneRT: THREE.WebGLRenderTarget;
@@ -190,7 +191,7 @@ export class PostPipeline {
       this.sceneRT = this.makeSceneRT(samples);
       this.sceneRT.setSize(this.w, this.h);
     }
-    this.dofMat.defines.SAMPLES = q === 'max' ? 64 : 32;
+    this.dofMat.defines.SAMPLES = q === 'max' ? 64 : q === 'light' ? 16 : 32;
     this.dofMat.needsUpdate = true;
   }
 

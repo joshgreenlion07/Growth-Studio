@@ -8,6 +8,7 @@ import { materialTextures, soilTextures } from '../engine/surfaces';
 import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
+import type { Quality } from '../engine/post';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -346,7 +347,7 @@ export interface GroundBuild {
   dispose(): void;
 }
 
-export function buildGround(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'balanced' | 'max', pools: PoolLayout): GroundBuild {
+export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, pools: PoolLayout): GroundBuild {
   const group = new THREE.Group();
   group.name = 'ground';
   const area = gm.area;

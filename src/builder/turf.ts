@@ -5,6 +5,7 @@ import type { SitePlan, Vec2 } from '../siteplan/types';
 import { GLOBAL, foliageDepthMaterial, patchFoliage } from '../engine/foliage';
 import { GeoBuilder } from './geobuilder';
 import type { GroundModel } from './ground';
+import type { Quality } from '../engine/post';
 
 /** Instanced lawn blades over every turf zone. */
 
@@ -40,10 +41,10 @@ export interface TurfBuild {
   dispose(): void;
 }
 
-export function buildTurf(plan: SitePlan, gm: GroundModel, quality: 'draft' | 'balanced' | 'max', blocked: (p: Vec2) => boolean): TurfBuild {
+export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blocked: (p: Vec2) => boolean): TurfBuild {
   const turf = plan.zones.filter((z) => z.kind === 'turf');
   if (!turf.length) return { object: null, dispose() {} };
-  const step = quality === 'draft' ? 0.17 : quality === 'balanced' ? 0.115 : 0.085;
+  const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.115 : 0.085;
   const r = rng('turf');
   const pts: { p: Vec2; c: THREE.Color; k: number }[] = [];
   for (const z of turf) {

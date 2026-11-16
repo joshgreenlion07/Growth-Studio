@@ -35,6 +35,20 @@ export interface StudioState {
 /** While leaves move in the wind, their shadows are redrawn this often (seconds of animation time). */
 const SHADOW_STEP = 1 / 20;
 
+/**
+ * The quality a session starts at. Phones and tablets (a touch screen as the main pointer, or a
+ * small screen) start at Light; anyone can pick a higher one.
+ */
+export function defaultQuality(): Quality {
+  try {
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const small = Math.min(window.screen?.width ?? 1024, window.screen?.height ?? 1024) < 600;
+    return coarse || small ? 'light' : 'balanced';
+  } catch {
+    return 'balanced';
+  }
+}
+
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export class Studio {
@@ -73,7 +87,7 @@ export class Studio {
   private navMode: NavMode = 'orbit';
   onNavModeChanged: (mode: NavMode) => void = () => {};
   onMeasureChanged: (mode: MeasureMode) => void = () => {};
-  state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: 'balanced', wind: 0.55, motion: true };
+  state: StudioState = { years: 3, mood: 'afternoon', hour: 15.5, date: new Date(new Date().getFullYear(), 5, 21), quality: defaultQuality(), wind: 0.55, motion: true };
   onViewsChanged: (views: CameraView[]) => void = () => {};
   onFrameStats: (fps: number) => void = () => {};
   /** A click (not a drag) on the scene: the id of the plan item under it, or null for bare ground. */
@@ -299,14 +313,14 @@ export class Studio {
   private applyQuality() {
     const q = this.state.quality;
     const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(q === 'draft' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2));
-    const size = q === 'draft' ? 1024 : q === 'balanced' ? 2048 : 4096;
+    this.renderer.setPixelRatio(q === 'draft' || q === 'light' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2));
+    const size = q === 'draft' || q === 'light' ? 1024 : q === 'balanced' ? 2048 : 4096;
     this.keyLight.shadow.mapSize.set(size, size);
     this.keyLight.shadow.map?.dispose();
     this.keyLight.shadow.map = null;
     this.shadowDirty = true;
     this.mirror.enabled = q !== 'draft';
-    this.mirror.scale = q === 'max' ? 1 : 0.5;
+    this.mirror.scale = q === 'max' ? 1 : q === 'light' ? 0.25 : 0.5;
     this.post.setQuality(q);
     this.resize();
   }
