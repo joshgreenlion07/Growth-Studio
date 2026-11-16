@@ -57,10 +57,11 @@ export class SegmentGrid {
     this.box = { minX, minY, maxX, maxY };
     const w = Math.max(1e-6, maxX - minX), h = Math.max(1e-6, maxY - minY);
     // About two segments per cell, never so many cells that building the grid costs more than it saves.
-    const c = cell ?? Math.max(0.25, len / Math.max(1, n) * 2, Math.sqrt((w * h) / 65536));
+    // Cells stay square and at most 1024 to a side, which the ring search in `nearest` relies on.
+    const c = Math.max(cell ?? Math.max(0.25, (len / Math.max(1, n)) * 2, Math.sqrt((w * h) / 65536)), w / 1023, h / 1023);
     this.cell = c;
-    this.nx = Math.max(1, Math.min(1024, Math.ceil(w / c) + 1));
-    this.ny = Math.max(1, Math.min(1024, Math.ceil(h / c) + 1));
+    this.nx = Math.max(1, Math.ceil(w / c) + 1);
+    this.ny = Math.max(1, Math.ceil(h / c) + 1);
     const count = new Int32Array(this.nx * this.ny + 1);
     const each = (i: number, f: (k: number) => void) => {
       const o = i * 4;

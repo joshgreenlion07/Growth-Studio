@@ -268,7 +268,74 @@ function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, h
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  g.userData.grid = { nx, ny };
   return g;
+}
+
+/**
+ * Ray hits on a grid mesh from gridGeometry, walking only the cells under the ray (in order,
+ * so the first cell with a hit holds the nearest one) instead of testing every triangle.
+ * Autofocus and picking cast a ray at the ground several times a second.
+ */
+function gridRaycast(mesh: THREE.Mesh, area: Bounds, nx: number, ny: number) {
+  const ray = new THREE.Ray(), inv = new THREE.Matrix4(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3(), hit = new THREE.Vector3();
+  const sx = (area.maxX - area.minX) / nx, sz = (area.maxY - area.minY) / ny;
+  mesh.raycast = (raycaster, intersects) => {
+    const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    inv.copy(mesh.matrixWorld).invert();
+    ray.copy(raycaster.ray).applyMatrix4(inv);
+    const o = ray.origin, dir = ray.direction;
+    // Where the ray's ground track enters and leaves the grid.
+    let t0 = 0, t1 = Infinity;
+    for (const [oo, dd, lo, hi] of [[o.x, dir.x, area.minX, area.maxX], [o.z, dir.z, area.minY, area.maxY]]) {
+      if (Math.abs(dd) < 1e-12) {
+        if (oo < lo || oo > hi) return;
+      } else {
+        const ta = (lo - oo) / dd, tb = (hi - oo) / dd;
+        t0 = Math.max(t0, Math.min(ta, tb));
+        t1 = Math.min(t1, Math.max(ta, tb));
+      }
+    }
+    if (t0 > t1) return;
+    const vx = (i: number, j: number, v: THREE.Vector3) => v.fromBufferAttribute(pos, j * (nx + 1) + i);
+    const cellHit = (i: number, j: number): number => {
+      vx(i, j, a);
+      vx(i + 1, j, b);
+      vx(i, j + 1, c);
+      vx(i + 1, j + 1, d);
+      let best = Infinity;
+      if (ray.intersectTriangle(a, c, b, false, hit)) best = Math.min(best, hit.distanceTo(o));
+      if (ray.intersectTriangle(b, c, d, false, hit)) best = Math.min(best, hit.distanceTo(o));
+      return best;
+    };
+    // Step through the cells under the ray (Amanatides and Woo).
+    const ex = o.x + dir.x * t0, ez = o.z + dir.z * t0;
+    let i = Math.max(0, Math.min(nx - 1, Math.floor((ex - area.minX) / sx)));
+    let j = Math.max(0, Math.min(ny - 1, Math.floor((ez - area.minY) / sz)));
+    const stepI = dir.x > 0 ? 1 : -1, stepJ = dir.z > 0 ? 1 : -1;
+    const dtx = Math.abs(dir.x) > 1e-12 ? sx / Math.abs(dir.x) : Infinity, dtz = Math.abs(dir.z) > 1e-12 ? sz / Math.abs(dir.z) : Infinity;
+    let tx = Math.abs(dir.x) > 1e-12 ? (area.minX + (i + (stepI > 0 ? 1 : 0)) * sx - o.x) / dir.x : Infinity;
+    let tz = Math.abs(dir.z) > 1e-12 ? (area.minY + (j + (stepJ > 0 ? 1 : 0)) * sz - o.z) / dir.z : Infinity;
+    for (let guard = 0; guard < nx + ny + 2; guard++) {
+      const dist = cellHit(i, j);
+      if (dist < Infinity) {
+        // Distances are along the local ray; the mesh is only translated, so they hold in world space too.
+        const point = ray.at(dist, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+        const dw = raycaster.ray.origin.distanceTo(point);
+        if (dw >= raycaster.near && dw <= raycaster.far) intersects.push({ distance: dw, point, object: mesh });
+        return;
+      }
+      if (Math.min(tx, tz) > t1) return;
+      if (tx < tz) {
+        i += stepI;
+        tx += dtx;
+      } else {
+        j += stepJ;
+        tz += dtz;
+      }
+      if (i < 0 || j < 0 || i >= nx || j >= ny) return;
+    }
+  };
 }
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
@@ -358,6 +425,7 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, p
   const site = new THREE.Mesh(gridGeometry(area, step, gm.grade), mat);
   site.receiveShadow = true;
   site.name = 'site-ground';
+  gridRaycast(site, area, site.geometry.userData.grid.nx, site.geometry.userData.grid.ny);
   group.add(site);
 
   // Surroundings: coarser terrain that fades into the haze.

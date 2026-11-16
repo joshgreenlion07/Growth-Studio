@@ -168,7 +168,10 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     return pts.length ? { b: bounds(pts), pad: (w.width ?? 0) / 2 } : null;
   }).filter((x) => !!x);
   const reflects = (p: Vec2, h: number) => waterBoxes.some(({ b, pad }) => inBounds(b, p[0], p[1], pad + Math.max(4, h * 3)));
-  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects });
+  // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
+  const sb = bounds(plan.site.boundary);
+  const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
+  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
 
   root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {

@@ -104,6 +104,8 @@ export class Studio {
   /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
   private shadowPassCam = new THREE.PerspectiveCamera(10, 1, 1, 2);
   private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+  /** How much larger than the view an exported still is, so its plants get the detail its size needs. */
+  private stillScale = 1;
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
@@ -617,7 +619,7 @@ export class Studio {
     }
 
     // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
-    const lodScale = this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1;
+    const lodScale = (this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1) * this.stillScale;
     this.build?.plants.update?.(this.camera, this.container.clientHeight * lodScale);
     // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
     // moves the leaves at a steady rate rather than every frame.
@@ -686,7 +688,12 @@ export class Studio {
     this.post.setSize(W, H);
     this.mirror.setSize(W, H);
     this.shadowDirty = true;
-    this.renderFrame(0);
+    this.stillScale = H / Math.max(1, h0);
+    try {
+      this.renderFrame(0);
+    } finally {
+      this.stillScale = 1;
+    }
     const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
     this.renderer.setPixelRatio(pr0);
     this.post.setQuality(q0);

@@ -519,6 +519,13 @@ interface Group {
   container?: ContainerId;
 }
 
+/** Instances drawn at one level of detail: a shared matrix buffer and a mesh per plant part. */
+interface Band {
+  attr: THREE.InstancedBufferAttribute;
+  meshes: THREE.InstancedMesh[];
+  count: number;
+}
+
 /** One plant group's instances when built with levels of detail. */
 interface LodSet {
   group: Group;
@@ -529,14 +536,14 @@ interface LodSet {
   center: Float32Array;
   /** Each instance's scale (largest axis). */
   scale: Float32Array;
-  hi: THREE.InstancedBufferAttribute;
-  lo: THREE.InstancedBufferAttribute;
-  hiMeshes: THREE.InstancedMesh[];
-  loMeshes: THREE.InstancedMesh[];
+  /** In view, by level of detail (full, fewer leaves, fewest): matrices rewritten as the camera moves. */
+  view: Band[];
+  /** In reflections, by level (fewer leaves, fewest), for the instances near reflecting water only. */
+  reflect: Band[];
+  /** Which instances show in reflections. */
+  reflects: Uint8Array;
   /** Shadow-map meshes: every instance, never rewritten. */
   staticMeshes: THREE.InstancedMesh[];
-  /** Reflection meshes: the instances near reflecting water. */
-  reflect: THREE.InstancedMesh[];
   /** Radius around the base that holds the mature plant at scale 1. */
   radius0: number;
 }
@@ -621,11 +628,18 @@ export const PLANT_LAYERS = {
 
 /**
  * On screen, plants smaller than this many CSS pixels tall (or wide) are drawn
- * with the lower-detail geometry.
+ * with fewer leaves, and below LOD2_PIXELS with the fewest.
  */
 export const LOD_PIXELS = 100;
+export const LOD2_PIXELS = 32;
 
-const lodCache = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+/** Detail levels: share of leaf cards kept (each grown to keep the crown full), share of larger pieces kept, share of twigs kept, smallest limb kept (share of the largest). */
+const LEVELS = {
+  1: { keep: 0.4, grow: 1 / Math.sqrt(0.4), keepBig: 0.55, twigs: 0.25, limb: 0.2, limbKeep: 0.5 },
+  2: { keep: 0.14, grow: 2.1, keepBig: 0.3, twigs: 0, limb: 0.35, limbKeep: 0.15 },
+};
+
+const lodCache = new WeakMap<THREE.BufferGeometry, Map<number, THREE.BufferGeometry>>();
 
 /**
  * A lower-detail copy of a plant part for shadows, reflections and far plants.
@@ -634,13 +648,16 @@ const lodCache = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
  * the crown stays about as dense; larger pieces (blades, broad leaves) keep
  * about half. Wood keeps its trunk and limbs and drops most twigs.
  */
-export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | 'flower'): THREE.BufferGeometry {
-  const hit = lodCache.get(geo);
+export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | 'flower', level: 1 | 2 = 1): THREE.BufferGeometry {
+  let levels = lodCache.get(geo);
+  if (!levels) lodCache.set(geo, (levels = new Map()));
+  const hit = levels.get(level);
   if (hit) return hit;
+  const L = LEVELS[level];
   const index = geo.index;
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   if (!index || pos.count < 64) {
-    lodCache.set(geo, geo);
+    levels.set(level, geo);
     return geo;
   }
   const n = pos.count, I = index.array;
@@ -682,17 +699,18 @@ export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | '
   const extent = (c: number[]) => Math.hypot(c[4] - c[3], c[6] - c[5], c[8] - c[7]);
   let maxExtent = 0;
   for (const c of cx.values()) maxExtent = Math.max(maxExtent, extent(c));
+  // The same rolls at every level, so the fewest-leaves copy keeps a subset of the fewer-leaves one.
   const r = rng(`lod-${n}-${I.length}`);
-  const CARD = 8, KEEP = 0.4, GROW = 1 / Math.sqrt(KEEP), KEEP_BIG = 0.55;
+  const CARD = 8;
   const keep = new Map<number, number>(); // piece -> scale (pieces left out are absent)
   for (const [k, c] of cx) {
     const nv = verts.get(k)!;
     const roll = r();
     if (part === 'wood') {
-      if (nv <= CARD ? roll < 0.25 : extent(c) >= maxExtent * 0.2 || roll < 0.5) keep.set(k, 1);
+      if (nv <= CARD ? roll < L.twigs : extent(c) >= maxExtent * L.limb || roll < L.limbKeep) keep.set(k, 1);
     } else if (nv <= CARD) {
-      if (roll < KEEP) keep.set(k, GROW);
-    } else if (roll < KEEP_BIG) keep.set(k, 1);
+      if (roll < L.keep) keep.set(k, L.grow);
+    } else if (roll < L.keepBig) keep.set(k, 1);
   }
   const remap = new Int32Array(n).fill(-1);
   let m = 0;
@@ -725,8 +743,12 @@ export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | '
   out.setIndex(idx);
   out.computeBoundingSphere();
   out.computeBoundingBox();
-  lodCache.set(geo, out);
+  levels.set(level, out);
   return out;
+}
+
+function band(n: number): Band {
+  return { attr: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage), meshes: [], count: 0 };
 }
 
 export interface PlantBuildOptions {
@@ -739,6 +761,8 @@ export interface PlantBuildOptions {
   lod?: boolean;
   /** With lod: which plants show in water reflections (near a mirror-like water surface). */
   reflects?: (p: Vec2, height: number) => boolean;
+  /** With lod: shadow map texel size in meters. Plants only a few texels across cast their shadow from the fewest-leaves copy. */
+  shadowTexel?: number;
 }
 
 export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2) => number, castShadows: boolean, options: PlantBuildOptions = {}): PlantLayer {
@@ -782,12 +806,10 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           base: new Float32Array(n * 16),
           center: new Float32Array(n * 3),
           scale: new Float32Array(n),
-          hi: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage),
-          lo: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage),
-          hiMeshes: [],
-          loMeshes: [],
+          view: [band(n), band(n), band(n)],
+          reflect: [band(n), band(n)],
+          reflects: new Uint8Array(n),
           staticMeshes: [],
-          reflect: [],
           radius0: 0,
         }
       : null;
@@ -806,26 +828,31 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         mats.push(im);
         return;
       }
-      const lo = lodGeometry(g, part);
+      const lo = lodGeometry(g, part, 1), lo2 = lodGeometry(g, part, 2);
       g.boundingSphere ?? g.computeBoundingSphere();
       const bs = g.boundingSphere!;
       set.radius0 = Math.max(set.radius0, bs.center.length() + bs.radius);
-      // In view: full detail near, fewer leaves far. Neither casts shadows or shows in reflections.
-      for (const [gg, attr, out, tag] of [[g, set.hi, set.hiMeshes, 'near'], [lo, set.lo, set.loMeshes, 'far']] as const) {
-        const im = new THREE.InstancedMesh(gg, mat, n);
-        im.name = `${spec.id}-${name}-${tag}`;
-        im.instanceMatrix = attr;
-        im.count = 0;
-        im.visible = false;
-        im.receiveShadow = true;
-        im.frustumCulled = false;
-        im.layers.set(PLANT_LAYERS.view);
-        root.add(im);
-        out.push(im);
-      }
-      // Every plant, lower detail, into the shadow map.
+      const banded = (geos: THREE.BufferGeometry[], bands: Band[], layer: number, tag: string) =>
+        geos.forEach((gg, k) => {
+          const im = new THREE.InstancedMesh(gg, mat, n);
+          im.name = `${spec.id}-${name}-${tag}${k}`;
+          im.instanceMatrix = bands[k].attr;
+          im.count = 0;
+          im.visible = false;
+          im.receiveShadow = true;
+          im.frustumCulled = false;
+          im.layers.set(layer);
+          root.add(im);
+          bands[k].meshes.push(im);
+        });
+      // In view: full detail near, fewer leaves farther, fewest far off. None cast shadows.
+      banded([g, lo, lo2], set.view, PLANT_LAYERS.view, 'view');
+      // In reflections, plants near reflecting water: fewer or fewest leaves.
+      banded([lo, lo2], set.reflect, PLANT_LAYERS.reflection, 'reflection');
+      // Every plant into the shadow map; one only a few shadow texels across from the fewest-leaves copy.
       if (cast && castShadows) {
-        const im = new THREE.InstancedMesh(lo, mat, n);
+        const tiny = options.shadowTexel !== undefined && Math.max(spec.matureHeight, spec.matureSpread) < options.shadowTexel * 16;
+        const im = new THREE.InstancedMesh(tiny ? lo2 : lo, mat, n);
         im.name = `${spec.id}-${name}-shadow`;
         im.castShadow = true;
         if (depth) im.customDepthMaterial = depth;
@@ -833,13 +860,6 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         root.add(im);
         set.staticMeshes.push(im);
       }
-      // Plants near reflecting water, lower detail, into the reflection.
-      const im = new THREE.InstancedMesh(lo, mat, n);
-      im.name = `${spec.id}-${name}-reflection`;
-      im.receiveShadow = true;
-      im.layers.set(PLANT_LAYERS.reflection);
-      root.add(im);
-      set.reflect.push(im);
     };
 
     const isTree = spec.group === 'Trees';
@@ -863,7 +883,6 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     ao.frustumCulled = false;
     root.add(ao);
 
-    let nRefl = 0;
     list.forEach((p, i) => {
       const r = rng(p.id);
       const y = groundHeight(p.position);
@@ -896,10 +915,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         set.center[i * 3 + 2] = t.z;
         set.scale[i] = sc * Math.max(1, tall);
         for (const im of set.staticMeshes) im.setMatrixAt(i, m4);
-        if (!options.reflects || options.reflects(p.position, spec.matureHeight * sc)) {
-          for (const im of set.reflect) im.setMatrixAt(nRefl, m4);
-          nRefl++;
-        }
+        set.reflects[i] = !options.reflects || options.reflects(p.position, spec.matureHeight * sc) ? 1 : 0;
       }
       m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, sc));
       ao.setMatrixAt(i, m4);
@@ -917,15 +933,6 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         // Culled against the sun's view as a whole; the sphere is padded for wind sway.
         im.computeBoundingSphere();
         im.boundingSphere!.radius += 1;
-      }
-      for (const im of set.reflect) {
-        im.count = nRefl;
-        im.visible = nRefl > 0;
-        im.instanceMatrix.needsUpdate = true;
-        if (nRefl) {
-          im.computeBoundingSphere();
-          im.boundingSphere!.radius += 1;
-        }
       }
       lodSets.push(set);
     }
@@ -973,27 +980,30 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         const { spec, growth } = set.group;
         const grow = Math.max(1, growth.uSize.value.x, growth.uSize.value.y);
         const size = Math.max(spec.matureHeight * growth.uSize.value.y, spec.matureSpread * growth.uSize.value.x);
-        const hi = set.hi.array as Float32Array, lo = set.lo.array as Float32Array;
-        let nh = 0, nl = 0;
+        for (const b of set.view) b.count = 0;
+        for (const b of set.reflect) b.count = 0;
+        const put = (b: Band, i: number) => (b.attr.array as Float32Array).set(set.base.subarray(i * 16, i * 16 + 16), 16 * b.count++);
         for (let i = 0; i < set.n; i++) {
           const k = set.scale[i];
           // A sphere around the plant's base that holds it at any size up to mature, plus wind sway.
           sphere.center.set(set.center[i * 3], set.center[i * 3 + 1], set.center[i * 3 + 2]);
+          const d = Math.max(0.1, Math.hypot(cam.x - sphere.center.x, cam.y - sphere.center.y - size * k * 0.5, cam.z - sphere.center.z));
+          const px = (size * k * pxPerM) / d;
+          // A reflection is about as large on screen as the plant, wherever the plant itself is.
+          if (set.reflects[i]) put(set.reflect[px >= LOD2_PIXELS ? 0 : 1], i);
           sphere.radius = set.radius0 * k * grow + 0.4;
           if (!frustum.intersectsSphere(sphere)) continue;
-          const d = Math.max(0.1, Math.hypot(cam.x - sphere.center.x, cam.y - sphere.center.y - size * k * 0.5, cam.z - sphere.center.z));
-          if ((size * k * pxPerM) / d >= LOD_PIXELS) hi.set(set.base.subarray(i * 16, i * 16 + 16), 16 * nh++);
-          else lo.set(set.base.subarray(i * 16, i * 16 + 16), 16 * nl++);
+          put(set.view[px >= LOD_PIXELS ? 0 : px >= LOD2_PIXELS ? 1 : 2], i);
         }
-        for (const [attr, meshes, count] of [[set.hi, set.hiMeshes, nh], [set.lo, set.loMeshes, nl]] as const) {
-          for (const im of meshes) {
-            im.count = count;
-            im.visible = count > 0;
+        for (const b of [...set.view, ...set.reflect]) {
+          for (const im of b.meshes) {
+            im.count = b.count;
+            im.visible = b.count > 0;
           }
-          if (count) {
-            attr.clearUpdateRanges();
-            attr.addUpdateRange(0, count * 16);
-            attr.needsUpdate = true;
+          if (b.count) {
+            b.attr.clearUpdateRanges();
+            b.attr.addUpdateRange(0, b.count * 16);
+            b.attr.needsUpdate = true;
           }
         }
       }
