@@ -84,6 +84,34 @@ aside.plan-pane > * { flex: 0 0 auto; }
 #tools button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 #tool-options { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--paper); flex-wrap: wrap; }
 #tool-options select { flex: 1 1 140px; }
+#tool-options .pp { flex: 1 1 220px; }
+/* Plant picker: chosen plant on a button, searchable list in a panel. */
+.pp { position: relative; min-width: 0; }
+.pp-btn { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 4px 8px 4px 4px; border-radius: 4px; cursor: pointer; font: inherit; }
+.pp-btn:hover { border-color: var(--ink-2); }
+.pp-btn:focus-visible, .pp-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-caret { margin-left: auto; color: var(--ink-2); font-size: 12px; }
+.pp-pic { flex: none; display: block; overflow: hidden; border-radius: 3px; border: 1px solid var(--line); }
+.pp-pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pp-md { width: 44px; height: 44px; }
+.pp-sm { width: 40px; height: 40px; }
+.pp-none { background: var(--paper); border-style: dashed; }
+.pp-text { display: grid; min-width: 0; line-height: 1.25; }
+.pp-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-bot, .botanical { font-style: italic; font-size: 12px; color: var(--ink-2); }
+.pp-bot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+p.botanical { margin: -6px 0 0; }
+td .botanical { line-height: 1.3; }
+.pp-panel { position: fixed; z-index: 40; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--ink-2); border-radius: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+.pp-search { margin: 8px 8px 4px; padding: 6px 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 4px; font: inherit; }
+.pp-status { font-size: 11px; color: var(--ink-2); padding: 0 10px 6px; border-bottom: 1px solid var(--line); }
+.pp-list { overflow-y: auto; padding: 0 0 6px; flex: 1 1 auto; min-height: 0; }
+.pp-group-name { position: sticky; top: 0; background: var(--panel); padding: 8px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); z-index: 1; }
+.pp-row { display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer; }
+.pp-row.is-active { background: var(--accent-soft); }
+.pp-row.is-current .pp-name::after { content: ' · selected'; font-weight: 400; color: var(--ink-2); }
+.pp-size { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pp-empty { padding: 14px 12px; color: var(--ink-2); font-size: 13px; }
 #plan { position: relative; flex: 1 1 auto !important; min-height: 220px; overflow: hidden; }
 .plan-canvas { display: block; touch-action: none; }
 #plan-status { font-size: 12px; color: var(--ink-2); padding: 6px 10px; border-top: 1px solid var(--line); min-height: 2.6em; }
