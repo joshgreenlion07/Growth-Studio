@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, featureById, materialById, plantById, sizeAt, type FeatureGroup, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, materialById, plantById, sizeAt, type FeatureGroup, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -6,6 +6,7 @@ import { cleanPlan } from '../siteplan/validate';
 import { expandPlants } from '../builder/build';
 import { groundModel } from '../builder/ground';
 import { plantPicker } from './plantpicker';
+import { wantThumb } from './plantthumbs';
 import { Studio } from '../engine/studio';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
@@ -807,7 +808,7 @@ function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] 
 
 function onEmbedMessage(e: MessageEvent) {
   if (e.source !== window.parent || !EMBED_ALLOWED_PARENT_ORIGINS.some((re) => re.test(e.origin))) return;
-  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; id?: unknown; kind?: unknown; data?: unknown } | null;
+  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; id?: unknown; kind?: unknown; data?: unknown; ids?: unknown } | null;
   if (!d || typeof d !== 'object' || d.source !== 'area-planner') return;
   if (d.type === 'asset') {
     // An uploaded file the plan names, sent in answer to `need-asset`. `data: null` means the parent no longer has it.
@@ -817,6 +818,14 @@ function onEmbedMessage(e: MessageEvent) {
     if (!(d.data instanceof Blob) || !studio) return reply(false, 'The file was not sent.');
     if (d.data.size > EMBED_ASSET_MAX_BYTES) return reply(false, 'This file is too large to show in 3D (the limit is 60 MB).');
     studio.addAsset(id, d.kind === 'image' ? 'image' : 'glb', d.data).then(() => reply(true), (err) => reply(false, err instanceof Error ? err.message : String(err)));
+    return;
+  }
+  if (d.type === 'plant-thumbs') {
+    // The parent wants pictures of catalog plants (for its plant picker). Each is drawn with the app's own plant
+    // builder, one at a time, and sent back as soon as it is ready.
+    const origin = e.origin;
+    const ids = Array.isArray(d.ids) ? d.ids.filter((x): x is string => typeof x === 'string' && plantById.has(x)) : PLANTS.map((p) => p.id);
+    for (const id of ids) wantThumb(id, (url) => window.parent.postMessage({ source: 'growth-studio', type: 'plant-thumb', id, url }, origin));
     return;
   }
   if (d.type !== 'siteplan') return;
