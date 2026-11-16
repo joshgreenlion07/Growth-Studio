@@ -98,10 +98,12 @@ export class Measurements {
     // Water.
     for (const w of plan.water) {
       if (w.polygon && w.polygon.length > 2) {
-        this.outline(w.polygon, true, gy, 'edge');
+        // A pool set in a raised area is outlined and labeled at its own level.
+        const lift = build.pools.byId.get(w.id)?.lift ?? 0;
+        this.outline(w.polygon, true, gy, 'edge', lift);
         const c = centroid(w.polygon);
         const kind = w.kind[0].toUpperCase() + w.kind.slice(1);
-        this.label(`${kind}\n${sqft(Math.abs(signedArea(w.polygon)))} sq ft · ${fmtFeet(w.depth)} deep`, new THREE.Vector3(c[0], gy(c) + 0.3, c[1]), 'area');
+        this.label(`${kind}\n${sqft(Math.abs(signedArea(w.polygon)))} sq ft · ${fmtFeet(w.depth)} deep`, new THREE.Vector3(c[0], gy(c) + 0.3 + lift, c[1]), 'area');
       } else if (w.points && w.points.length > 1) {
         this.outline(w.points, false, gy, 'edge');
       }

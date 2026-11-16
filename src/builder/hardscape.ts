@@ -6,6 +6,7 @@ import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { latticeAlpha, materialTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { catalogMaterial, plainMaterial, segmentBox } from './materials';
+import type { PoolLayout } from './pools';
 
 /**
  * Patios with soldier borders and inset lights, raised planters, walls with
@@ -147,22 +148,73 @@ export interface HardscapeBuild {
   dispose(): void;
 }
 
-export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): HardscapeBuild {
+/** Top of a hardscape zone above grade: its material's thickness, its elevation when raised, and a
+    hair per zone so overlapping paving does not flicker. `index` is the zone's place in plan.zones. */
+export function zoneTop(z: Zone, index: number): number {
+  return (materialById.get(z.catalogId)?.thickness ?? 0.07) + index * 0.0015 + (z.elevation ?? 0);
+}
+
+/**
+ * The cut face of a paving zone where a pool opens it: a wall from the base to the zone's top along
+ * each cut outline, only where that outline runs inside the zone. It closes the side of a raised
+ * area that stands above the pool beside it; at a pool on the zone's own level it sits hidden
+ * inside the coping.
+ */
+function cutFaces(lines: Vec2[][], zone: Vec2[], y0: number, y1: number): THREE.BufferGeometry | null {
+  const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (const line of lines) {
+    let along = 0;
+    for (let i = 0; i < line.length; i++) {
+      const a = line[i], b = line[(i + 1) % line.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 1e-6) continue;
+      const d: Vec2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+      const at = (s: number): Vec2 => [a[0] + d[0] * s, a[1] + d[1] * s];
+      // Walk the edge in short pieces and join the ones inside the zone into runs.
+      const n = Math.max(1, Math.ceil(len / 0.05));
+      let from = -1;
+      for (let k = 0; k <= n; k++) {
+        const inside = k < n && pointInPolygon(at(((k + 0.5) / n) * len), zone);
+        if (inside && from < 0) from = k;
+        if (!inside && from >= 0) {
+          const s0 = (from / n) * len, s1 = (k / n) * len, p = at(s0), q = at(s1), base = pos.length / 3;
+          for (const [c, y, s] of [[p, y0, s0], [q, y0, s1], [q, y1, s1], [p, y1, s0]] as [Vec2, number, number][]) {
+            pos.push(c[0], y, c[1]);
+            nor.push(-d[1], 0, d[0]);
+            uv.push(along + s, y);
+          }
+          idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          from = -1;
+        }
+      }
+      along += len;
+    }
+  }
+  if (!idx.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pools: PoolLayout): HardscapeBuild {
   const group = new THREE.Group();
   group.name = 'hardscape';
   const surfaces: THREE.Mesh[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const lightGeo: THREE.BufferGeometry[] = [];
   const glowMat = new THREE.MeshStandardMaterial({ color: '#d8d3c8', emissive: new THREE.Color('#ffd49a'), emissiveIntensity: 0, roughness: 0.3, metalness: 0.4 });
-  // Pools sit on top of paving: each pool (with its coping) is cut out of any paving that surrounds it.
-  const poolCuts: Vec2[][] = [];
-  for (const w of plan.water) if (w.kind === 'pool' && w.polygon) poolCuts.push(outsetPolygon(w.polygon, poolCoping(w)));
-
   plan.zones.forEach((z: Zone, i) => {
     if (z.kind === 'hardscape') {
       const spec = materialById.get(z.catalogId);
       // A raised area: the whole surface lifts by its elevation and sits on solid sides of the same material.
-      const t = (spec?.thickness ?? 0.07) + i * 0.0015 + (z.elevation ?? 0);
+      const t = zoneTop(z, i);
+      // Pools show through paving: near a pool the zone's materials leave out everything over the
+      // pool and its coping, and so do the shadows they cast.
+      const cut = pools.touches(z.polygon);
+      const mat = (m: THREE.Material) => (cut ? pools.cutMaterial(m) : m);
       const bev = spec?.recipe === 'deck' ? 0.004 : 0.006;
       let field = z.polygon;
       if (z.border && materialById.has(z.border.catalogId)) {
@@ -171,7 +223,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
         field = inner;
         const bg = borderGeometry(z.polygon, inner, t, -0.06, z.border.course === 'sailor');
         geos.push(bg);
-        const bm = new THREE.Mesh(bg, catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide }));
+        const bm = new THREE.Mesh(bg, mat(catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide })));
         bm.receiveShadow = true;
         bm.userData.itemId = z.id;
         group.add(bm);
@@ -186,17 +238,26 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
             for (let j = 0; j < k; j++) {
               const f = (j + 0.5) / k;
               const p: Vec2 = [(a[0] + (b[0] - a[0]) * f + d[0] + (c[0] - d[0]) * f) / 2, (a[1] + (b[1] - a[1]) * f + d[1] + (c[1] - d[1]) * f) / 2];
-              lightGeo.push(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 12).translate(p[0], t + 0.003, p[1]));
+              if (!pools.cutAt(p)) lightGeo.push(new THREE.CylinderGeometry(0.03, 0.03, 0.01, 12).translate(p[0], t + 0.003, p[1]));
             }
           }
         }
       }
-      const holes = poolCuts.filter((h) => h.every((p) => pointInPolygon(p, field)));
-      const g = slab(field, -0.06, t + 0.0005, bev, holes);
+      const g = slab(field, -0.06, t + 0.0005, bev);
       geos.push(g);
-      const mesh = new THREE.Mesh(g, catalogMaterial(z.catalogId));
+      const mesh = new THREE.Mesh(g, mat(catalogMaterial(z.catalogId)));
       mesh.receiveShadow = true;
       mesh.castShadow = t > 0.15;
+      if (cut && pools.cutDepth) mesh.customDepthMaterial = pools.cutDepth;
+      if (cut) {
+        const fg = cutFaces(pools.cutLines, z.polygon, -0.06, t - 0.001);
+        if (fg) {
+          geos.push(fg);
+          const fm = new THREE.Mesh(fg, catalogMaterial(z.catalogId, { side: THREE.DoubleSide }));
+          fm.receiveShadow = true;
+          group.add(fm);
+        }
+      }
       mesh.name = `zone-${z.id}`;
       mesh.userData.itemId = z.id;
       group.add(mesh);
@@ -212,7 +273,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
     group.add(new THREE.Mesh(lg, glowMat));
   }
 
-  for (const l of plan.lines) group.add(l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, height, geos));
+  for (const l of plan.lines) group.add(l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, plan.zones, height, geos));
 
   return {
     object: group,
@@ -397,7 +458,99 @@ function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geo
   return g;
 }
 
-function buildLine(l: LineItem, height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {
+/** Thickness in meters of a line that is built as a solid body: a wall or a concrete curb. 0 for the rest. */
+export function lineThickness(l: LineItem): number {
+  const spec = materialById.get(l.catalogId);
+  if (l.kind === 'wall') return (spec?.wall?.face ?? 'splitFace') === 'plaster' ? 0.25 : 0.3;
+  if (l.kind === 'edging' && spec?.recipe === 'curb') return 0.15;
+  return 0;
+}
+
+/**
+ * How much a surface must stay in view at a point, for choosing the side of a boundary a wall
+ * stands on: paving first (raised paving above lower paving), then lawn, then beds and gravel,
+ * then bare ground. Paving is a slab that covers any zone drawn over it, so it counts wherever
+ * it is; among the other zones the later one wins, as on the ground.
+ */
+function surfaceRank(zones: Zone[], p: Vec2): number {
+  let paving = 0, top: Zone | null = null;
+  for (const z of zones) {
+    if (!pointInPolygon(p, z.polygon)) continue;
+    if (z.kind === 'hardscape') paving = Math.max(paving, 3 + (z.elevation ?? 0));
+    top = z;
+  }
+  return paving || (top ? (top.kind === 'turf' ? 2 : 1) : 0);
+}
+
+/**
+ * How far each straight piece of a wall or curb moves sideways off the drawn line, one value per
+ * segment, along the segment's left normal. A piece that runs along the boundary between two
+ * surfaces moves by half its thickness onto the one that matters less, so its face is flush with
+ * the drawn line and the paving's border (or the lawn's edge) on the other side stays in view. A
+ * piece with the same surface on both sides stays centered on the line, and so do fences and steel
+ * edging. The surfaces are read a little off the line on each side, never on it, because the
+ * line's points usually are the surfaces' own points.
+ */
+export function lineMoves(l: LineItem, zones: Zone[]): number[] {
+  const thick = lineThickness(l);
+  const moves: number[] = [];
+  for (let i = 0; i < l.points.length - 1; i++) {
+    const a = l.points[i], b = l.points[i + 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!thick || len < 1e-6) {
+      moves.push(0);
+      continue;
+    }
+    const n: Vec2 = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+    const off = thick / 2 + 0.06;
+    let score = 0;
+    for (const t of [0.15, 0.35, 0.5, 0.65, 0.85]) {
+      const q: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const left = surfaceRank(zones, [q[0] + n[0] * off, q[1] + n[1] * off]);
+      const right = surfaceRank(zones, [q[0] - n[0] * off, q[1] - n[1] * off]);
+      if (left > right + 0.02) score++;
+      else if (right > left + 0.02) score--;
+    }
+    // Away from the side that must stay in view, a few millimeters clear of the line.
+    moves.push(score > 0 ? -(thick / 2 + 0.004) : score < 0 ? thick / 2 + 0.004 : 0);
+  }
+  return moves;
+}
+
+/**
+ * The [start, end] of each segment of a line moved sideways by `moves` (see lineMoves), plus
+ * `extra` meters further the same way on each moved segment. Where either of two neighbors moved,
+ * both end at the point their center lines cross, so the pieces meet at the corner.
+ */
+export function lineRuns(l: LineItem, moves: number[], extra = 0): [Vec2, Vec2][] {
+  const runs: [Vec2, Vec2][] = [];
+  for (let i = 0; i < l.points.length - 1; i++) {
+    const a = l.points[i], b = l.points[i + 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n: Vec2 = len > 1e-6 ? [-(b[1] - a[1]) / len, (b[0] - a[0]) / len] : [0, 0];
+    const m = moves[i] ? moves[i] + Math.sign(moves[i]) * extra : 0;
+    runs.push([[a[0] + n[0] * m, a[1] + n[1] * m], [b[0] + n[0] * m, b[1] + n[1] * m]]);
+  }
+  const reach = Math.max(0.3, lineThickness(l) * 3);
+  for (let i = 0; i + 1 < runs.length; i++) {
+    if (!moves[i] && !moves[i + 1]) continue;
+    const [a1, b1] = runs[i], [a2, b2] = runs[i + 1];
+    const d1: Vec2 = [b1[0] - a1[0], b1[1] - a1[1]], d2: Vec2 = [b2[0] - a2[0], b2[1] - a2[1]];
+    const l1 = Math.hypot(d1[0], d1[1]), l2 = Math.hypot(d2[0], d2[1]);
+    const cross = d1[0] * d2[1] - d1[1] * d2[0];
+    // Nearly straight on: no clean crossing, and the pieces overlap at their ends anyway.
+    if (l1 < 1e-6 || l2 < 1e-6 || Math.abs(cross) < 0.05 * l1 * l2) continue;
+    const s = ((a2[0] - a1[0]) * d2[1] - (a2[1] - a1[1]) * d2[0]) / cross;
+    const x: Vec2 = [a1[0] + d1[0] * s, a1[1] + d1[1] * s];
+    const corner = l.points[i + 1];
+    if (Math.hypot(x[0] - corner[0], x[1] - corner[1]) > reach) continue;
+    runs[i][1] = x;
+    runs[i + 1][0] = x;
+  }
+  return runs;
+}
+
+function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {
   const g = new THREE.Group();
   g.name = `line-${l.id}`;
   const spec = materialById.get(l.catalogId);
@@ -409,21 +562,28 @@ function buildLine(l: LineItem, height: (p: Vec2) => number, geos: THREE.BufferG
     buckets.set(key, b);
   };
 
+  // Walls and curbs are built where lineMoves puts them; everything else on the drawn line. A
+  // moved wall's cap overhangs only on the side away from the line, so it leaves the border showing.
+  const moves = lineMoves(l, zones);
+  const runs = lineRuns(l, moves);
+  const face = spec?.wall?.face ?? 'splitFace';
+  const over = face === 'plaster' ? 0.02 : 0.035;
+  const capRuns = l.kind === 'wall' ? lineRuns(l, moves, over) : runs;
   for (let i = 0; i < l.points.length - 1; i++) {
     const a = l.points[i], b = l.points[i + 1];
+    const [ra, rb] = runs[i], [ca, cb] = capRuns[i];
     const y0 = Math.min(height(a), height(b), 0) - 0.08;
     if (l.kind === 'wall') {
-      const face = spec?.wall?.face ?? 'splitFace';
-      const thick = face === 'plaster' ? 0.25 : 0.3;
-      put('wall', catalogMaterial(l.catalogId), segmentBox(a, b, thick, y0, l.height, thick / 2));
-      if (face !== 'plaster') put('cap', capMaterial(l.catalogId, l.cap), segmentBox(a, b, thick + 0.07, l.height, l.height + 0.06, thick / 2 + 0.035));
-      else put('cap', catalogMaterial(l.catalogId), segmentBox(a, b, thick + 0.04, l.height, l.height + 0.05, thick / 2 + 0.02));
+      const thick = lineThickness(l);
+      put('wall', catalogMaterial(l.catalogId), segmentBox(ra, rb, thick, y0, l.height, thick / 2));
+      const cap = segmentBox(ca, cb, thick + over * 2, l.height, l.height + (face === 'plaster' ? 0.05 : 0.06), thick / 2 + over);
+      put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else if (l.kind === 'fence') {
       fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
     } else {
       const top = Math.max(height(a), height(b));
       if (spec?.recipe === 'curb') {
-        put('curb', catalogMaterial(l.catalogId), segmentBox(a, b, 0.15, y0, top + 0.07, 0.075));
+        put('curb', catalogMaterial(l.catalogId), segmentBox(ra, rb, 0.15, y0, top + 0.07, 0.075));
       } else {
         put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, top + 0.03, 0.004), false);
       }

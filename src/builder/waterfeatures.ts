@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { bounds, centroid, distToEdge, distToPolyline, fallProfile, pointInPolygon, projectOnPolyline, rng, samplePolyline } from '../siteplan/geometry';
+import { area, bounds, centroid, distToEdge, distToPolyline, fallProfile, pointInPolygon, polylineLength, projectOnPolyline, rng, samplePolyline } from '../siteplan/geometry';
 import type { SitePlan, Vec2, WaterFeature } from '../siteplan/types';
 import { PlanarMirror, WATER_LOOKS, fallMaterial, waterMaterial, type WaterLook } from '../engine/water';
 import type { NightLight } from './features';
@@ -8,7 +8,8 @@ import { poolTile } from '../engine/textures';
 import { WATER_LEVEL, type GroundModel } from './ground';
 import { catalogMaterial, pbrMaterial, segmentBox } from './materials';
 import { rockField, type RockSpot } from './rocks';
-import { outsetPolygon, poolCoping, slab } from './hardscape';
+import { boxMapWorld, insetPolygon, outsetPolygon, slab } from './hardscape';
+import type { PoolLayout } from './pools';
 
 /** Ponds, streams, pools and fountains. */
 
@@ -72,6 +73,43 @@ function surfaceGrid(
   return g;
 }
 
+/**
+ * A water surface that follows an outline exactly: the polygon cut into triangles, which are then
+ * split until no edge is longer than `maxEdge`, so depth that changes across the pool (a ledge)
+ * is carried per vertex.
+ */
+function outlineSurface(poly: Vec2[], y: number, maxEdge: number, depth: (p: Vec2) => number): THREE.BufferGeometry {
+  let tris: Vec2[][] = THREE.ShapeUtils.triangulateShape(poly.map(([x, z]) => new THREE.Vector2(x, z)), []).map((f) => f.map((i) => poly[i]));
+  const longest = (t: Vec2[]) => Math.max(...t.map((p, i) => Math.hypot(t[(i + 1) % 3][0] - p[0], t[(i + 1) % 3][1] - p[1])));
+  for (let pass = 0; pass < 6 && tris.length < 20000 && tris.some((t) => longest(t) > maxEdge); pass++) {
+    // Every triangle splits in four at its edge midpoints, so neighbors keep sharing whole edges.
+    tris = tris.flatMap(([a, b, c]) => {
+      const ab: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], bc: Vec2 = [(b[0] + c[0]) / 2, (b[1] + c[1]) / 2], ca: Vec2 = [(c[0] + a[0]) / 2, (c[1] + a[1]) / 2];
+      return [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]];
+    });
+  }
+  const pos: number[] = [], sh: number[] = [], dp: number[] = [], fl: number[] = [];
+  for (const t of tris) {
+    // Wind each triangle to face up.
+    const up = (t[1][1] - t[0][1]) * (t[2][0] - t[0][0]) - (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) > 0;
+    const c: Vec2 = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3];
+    for (const p of up ? t : [t[0], t[2], t[1]]) {
+      pos.push(p[0], y, p[1]);
+      sh.push(1);
+      // Read depth a touch toward the triangle's middle, so a vertex on the ledge line takes its own side's depth.
+      dp.push(Math.max(0.01, depth([p[0] + (c[0] - p[0]) * 0.05, p[1] + (c[1] - p[1]) * 0.05])));
+      fl.push(0, 0, 0);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aShore', new THREE.Float32BufferAttribute(sh, 1));
+  g.setAttribute('aDepth', new THREE.Float32BufferAttribute(dp, 1));
+  g.setAttribute('aFlow', new THREE.Float32BufferAttribute(fl, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+
 function edgeRocks(poly: Vec2[], gm: GroundModel, seed: string, size: number, spacing: number): RockSpot[] {
   const out: RockSpot[] = [];
   const loop = [...poly, poly[0]];
@@ -90,7 +128,7 @@ function edgeRocks(poly: Vec2[], gm: GroundModel, seed: string, size: number, sp
   return out;
 }
 
-export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror | null, sky: SkyUniforms): WaterBuild {
+export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror | null, sky: SkyUniforms, pools: PoolLayout): WaterBuild {
   const group = new THREE.Group();
   group.name = 'water';
   const surfaces: THREE.Mesh[] = [];
@@ -100,8 +138,11 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
   const lights: NightLight[] = [];
   const fallMats: THREE.ShaderMaterial[] = [];
 
-  const addSurface = (geo: THREE.BufferGeometry, look: WaterLook, name: string, id: string) => {
+  // Water that reflects the scene, with its height and size, for choosing the one reflection plane.
+  const mirrored: { mat: THREE.ShaderMaterial; level: number; size: number }[] = [];
+  const addSurface = (geo: THREE.BufferGeometry, look: WaterLook, name: string, id: string, level = WATER_LEVEL, size = 0) => {
     const mat = waterMaterial(look, mirror, sky);
+    if (look.useMirror) mirrored.push({ mat, level, size });
     const m = new THREE.Mesh(geo, mat);
     m.name = name;
     m.renderOrder = 2;
@@ -125,7 +166,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
         (p) => WATER_LEVEL - gm.height(p),
         () => [0, 0, 0],
       );
-      addSurface(geo, WATER_LOOKS.pond, `pond-${w.id}`, w.id);
+      addSurface(geo, WATER_LOOKS.pond, `pond-${w.id}`, w.id, WATER_LEVEL, area(poly));
       rocks.push(...edgeRocks(poly, gm, w.id, 0.42, 0.42));
     } else if ((w.kind === 'stream' || w.kind === 'pondless') && w.points) {
       const pts = w.points;
@@ -148,7 +189,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
           return [pr.dir[0], pr.dir[1], pr.along];
         },
       );
-      addSurface(geo, WATER_LOOKS.stream, `${w.kind}-${w.id}`, w.id);
+      addSurface(geo, WATER_LOOKS.stream, `${w.kind}-${w.id}`, w.id, WATER_LEVEL, polylineLength(pts) * half * 2);
       // Boulders along both banks, bigger near the falls.
       for (const side of [-1, 1]) {
         const bank: Vec2[] = [];
@@ -210,9 +251,11 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
           rocks.push({ x: end[0] + Math.cos(a) * rr, y: -0.04, z: end[1] + Math.sin(a) * rr, size: 0.18 + r() * 0.2, rot: a, seed: `${w.id}-basin-${k}` });
         }
       }
-    } else if (w.kind === 'pool' && w.polygon) {
+    } else if (w.kind === 'pool' && w.polygon && pools.byId.has(w.id)) {
       const poly = w.polygon;
-      const b = bounds(poly);
+      // The pool stands at the level of the paving it is set in: water, coping and shell top rise with a raised area.
+      const place = pools.byId.get(w.id)!;
+      const level = place.level, bottom = level - w.depth;
       // Tanning ledge: a 30 cm deep shelf along the first edge.
       const ledgeDepth = (p: Vec2) => {
         if (!w.ledge) return w.depth;
@@ -220,8 +263,8 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
         const d = distToPolyline(p, [a0, a1]);
         return d < 1.6 ? 0.3 : w.depth;
       };
-      const geo = surfaceGrid((p) => pointInPolygon(p, poly), b, WATER_LEVEL - 0.03, 0.2, (p) => distToEdge(p, poly) + 0.2, ledgeDepth, () => [0, 0, 0]);
-      addSurface(geo, WATER_LOOKS.pool, `pool-${w.id}`, w.id);
+      addSurface(outlineSurface(poly, level, w.ledge ? 0.35 : Infinity, ledgeDepth), WATER_LOOKS.pool, `pool-${w.id}`, w.id, level, area(poly));
+      const tile = pbrMaterial('poolTile', poolTile());
       if (w.ledge) {
         const a0 = poly[0], a1 = poly[1];
         const dx = a1[0] - a0[0], dy = a1[1] - a0[1], l = Math.hypot(dx, dy) || 1;
@@ -231,31 +274,30 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
           nx = -nx;
           ny = -ny;
         }
-        const shelf = slab([a0, a1, [a1[0] + nx * 1.6, a1[1] + ny * 1.6], [a0[0] + nx * 1.6, a0[1] + ny * 1.6]], -w.depth - 0.1, WATER_LEVEL - 0.33, 0);
+        const shelf = slab([a0, a1, [a1[0] + nx * 1.6, a1[1] + ny * 1.6], [a0[0] + nx * 1.6, a0[1] + ny * 1.6]], bottom, level - 0.3, 0);
         geos.push(shelf);
-        const sm = new THREE.Mesh(shelf, pbrMaterial('poolTile', poolTile()));
+        const sm = new THREE.Mesh(shelf, tile);
         sm.receiveShadow = true;
         group.add(sm);
       }
-      const tile = pbrMaterial('poolTile', poolTile());
-      const shellParts: THREE.BufferGeometry[] = [];
-      for (let i = 0; i < poly.length; i++) {
-        const a = poly[i], c = poly[(i + 1) % poly.length];
-        shellParts.push(segmentBox(a, c, 0.06, -w.depth - 0.1, 0.02, 0.03));
-      }
-      const floor = slab(poly, -w.depth - 0.2, -w.depth - 0.1, 0);
-      shellParts.push(floor);
-      const shell = mergeGeometries(shellParts.map((g) => g.toNonIndexed()), false);
-      if (shell) {
-        geos.push(shell);
-        const m = new THREE.Mesh(shell, tile);
+      // Shell: one tiled wall ring around the outline, mitered at the corners, from under the floor
+      // up to the coping (or, with no coping, up to the rim at the paving's level), and the floor.
+      const cw = place.coping;
+      const wall = slab(outsetPolygon(poly, 0.03), bottom - 0.1, cw ? place.top - 0.03 : place.top, 0, [insetPolygon(poly, 0.03)]);
+      boxMapWorld(wall);
+      const floor = slab(poly, bottom - 0.1, bottom, 0);
+      for (const g of [wall, floor]) {
+        geos.push(g);
+        const m = new THREE.Mesh(g, tile);
         m.receiveShadow = true;
+        // The wall shades the floor below it, so the coping's shadow does not float in the water.
+        m.castShadow = g === wall;
         group.add(m);
       }
-      // Coping: a ring from just over the water's edge out to the coping width. A pool can have none.
-      const cw = poolCoping(w);
-      if (cw > 0.02) {
-        const cop = slab(outsetPolygon(poly, cw), -0.02, 0.085, 0.006, [poly]);
+      // Coping: a ring from the water's edge out to the coping width, solid down to the ground so
+      // a raised pool has closed sides. A pool can have none.
+      if (cw) {
+        const cop = slab(place.outer, -0.02, place.top, 0.006, [poly]);
         geos.push(cop);
         const m = new THREE.Mesh(cop, catalogMaterial('concrete-smooth'));
         m.receiveShadow = true;
@@ -293,6 +335,15 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
     }
   }
   group.add(rockField(rocks, 'water-rocks'));
+
+  // The scene is reflected about one height only. It is set to the level that carries the most
+  // water; water more than 5 cm off it (a raised spa beside a pool at grade) reflects the sky instead.
+  if (mirror) {
+    const total = (level: number) => mirrored.reduce((s, m) => s + (Math.abs(m.level - level) <= 0.05 ? m.size : 0), 0);
+    const main = mirrored.reduce((best, m) => (total(m.level) > total(best) ? m.level : best), WATER_LEVEL);
+    mirror.height = main;
+    for (const m of mirrored) if (Math.abs(m.level - main) > 0.05) m.mat.uniforms.uUseMirror.value = 0;
+  }
 
   return {
     object: group,
