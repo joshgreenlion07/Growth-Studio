@@ -1,10 +1,11 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, materialById, plantById, sizeAt, type FeatureGroup, type MaterialUse, type PlantGroup } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, featureById, materialById, plantById, sizeAt, type FeatureGroup, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 import { cleanPlan } from '../siteplan/validate';
 import { expandPlants } from '../builder/build';
 import { groundModel } from '../builder/ground';
+import { plantPicker } from './plantpicker';
 import { Studio } from '../engine/studio';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
@@ -213,7 +214,6 @@ function selectEl(id: string, options: { value: string; label: string; group?: s
 }
 
 const matOptions = (use: MaterialUse) => MATERIALS.filter((m) => m.use === use).map((m) => ({ value: m.id, label: m.name, group: m.group }));
-const plantOptions = () => PLANTS.map((p) => ({ value: p.id, label: p.name, group: p.group as PlantGroup }));
 const featureOptions = () => FEATURES.map((f) => ({ value: f.id, label: f.name, group: f.group as FeatureGroup }));
 
 function renderToolOptions() {
@@ -256,10 +256,10 @@ function renderToolOptions() {
       refresh();
     }, 'Water type'));
   } else if (toolKey === 'plant') {
-    box.append(selectEl('opt-plant', plantOptions(), pick.plant, (v) => {
+    box.append(plantPicker({ id: 'opt-plant', label: 'Plant', value: pick.plant, onChange: (v) => {
       pick.plant = v;
       refresh();
-    }, 'Plant'));
+    } }));
   } else if (toolKey === 'feature') {
     box.append(selectEl('opt-feature', featureOptions(), pick.feature, (v) => {
       pick.feature = v;
@@ -366,11 +366,11 @@ function renderInspector() {
       }
     }
     if (z.kind === 'bed') {
-      box.append(field('Mass planting', selectEl('z-fill', [{ value: '', label: 'None' }, ...plantOptions()], z.fill?.catalogId ?? '', (v) => {
+      box.append(field('Mass planting', plantPicker({ id: 'z-fill', label: 'Mass planting', value: z.fill?.catalogId ?? '', allowNone: true, onChange: (v) => {
         snapshot();
         z.fill = v ? { catalogId: v, spacing: plantById.get(v)!.spacing } : undefined;
         changed('structure');
-      }, 'Mass planting')));
+      } })));
       if (z.fill) box.append(field('Spacing', numInput('z-sp', ft(z.fill.spacing), 0.5, 0.5, 30, (v) => { snapshot(); z.fill!.spacing = toM(v); changed(); }), 'On center.'));
       box.append(check('z-raised', 'Raised planter', !!z.raised, (v) => {
         snapshot();
@@ -418,9 +418,9 @@ function renderInspector() {
   if (sel.list === 'plants') {
     const p = plan.plants.find((x) => x.id === sel.id)!;
     const spec = plantById.get(p.catalogId)!;
-    box.append(h('h3', { text: spec.name }), confirmAI(p) ?? '');
+    box.append(h('h3', { text: spec.name }), h('p', { class: 'botanical', text: spec.botanical }), confirmAI(p) ?? '');
     box.append(
-      field('Plant', selectEl('p-sp', plantOptions(), p.catalogId, (v) => { snapshot(); p.catalogId = v; changed('structure'); }, 'Plant')),
+      field('Plant', plantPicker({ id: 'p-sp', label: 'Plant', value: p.catalogId, onChange: (v) => { snapshot(); p.catalogId = v; changed('structure'); } })),
       check('p-ex', 'Already in the yard (keep current size)', !!p.existing, (v) => { snapshot(); p.existing = v; changed(); }),
     );
     const rows = [0, 1, 3, 5].map((y) => {
@@ -473,7 +473,7 @@ function renderPlantList() {
   const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => {
     const s = plantById.get(id)!;
     const s5 = sizeAt(s, 5);
-    return h('tr', {}, h('td', { text: s.name }), h('td', { class: 'num-cell', text: String(n) }), h('td', { text: s.container }), h('td', { class: 'num-cell', text: `${fmtFeet(s5.height)} × ${fmtFeet(s5.spread)}` }));
+    return h('tr', {}, h('td', {}, s.name, h('div', { class: 'botanical', text: s.botanical })), h('td', { class: 'num-cell', text: String(n) }), h('td', { text: s.container }), h('td', { class: 'num-cell', text: `${fmtFeet(s5.height)} × ${fmtFeet(s5.spread)}` }));
   });
   body.replaceChildren(...rows);
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
