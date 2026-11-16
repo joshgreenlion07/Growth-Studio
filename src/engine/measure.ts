@@ -11,13 +11,14 @@ import type { SitePlan, Vec2 } from '../siteplan/types';
  *           curb run (walls and fences with their height), and the size of
  *           structures, features and hand-placed plants. Outlines, no edge labels.
  *   edges   all of that plus every straight run labeled, end ticks and lot lines.
+ * Dimensions the person drew with the ruler show in both views, named and measured, above everything else.
  *
  * Lines are 3D (drawn on top of everything so grass never hides them); labels
  * are HTML placed over the canvas each frame, nearest and most important first,
  * skipping any that would overlap one already placed.
  */
 
-type LabelKind = 'area' | 'object' | 'plant' | 'edge' | 'lot';
+type LabelKind = 'ruler' | 'area' | 'object' | 'plant' | 'edge' | 'lot';
 interface Label {
   el: HTMLDivElement;
   pos: THREE.Vector3;
@@ -26,8 +27,8 @@ interface Label {
   h: number;
 }
 
-// When labels collide the lower number wins: areas, then walls, runs and structures, then plants.
-const PRIORITY: Record<LabelKind, number> = { area: 0, object: 1, plant: 2, edge: 3, lot: 4 };
+// When labels collide the lower number wins: the person's own dimensions, then areas, then walls, runs and structures, then plants.
+const PRIORITY: Record<LabelKind, number> = { ruler: -1, area: 0, object: 1, plant: 2, edge: 3, lot: 4 };
 export type MeasureMode = 'off' | 'totals' | 'edges';
 export const MEASURE_MODES: MeasureMode[] = ['off', 'totals', 'edges'];
 const LIFT = 0.09; // above hardscape so the lines sit on the surface
@@ -41,6 +42,7 @@ export class Measurements {
     edge: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }),
     lot: new THREE.LineDashedMaterial({ color: 0xffe9a8, dashSize: 0.5, gapSize: 0.35, transparent: true, opacity: 0.85, depthTest: false }),
     tick: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }),
+    ruler: new THREE.LineBasicMaterial({ color: 0xffc94d, transparent: true, opacity: 1, depthTest: false }),
   };
   private v = new THREE.Vector3();
   private shown = false;
@@ -80,6 +82,9 @@ export class Measurements {
   rebuild(plan: SitePlan, build: SceneBuild, years: number) {
     this.clear();
     const gy = (p: Vec2) => Math.max(0, build.gm.height(p));
+
+    // Dimensions drawn with the ruler: a line with end ticks, named and measured. Shown in both views.
+    for (const r of plan.rulers ?? []) this.ruler(r.a, r.b, r.label, gy);
 
     // Lot lines, dashed (every-edge view only).
     if (this.detail && plan.site.boundary.length > 2) this.outline(plan.site.boundary, true, gy, 'lot');
@@ -218,6 +223,28 @@ export class Measurements {
     }
   }
 
+  /** A ruler dimension: the line follows the ground, with a tick across each end and the label halfway along. */
+  private ruler(a: Vec2, b: Vec2, label: string | undefined, gy: (p: Vec2) => number) {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 0.02) return;
+    const steps = Math.max(1, Math.min(40, Math.ceil(len / 0.6)));
+    const line: THREE.Vector3[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const p: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      line.push(new THREE.Vector3(p[0], gy(p) + LIFT + 0.04, p[1]));
+    }
+    this.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(line), this.mats.ruler));
+    const nx = (-(b[1] - a[1]) / len) * 0.28, nz = ((b[0] - a[0]) / len) * 0.28;
+    for (const e of [a, b]) {
+      const y = gy(e) + LIFT + 0.04;
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(e[0] - nx, y, e[1] - nz), new THREE.Vector3(e[0] + nx, y, e[1] + nz)]);
+      this.group.add(new THREE.LineSegments(g, this.mats.ruler));
+    }
+    const m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    this.label(label ? `${label}\n${fmtFeet(len)}` : fmtFeet(len), new THREE.Vector3(m[0], gy(m) + LIFT + 0.3, m[1]), 'ruler');
+  }
+
   private footprint(c: Vec2, [w, d]: [number, number], rotDeg: number, gy: (p: Vec2) => number) {
     const a = (rotDeg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
     const corner = (x: number, z: number): Vec2 => [c[0] + x * ca - z * sa, c[1] + x * sa + z * ca];
@@ -250,7 +277,7 @@ export class Measurements {
       .sort((a, b) => PRIORITY[a.l.kind] - PRIORITY[b.l.kind] || a.d - b.d);
     for (const { l, d } of order) {
       this.v.copy(l.pos).project(camera);
-      const far = l.kind === 'edge' ? 45 : l.kind === 'lot' ? 80 : 120;
+      const far = l.kind === 'edge' ? 45 : l.kind === 'lot' ? 80 : l.kind === 'ruler' ? 250 : 120;
       if (this.v.z > 1 || this.v.z < -1 || d > far || Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05) {
         l.el.style.display = 'none';
         continue;

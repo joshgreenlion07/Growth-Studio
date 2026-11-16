@@ -151,6 +151,15 @@ export interface SiteInfo {
   streetEdge?: number;
 }
 
+/** A dimension drawn with the ruler: a measured straight run between two points, with an optional name. */
+export interface Ruler {
+  id: string;
+  a: Vec2;
+  b: Vec2;
+  /** What the person called it, such as "Patio width". Empty means the length alone. */
+  label?: string;
+}
+
 export interface SitePlan {
   schemaVersion: 1;
   site: SiteInfo;
@@ -162,6 +171,8 @@ export interface SitePlan {
   features: FeaturePlacement[];
   /** Uploaded models. Left out of plans saved before they existed. */
   models?: ModelPlacement[];
+  /** Dimensions drawn with the ruler. Left out of plans saved before they existed. */
+  rulers?: Ruler[];
 }
 
 export const EMPTY_PLAN = (): SitePlan => ({

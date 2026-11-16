@@ -95,6 +95,11 @@ Messages use `window.postMessage`:
   page; `turn` adds quarter turns. An `image` stands up as a flat board across
   the footprint. Files over 60 MB and Draco-compressed models are refused with
   a message. A file is forgotten when a later plan no longer names it.
+- `plan.rulers` carries dimensions the person drew with Area Planner's ruler:
+  `{ id, a: [x, y], b: [x, y], label? }`, in meters like everything else.
+  They show in the 3D view's Totals and Every edge measurements as a gold
+  line with end ticks, the label (if any) and the length, above all other labels.
+  Plans without the key load as before.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
