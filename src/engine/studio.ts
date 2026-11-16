@@ -616,7 +616,9 @@ export class Studio {
       }
     }
 
-    this.build?.plants.update?.(this.camera, this.container.clientHeight);
+    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
+    const lodScale = this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1;
+    this.build?.plants.update?.(this.camera, this.container.clientHeight * lodScale);
     // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
     // moves the leaves at a steady rate rather than every frame.
     const swaying = this.state.motion && this.state.wind > 0.001;
