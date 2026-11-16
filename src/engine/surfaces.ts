@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ConcreteFinish, FenceStyle, MaterialSpec, PaverPattern, WallFace } from '../siteplan/catalog';
+import { isThreePiece, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from './textures';
@@ -206,8 +206,57 @@ function cobbleLayout(sizes: [number, number][], seed: string): Layout {
   };
 }
 
-function layoutFor(p: PaverPattern, seed: string): Layout {
+/*
+ * Belgard's published 3-Piece laying patterns, read from the vector drawings on Belgard's Avalon Slate pattern sheet.
+ * Each is one module of pieces [x, y, w, h] (inches) repeated on a lattice v1, v2; P is the smallest square the
+ * pattern repeats over, so the texture tiles. Both use the pallet mix by area: 25% 6 x 12, 25% 9 x 12, 50% 12 x 12.
+ * A: 12 in wide courses of 6, 9 and 12 in pieces, a 48 x 42 in module. B: a 36 x 30 in module mixing both directions.
+ */
+interface PieceModule { pieces: [number, number, number, number][]; v1: [number, number]; v2: [number, number]; P: number }
+const THREE_PIECE: Record<'a' | 'b', PieceModule> = {
+  a: {
+    pieces: [[0, 0, 12, 9], [0, 9, 12, 9], [12, 0, 12, 6], [12, 6, 12, 9], [12, 15, 12, 12], [12, 27, 12, 9], [12, 36, 12, 6], [24, 0, 12, 12], [24, 12, 12, 6], [24, 18, 12, 12], [24, 30, 12, 12], [36, 0, 12, 6], [36, 6, 12, 12], [36, 18, 12, 6], [36, 24, 12, 12], [36, 36, 12, 6]],
+    v1: [48, 24], v2: [12, 42], P: 288,
+  },
+  b: {
+    pieces: [[12, 0, 12, 9], [12, 9, 12, 9], [24, 0, 12, 12], [24, 12, 12, 6], [0, 18, 6, 12], [6, 18, 12, 12], [18, 18, 6, 12], [24, 18, 12, 12]],
+    v1: [12, -30], v2: [-24, -12], P: 144,
+  },
+};
+
+function moduleLayout(m: PieceModule): Layout {
+  const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
+  const P = m.P;
+  return {
+    tile: P * IN,
+    at(x: number, y: number) {
+      const X = x / IN, Y = y / IN;
+      // Lattice coordinates of the point, then the copy of the module that holds it.
+      const a = Math.floor((X * m.v2[1] - Y * m.v2[0]) / det), b = Math.floor((m.v1[0] * Y - m.v1[1] * X) / det);
+      for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+        const i = a + di, j = b + dj;
+        const ox = i * m.v1[0] + j * m.v2[0], oy = i * m.v1[1] + j * m.v2[1];
+        const qx = X - ox, qy = Y - oy;
+        for (let k = 0; k < m.pieces.length; k++) {
+          const [px, py, pw, ph] = m.pieces[k];
+          if (qx >= px && qx < px + pw && qy >= py && qy < py + ph) {
+            // The id comes from where the piece sits inside the repeat, so the same piece keeps its color across tiles.
+            const cx = ((((ox + px + pw / 2) % P) + P) % P), cy = ((((oy + py + ph / 2) % P) + P) % P);
+            const rotated = ph > pw;
+            const edge = Math.min(qx - px, px + pw - qx, qy - py, py + ph - qy) * IN;
+            const along = rotated ? (qy - py) / ph : (qx - px) / pw;
+            return { id: Math.round(cx * 2) * 1009 + Math.round(cy * 2), edge, along, rotated, len: Math.max(pw, ph) * IN };
+          }
+        }
+      }
+      return { id: 0, edge: 0, along: 0, rotated: false, len: 0 };
+    },
+  };
+}
+
+function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layout {
   const [a, b] = p.sizes[0];
+  if (laying && laying !== 'random' && p.kind === 'ashlar') return moduleLayout(THREE_PIECE[laying]);
   switch (p.kind) {
     case 'running': return runningLayout(a, b, 0.5, false, 12, 6, seed);
     case 'soldier': return runningLayout(a, b, 0, false, Math.max(1, Math.round(48 / b)), Math.round(48 / a), seed);
@@ -223,15 +272,15 @@ function layoutFor(p: PaverPattern, seed: string): Layout {
   }
 }
 
-function paverSet(spec: MaterialSpec): PBRSet {
+function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
   const colors = pal(spec);
-  const lay = layoutFor(p, spec.id);
+  const lay = layoutFor(p, spec.id, laying);
   const T = lay.tile;
   const J = (p.joint * IN) / 2;
   const bevel = p.tumbled ? 0.012 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005;
-  const size = T > 2.5 ? 1024 : 1024;
-  return paint(size, T, p.tumbled ? 12 : 9, (u, v) => {
+  const size = T > 5 ? 2048 : 1024;
+  return paint(size, T, p.tumbled ? 12 : p.face === 'slate' ? 15 : 9, (u, v) => {
     const x = u * T, y = v * T;
     const hit = lay.at(x, y);
     const id = hit.id;
@@ -262,6 +311,25 @@ function paverSet(spec: MaterialSpec): PBRSet {
       c = mulRGB(c, 0.95 + g * 0.08);
       h = bev * (0.97 + g * 0.03);
       rough = 0.7;
+    } else if (p.face === 'slate') {
+      // Cleft slate (Avalon Slate): each stone carries its own rippled cleft, ridges a few centimeters apart running
+      // roughly along the stone and leaning a little differently on each, broken into a few shallow terraces.
+      // Integer wave counts per tile keep the texture seamless.
+      const N = Math.max(6, Math.round((T / 0.11) * (0.75 + r1 * 0.5)));
+      const tilt = Math.floor(r2 * 7) - 3;
+      const fu = hit.rotated ? tilt : N, fv = hit.rotated ? N : tilt;
+      const warp = (fbm(u + r3 * 1.9, v + r1 * 2.3, Math.max(2, Math.round(T * 4)), 4, 31 + (id % 13)) - 0.5) * 7;
+      const wave = 0.5 + 0.5 * Math.sin(Math.PI * 2 * (fu * u + fv * v) + warp + r3 * 6.28);
+      const wave2 = 0.5 + 0.5 * Math.sin(Math.PI * 2 * (Math.round(fu * 2.3) * u + Math.round(fv * 2.3) * v) + warp * 1.6 + r2 * 6.28);
+      // The cleft is uneven: ripples come and go across a stone instead of running as even stripes.
+      const amt = smooth(0.3, 0.75, fbm(u + r2 * 2.9, v + r3 * 3.7, Math.max(2, Math.round(T * 3.5)), 3, 41 + (id % 7)));
+      const rip = amt * (wave * 0.8 + wave2 * 0.2);
+      const tn = fbm(u + r3 * 2.3, v + r1 * 1.7, Math.max(2, Math.round(T * 2.5)), 3, 23) * 3;
+      const step = (Math.floor(tn) + smooth(0.82, 1, tn - Math.floor(tn))) / 3;
+      const g = vnoise(u * 600, v * 600, 600, 13);
+      c = mulRGB(c, 0.92 + rip * 0.04 + step * 0.06 + g * 0.05);
+      h = bev * (0.5 + rip * 0.3 + step * 0.16 + g * 0.04);
+      rough = 0.84 - rip * 0.12;
     } else {
       // Textured face: fine aggregate and pores.
       const g = vnoise(u * 420, v * 420, 420, 7);
@@ -562,8 +630,10 @@ export function latticeAlpha(): THREE.Texture {
 /* Dispatch                                                             */
 /* ------------------------------------------------------------------ */
 
-export function materialTextures(spec: MaterialSpec): PBRSet {
-  return textureSet(`mat:${spec.id}`, () => {
+/** Textures for a catalog material. `laying` picks the laying pattern of a 3-piece paver set (Pattern A when left out). */
+export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
+  const lay: LayingPattern | undefined = isThreePiece(spec) ? laying ?? 'a' : undefined;
+  return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, () => {
     switch (spec.recipe) {
       case 'lawn': return lawnSet(spec);
       case 'turfArtificial': return turfSet(spec);
@@ -572,7 +642,7 @@ export function materialTextures(spec: MaterialSpec): PBRSet {
       case 'riverRock': return stonesSet(spec, 13, 1.0, 0.3);
       case 'blackPebble': return stonesSet(spec, 22, 1.0, 0.65);
       case 'cobble': return stonesSet(spec, 7, 1.2, 0.25);
-      case 'paver': return paverSet(spec);
+      case 'paver': return paverSet(spec, lay);
       case 'concrete': return concreteSet(spec, spec.finish ?? 'broom');
       case 'flagstone': return flagstoneSet(spec);
       case 'deck': return deckSet(spec);

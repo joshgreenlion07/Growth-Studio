@@ -199,8 +199,38 @@ export function samplePuttingGreen(): SitePlan {
   };
 }
 
+/**
+ * Four 10 x 10 ft patios to compare paver lines and laying patterns: Avalon Slate on the left, Catalina Grana on the
+ * right, both Sonoran Gray; Belgard Pattern A in the front row and Pattern B behind; each with an Anthracite border.
+ */
+export function samplePaverCompare(): SitePlan {
+  const S = 'sample' as const;
+  const F = 3.048; // 10 ft
+  const sq = (x: number, y: number): Vec2[] => [[x, y], [x + F, y], [x + F, y + F], [x, y + F]];
+  const border = { catalogId: 'catalina-grana-border-anthracite', width: 0.229 };
+  const patio = (id: string, catalogId: string, laying: 'a' | 'b', x: number, y: number, note: string) =>
+    ({ id, source: S, kind: 'hardscape' as const, catalogId, laying, polygon: sq(x, y), border, note });
+  return {
+    schemaVersion: 1,
+    site: { name: 'Paver comparison: Avalon Slate and Catalina Grana, Patterns A and B', boundary: [[0, 0], [9, 0], [9, 9.6], [0, 9.6]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'artificial-turf', polygon: [[0, 0], [9, 0], [9, 9.6], [0, 9.6]] },
+      patio('avalon-b', 'avalon-slate-sonoran-gray', 'b', 0.9, 1.2, 'Avalon Slate, Sonoran Gray, Pattern B'),
+      patio('catalina-b', 'catalina-grana-sonoran-gray', 'b', 5.05, 1.2, 'Catalina Grana, Sonoran Gray, Pattern B'),
+      patio('avalon-a', 'avalon-slate-sonoran-gray', 'a', 0.9, 5.4, 'Avalon Slate, Sonoran Gray, Pattern A'),
+      patio('catalina-a', 'catalina-grana-sonoran-gray', 'a', 5.05, 5.4, 'Catalina Grana, Sonoran Gray, Pattern A'),
+    ],
+    lines: [],
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
 export const SAMPLES = [
   { id: 'backyard', name: 'Modern backyard', make: sampleBackyard },
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
+  { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
 ];

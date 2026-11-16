@@ -102,6 +102,10 @@ Messages use `window.postMessage`:
   They show in the 3D view's Totals and Every edge measurements as a gold
   line with end ticks, the label (if any) and the length, above all other labels.
   Plans without the key load as before.
+- A hardscape zone in a 3-piece paver set (6 x 12, 9 x 12, 12 x 12) can carry
+  `laying: 'a' | 'b' | 'random'`: Belgard's 3-Piece Pattern A (12 in courses),
+  Pattern B, or the old random ashlar. Left out, Pattern A. The looks in the
+  `ready` message carry `laying: true` when they take a laying pattern.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

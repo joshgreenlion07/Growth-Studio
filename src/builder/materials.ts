@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { materialById } from '../siteplan/catalog';
+import { isThreePiece, materialById, type LayingPattern } from '../siteplan/catalog';
 import { paint, textureSet, type PBRSet } from '../engine/textures';
 import { fbm, vnoise } from '../engine/noise';
 
@@ -29,15 +29,14 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
   return m;
 }
 
-export function catalogMaterial(id: string, extra: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
+/** A catalog material. `laying` is a zone's laying pattern, used by 3-piece paver sets. */
+export function catalogMaterial(id: string, extra: THREE.MeshStandardMaterialParameters = {}, laying?: LayingPattern): THREE.MeshStandardMaterial {
   const spec = materialById.get(id) ?? materialById.get('concrete-broom')!;
-  return pbrMaterial(`cat:${spec.id}:${JSON.stringify(extra)}`, matSet(spec.id), extra);
+  const lay = isThreePiece(spec) ? laying ?? 'a' : '';
+  return pbrMaterial(`cat:${spec.id}:${lay}:${JSON.stringify(extra)}`, materialTextures(spec, laying), extra);
 }
 
 import { materialTextures } from '../engine/surfaces';
-function matSet(id: string) {
-  return materialTextures(materialById.get(id)!);
-}
 
 export function rockSet(): PBRSet {
   return textureSet('rock', () =>

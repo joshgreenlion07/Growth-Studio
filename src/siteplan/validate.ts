@@ -167,6 +167,7 @@ export function cleanPlan(input: unknown): CleanResult {
       const e = num(it.elevation, 0, 0, 3);
       if (e > 0.005) z.elevation = e;
     }
+    if (it.laying === 'a' || it.laying === 'b' || it.laying === 'random') z.laying = it.laying;
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };

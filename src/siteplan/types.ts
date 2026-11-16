@@ -32,6 +32,8 @@ export interface Zone extends ItemBase {
   fill?: { catalogId: string; spacing: number };
   /** Hardscape: a soldier-course border band around the edge. */
   border?: { catalogId: string; width: number; /** soldier (default): long side across the band. sailor: long side along the edge. */ course?: 'soldier' | 'sailor' };
+  /** Hardscape in a 3-piece paver set: the laying pattern (see LayingPattern in the catalog). Left out, Pattern A. */
+  laying?: 'a' | 'b' | 'random';
   /** Small lights set into the border, every ~2.4 m. */
   borderLights?: boolean;
   /** Hardscape: top of the surface this far above grade (m), on solid sides. */

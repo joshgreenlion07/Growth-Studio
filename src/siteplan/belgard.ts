@@ -9,10 +9,24 @@ export interface MakerLine {
   name: string;
   shelf: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb';
   sizes?: [number, number][];
+  /** Paver face and joint width (in), when the line differs from the usual textured face and 0.2 in joint. */
+  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate';
+  joint?: number;
   colors: [string, string[]][];
 }
 
 export const BELGARD_LINES: MakerLine[] = [
+  // Avalon Slate: 3-piece set, 2 3/8 in thick, "natural slate texture with a unique rippled face" (belgard.com). Colors with a
+  // swatch on Belgard's product page (Rainier and Victorian are listed there without one, so they are left out).
+  { slug: 'avalon-slate', name: "Avalon Slate", shelf: 'Pavers', sizes: [[6, 12], [9, 12], [12, 12]], face: 'slate', joint: 0.12, colors: [
+    ["Autumn", ['#7e6d5c', '#706156', '#675a51', '#584d46']],
+    ["Bella", ['#8a7865', '#81705f', '#7a6b5b', '#6e6153']],
+    ["Midnight", ['#4f4d4b', '#4a4847', '#474544', '#42403f']],
+    ["Rio", ['#77736e', '#6c6863', '#64605b', '#55534e']],
+    ["Sierra", ['#7e6d61', '#756559', '#6e5f53', '#605349']],
+    ["Sonoran Gray", ['#817b76', '#76706b', '#6e6763', '#5f5854']],
+    ["Toscana", ['#837160', '#796959', '#726355', '#665a4e']],
+  ] },
   { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], colors: [
     ["Cream Tan Brown", ['#897362', '#836d5c', '#7e6957', '#776252']],
     ["Gray Charcoal Tan", ['#7f7971', '#7c736b', '#776e66', '#6e6760']],

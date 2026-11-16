@@ -86,6 +86,18 @@ export interface PaverPattern {
   face?: 'smooth' | 'textured' | 'woodgrain' | 'slate';
 }
 
+/**
+ * Laying pattern for a Belgard-style 3-piece set (6 x 12, 9 x 12 and 12 x 12): 'a' and 'b' are Belgard's
+ * published 3-Piece Pattern A and Pattern B, 'random' the old random ashlar. Left out means Pattern A.
+ */
+export type LayingPattern = 'a' | 'b' | 'random';
+export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar' };
+/** True for a paver whose pieces are the 3-piece set the laying patterns are drawn for. */
+export function isThreePiece(spec: MaterialSpec | undefined): boolean {
+  const s = spec?.pattern?.sizes;
+  return !!s && spec!.pattern!.kind === 'ashlar' && s.length === 3 && [[6, 12], [9, 12], [12, 12]].every(([a, b], i) => s[i][0] === a && s[i][1] === b);
+}
+
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
 export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone';
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
@@ -406,7 +418,7 @@ const BELGARD: MaterialSpec[] = [
     if (L.shelf === 'Pavers') {
       const sizes = L.sizes ?? CATALINA_SIZES;
       return [
-        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: sizes.length > 1 ? { kind: 'ashlar', sizes, joint: 0.2, face: 'textured' } : { kind: 'running', sizes, joint: 0.2, face: 'textured' }, thickness: 0.06, ...tags }),
+        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured' }, thickness: 0.06, ...tags }),
         M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true }),
       ];
     }
