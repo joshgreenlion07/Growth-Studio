@@ -124,7 +124,9 @@ export class Measurements {
       }
       if (l.kind === 'steps') {
         const st = stepCount(l.height, l.riser);
-        this.label(`Steps · ${st.n} riser${st.n === 1 ? '' : 's'} of ${fmtFeet(st.r)}\n${fmtFeet(total)} wide · ${fmtFeet(l.height)} rise`, new THREE.Vector3(m[0], gy(m) + l.height + 0.25, m[1]), 'object');
+        const inch = (m: number) => { const q = Math.round((m / 0.0254) * 4), w = Math.floor(q / 4), f = ['', '1/4', '1/2', '3/4'][q % 4]; return `${w || !f ? w : ''}${f ? (w ? ' ' : '') + f : ''} in`; };
+        const risers = st.full ? `${st.full} riser${st.full === 1 ? '' : 's'} of ${inch(st.r)}${st.last ? ` + 1 of ${inch(st.last)}` : ''}` : `1 riser of ${inch(st.last)}`;
+        this.label(`Steps · ${risers}\n${fmtFeet(total)} wide · ${inch(l.height)} rise`, new THREE.Vector3(m[0], gy(m) + l.height + 0.25, m[1]), 'object');
         continue;
       }
       const name = l.kind === 'wall' ? 'Wall' : l.kind === 'fence' ? 'Fence' : (materialById.get(l.catalogId)?.name.split(',')[0] ?? 'Edging');

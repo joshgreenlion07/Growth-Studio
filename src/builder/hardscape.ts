@@ -330,10 +330,15 @@ function postsAlong(a: Vec2, b: Vec2, size: number, y0: number, y1: number, out:
 /* Steps                                                                */
 /* ------------------------------------------------------------------ */
 
-/** The number of risers and the real riser height for a flight with total rise `rise`. */
-export function stepCount(rise: number, riser = 0.152): { n: number; r: number } {
-  const n = Math.max(1, Math.round(rise / Math.max(0.05, riser)));
-  return { n, r: rise / n };
+/** Risers for a flight with total rise `rise`: each a full `riser`, and any remainder (over 1/8 in)
+    as one shorter riser at the bottom. `last` is that bottom riser's height. */
+export function stepCount(rise: number, riser = 0.1524): { n: number; r: number; full: number; last: number } {
+  const r = Math.max(0.05, riser);
+  const full = Math.floor(rise / r + 1e-6);
+  const rest = rise - full * r;
+  const last = rest > 0.0032 ? rest : 0;
+  const n = Math.max(1, full + (last ? 1 : 0));
+  return { n, r, full, last: full ? last : rise };
 }
 
 /** Which way a flight goes down: the unit normal of its first edge that points away from a raised zone. */

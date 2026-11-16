@@ -194,7 +194,7 @@ export function cleanPlan(input: unknown): CleanResult {
       height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : kind === 'steps' ? 3 : 3.5),
     };
     if (kind === 'steps') {
-      l.riser = num(it.riser, 0.152, 0.08, 0.2);
+      l.riser = num(it.riser, 0.1524, 0.08, 0.2);
       l.tread = num(it.tread, 0.3, 0.2, 0.6);
     }
     if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
