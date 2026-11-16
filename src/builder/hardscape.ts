@@ -161,7 +161,8 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
   plan.zones.forEach((z: Zone, i) => {
     if (z.kind === 'hardscape') {
       const spec = materialById.get(z.catalogId);
-      const t = (spec?.thickness ?? 0.07) + i * 0.0015;
+      // A raised area: the whole surface lifts by its elevation and sits on solid sides of the same material.
+      const t = (spec?.thickness ?? 0.07) + i * 0.0015 + (z.elevation ?? 0);
       const bev = spec?.recipe === 'deck' ? 0.004 : 0.006;
       let field = z.polygon;
       if (z.border && materialById.has(z.border.catalogId)) {
@@ -211,7 +212,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number): Har
     group.add(new THREE.Mesh(lg, glowMat));
   }
 
-  for (const l of plan.lines) group.add(buildLine(l, height, geos));
+  for (const l of plan.lines) group.add(l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, height, geos));
 
   return {
     object: group,
@@ -323,6 +324,72 @@ function postsAlong(a: Vec2, b: Vec2, size: number, y0: number, y1: number, out:
       out.push(segmentBox([p[0] - (dir[0] * size) / 2, p[1] - (dir[1] * size) / 2], [p[0] + (dir[0] * size) / 2, p[1] + (dir[1] * size) / 2], size, y0, y1));
     }
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Steps                                                                */
+/* ------------------------------------------------------------------ */
+
+/** The number of risers and the real riser height for a flight with total rise `rise`. */
+export function stepCount(rise: number, riser = 0.152): { n: number; r: number } {
+  const n = Math.max(1, Math.round(rise / Math.max(0.05, riser)));
+  return { n, r: rise / n };
+}
+
+/** Which way a flight goes down: the unit normal of its first edge that points away from a raised zone. */
+function stepsDown(l: LineItem, zones: Zone[]): Vec2 {
+  const a = l.points[0], b = l.points[1];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const n: Vec2 = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+  const mid: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const up = (p: Vec2) => zones.some((z) => (z.elevation ?? 0) > 0 && pointInPolygon(p, z.polygon));
+  const probe = (s: number): Vec2 => [mid[0] + n[0] * 0.3 * s, mid[1] + n[1] * 0.3 * s];
+  return up(probe(1)) && !up(probe(-1)) ? [-n[0], -n[1]] : n;
+}
+
+/** The ground footprint of a flight of steps (each segment of the line, carried down and out). */
+export function stepsFootprint(l: LineItem, zones: Zone[]): Vec2[][] {
+  if (l.kind !== 'steps' || l.points.length < 2) return [];
+  const { n } = stepCount(l.height, l.riser);
+  const d = stepsDown(l, zones), run = (n - 1) * (l.tread ?? 0.3) + 0.02;
+  const out: Vec2[][] = [];
+  for (let i = 0; i < l.points.length - 1; i++) {
+    const a = l.points[i], b = l.points[i + 1];
+    out.push([a, b, [b[0] + d[0] * run, b[1] + d[1] * run], [a[0] + d[0] * run, a[1] + d[1] * run]]);
+  }
+  return out;
+}
+
+/** A flight of steps: its top edge is the line, at `height` above grade, and each step drops one riser
+    and steps out one tread, away from the raised area. Built of the line's hardscape material. */
+function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {
+  const g = new THREE.Group();
+  g.name = `steps-${l.id}`;
+  if (l.points.length < 2) return g;
+  const { n, r } = stepCount(l.height, l.riser);
+  const T = l.tread ?? 0.3, d = stepsDown(l, zones);
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < l.points.length - 1; i++) {
+    const a = l.points[i], b = l.points[i + 1];
+    const y0 = Math.min(height(a), height(b), 0) - 0.06;
+    // Step j (1 = just below the top) has its top j risers down and sits j treads out from the edge.
+    for (let j = 1; j < n; j++) {
+      const top = l.height - j * r;
+      const off = (j - 0.5) * T;
+      const pa: Vec2 = [a[0] + d[0] * off, a[1] + d[1] * off], pb: Vec2 = [b[0] + d[0] * off, b[1] + d[1] * off];
+      parts.push(segmentBox(pa, pb, T, y0, top, 0));
+    }
+  }
+  const merged = parts.length ? mergeGeometries(parts.map((p) => (p.index ? p.toNonIndexed() : p)), false) : null;
+  if (merged) {
+    geos.push(merged);
+    const m = new THREE.Mesh(merged, catalogMaterial(l.catalogId));
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.userData.itemId = l.id;
+    g.add(m);
+  }
+  return g;
 }
 
 function buildLine(l: LineItem, height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {

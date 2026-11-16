@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SceneBuild } from '../builder/build';
+import { stepCount } from '../builder/hardscape';
 import { featureById, materialById, plantById, sizeAt } from '../siteplan/catalog';
 import { centroid, fmtFeet, signedArea } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -89,8 +90,9 @@ export class Measurements {
       this.outline(z.polygon, true, gy, 'edge');
       const c = centroid(z.polygon);
       const name = materialById.get(z.catalogId)?.name.split(',')[0] ?? (z.kind === 'turf' ? 'Lawn' : z.kind === 'bed' ? 'Planting bed' : 'Hardscape');
-      const raised = z.raised ? ` · raised ${fmtFeet(z.raised.height)}` : '';
-      this.label(`${name}\n${sqft(Math.abs(signedArea(z.polygon)))} sq ft${raised}`, new THREE.Vector3(c[0], gy(c) + LIFT + (z.raised?.height ?? 0), c[1]), 'area');
+      const lift = z.raised?.height ?? z.elevation ?? 0;
+      const raised = lift > 0 ? ` · raised ${fmtFeet(lift)}` : '';
+      this.label(`${name}\n${sqft(Math.abs(signedArea(z.polygon)))} sq ft${raised}`, new THREE.Vector3(c[0], gy(c) + LIFT + lift, c[1]), 'area');
     }
 
     // Water.
@@ -119,6 +121,11 @@ export class Measurements {
         const a = l.points[i], b = l.points[i + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
         if (walked + seg >= total / 2) { const t = seg ? (total / 2 - walked) / seg : 0; m = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; break; }
         walked += seg;
+      }
+      if (l.kind === 'steps') {
+        const st = stepCount(l.height, l.riser);
+        this.label(`Steps · ${st.n} riser${st.n === 1 ? '' : 's'} of ${fmtFeet(st.r)}\n${fmtFeet(total)} wide · ${fmtFeet(l.height)} rise`, new THREE.Vector3(m[0], gy(m) + l.height + 0.25, m[1]), 'object');
+        continue;
       }
       const name = l.kind === 'wall' ? 'Wall' : l.kind === 'fence' ? 'Fence' : (materialById.get(l.catalogId)?.name.split(',')[0] ?? 'Edging');
       const text = tall > 0 ? `${name} · ${fmtFeet(tall)} tall\n${fmtFeet(total)} long` : `${name}\n${fmtFeet(total)} long`;

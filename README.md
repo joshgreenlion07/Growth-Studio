@@ -78,6 +78,10 @@ Messages use `window.postMessage`:
 - A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
   pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.
 - A fence line can carry `topper: 'lattice' | 'cap'`, added above its height.
+- A hardscape zone can carry `elevation` (meters above grade): it is built on solid
+  sides at that height. A line of kind `steps` is a flight of stairs: the line is the
+  top edge, `height` the total rise, `riser` and `tread` in meters; it goes down away
+  from the raised zone it touches and uses its hardscape `catalogId`.
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
   plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
