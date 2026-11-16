@@ -34,11 +34,14 @@ export interface Zone extends ItemBase {
   border?: { catalogId: string; width: number; /** soldier (default): long side across the band. sailor: long side along the edge. */ course?: 'soldier' | 'sailor' };
   /** Small lights set into the border, every ~2.4 m. */
   borderLights?: boolean;
+  /** Hardscape: top of the surface this far above grade (m), on solid sides. */
+  elevation?: number;
   /** Beds: a raised planter with walls of this material and height (m). */
   raised?: { wallCatalogId: string; height: number };
 }
 
-export type LineKind = 'wall' | 'fence' | 'edging';
+/** steps: a flight of stairs whose top edge is the line, going down away from a raised zone. */
+export type LineKind = 'wall' | 'fence' | 'edging' | 'steps';
 
 export interface LineItem extends ItemBase {
   kind: LineKind;
@@ -51,6 +54,9 @@ export interface LineItem extends ItemBase {
   cap?: 'same' | 'midnight';
   /** Fences: a topper added above the fence height. Left out, none. */
   topper?: 'lattice' | 'cap';
+  /** Steps: riser height and tread depth, meters. `height` is the total rise. */
+  riser?: number;
+  tread?: number;
 }
 
 export type WaterKind = 'pond' | 'pool' | 'fountain' | 'stream' | 'pondless';

@@ -163,6 +163,10 @@ export function cleanPlan(input: unknown): CleanResult {
       const pid = pickPlant(f.catalogId, warnings);
       z.fill = { catalogId: pid, spacing: num(f.spacing, plantById.get(pid)!.spacing, 0.25, 10) };
     }
+    if (kind === 'hardscape' && it.elevation !== undefined && it.elevation !== null) {
+      const e = num(it.elevation, 0, 0, 3);
+      if (e > 0.005) z.elevation = e;
+    }
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };
@@ -179,15 +183,20 @@ export function cleanPlan(input: unknown): CleanResult {
   for (const it of arr(o.lines)) {
     const points = pts(it.points, 2, true);
     if (!points) continue;
-    const kind = it.kind === 'fence' || it.kind === 'edging' ? it.kind : 'wall';
-    const use = kind;
-    const fallback = kind === 'fence' ? 'fence-board-on-board' : kind === 'edging' ? 'curb-charcoal' : 'wall-gray-block';
+    const kind = it.kind === 'fence' || it.kind === 'edging' || it.kind === 'steps' ? it.kind : 'wall';
+    // Steps are built from a hardscape material (the paving they lead up to).
+    const use = kind === 'steps' ? 'hardscape' : kind;
+    const fallback = kind === 'fence' ? 'fence-board-on-board' : kind === 'edging' ? 'curb-charcoal' : kind === 'steps' ? 'concrete-broom' : 'wall-gray-block';
     const l: LineItem = {
       ...base(it, kind), kind, points,
       catalogId: pickMaterial(it.catalogId, use, fallback, warnings, 'Line material'),
       // Retaining walls run up to 20 ft (6.1 m); fences and curbs stay under 3.5 m.
-      height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : 3.5),
+      height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : kind === 'steps' ? 3 : 3.5),
     };
+    if (kind === 'steps') {
+      l.riser = num(it.riser, 0.1524, 0.08, 0.2);
+      l.tread = num(it.tread, 0.3, 0.2, 0.6);
+    }
     if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
     if (kind === 'fence' && (it.topper === 'lattice' || it.topper === 'cap')) l.topper = it.topper;
     plan.lines.push(l);

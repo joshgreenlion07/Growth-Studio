@@ -390,8 +390,8 @@ function renderInspector() {
 
   if (sel.list === 'lines') {
     const l = plan.lines.find((x) => x.id === sel.id)!;
-    box.append(h('h3', { text: l.kind === 'fence' ? 'Fence' : l.kind === 'wall' ? 'Wall' : 'Curb or edging' }), confirmAI(l) ?? '');
-    box.append(field('Style', selectEl('l-mat', matOptions(l.kind), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
+    box.append(h('h3', { text: l.kind === 'fence' ? 'Fence' : l.kind === 'wall' ? 'Wall' : l.kind === 'steps' ? 'Steps' : 'Curb or edging' }), confirmAI(l) ?? '');
+    box.append(field('Style', selectEl('l-mat', matOptions(l.kind === 'steps' ? 'hardscape' : l.kind), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
     if (l.kind !== 'edging') box.append(field('Height', numInput('l-h', ft(l.height), 0.25, 0.5, l.kind === 'wall' ? 21 : 10, (v) => { snapshot(); l.height = toM(v); changed(); })));
     box.append(h('p', { class: 'muted', text: `${Math.round(ft(polylineLength(l.points)))} linear ft` }), del);
     return;

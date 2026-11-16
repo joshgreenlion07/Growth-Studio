@@ -8,7 +8,7 @@ import type { Quality } from '../engine/post';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { buildGround, groundModel, type GroundModel } from './ground';
-import { buildHardscape } from './hardscape';
+import { buildHardscape, stepsFootprint } from './hardscape';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, type PlantLayer } from './plants';
 import { buildStructures } from './structures';
@@ -74,6 +74,10 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     if (z && z.kind !== 'turf') return true;
     for (const s of plan.structures) if (pointInPolygon(p, s.polygon) || distToEdge(p, s.polygon) < 0.05) return true;
     for (const l of plan.lines) {
+      if (l.kind === 'steps') {
+        if (stepsFootprint(l, plan.zones).some((q) => pointInPolygon(p, q))) return true;
+        continue;
+      }
       for (let i = 0; i < l.points.length - 1; i++) {
         const a = l.points[i], b = l.points[i + 1];
         const dx = b[0] - a[0], dy = b[1] - a[1], ll = dx * dx + dy * dy;
