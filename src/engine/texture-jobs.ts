@@ -60,6 +60,13 @@ let nextId = 1;
 const waiting: Job[] = [];
 const applying: Apply[] = [];
 let raf = 0;
+const listeners = new Set<() => void>();
+
+/** Call `fn` whenever painted maps were swapped in (the view draws on demand, so it must redraw). */
+export function onTexturesChanged(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
 
 /** Measurements for tests and the console: `window.__gsTextures`. */
 const stats = { requested: 0, painted: 0, fromCache: 0, fallback: 0, firstMs: 0, lastMs: 0, workers: 0 };
@@ -175,6 +182,7 @@ function tick(now: number) {
       }
     }
   }
+  if (i >= 0) for (const fn of listeners) fn();
   if (applying.length && !raf) raf = requestAnimationFrame(tick);
 }
 

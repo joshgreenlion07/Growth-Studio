@@ -10,7 +10,7 @@ import { wantThumb } from './plantthumbs';
 import { lookOf } from './looks';
 import { Studio } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
-import '../engine/texture-jobs';
+import { onTexturesChanged } from '../engine/texture-jobs';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
 import type { Quality } from '../engine/post';
@@ -115,6 +115,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Painted textures arrive from the worker after the build; redraw when they do.
+  onTexturesChanged(() => studio?.invalidate());
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
   studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
