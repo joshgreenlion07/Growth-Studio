@@ -208,10 +208,14 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     root.add(humus.object);
   }
 
+  // The studio has a small pool of point lights, filled in this order: fire, path and other feature lights, water,
+  // porch, then shade structures (pergolas, gazebos) last, so a yard of pergolas cannot push the others out. A pergola
+  // left without a light still shows its glowing LED strips.
   const nightLights: NightLight[] = [
-    ...features.lights,
+    ...features.lights.filter((l) => !l.shade),
     ...water.lights,
     ...structs.porchLights.slice(0, 2).map((p) => ({ position: p, color: '#ffc27a', intensity: 3.5, distance: 7, flicker: false })),
+    ...features.lights.filter((l) => l.shade),
   ];
 
   tagPointables(plan, [structs.object, water.object, features.object, models.object]);

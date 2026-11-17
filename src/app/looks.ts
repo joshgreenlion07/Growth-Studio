@@ -4,6 +4,7 @@
 // (lookOfPoint) and adds a picture rendered from the 3D material itself (swatches.ts).
 import { CONTAINERS, featureById, layingName, layingsFor, materialById, plantById, type MaterialSpec } from '../siteplan/catalog';
 import { BELGARD_MEDIA, makerImage } from '../siteplan/belgard-media';
+import { BASALITE_MEDIA, basaliteImage } from '../siteplan/basalite-media';
 import { STRUCTURE_NAMES, WATER_NAMES, materialInfo, pointKind } from '../siteplan/material-info';
 import type { SitePlan, WaterKind } from '../siteplan/types';
 
@@ -78,7 +79,7 @@ export function lookOf(m: MaterialSpec): Look {
   const maker = tag.maker ?? '', line = tag.line ?? '', color = tag.color ?? m.name;
   // A line made from part of a Belgard line (the 24 x 24 slab of Dimensions Slabs) shares that line's page and photos.
   const mediaLine = MEDIA_LINE[line] ?? line;
-  const media = maker === 'Belgard' ? BELGARD_MEDIA[mediaLine] : undefined;
+  const media = maker === 'Belgard' ? BELGARD_MEDIA[mediaLine] : maker === 'Basalite' ? BASALITE_MEDIA[mediaLine] : undefined;
   const sizes = m.pattern?.sizes;
   const border = m.use === 'border';
   // Belgard lists every set of a line together (the main set, a small set, the border stone); keep the listing whose
@@ -115,13 +116,15 @@ export function lookOf(m: MaterialSpec): Look {
   if (sizes?.length) look.sizes = sizes.map(([a, b]) => [a, b]);
   if (sizeText?.length) look.sizeText = sizeText;
   else if (SIZE_TEXT[line]) look.sizeText = SIZE_TEXT[line];
+  // Basalite lists sizes in millimeters with inches (Premier Slab: 594 x 594 x 60 mm).
+  else if (maker === 'Basalite' && media?.sizes.length) look.sizeText = media.sizes.slice();
   // A curb has no paver sizes: show the unit as Belgard lists it (Melville Curb: 4 x 24 x 6 1/2 in).
   else if (m.recipe === 'curb' && media?.sizes.length) look.sizeText = media.sizes.slice();
   // A slab is poured to a whole inch (a 0.1 m slab is a 4 in slab); pieces are listed to the eighth.
   if (m.thickness) look.thicknessIn = m.recipe === 'concrete' ? Math.round(m.thickness / IN) : Math.round((m.thickness / IN) * 8) / 8;
   if (m.pattern?.face) look.face = m.pattern.face;
   else if (m.wall?.face) look.face = m.wall.face;
-  const image = maker === 'Belgard' ? makerImage(mediaLine, color) : undefined;
+  const image = maker === 'Belgard' ? makerImage(mediaLine, color) : maker === 'Basalite' ? basaliteImage(mediaLine, color) : undefined;
   if (image) look.image = image;
   if (media) look.page = media.page;
   // Synthetic turf: its pile and weight as the maker lists them, and the product page.
@@ -192,7 +195,11 @@ export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: st
   if (kind === 'feature') {
     const f = featureById.get(id);
     if (!f) return null;
-    return base(f.name, 'feature', f.group, ['#9a948b', '#6f6a63'], `${f.name}.`, [`Footprint about ${ft(f.footprint[0])} x ${ft(f.footprint[1])}`]);
+    const look = base(f.name, 'feature', f.group, ['#9a948b', '#6f6a63'], f.about ?? `${f.name}.`, f.facts ?? [`Footprint about ${ft(f.footprint[0])} x ${ft(f.footprint[1])}`]);
+    // A maker's product (SunVilla Stratus): its maker and product page; no maker photos are shown for features.
+    if (f.maker) look.maker = f.maker;
+    if (f.page) look.page = f.page;
+    return look;
   }
   if (kind === 'model') return base(id === 'image' ? 'Your picture' : 'Your 3D model', 'model', 'Uploaded', ['#9a948b'], 'The designer\u2019s own rendering, placed at the size drawn on the plan.', []);
   return null;

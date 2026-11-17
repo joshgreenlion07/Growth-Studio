@@ -21,6 +21,8 @@ export interface NightLight {
   intensity: number;
   distance: number;
   flicker: boolean;
+  /** A shade structure's light (pergola, gazebo): ranked after fire, water, porch and path lights for the light pool. */
+  shade?: boolean;
 }
 
 export interface FeatureBuild {
@@ -35,6 +37,7 @@ export interface FeatureBuild {
 }
 
 type Parts = Map<THREE.Material, THREE.BufferGeometry[]>;
+const IN_M = 0.0254;
 
 function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d);
@@ -130,7 +133,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   };
   const lampGlow = new THREE.MeshStandardMaterial({ color: '#f3e7cf', emissive: new THREE.Color('#ffcf8a'), emissiveIntensity: 0, roughness: 0.4 });
   const spaGlow = new THREE.MeshStandardMaterial({ color: '#7fd0e0', emissive: new THREE.Color('#5ec8ff'), emissiveIntensity: 0, roughness: 0.1, transparent: true, opacity: 0.85 });
-  owned.push(lampGlow, spaGlow);
+  // LED strips in a louvered roof (SunVilla Stratus): a milky diffuser by day, a warm white line at night.
+  const ledGlow = new THREE.MeshStandardMaterial({ color: '#aaa69f', emissive: new THREE.Color('#ffc890'), emissiveIntensity: 0, roughness: 0.5 });
+  // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
+  const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
+  owned.push(lampGlow, spaGlow, ledGlow);
   const flameMat = flameMaterial();
   owned.push(flameMat);
   const falls = fallMaterial();
@@ -151,8 +158,9 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       const a = (-f.rotationDeg * Math.PI) / 180;
       return new THREE.Vector3(f.position[0] + x * Math.cos(a) + z * Math.sin(a), y0 + y, f.position[1] - x * Math.sin(a) + z * Math.cos(a));
     };
+    const shade = spec.group === 'Shade';
     const light = (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker = false) =>
-      lights.push({ position: local(x, y, z), color, intensity, distance, flicker });
+      lights.push({ position: local(x, y, z), color, intensity, distance, flicker, ...(shade ? { shade: true } : {}) });
     const flame = (w: number, h: number, x: number, y: number, z: number, ry = 0) => {
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0), flameMat);
       fl.position.set(x, y, z);
@@ -209,6 +217,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'pergolaLouvered': {
+        if (spec.model === 'stratus') {
+          stratusPergola(W, D, stratusFrame, ledGlow, add, light);
+          break;
+        }
         const H = 2.75;
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(mat.alum, box(0.18, H, 0.18, sx * (W / 2 - 0.09), 0, sz * (D / 2 - 0.09)));
         for (const sz of [-1, 1]) add(mat.alum, box(W, 0.26, 0.12, 0, H, sz * (D / 2 - 0.06)));
@@ -495,7 +507,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow],
+    glow: [lampGlow, spaGlow, ledGlow],
     flames,
     fallMats,
     dispose() {
@@ -504,6 +516,75 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       for (const m of fallMats) m.dispose();
     },
   };
+}
+
+/*
+ * SunVilla Stratus 10 x 13 ft motorized pergola, to SunVilla's overall size: W along x (157.3 in), D along z
+ * (118.7 in), 98.6 in to the top of the frame. Proportions read from SunVilla's product photos (no part sizes are
+ * published): square posts about 5 in on square base plates about 8 in, flush with the outside of a deep fascia beam
+ * band (about 6 1/2 in) that runs round the top; the long beams are made in two lengths with a joint at mid-span.
+ * The louvers (about 6 in at a 5.9 in pitch) span the short way between the long beams on pivots just under the beam
+ * top, tilted partly open; every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
+ * each long beam. One warm light under the roof lights the space at night.
+ */
+function stratusPergola(
+  W: number,
+  D: number,
+  frame: THREE.Material,
+  led: THREE.Material,
+  add: (m: THREE.Material, g: THREE.BufferGeometry) => void,
+  light: (x: number, y: number, z: number, color: string, intensity: number, distance: number) => void,
+) {
+  const H = 98.6 * IN_M;
+  const post = 0.127, beamH = 0.165, beamT = 0.095;
+  const plate = 0.205, plateH = 0.014;
+  const px = W / 2 - post / 2, pz = D / 2 - post / 2;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    // Base plate with a low chamfered cover, the post to the top of the beam band, and a flat cap.
+    add(frame, box(plate, plateH, plate, sx * px, 0, sz * pz));
+    add(frame, box(post + 0.05, 0.016, post + 0.05, sx * px, plateH, sz * pz));
+    add(frame, box(post, H - plateH, post, sx * px, plateH, sz * pz));
+  }
+  // Fascia beams, outer faces flush with the posts. The long beams (along x) have a joint at mid-span.
+  const yb = H - beamH;
+  const longL = W - 2 * post;
+  const gap = 0.004;
+  for (const sz of [-1, 1]) {
+    const z = sz * (D / 2 - beamT / 2);
+    for (const side of [-1, 1]) add(frame, box(longL / 2 - gap / 2, beamH, beamT, side * (longL / 4 + gap / 4), yb, z));
+    // The joint's backing, set in so the seam reads as a thin dark line.
+    add(frame, box(gap * 3, beamH - 0.01, beamT - 0.012, 0, yb + 0.005, z - sz * 0.006));
+    // Internal gutter rail inside the long beam, under the louver pivots.
+    add(frame, box(longL, 0.05, 0.05, 0, yb - 0.01, sz * (D / 2 - beamT - 0.025)));
+  }
+  for (const sx of [-1, 1]) add(frame, box(beamT, beamH, D - 2 * post, sx * (W / 2 - beamT / 2), yb, 0));
+  // Louvers: span between the gutter rails, pivot just under the top of the beams, tilted partly open (22 degrees).
+  const inner = W - 2 * beamT - 0.02;
+  const pitch = 0.15;
+  const n = Math.floor(inner / pitch);
+  const blade = 0.16, thick = 0.02, span = D - 2 * beamT - 0.1;
+  const tilt = (22 * Math.PI) / 180;
+  const yPivot = H - 0.075;
+  for (let i = 0; i < n; i++) {
+    const x = -((n - 1) * pitch) / 2 + i * pitch;
+    const parts: [THREE.Material, THREE.BufferGeometry][] = [];
+    // The blade, slightly crowned (a thin rib along its top), and the drip lip on its lower edge.
+    parts.push([frame, new THREE.BoxGeometry(blade, thick, span)]);
+    parts.push([frame, new THREE.BoxGeometry(blade * 0.35, 0.008, span).translate(0, thick / 2 + 0.004, 0)]);
+    parts.push([frame, new THREE.BoxGeometry(0.008, 0.024, span).translate(blade / 2 - 0.004, 0.012, 0)]);
+    // The LED strip: a rounded diffuser along the blade's underside, so it shows from any side below.
+    if (i % 4 === 0) parts.push([led, new THREE.CylinderGeometry(0.011, 0.011, span - 0.12, 8).rotateX(Math.PI / 2).translate(0, -thick / 2 - 0.004, 0)]);
+    for (const [m, g] of parts) {
+      g.rotateZ(tilt);
+      g.translate(x, yPivot, 0);
+      add(m, g.toNonIndexed());
+    }
+    // End caps and pivot brackets on the gutter rails.
+    for (const sz of [-1, 1]) add(frame, box(0.05, 0.045, 0.03, x, yPivot - 0.035, sz * (span / 2 + 0.015)));
+  }
+  // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between
+  // them. One light per pergola: the scene's light pool is small (see build.ts), the strips themselves glow regardless.
+  light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
 }
 
 export function setFlames(fb: FeatureBuild, on: number) {
