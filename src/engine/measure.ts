@@ -4,6 +4,7 @@ import { stepCount } from '../builder/hardscape';
 import { featureById, materialById, plantById, sizeAt } from '../siteplan/catalog';
 import { centroid, fmtFeet, signedArea } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
+import { OverlayObstacles, insideView } from './overlay';
 
 /**
  * Measurements overlay, in two levels:
@@ -15,7 +16,13 @@ import type { SitePlan, Vec2 } from '../siteplan/types';
  *
  * Lines are 3D (drawn on top of everything so grass never hides them); labels
  * are HTML placed over the canvas each frame, nearest and most important first,
- * skipping any that would overlap one already placed.
+ * skipping any that would overlap one already placed, sit under a control drawn over
+ * the view, or be cut off by its edge.
+ *
+ * All labels live in one layer (one composited layer, see .measure-layer in page.html) and
+ * are moved by transform and shown or hidden by visibility, never by display: the set of
+ * layers drawn over the WebGL canvas stays the same from frame to frame, and no frame needs
+ * a new layout.
  */
 
 type LabelKind = 'ruler' | 'area' | 'object' | 'plant' | 'edge' | 'lot';
@@ -57,6 +64,7 @@ export class Measurements {
   private order: Label[] = [];
   private shown = false;
   private detail = false;
+  private obstacles: OverlayObstacles;
 
   constructor(container: HTMLElement) {
     this.group.name = 'measurements';
@@ -66,6 +74,7 @@ export class Measurements {
     this.layer.className = 'measure-layer';
     this.layer.hidden = true;
     container.appendChild(this.layer);
+    this.obstacles = new OverlayObstacles(container, this.layer);
   }
 
   get visible() {
@@ -274,8 +283,8 @@ export class Measurements {
       s.textContent = r;
       el.append(s);
     }
+    el.style.visibility = 'hidden';
     this.layer.appendChild(el);
-    el.style.display = 'none';
     this.labels.push({ el, pos, kind, w: 0, h: 0, on: false, d: 0 });
     this.lastPV.elements[0] = NaN;
   }
@@ -283,25 +292,20 @@ export class Measurements {
   /** Place labels for this frame (only when the view or the labels changed). */
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
     if (!this.shown) return;
+    // Controls that moved (a panel opened, the window resized) re-place the labels even with the view still.
+    const moved = this.obstacles.refresh();
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    if (this.pv.equals(this.lastPV) && width === this.lastW && height === this.lastH) return;
+    if (!moved && this.pv.equals(this.lastPV) && width === this.lastW && height === this.lastH) return;
     this.lastPV.copy(this.pv);
     this.lastW = width;
     this.lastH = height;
     const cam = camera.position;
-    // Measure new labels in one pass (all reads, then the writes below), not one forced layout per label.
-    for (const l of this.labels) {
-      if (!l.w) {
-        l.el.style.visibility = 'hidden';
-        l.el.style.display = '';
-      }
-    }
+    // Measure new labels (all reads, before any write below). Hidden labels keep their layout, so this is one
+    // layout at most, the first frame after labels were added.
     for (const l of this.labels) {
       if (!l.w) {
         l.w = l.el.offsetWidth;
         l.h = l.el.offsetHeight;
-        l.el.style.visibility = '';
-        l.el.style.display = 'none';
       }
       l.d = l.pos.distanceTo(cam);
     }
@@ -310,13 +314,16 @@ export class Measurements {
     for (const l of this.labels) order.push(l);
     order.sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind] || Number(b.on) - Number(a.on) || a.d - b.d);
     const placed = this.placed;
+    // The controls over the view count as labels already placed, so no label goes under one.
     placed.length = 0;
+    for (const n of this.obstacles.rects) placed.push(n);
     for (const l of order) {
       this.v.copy(l.pos).project(camera);
       const far = l.kind === 'edge' ? 45 : l.kind === 'lot' ? 80 : l.kind === 'ruler' ? 250 : 120;
-      let show = !(this.v.z > 1 || this.v.z < -1 || l.d > far || Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05);
       const x = (this.v.x * 0.5 + 0.5) * width - l.w / 2;
       const y = (-this.v.y * 0.5 + 0.5) * height - l.h / 2;
+      // Only whole labels: one that would be cut by the edge of the view is not shown.
+      let show = !(this.v.z > 1 || this.v.z < -1 || l.d > far || !l.w) && insideView(x, y, l.w, l.h, width, height);
       if (show) {
         // A label already showing stays until it truly overlaps; a new one needs a little clear space.
         const mx = l.on ? 0 : 6, my = l.on ? 0 : 4;
@@ -329,12 +336,12 @@ export class Measurements {
         }
       }
       if (!show) {
-        if (l.on) l.el.style.display = 'none';
+        if (l.on) l.el.style.visibility = 'hidden';
         l.on = false;
         continue;
       }
       placed.push(x, y, l.w, l.h);
-      if (!l.on) l.el.style.display = '';
+      if (!l.on) l.el.style.visibility = '';
       l.on = true;
       l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
     }

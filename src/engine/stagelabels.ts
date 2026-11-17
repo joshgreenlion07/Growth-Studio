@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { BuildStage, StageLabel } from '../builder/construction';
+import { OverlayObstacles, insideView } from './overlay';
 
 /**
  * Labels for the build stages: each trench with its cover, each dug-out area with its depth, each layer with its
  * thickness and amount, and the equipment by name. HTML over the canvas, placed each frame like the measurements
- * overlay (nearest first, skipping any that would overlap one already placed). Shown only in a stage before the
- * finished yard.
+ * overlay (nearest first, skipping any that would overlap one already placed, sit under a control or be cut off by
+ * the edge of the view; shown and hidden by visibility, in one layer). Shown only in a stage before the finished yard.
  */
 
 interface Placed {
@@ -22,6 +23,7 @@ export class StageLabels {
   private layer: HTMLDivElement;
   private labels: Placed[] = [];
   private v = new THREE.Vector3();
+  private obstacles: OverlayObstacles;
   /** With the yard cut away, labels on the cut-away side are hidden. */
   clip: THREE.Plane | null = null;
 
@@ -30,6 +32,7 @@ export class StageLabels {
     this.layer.className = 'measure-layer stage-layer';
     this.layer.hidden = true;
     container.appendChild(this.layer);
+    this.obstacles = new OverlayObstacles(container, this.layer);
   }
 
   /** Show the labels for a stage (none for the finished yard). */
@@ -46,7 +49,7 @@ export class StageLabels {
         s.textContent = l.sub;
         el.append(s);
       }
-      el.style.display = 'none';
+      el.style.visibility = 'hidden';
       this.layer.append(el);
       this.labels.push({ el, pos: l.at.clone(), kind: l.kind, w: 0, h: 0 });
     }
@@ -55,32 +58,40 @@ export class StageLabels {
 
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
     if (this.layer.hidden) return;
+    this.obstacles.refresh();
+    const ob = this.obstacles.rects;
     const placed: [number, number, number, number][] = [];
-    const cam = camera.position;
-    const order = this.labels.map((l) => ({ l, d: l.pos.distanceTo(cam) })).sort((a, b) => PRIORITY[a.l.kind] - PRIORITY[b.l.kind] || a.d - b.d);
-    for (const { l, d } of order) {
-      if (this.clip && this.clip.distanceToPoint(l.pos) < -0.05) {
-        l.el.style.display = 'none';
-        continue;
-      }
-      this.v.copy(l.pos).project(camera);
-      if (this.v.z > 1 || this.v.z < -1 || d > 90 || Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05) {
-        l.el.style.display = 'none';
-        continue;
-      }
+    for (let i = 0; i < ob.length; i += 4) placed.push([ob[i], ob[i + 1], ob[i + 2], ob[i + 3]]);
+    // Measure new labels first (reads before the writes below).
+    for (const l of this.labels) {
       if (!l.w) {
-        l.el.style.display = '';
         l.w = l.el.offsetWidth;
         l.h = l.el.offsetHeight;
       }
+    }
+    const cam = camera.position;
+    const order = this.labels.map((l) => ({ l, d: l.pos.distanceTo(cam) })).sort((a, b) => PRIORITY[a.l.kind] - PRIORITY[b.l.kind] || a.d - b.d);
+    for (const { l, d } of order) {
+      const hide = () => {
+        if (l.el.style.visibility !== 'hidden') l.el.style.visibility = 'hidden';
+      };
+      if (this.clip && this.clip.distanceToPoint(l.pos) < -0.05) {
+        hide();
+        continue;
+      }
+      this.v.copy(l.pos).project(camera);
       const x = (this.v.x * 0.5 + 0.5) * width - l.w / 2;
       const y = (-this.v.y * 0.5 + 0.5) * height - l.h / 2;
+      if (this.v.z > 1 || this.v.z < -1 || d > 90 || !l.w || !insideView(x, y, l.w, l.h, width, height)) {
+        hide();
+        continue;
+      }
       if (placed.some(([px, py, pw, ph]) => x < px + pw + 4 && x + l.w + 4 > px && y < py + ph + 2 && y + l.h + 2 > py)) {
-        l.el.style.display = 'none';
+        hide();
         continue;
       }
       placed.push([x, y, l.w, l.h]);
-      l.el.style.display = '';
+      if (l.el.style.visibility) l.el.style.visibility = '';
       l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
     }
   }

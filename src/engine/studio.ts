@@ -27,6 +27,7 @@ export interface PointHit {
   part: string;
   catalogId: string;
 }
+import { GpuFrameTimer, LONG_GPU_MS } from './gputimer';
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
 
@@ -52,6 +53,25 @@ const MAX_DT = 1 / 20;
 const RESIZE_SETTLE_MS = 160;
 /** Frames still drawn after the view stops changing, before drawing pauses (nothing on screen would differ). */
 const SETTLE_FRAMES = 4;
+/**
+ * The WebGL renderer, on a canvas the browser can present the plainest way it has. three.js (r186) always asks for a
+ * drawing buffer WITH an alpha channel (its `alpha` option only sets the clear alpha), so the browser has to treat the
+ * canvas as see-through and blend it over the page every frame, although every pixel it draws is opaque (the output
+ * pass writes alpha 1). Here the context is made opaque (alpha false), so the compositor knows nothing shows through
+ * it. Also: no kept buffer (preserveDrawingBuffer true with antialias false is a known flicker case on macOS ANGLE),
+ * and no low-latency 'desynchronized' mode (the Chrome GPU team advises against it on macOS). If the browser refuses
+ * these settings, three makes its own context as before.
+ */
+function createRenderer(): THREE.WebGLRenderer {
+  const opts = { antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' as const };
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('webgl2', { ...opts, alpha: false, depth: true, stencil: false, desynchronized: false });
+  if (context) return new THREE.WebGLRenderer({ ...opts, canvas, context, alpha: false });
+  return new THREE.WebGLRenderer({ ...opts, alpha: false });
+}
+
+/** Near plane steps (see fitClipPlanes): 5 cm up to 2 m, each step 2^¼ (about 1.19) times the last. */
+const NEAR_MIN = 0.05, NEAR_MAX = 2, NEAR_STEP = Math.pow(2, 0.25);
 
 // Soft shadow edges sample the shadow map in a pattern turned per pixel by screen-space noise, which crawls as
 // the view moves. A fixed pattern (each tap still filtered by the hardware) is as soft and holds still.
@@ -184,6 +204,10 @@ export class Studio {
   holdClip = false;
   /** Diagnostics switch: draw every frame instead of pausing while nothing on screen changes. */
   alwaysDraw = false;
+  /** Diagnostics: GPU time of each drawn frame (where the browser offers a GPU timer). */
+  private gpuTimer: GpuFrameTimer | null = null;
+  /** Diagnostics: frames with the camera moving in the last second. */
+  private movingInWin = 0;
 
   /** Count one event for the diagnostics readout (and log it with its time). Cheap when the readout is off. */
   noteEvent(name: string, detail = '') {
@@ -214,7 +238,7 @@ export class Studio {
   private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
 
   constructor(private container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    this.renderer = createRenderer();
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
@@ -226,6 +250,18 @@ export class Studio {
     this.renderer.domElement.style.height = '100%';
     this.renderer.domElement.setAttribute('aria-label', '3D view of the yard');
     container.appendChild(this.renderer.domElement);
+    // An opaque canvas starts black: until the yard is drawn, show the view's own background color instead.
+    for (let el: HTMLElement | null = container; el; el = el.parentElement) {
+      const bg = getComputedStyle(el).backgroundColor;
+      if (bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) {
+        const c = new THREE.Color();
+        c.setStyle(bg, THREE.SRGBColorSpace);
+        this.renderer.setClearColor(c, 1);
+        this.renderer.clear();
+        this.renderer.setClearColor(0x000000, 1);
+        break;
+      }
+    }
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
     setGroundTextureUnits(this.renderer.capabilities.maxTextures);
 
@@ -370,6 +406,8 @@ export class Studio {
     if (!on) {
       this.diag.el?.remove();
       this.diag.el = null;
+      this.gpuTimer?.dispose();
+      this.gpuTimer = null;
       this.holdClip = false;
       this.alwaysDraw = false;
       return;
@@ -389,6 +427,7 @@ export class Studio {
     if (getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative';
     this.container.appendChild(el);
     this.diag.el = el;
+    if (this.renderer.capabilities.isWebGL2) this.gpuTimer = new GpuFrameTimer(this.renderer.getContext() as WebGL2RenderingContext);
     this.diag.counts.clear();
     this.diag.log = [];
     this.fpsWin = [];
@@ -1248,7 +1287,21 @@ export class Studio {
       this.frameStats(dt, false);
       return;
     }
+    if (!this.diag.el) {
+      this.draw(dt);
+      this.frameStats(dt, true);
+      return;
+    }
+    // Diagnostics: was this frame, with the camera moving, really drawn (three counts each render), and was it on time?
+    const before = this.renderer.info.render.frame;
+    this.gpuTimer?.begin();
     this.draw(dt);
+    this.gpuTimer?.end();
+    if (this.camMoved) {
+      this.movingInWin++;
+      if (this.renderer.info.render.frame === before) this.noteEvent('not drawn', 'camera moved but nothing was drawn');
+      if (dt * 1000 > LONG_GPU_MS) this.diag.counts.set('late', (this.diag.counts.get('late') ?? 0) + 1);
+    }
     this.frameStats(dt, true);
   }
 
@@ -1282,6 +1335,13 @@ export class Studio {
   /**
    * Near and far planes that follow the camera: the depth buffer's precision goes where the eye is, so paving
    * layers millimeters apart do not shimmer into each other from the overview, and nothing near is clipped up close.
+   *
+   * The near plane moves in fixed steps (each about 1.19× the last) rather than with every frame: a changing near plane
+   * moves the depth precision too, so coplanar layers could trade places as the camera rises and falls, and it used to
+   * change about 20 times a second while flying. It steps in as soon as the camera needs it (never farther out than the
+   * ideal, so nothing close is clipped) but steps out only once the ideal is two steps (41%) beyond it, and then to one
+   * step short of the ideal, so hovering near a step does not toggle it. The near plane is never less than 1/1.41 of
+   * the ideal, so depth precision is at worst 1.41× coarser than an exact fit.
    */
   private fitClipPlanes(cam: THREE.PerspectiveCamera, target: THREE.Vector3) {
     const g = this.build ? Math.max(0, this.build.gm.height([cam.position.x, cam.position.z])) : 0;
@@ -1290,10 +1350,16 @@ export class Studio {
     // Flying above the yard, the nearest thing can be a tree top or roof well above the ground under the
     // camera: below the tallest thing allow no more than 6 m of clear space, above it the height over it.
     const clear = Math.max(cam.position.y - this.yardTop, 6);
-    const near = THREE.MathUtils.clamp(Math.min(h, d, clear) * 0.08, 0.05, 2);
+    const ideal = THREE.MathUtils.clamp(Math.min(h, d, clear) * 0.08, NEAR_MIN, NEAR_MAX);
     const far = 900;
     if (this.holdClip && cam === this.camera) return;
-    if (Math.abs(near - cam.near) > cam.near * 0.02 || cam.far !== far) {
+    // The step at or below the ideal: never farther out than the ideal near plane.
+    const step = (v: number) => Math.min(NEAR_MAX, NEAR_MIN * Math.pow(NEAR_STEP, Math.floor(Math.log(v / NEAR_MIN) / Math.log(NEAR_STEP) + 1e-6)));
+    let near = cam.near;
+    const onStep = Math.abs(step(cam.near) - cam.near) < 1e-6 * cam.near;
+    if (!onStep || ideal < cam.near) near = step(ideal); // closer things in view: step in now
+    else if (ideal >= cam.near * NEAR_STEP * NEAR_STEP) near = step(ideal / NEAR_STEP); // well clear: step out, one step short
+    if (near !== cam.near || cam.far !== far) {
       if (cam === this.camera) this.noteEvent('depth range', `near ${cam.near.toFixed(2)} → ${near.toFixed(2)} m`);
       cam.near = near;
       cam.far = far;
@@ -1392,6 +1458,7 @@ export class Studio {
         `${head}  drawn ${this.drawnInWin}/${n} frames`,
         `canvas ${this.size.w}×${this.size.h} @${this.size.pr.toFixed(2)}x  quality ${this.state.quality}  near ${this.camera.near.toFixed(2)} m`,
         `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}`,
+        this.motionLine(c('not drawn'), c('late')),
         ...this.diag.log,
       ].join('\n');
       this.diag.counts.clear();
@@ -1399,6 +1466,16 @@ export class Studio {
     this.fpsWin = [];
     this.drawnInWin = 0;
     this.fpsShownAt = now;
+  }
+
+  /** Diagnostics: while the camera moved, frames not drawn, frames more than 33 ms apart, and GPU frames over 33 ms. */
+  private motionLine(notDrawn: number, late: number) {
+    const g = this.gpuTimer?.take();
+    const gpu = !g ? 'GPU timer not offered by this browser' : g.timed ? `GPU >${LONG_GPU_MS} ms ${g.long}/${g.timed}  GPU worst ${g.worst.toFixed(1)} ms` : 'GPU timer waiting';
+    if (g?.long) this.noteEvent('long GPU frame', `${g.long} over ${LONG_GPU_MS} ms`);
+    const line = `moving ${this.movingInWin}: not drawn ${notDrawn}  late >${LONG_GPU_MS} ms ${late}  ${gpu}`;
+    this.movingInWin = 0;
+    return line;
   }
 
   /**
