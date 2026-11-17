@@ -148,7 +148,8 @@ Messages use `window.postMessage`:
   answer the studio goes full screen by itself.
 - Cover picture: the parent sends `{ source: 'area-planner', type: 'cover' }`
   and gets `{ source: 'growth-studio', type: 'cover', ok: true, data: Blob }` (a
-  1600 px JPEG of the yard from the Overview view; the camera returns at once),
+  1600 px JPEG of the yard from the Overview view, drawn off screen: the live
+  view does not move, resize or blink),
   or `{ ..., ok: false, message }` before a plan is built.
 - Stepping stones are `features` with `catalogId: 'stepping-stone-24'` (a Belgard
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
@@ -161,6 +162,9 @@ Messages use `window.postMessage`:
   ground. The first plan is always framed.
 - Messages that arrive within 150 ms of each other are applied as one
   rebuild, using the newest plan. Each rebuild gets one `built` reply.
+  The new yard's shaders are compiled while the old yard stays on screen, so
+  it can appear a few frames after `built`; a cover picture asked for in that
+  time waits for it.
 - Wait for `ready` before sending. It is sent to any parent (`'*'`) and holds
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
@@ -172,6 +176,22 @@ Messages use `window.postMessage`:
   its subdomains. Anything else is ignored silently.
 - If the iframe has a `sandbox` attribute, it needs `allow-scripts`, and
   `allow-downloads` for Save image.
+
+## Smooth rendering
+- Frame rate readout: add `?fps=1` to the address (or press F9 in the 3D view)
+  for frames per second and the slowest frame of the last half second. It
+  says "idle" while nothing on screen changes.
+- Drawing pauses while nothing moves (Motion off, or no wind, water or fire,
+  and the camera at rest) to save battery and heat; the loop keeps running,
+  so the next input is drawn in the very next frame.
+- A new plan is built and its shaders compiled before it replaces the old
+  yard; plants share one shader, and the lighting environment is remade only
+  when the sky changes.
+- Shadows are cast from the plants' still pose and redrawn only when the yard,
+  sun or growth changes. Lawn blades fade into the ground only where they
+  would be thinner than a third of a pixel.
+- Losing WebGL (Safari can take it away under memory pressure) shows
+  "Restoring the 3D view" and rebuilds the yard when it comes back.
 
 ## Next steps
 1. Replace the starter catalog with Green Lion's plant list (names, container
