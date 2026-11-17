@@ -467,7 +467,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const mj = mitreJoints(z.polygon, inner, t);
         if (mj) {
           geos.push(mj);
-          group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1 }))));
+          group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }))));
         }
         surfaces.push(bm);
         if (z.borderLights) {

@@ -38,6 +38,43 @@ export function setMaxAnisotropy(n: number) {
   anisotropy = Math.min(8, n);
 }
 
+/**
+ * Keys of the sets the texture worker can paint by itself (texture-recipes.ts
+ * resolves each one). Small or one-off sets stay on the main thread.
+ */
+export const WORKER_KEYS = /^(?:mat:|cap:)|^(?:soil|corten|porcelainPanel|rock|stucco|roofTile|bark|asphalt|poolTile)$/;
+
+/** Paints sets off the main thread; registered by texture-jobs.ts on the page. */
+export interface TexturePainter {
+  /** False when workers are unavailable or failed; recipes are then painted here. */
+  available(): boolean;
+  /** Paint `key` in a worker and swap the result into `set`, whose maps are stand-ins. `make` paints it here if the worker fails. */
+  request(key: string, set: PBRSet, make: () => PBRSet): void;
+}
+let painter: TexturePainter | null = null;
+export function setTexturePainter(p: TexturePainter | null) {
+  painter = p;
+}
+
+/**
+ * A stand-in map whose painted image arrives later. Materials clone their
+ * maps (to set the repeat), so every clone is remembered and gets the image too.
+ */
+export class PendingTexture extends THREE.Texture {
+  group: Set<THREE.Texture> | null = null;
+  clone(): this {
+    const c = super.clone();
+    if (this.group) {
+      (c as PendingTexture).group = this.group;
+      this.group.add(c);
+    }
+    return c;
+  }
+}
+
+/** True inside the texture worker (no DOM): paint() then returns raw pixels for the worker to send. */
+const IN_WORKER = typeof document === 'undefined';
+
 function canvas(size: number) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -53,8 +90,16 @@ function texFromCanvas(c: HTMLCanvasElement, srgb: boolean): THREE.Texture {
   return t;
 }
 
-/** Paint a seamless PBR set from a per-pixel function of (u, v) in [0,1). */
-export function paint(size: number, tileMeters: number, normalStrength: number, fn: (u: number, v: number) => Sample): PBRSet {
+/** The three maps of a painted set as RGBA bytes, rows top first (as a canvas holds them). */
+export interface PaintedPixels {
+  size: number;
+  albedo: Uint8ClampedArray;
+  normal: Uint8ClampedArray;
+  rough: Uint8ClampedArray;
+}
+
+/** Run a recipe over every texel and turn its height into a normal map. Pure: no DOM, runs in a worker too. */
+export function paintPixels(size: number, normalStrength: number, fn: (u: number, v: number) => Sample): PaintedPixels {
   const n = size * size;
   const H = new Float32Array(n);
   const C = new Float32Array(n * 3);
@@ -70,10 +115,7 @@ export function paint(size: number, tileMeters: number, normalStrength: number, 
       R[i] = s.r;
     }
   }
-  const ca = canvas(size), cn = canvas(size), cr = canvas(size);
-  const da = ca.getContext('2d')!.createImageData(size, size);
-  const dn = cn.getContext('2d')!.createImageData(size, size);
-  const dr = cr.getContext('2d')!.createImageData(size, size);
+  const da = new Uint8ClampedArray(n * 4), dn = new Uint8ClampedArray(n * 4), dr = new Uint8ClampedArray(n * 4);
   // Height is in "pixels of relief" scaled by normalStrength.
   const k = normalStrength;
   for (let y = 0; y < size; y++) {
@@ -89,25 +131,95 @@ export function paint(size: number, tileMeters: number, normalStrength: number, 
       ny /= l;
       nz /= l;
       const o = i * 4;
-      dn.data[o] = (nx * 0.5 + 0.5) * 255;
-      dn.data[o + 1] = (ny * 0.5 + 0.5) * 255;
-      dn.data[o + 2] = (nz * 0.5 + 0.5) * 255;
-      dn.data[o + 3] = 255;
-      da.data[o] = clamp01(C[i * 3]) * 255;
-      da.data[o + 1] = clamp01(C[i * 3 + 1]) * 255;
-      da.data[o + 2] = clamp01(C[i * 3 + 2]) * 255;
-      da.data[o + 3] = 255;
+      dn[o] = (nx * 0.5 + 0.5) * 255;
+      dn[o + 1] = (ny * 0.5 + 0.5) * 255;
+      dn[o + 2] = (nz * 0.5 + 0.5) * 255;
+      dn[o + 3] = 255;
+      da[o] = clamp01(C[i * 3]) * 255;
+      da[o + 1] = clamp01(C[i * 3 + 1]) * 255;
+      da[o + 2] = clamp01(C[i * 3 + 2]) * 255;
+      da[o + 3] = 255;
       const r = clamp01(R[i]) * 255;
-      dr.data[o] = r;
-      dr.data[o + 1] = r;
-      dr.data[o + 2] = r;
-      dr.data[o + 3] = 255;
+      dr[o] = r;
+      dr[o + 1] = r;
+      dr[o + 2] = r;
+      dr[o + 3] = 255;
     }
   }
-  ca.getContext('2d')!.putImageData(da, 0, 0);
-  cn.getContext('2d')!.putImageData(dn, 0, 0);
-  cr.getContext('2d')!.putImageData(dr, 0, 0);
-  return { map: texFromCanvas(ca, true), normalMap: texFromCanvas(cn, false), roughnessMap: texFromCanvas(cr, false), tileMeters };
+  return { size, albedo: da, normal: dn, rough: dr };
+}
+
+function canvasSet(px: PaintedPixels, tileMeters: number): PBRSet {
+  const make = (data: Uint8ClampedArray, srgb: boolean) => {
+    const c = canvas(px.size);
+    const g = c.getContext('2d')!;
+    const img = g.createImageData(px.size, px.size);
+    img.data.set(data);
+    g.putImageData(img, 0, 0);
+    return texFromCanvas(c, srgb);
+  };
+  return { map: make(px.albedo, true), normalMap: make(px.normal, false), roughnessMap: make(px.rough, false), tileMeters };
+}
+
+/** In the worker the textures only carry the pixels; the worker posts them to the page. */
+function pixelSet(px: PaintedPixels, tileMeters: number): PBRSet {
+  const tex = (data: Uint8ClampedArray) => new THREE.Texture({ data, width: px.size, height: px.size, pixels: px });
+  return { map: tex(px.albedo), normalMap: tex(px.normal), roughnessMap: tex(px.rough), tileMeters };
+}
+
+/** Set while textureSet() runs a recipe only to learn its average color (see previewSet). */
+let previewing = false;
+
+/** Paint a seamless PBR set from a per-pixel function of (u, v) in [0,1). */
+export function paint(size: number, tileMeters: number, normalStrength: number, fn: (u: number, v: number) => Sample): PBRSet {
+  if (previewing) return previewSet(tileMeters, fn);
+  const px = paintPixels(size, normalStrength, fn);
+  return IN_WORKER ? pixelSet(px, tileMeters) : canvasSet(px, tileMeters);
+}
+
+/** Texels sampled (per side) to find a recipe's average color: 1,024 calls, about a millisecond. */
+const PREVIEW_SAMPLES = 32;
+
+/**
+ * The stand-in shown while the worker paints: the recipe's average color,
+ * a flat normal and its average roughness, as tiny textures that are swapped
+ * for the painted ones in place (see texture-jobs.ts).
+ */
+function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample): PBRSet {
+  const N = PREVIEW_SAMPLES;
+  let r = 0, g = 0, b = 0, ro = 0;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const s = fn((x + 0.5) / N, (y + 0.5) / N);
+      r += clamp01(s.c[0]);
+      g += clamp01(s.c[1]);
+      b += clamp01(s.c[2]);
+      ro += clamp01(s.r);
+    }
+  }
+  const k = 255 / (N * N);
+  const avg: [number, number, number, number] = [Math.round(r * k), Math.round(g * k), Math.round(b * k), Math.round(ro * k)];
+  return {
+    map: pendingTexture([avg[0], avg[1], avg[2]], true),
+    normalMap: pendingTexture([128, 128, 255], false),
+    roughnessMap: pendingTexture([avg[3], avg[3], avg[3]], false),
+    tileMeters,
+  };
+}
+
+function pendingTexture(rgb: [number, number, number], srgb: boolean): PendingTexture {
+  const c = canvas(2);
+  const g = c.getContext('2d')!;
+  g.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  g.fillRect(0, 0, 2, 2);
+  const t = new PendingTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.anisotropy = anisotropy;
+  t.userData.flat = rgb;
+  t.group = new Set([t]);
+  t.needsUpdate = true;
+  return t;
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,7 +231,7 @@ export const hash = (a: number, b: number) => {
   return s - Math.floor(s);
 };
 
-export function stucco(): PBRSet {
+function paintStucco(): PBRSet {
   const a: RGB = [0.86, 0.82, 0.74], b: RGB = [0.8, 0.76, 0.68];
   return paint(512, 2, 7, (u, v) => {
     const n = fbm(u, v, 8, 5, 3);
@@ -128,7 +240,7 @@ export function stucco(): PBRSet {
   });
 }
 
-export function roofTile(): PBRSet {
+function paintRoofTile(): PBRSet {
   const a: RGB = [0.36, 0.33, 0.31], b: RGB = [0.45, 0.4, 0.36];
   const RH = 0.33, CW = 0.42, T = 1.68;
   return paint(512, T, 10, (u, v) => {
@@ -148,7 +260,7 @@ export function roofTile(): PBRSet {
   });
 }
 
-export function bark(): PBRSet {
+function paintBark(): PBRSet {
   const a: RGB = [0.27, 0.22, 0.18], b: RGB = [0.45, 0.4, 0.34];
   return paint(256, 0.8, 9, (u, v) => {
     const furrow = vnoise(u * 10, v * 2, 10, 4) * 0.6 + vnoise(u * 26, v * 5, 26, 5) * 0.4;
@@ -158,7 +270,7 @@ export function bark(): PBRSet {
   });
 }
 
-export function asphalt(): PBRSet {
+function paintAsphalt(): PBRSet {
   return paint(512, 3, 4, (u, v) => {
     const agg = vnoise(u * 600, v * 600, 600, 1);
     const n = fbm(u, v, 4, 4, 3);
@@ -167,7 +279,7 @@ export function asphalt(): PBRSet {
   });
 }
 
-export function poolTile(): PBRSet {
+function paintPoolTile(): PBRSet {
   const T = 1.2, S = 0.15;
   return paint(512, T, 3, (u, v) => {
     const x = u * T, y = v * T;
@@ -181,14 +293,47 @@ export function poolTile(): PBRSet {
 
 const cache = new Map<string, PBRSet>();
 
+/**
+ * One cached PBR set per key. On the page, recipes the texture worker knows
+ * (see WORKER_KEYS) are painted off the main thread: the set comes back at
+ * once with the material's flat average color, and the painted maps replace
+ * it in place a moment later with a short crossfade. Elsewhere (and when
+ * workers are unavailable) the recipe is painted here, synchronously.
+ */
 export function textureSet(key: string, make: () => PBRSet): PBRSet {
   let t = cache.get(key);
-  if (!t) {
-    t = make();
-    cache.set(key, t);
+  if (t) return t;
+  if (previewing) return make();
+  if (!IN_WORKER && painter && WORKER_KEYS.test(key) && painter.available()) {
+    previewing = true;
+    try {
+      t = make();
+    } finally {
+      previewing = false;
+    }
+    if (t.map instanceof PendingTexture && t.normalMap instanceof PendingTexture && t.roughnessMap instanceof PendingTexture) {
+      cache.set(key, t);
+      painter.request(key, t, make);
+      return t;
+    }
   }
+  t = make();
+  cache.set(key, t);
   return t;
 }
+
+/** Shared house, roof, bark, road and pool textures: painted once (in the worker) and kept. */
+/** Forget every cached set. The worker calls it after each job so it holds no pixels. */
+export function clearTextureSets() {
+  cache.clear();
+}
+
+const cached = (key: string, make: () => PBRSet) => () => textureSet(key, make);
+export const stucco = cached('stucco', paintStucco);
+export const roofTile = cached('roofTile', paintRoofTile);
+export const bark = cached('bark', paintBark);
+export const asphalt = cached('asphalt', paintAsphalt);
+export const poolTile = cached('poolTile', paintPoolTile);
 
 /* ------------------------------------------------------------------ */
 /* Foliage                                                              */

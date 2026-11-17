@@ -1,0 +1,35 @@
+import { materialById, type LayingPattern } from '../siteplan/catalog';
+import { rockSet } from '../builder/materials';
+import { cortenSet, materialTextures, porcelainPanelSet, soilTextures, wallCapTextures } from './surfaces';
+import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
+
+/**
+ * The texture worker's side of `textureSet`: rebuild a set from its cache key
+ * alone (the page cannot send the recipe itself). Every key `WORKER_KEYS`
+ * accepts must resolve here; anything else returns null and the page paints
+ * it on the main thread.
+ */
+export function runRecipe(key: string): PBRSet | null {
+  const mat = /^mat:([^:]+)(?::(.+))?$/.exec(key);
+  if (mat) {
+    const spec = materialById.get(mat[1]);
+    return spec ? materialTextures(spec, mat[2] as LayingPattern | undefined) : null;
+  }
+  const cap = /^cap:(.+)$/.exec(key);
+  if (cap) {
+    const spec = materialById.get(cap[1]);
+    return spec ? wallCapTextures(spec) : null;
+  }
+  const named: Record<string, () => PBRSet> = {
+    soil: soilTextures,
+    corten: cortenSet,
+    porcelainPanel: porcelainPanelSet,
+    rock: rockSet,
+    stucco,
+    roofTile,
+    bark,
+    asphalt,
+    poolTile,
+  };
+  return named[key]?.() ?? null;
+}

@@ -40,8 +40,19 @@ export interface StudioState {
   motion: boolean;
 }
 
-/** While leaves move in the wind, their shadows are redrawn this often (seconds of animation time). */
-const SHADOW_STEP = 1 / 20;
+/** The longest step any motion takes in one frame (seconds): a hitch is not turned into a jump. */
+const MAX_DT = 1 / 20;
+/** Resizes closer together than this (ms) are one continuous resize: the canvas is stretched until it ends. */
+const RESIZE_SETTLE_MS = 160;
+/** Frames still drawn after the view stops changing, before drawing pauses (nothing on screen would differ). */
+const SETTLE_FRAMES = 4;
+
+// Soft shadow edges sample the shadow map in a pattern turned per pixel by screen-space noise, which crawls as
+// the view moves. A fixed pattern (each tap still filtered by the hardware) is as soft and holds still.
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace(
+  /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;/g,
+  'float phi = 0.0;',
+);
 
 /**
  * The quality a session starts at. Phones and tablets (a touch screen as the main pointer, or a
@@ -82,10 +93,26 @@ export class Studio {
    */
   private builtPlan: SitePlan | null = null;
   private skyNow: SkyState | null = null;
-  private clock = new THREE.Clock();
+  /** The yard being warmed up (its shaders compiled) before it replaces the one on screen. */
+  private pending: SceneBuild | null = null;
+  private buildToken = 0;
+  private whenBuilt: (() => void)[] = [];
+  /** Replaced yards, released after the next drawn frame (their shader programs are shared by the new one until then). */
+  private retired: SceneBuild[] = [];
+  /** The sky the lighting environment was last made for; it is remade only when that changes. */
+  private envKey = '';
+  /** Autofocus targets: solid surfaces only, not the invisible plant spheres. */
+  private focusSurfaces: THREE.Object3D[] = [];
+  private lastTs = -1;
+  /** Height of the tallest thing in the yard (m). */
+  private yardTop = 0;
+  /** The view moved since the material pointer last reported: keep drawing until it has. */
+  private pointDue = false;
   private raf = 0;
   private frame = 0;
   private focusTarget = 10;
+  /** Focus eases in diopters (1 / distance), the way a lens racks. */
+  private focusInv = 0.1;
   private manualFocus: THREE.Vector3 | null = null;
   private raycaster = new THREE.Raycaster();
   private tween: { from: { e: THREE.Vector3; t: THREE.Vector3; f: number }; to: CameraView; t0: number; dur: number } | null = null;
@@ -122,21 +149,39 @@ export class Studio {
   onNeedAsset: (id: string) => void = () => {};
   private fpsAcc = 0;
   private fpsN = 0;
+  /** Something other than the camera changed since the last drawn frame. */
+  private dirty = true;
+  private stillFrames = 0;
+  private lastView = new THREE.Matrix4();
+  private lastProj = new THREE.Matrix4();
+  private camMoved = true;
+  private v2 = new THREE.Vector2();
+  /** Size the drawing buffers were last made for (CSS px and pixel ratio). */
+  private size = { w: 0, h: 0, pr: 0 };
+  private lastResize = 0;
+  private resizeTimer = 0;
+  private dprQuery: MediaQueryList | null = null;
+  private contextLost = false;
+  private lossNote: HTMLDivElement | null = null;
+  private stillPost: PostPipeline | null = null;
+  /** Optional frame-rate readout (?fps=1, or F9). */
+  private fpsEl: HTMLDivElement | null = null;
+  private fpsWin: number[] = [];
+  private fpsShownAt = 0;
+  private drawnInWin = 0;
   /** The shadow map is redrawn only when something that casts or lights it changed. */
   private shadowDirty = true;
-  private shadowTime = -Infinity;
   /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
   private shadowPassCam = new THREE.PerspectiveCamera(10, 1, 1, 2);
   private shadowPassTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
-  /** While an exported still is drawn: how much larger than the view it is, so its plants get the detail its size needs. */
-  private stillScale: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCF with hardware filtering (PCFSoftShadowMap is gone from three); see the fixed pattern above.
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.width = '100%';
@@ -154,12 +199,14 @@ export class Studio {
     this.scene.add(this.sky.mesh);
     this.scene.fog = new THREE.FogExp2(0xc9d6e2, 0.004);
     this.keyLight.castShadow = true;
-    this.keyLight.shadow.bias = -0.0003;
-    this.keyLight.shadow.normalBias = 0.025;
+    // Bias and softness follow the shadow texel size (fitShadow).
+    this.keyLight.shadow.bias = -0.0002;
     this.scene.add(this.keyLight, this.keyLight.target, this.fillLight);
+    // A fixed set of night lights, always present: lit materials are compiled for the number of lights, so a plan
+    // that gains or loses a light only changes intensities, never recompiles every shader.
     for (let i = 0; i < 8; i++) {
       const p = new THREE.PointLight(0xffc98a, 0, 5, 2);
-      p.visible = false;
+      p.userData.base = 0;
       this.pointLights.push(p);
       this.scene.add(p);
     }
@@ -183,6 +230,7 @@ export class Studio {
       this.tween = null;
       this.manualFocus = null;
     });
+    this.controls.addEventListener('change', () => this.invalidate());
 
     this.nav = new Navigation({
       camera: this.camera,
@@ -228,7 +276,12 @@ export class Studio {
 
     // Tap to focus.
     let down: { x: number; y: number } | null = null;
-    this.renderer.domElement.addEventListener('pointerdown', (e) => (down = { x: e.clientX, y: e.clientY }));
+    this.renderer.domElement.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY };
+      this.invalidate();
+    });
+    this.renderer.domElement.addEventListener('wheel', () => this.invalidate(), { passive: true });
+    window.addEventListener('keydown', this.onKey);
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
         this.focusAt(e.clientX, e.clientY);
@@ -237,18 +290,123 @@ export class Studio {
       down = null;
     });
 
-    this.resizeObs = new ResizeObserver(() => this.resize());
+    // WebGL can be taken away (Safari under memory pressure, GPU resets): say so, and rebuild when it comes back.
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('webglcontextlost', this.onContextLost, false);
+    canvas.addEventListener('webglcontextrestored', this.onContextRestored, false);
+
+    this.resizeObs = new ResizeObserver(() => this.onResize());
     this.resizeObs.observe(container);
+    this.watchPixelRatio();
     this.applyQuality();
-    this.resize();
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
+    try {
+      if (new URLSearchParams(location.search).get('fps') === '1') this.showFps(true);
+    } catch {
+      /* no query string */
+    }
   }
+
+  /** Something changed that the camera check cannot see: draw the next frame. */
+  invalidate() {
+    this.dirty = true;
+  }
+
+  private onKey = (e: KeyboardEvent) => {
+    this.invalidate();
+    if (e.key === 'F9') {
+      e.preventDefault();
+      this.showFps(!this.fpsEl);
+    }
+  };
+
+  /** Show or hide a small frame-rate readout (frames per second, and the slowest frame of the last second). */
+  showFps(on: boolean) {
+    if (!on) {
+      this.fpsEl?.remove();
+      this.fpsEl = null;
+      return;
+    }
+    if (this.fpsEl) return;
+    const el = document.createElement('div');
+    el.className = 'fps-readout';
+    el.setAttribute('aria-hidden', 'true');
+    Object.assign(el.style, {
+      position: 'absolute', left: '8px', bottom: '8px', zIndex: '5', padding: '3px 6px', font: '11px/1.35 ui-monospace, Menlo, monospace',
+      color: '#e8ece6', background: 'rgba(16,20,18,0.72)', borderRadius: '3px', pointerEvents: 'none', whiteSpace: 'pre',
+    } as CSSStyleDeclaration);
+    el.textContent = '-- fps';
+    if (getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative';
+    this.container.appendChild(el);
+    this.fpsEl = el;
+    this.fpsWin = [];
+  }
+
+  private onContextLost = (e: Event) => {
+    e.preventDefault();
+    this.contextLost = true;
+    if (!this.lossNote) {
+      const n = document.createElement('div');
+      n.className = 'context-note';
+      n.setAttribute('role', 'status');
+      n.textContent = 'Restoring the 3D view…';
+      Object.assign(n.style, {
+        position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: '5', padding: '8px 12px',
+        font: '13px/1.4 system-ui, sans-serif', color: '#e8ece6', background: 'rgba(16,20,18,0.85)', borderRadius: '4px',
+      } as CSSStyleDeclaration);
+      if (getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative';
+      this.container.appendChild(n);
+      this.lossNote = n;
+    }
+  };
+
+  private onContextRestored = () => {
+    // three restores its own state; everything drawn into textures (lighting environment, shadow map) is redone,
+    // and the yard is rebuilt so every buffer and texture is uploaded again.
+    this.contextLost = false;
+    // The old generator's GPU objects died with the old context; a new one starts clean.
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envRT = null;
+    this.envKey = '';
+    this.keyLight.shadow.map?.dispose();
+    this.keyLight.shadow.map = null;
+    this.shadowDirty = true;
+    this.size.w = 0;
+    this.resize();
+    if (this.plan) this.applyPlan(this.plan, true, false);
+    else this.updateSky(true);
+    this.lossNote?.remove();
+    this.lossNote = null;
+    this.invalidate();
+  };
+
+  /** Moving the window to a screen with another pixel density changes the drawing size. */
+  private watchPixelRatio() {
+    this.dprQuery?.removeEventListener('change', this.onDprChange);
+    try {
+      this.dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      this.dprQuery.addEventListener('change', this.onDprChange);
+    } catch {
+      this.dprQuery = null;
+    }
+  }
+
+  private onDprChange = () => {
+    this.watchPixelRatio();
+    this.renderer.setPixelRatio(this.pixelRatioFor(this.state.quality));
+    this.resize();
+  };
 
   /* -------------------------------------------------------------- */
 
-  setPlan(plan: SitePlan, keepCamera = false) {
+  /**
+   * Show a plan. Building happens now (a plan that cannot be built throws here); the returned promise resolves
+   * once the new yard is on screen, after its shaders are warmed (or at once for a paving-only restyle).
+   */
+  setPlan(plan: SitePlan, keepCamera = false): Promise<void> {
     this.applyPlan(plan, keepCamera, true);
+    return this.built();
   }
 
   /** `restyle` false always rebuilds the whole yard (a new quality or uploaded file). */
@@ -266,32 +424,86 @@ export class Studio {
       if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
       this.updateSky(false);
       if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+      this.invalidate();
       return;
     }
     this.plan = plan;
     // Until the new yard is built, nothing may be restyled.
     this.builtPlan = null;
-    if (this.build) {
-      this.scene.remove(this.build.root);
-      this.build.dispose();
+    // A yard still warming up from an earlier plan is dropped: only the newest is shown.
+    if (this.pending) {
+      this.pending.dispose();
+      this.pending = null;
     }
-    this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
-    this.build = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
-    this.builtPlan = copy;
+    const token = ++this.buildToken;
+    const next = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
     // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
-    this.build.root.traverse((o) => {
+    next.root.traverse((o) => {
       if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
     });
+    next.setYears(this.state.years);
+    this.pending = next;
+    // Compile the new yard's shaders while the old one stays on screen (in the background where the browser can),
+    // then swap. The old yard is released only after that, so every shader both share is kept, not rebuilt.
+    const swap = () => {
+      if (token !== this.buildToken || this.disposed || this.pending !== next) return;
+      this.pending = null;
+      this.swapIn(next, plan, copy, keepCamera);
+    };
+    let warm: Promise<unknown> | null = null;
+    // Programs are compiled for the current render target's color space: the yard is drawn into the post
+    // pipeline's linear HDR target (and the mirror's), not the canvas, so warm that variant.
+    const r = this.renderer;
+    const prevTarget = r.getRenderTarget();
+    try {
+      r.setRenderTarget(this.post.sceneRT);
+      warm = r.compileAsync(next.root, this.camera, this.scene);
+    } catch {
+      warm = null;
+    } finally {
+      r.setRenderTarget(prevTarget);
+    }
+    if (warm) warm.then(swap, swap);
+    else swap();
+  }
+
+  private swapIn(next: SceneBuild, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
+    const old = this.build;
+    if (old) {
+      this.scene.remove(old.root);
+      this.retired.push(old);
+    }
+    // Uploaded files the new plan no longer uses go only now: the old yard showed them until this swap.
+    this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
+    // The top of everything built (mature plant sizes, structures, the neighborhood), for the near plane.
+    try {
+      const box = new THREE.Box3().setFromObject(next.root);
+      this.yardTop = box.isEmpty() ? 0 : box.max.y;
+    } catch {
+      this.yardTop = 20;
+    }
+    this.build = next;
+    this.builtPlan = copy;
+    this.focusSurfaces = next.surfaces.filter((o) => !o.userData?.plantId);
     this.shadowDirty = true;
-    this.scene.add(this.build.root);
-    this.build.setYears(this.state.years);
-    this.views = generateViews(plan, this.build.gm.height);
+    this.scene.add(next.root);
+    this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
-    if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
+    if (this.measure.visible) this.measure.rebuild(plan, next, this.state.years);
     this.updateSky(true);
     this.assignNightLights();
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
-    for (const id of this.build.missingAssets) this.onNeedAsset(id);
+    this.invalidate();
+    for (const id of next.missingAssets) this.onNeedAsset(id);
+    const waiting = this.whenBuilt;
+    this.whenBuilt = [];
+    for (const f of waiting) f();
+  }
+
+  /** Resolves once the newest plan's yard is on screen. */
+  private built(): Promise<void> {
+    if (!this.pending) return Promise.resolve();
+    return new Promise((res) => this.whenBuilt.push(res));
   }
 
   /**
@@ -315,7 +527,9 @@ export class Studio {
   setYears(y: number) {
     this.state.years = y;
     this.build?.setYears(y);
+    this.pending?.setYears(y);
     this.shadowDirty = true;
+    this.invalidate();
     if (this.plan && this.build && this.measure.visible) this.measure.rebuild(this.plan, this.build, y);
   }
 
@@ -338,16 +552,17 @@ export class Studio {
   setWind(w: number) {
     this.state.wind = w;
     GLOBAL.uWind.value = w;
-    this.shadowDirty = true;
+    this.invalidate();
   }
 
   setMotion(on: boolean) {
     this.state.motion = on;
-    this.shadowDirty = true;
+    this.invalidate();
   }
 
   setLens(l: Partial<LensSettings>) {
     Object.assign(this.post.lens, l);
+    this.invalidate();
   }
 
   setQuality(q: Quality) {
@@ -363,29 +578,66 @@ export class Studio {
     return moodHour(this.state.mood, this.plan.site.latitude, dayOfYear(this.state.date));
   }
 
+  private pixelRatioFor(q: Quality) {
+    const dpr = window.devicePixelRatio || 1;
+    return q === 'draft' || q === 'light' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+  }
+
   private applyQuality() {
     const q = this.state.quality;
-    const dpr = window.devicePixelRatio || 1;
-    this.renderer.setPixelRatio(q === 'draft' || q === 'light' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2));
+    this.renderer.setPixelRatio(this.pixelRatioFor(q));
     const size = q === 'draft' || q === 'light' ? 1024 : q === 'balanced' ? 2048 : 4096;
     this.keyLight.shadow.mapSize.set(size, size);
     this.keyLight.shadow.map?.dispose();
     this.keyLight.shadow.map = null;
+    this.fitShadow();
     this.shadowDirty = true;
     this.mirror.enabled = q !== 'draft';
     this.mirror.scale = q === 'max' ? 1 : q === 'light' ? 0.25 : 0.5;
     this.post.setQuality(q);
+    this.size.w = 0;
     this.resize();
   }
 
+  /**
+   * The container changed size. A single change is applied at once and drawn before the browser paints, so no
+   * blank frame shows. During a continuous resize (a dragged split, a panel animating, full screen opening) the
+   * picture is stretched to fit and the buffers are remade once it settles. A hidden container (size 0) keeps
+   * everything as it was.
+   */
+  private onResize() {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (w < 2 || h < 2) return;
+    if (w === this.size.w && h === this.size.h && this.renderer.getPixelRatio() === this.size.pr) return;
+    const now = performance.now();
+    const burst = now - this.lastResize < RESIZE_SETTLE_MS;
+    this.lastResize = now;
+    clearTimeout(this.resizeTimer);
+    if (burst && this.size.w) {
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+      this.draw(0);
+      this.resizeTimer = window.setTimeout(() => this.resize(), RESIZE_SETTLE_MS);
+      return;
+    }
+    this.resize();
+  }
+
+  /** Make the drawing buffers for the container's size, and draw a frame now. */
   private resize() {
-    const w = Math.max(1, this.container.clientWidth), h = Math.max(1, this.container.clientHeight);
-    this.renderer.setSize(w, h, false);
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (w < 2 || h < 2) return;
     const pr = this.renderer.getPixelRatio();
-    this.post.setSize(Math.round(w * pr), Math.round(h * pr));
-    this.mirror.setSize(w * pr, h * pr);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (w !== this.size.w || h !== this.size.h || pr !== this.size.pr) {
+      this.size = { w, h, pr };
+      this.renderer.setSize(w, h, false);
+      this.post.setSize(Math.round(w * pr), Math.round(h * pr));
+      this.mirror.setSize(w * pr, h * pr);
+    }
+    // Setting the size cleared the canvas; fill it before the browser shows it.
+    this.draw(0);
   }
 
   /* -------------------------------------------------------------- */
@@ -413,7 +665,9 @@ export class Studio {
     this.post.lens.bloom = s.night > 0.3 ? 0.7 : s.sunElevation < 10 ? 0.45 : 0.3;
     this.fitShadow();
     this.shadowDirty = true;
-    if (regenEnv) this.regenEnv();
+    // The lighting environment depends only on the sky, so a new yard under the same sky keeps it.
+    const key = `${site.latitude}|${site.northAngleDeg}|${dayOfYear(this.state.date)}|${this.currentHour()}`;
+    if (regenEnv && key !== this.envKey) this.regenEnv(key);
     // Night accents.
     if (this.build) {
       const n = s.night > 0 ? Math.min(1, 0.25 + s.night) : s.sunElevation < 2 ? 0.25 : 0;
@@ -421,9 +675,11 @@ export class Studio {
       setFlames(this.build.features, s.sunElevation < 4 ? Math.min(1, 0.4 + s.night) : 0);
       this.pointLights.forEach((p) => (p.intensity = (p.userData.base ?? 0) * n));
     }
+    this.invalidate();
   }
 
-  private regenEnv() {
+  private regenEnv(key: string) {
+    this.envKey = key;
     this.envRT?.dispose();
     this.envSky.mesh.position.set(0, 0, 0);
     this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
@@ -439,8 +695,22 @@ export class Studio {
     const dir = this.skyNow.keyDir.clone();
     if (dir.y < 0.08) dir.y = 0.08;
     dir.normalize();
-    this.keyLight.position.set(cx + dir.x * 80, dir.y * 80, cz + dir.z * 80);
-    this.keyLight.target.position.set(cx, 0, cz);
+    // Snap the shadow camera's center to whole shadow texels across the sun's view, so the shadow map's grid
+    // stays put in the world (edges never shimmer as the framing is redone).
+    const sh = this.keyLight.shadow;
+    const texel = (2 * R) / sh.mapSize.x;
+    const rot = new THREE.Matrix4().lookAt(dir, new THREE.Vector3(), new THREE.Vector3(0, 1, 0));
+    const inv = rot.clone().transpose();
+    const c = new THREE.Vector3(cx, 0, cz).applyMatrix4(inv);
+    c.x = Math.round(c.x / texel) * texel;
+    c.y = Math.round(c.y / texel) * texel;
+    c.applyMatrix4(rot);
+    this.keyLight.position.copy(c).addScaledVector(dir, 80);
+    this.keyLight.target.position.copy(c);
+    // Normal offset of about half a texel keeps lit surfaces free of acne at every map size (Light's coarse map
+    // too) and at low sun, without shadows floating off their casters.
+    sh.normalBias = texel * 0.6;
+    sh.radius = sh.mapSize.x <= 1024 ? 1.25 : 1.75;
     const cam = this.keyLight.shadow.camera;
     cam.left = -R;
     cam.right = R;
@@ -455,8 +725,13 @@ export class Studio {
     const lights = this.build?.nightLights ?? [];
     this.pointLights.forEach((p, i) => {
       const l = lights[i];
-      p.visible = !!l;
-      if (!l) return;
+      // Unused lights stay in the scene, dark (see the constructor).
+      if (!l) {
+        p.userData.base = 0;
+        p.userData.flicker = false;
+        p.intensity = 0;
+        return;
+      }
       p.position.copy(l.position);
       p.color.set(l.color);
       p.distance = l.distance;
@@ -478,6 +753,8 @@ export class Studio {
     this.controls.update();
     this.focusTarget = v.eye.distanceTo(v.target);
     this.post.focus = this.focusTarget;
+    this.focusInv = 1 / Math.max(0.3, this.focusTarget);
+    this.invalidate();
   }
 
   /* First person ------------------------------------------------- */
@@ -532,6 +809,7 @@ export class Studio {
     this.measure.setMode(mode);
     if (mode !== 'off' && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
     this.onMeasureChanged(mode);
+    this.invalidate();
   }
 
   /** On shows the totals view. */
@@ -558,7 +836,8 @@ export class Studio {
     if (!v) return;
     this.viewIndex = this.views.indexOf(v);
     this.manualFocus = null;
-    this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: performance.now(), dur: 1400 };
+    this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: -1, dur: 1400 };
+    this.invalidate();
   }
 
   get pointer() {
@@ -612,9 +891,14 @@ export class Studio {
 
   /** The surface at the center of the view, at most about eight times a second; reports it when it changes. */
   private updatePointer() {
-    if (this.pointLocked) return;
+    if (this.pointLocked) {
+      this.pointDue = false;
+      return;
+    }
     const now = performance.now();
     if (now - this.pointT < 120) return;
+    // This report sees the view as it is now; drawing may pause after it (see tick).
+    this.pointDue = this.camMoved;
     this.pointT = now;
     const hit = this.pointAtCenter();
     const key = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '';
@@ -631,7 +915,7 @@ export class Studio {
 
   private pointAtCenter(): PointHit | null {
     if (!this.build) return null;
-    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    this.raycaster.setFromCamera(this.v2.set(0, 0), this.camera);
     const hard = this.build.root.getObjectByName('hardscape');
     const hit = this.raycaster.intersectObjects(hard ? [...this.build.surfaces, hard] : this.build.surfaces, true)[0];
     let part = '', catalogId = '';
@@ -666,6 +950,7 @@ export class Studio {
     this.raycaster.setFromCamera(ndc, this.camera);
     const hit = this.raycaster.intersectObjects(this.build.surfaces, true)[0];
     if (hit) this.manualFocus = hit.point.clone();
+    this.invalidate();
   }
 
   private autofocus() {
@@ -674,9 +959,11 @@ export class Studio {
       this.focusTarget = this.camera.position.distanceTo(this.manualFocus);
       return;
     }
-    this.raycaster.setFromCamera(new THREE.Vector2(0, -0.1), this.camera);
+    this.raycaster.setFromCamera(this.v2.set(0, -0.1), this.camera);
     this.raycaster.far = 300;
-    const hit = this.raycaster.intersectObjects(this.build.surfaces, true)[0];
+    // Solid surfaces only: the plants' invisible spheres flip the focus between a shrub and the ground behind it.
+    const hit = this.raycaster.intersectObjects(this.focusSurfaces, true)[0];
+    this.raycaster.far = Infinity;
     this.focusTarget = hit ? hit.distance : this.camera.position.distanceTo(this.controls.target);
   }
 
@@ -699,20 +986,52 @@ export class Studio {
   /* -------------------------------------------------------------- */
   /* Frame loop                                                        */
 
-  private loop() {
+  private loop(ts: number) {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
-    if (document.hidden) return;
-    this.renderFrame();
+    if (document.hidden || this.contextLost) {
+      this.lastTs = -1;
+      return;
+    }
+    // Steps follow the display's own frame times (not when this code happened to run), never larger than MAX_DT.
+    const dt = this.lastTs < 0 ? 1 / 60 : Math.min(MAX_DT, Math.max(0, (ts - this.lastTs) / 1000));
+    this.lastTs = ts;
+    this.tick(dt, ts);
   }
 
-  private renderFrame(dtOverride?: number) {
-    const dt = dtOverride ?? Math.min(0.05, this.clock.getDelta());
-    if (this.state.motion) GLOBAL.uTime.value += dt;
-    this.sky.uniforms.uTime.value = GLOBAL.uTime.value;
+  /** Anything on screen that moves by itself (leaves in the wind, water, flames) while Motion is on. */
+  private animating(): boolean {
+    if (!this.state.motion || !this.build) return false;
+    if (this.state.wind > 0.001 && (this.build.plantCount > 0 || this.build.root.getObjectByName('turf'))) return true;
+    if (this.build.water.surfaces.length || this.build.fallMats.length) return true;
+    return this.pointLights.some((p) => p.userData.flicker && p.intensity > 0) || this.build.features.flames.some((f) => f.visible);
+  }
 
+  /**
+   * One display frame: move the camera, then draw only if something on screen can have changed. While nothing
+   * moves (Motion off or nothing animated, camera at rest) drawing pauses to save power; the loop keeps running
+   * so the next input is drawn in the very next frame.
+   */
+  private tick(dt: number, now: number) {
+    const animate = this.animating();
+    if (this.state.motion) GLOBAL.uTime.value += dt;
+    this.moveCamera(dt, now);
+    const focusing = Math.abs(1 / Math.max(0.3, this.focusTarget) - this.focusInv) > this.focusInv * 0.002;
+    if (this.camMoved && this.pointerOn) this.pointDue = true;
+    if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending || (this.pointerOn && this.pointDue)) this.stillFrames = 0;
+    else this.stillFrames++;
+    if (this.stillFrames > SETTLE_FRAMES) {
+      this.frameStats(dt, false);
+      return;
+    }
+    this.draw(dt);
+    this.frameStats(dt, true);
+  }
+
+  private moveCamera(dt: number, now: number) {
     if (this.tween) {
-      const k = Math.min(1, (performance.now() - this.tween.t0) / this.tween.dur);
+      if (this.tween.t0 < 0) this.tween.t0 = now;
+      const k = Math.min(1, (now - this.tween.t0) / this.tween.dur);
       const e = ease(k);
       this.camera.position.lerpVectors(this.tween.from.e, this.tween.to.eye, e);
       this.controls.target.lerpVectors(this.tween.from.t, this.tween.to.target, e);
@@ -721,49 +1040,125 @@ export class Studio {
       if (k >= 1) this.tween = null;
     }
     this.nav.update(dt);
-    if (this.navMode === 'orbit') this.controls.update();
-    else this.camera.lookAt(this.controls.target);
+    if (this.navMode === 'orbit') {
+      // The same glide per second at any frame rate (60, 120 Hz, or throttled to 30).
+      this.controls.dampingFactor = 1 - Math.pow(1 - 0.08, dt * 60);
+      if (dt > 0) this.controls.update(dt);
+    } else this.camera.lookAt(this.controls.target);
     this.keepAboveGround();
+    this.fitClipPlanes(this.camera, this.controls.target);
+    this.camera.updateMatrixWorld();
+    this.camMoved = !this.camera.matrixWorld.equals(this.lastView) || !this.camera.projectionMatrix.equals(this.lastProj);
+    if (this.camMoved) {
+      this.lastView.copy(this.camera.matrixWorld);
+      this.lastProj.copy(this.camera.projectionMatrix);
+    }
+  }
+
+  /**
+   * Near and far planes that follow the camera: the depth buffer's precision goes where the eye is, so paving
+   * layers millimeters apart do not shimmer into each other from the overview, and nothing near is clipped up close.
+   */
+  private fitClipPlanes(cam: THREE.PerspectiveCamera, target: THREE.Vector3) {
+    const g = this.build ? Math.max(0, this.build.gm.height([cam.position.x, cam.position.z])) : 0;
+    const h = Math.max(0, cam.position.y - g);
+    const d = cam.position.distanceTo(target);
+    // Flying above the yard, the nearest thing can be a tree top or roof well above the ground under the
+    // camera: below the tallest thing allow no more than 6 m of clear space, above it the height over it.
+    const clear = Math.max(cam.position.y - this.yardTop, 6);
+    const near = THREE.MathUtils.clamp(Math.min(h, d, clear) * 0.08, 0.05, 2);
+    const far = 900;
+    if (Math.abs(near - cam.near) > cam.near * 0.02 || cam.far !== far) {
+      cam.near = near;
+      cam.far = far;
+      cam.updateProjectionMatrix();
+    }
+  }
+
+  /**
+   * Lawn blades fade out only where they would be drawn about a third of a pixel wide or less (see foliage.ts):
+   * there they are pure sparkle, and the lawn's ground texture carries the color.
+   */
+  private fitTurfFade(cam: THREE.PerspectiveCamera, viewPx: number) {
+    const pxPerM = viewPx / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
+    const end = THREE.MathUtils.clamp((0.013 * pxPerM) / 0.35, 18, 90);
+    GLOBAL.uTurfFade.value.set(end * 0.6, end);
+  }
+
+  /** Draw a frame of the live view. */
+  private draw(dt: number) {
+    if (this.contextLost) return;
+    this.dirty = false;
+    this.sky.uniforms.uTime.value = GLOBAL.uTime.value;
     this.sky.mesh.position.copy(this.camera.position);
 
-    if (this.frame++ % 4 === 0) this.autofocus();
-    this.post.focus += (this.focusTarget - this.post.focus) * 0.15;
+    if (this.camMoved && this.post.lens.dof && this.frame % 4 === 0) this.autofocus();
+    this.frame++;
+    // Ease the focus in diopters, at the same rate at any frame rate.
+    const goal = 1 / Math.max(0.3, this.focusTarget);
+    this.focusInv += (goal - this.focusInv) * (1 - Math.exp(-dt * 5));
+    this.post.focus = 1 / this.focusInv;
 
     // Fire flicker.
     const t = GLOBAL.uTime.value;
     for (const p of this.pointLights) {
-      if (p.visible && p.userData.flicker && p.intensity > 0) {
+      if (p.userData.flicker && p.userData.base > 0 && p.intensity > 0) {
         const n = this.skyNow ? Math.min(1, 0.25 + this.skyNow.night) : 1;
         p.intensity = (p.userData.base ?? 0) * n * (0.82 + 0.18 * Math.sin(t * 13.0) * Math.sin(t * 7.3 + 1.2));
       }
     }
 
-    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller);
-    // an exported still always gets the detail its own size needs.
-    const lodScale = this.stillScale ?? (this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1);
-    // Plants are culled against this frame's view: the camera has just moved (controls, tween,
-    // first person), and its world matrix is otherwise brought up to date only when it is drawn.
+    // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
+    const lodScale = this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1;
     this.camera.updateMatrixWorld();
-    this.build?.plants.update?.(this.camera, this.container.clientHeight * lodScale);
-    // Shadows are redrawn when the yard, the sun or the plants changed, and while the wind
-    // moves the leaves at a steady rate rather than every frame.
-    const swaying = this.state.motion && this.state.wind > 0.001;
-    if (this.shadowDirty || (swaying && Math.abs(t - this.shadowTime) >= SHADOW_STEP)) this.renderShadows(t);
-    if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
-      this.camera.updateMatrixWorld();
-      this.mirror.render(this.renderer, this.scene, this.camera, this.build.water.surfaces);
-    }
+    this.drawScene(this.camera, this.container.clientHeight * lodScale, this.size.h * this.size.pr, this.post, null, t);
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();
-    this.post.render(this.scene, this.camera, t);
-
-    const fps = dt > 0 ? 1 / dt : 60;
-    this.fpsAcc += fps;
-    if (++this.fpsN >= 30) {
-      this.onFrameStats(this.fpsAcc / this.fpsN);
-      this.fpsAcc = 0;
-      this.fpsN = 0;
+    // Yards replaced by a new one are released now that the new one has been drawn (shadow pass included).
+    if (this.retired.length) {
+      for (const b of this.retired) b.dispose();
+      this.retired.length = 0;
     }
+  }
+
+  /** The yard as `cam` sees it, through `post`, into `target` (null: the canvas). Shared by the view and stills. */
+  private drawScene(cam: THREE.PerspectiveCamera, lodPx: number, devicePx: number, post: PostPipeline, target: THREE.WebGLRenderTarget | null, t: number) {
+    // Plants are culled against this view: the camera has just moved, and its world matrix is otherwise
+    // brought up to date only when it is drawn.
+    this.build?.plants.update?.(cam, lodPx);
+    this.fitTurfFade(cam, devicePx);
+    // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
+    // plants' size changed, never on a timer while leaves sway.
+    if (this.shadowDirty) this.renderShadows();
+    if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
+      this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces);
+    }
+    post.render(this.scene, cam, t, target);
+  }
+
+  private frameStats(dt: number, drawn: boolean) {
+    const fps = dt > 0 ? 1 / dt : 60;
+    if (drawn) {
+      this.fpsAcc += fps;
+      if (++this.fpsN >= 30) {
+        this.onFrameStats(this.fpsAcc / this.fpsN);
+        this.fpsAcc = 0;
+        this.fpsN = 0;
+      }
+    }
+    if (!this.fpsEl) return;
+    const now = performance.now();
+    this.fpsWin.push(dt * 1000);
+    if (drawn) this.drawnInWin++;
+    if (now - this.fpsShownAt < 500) return;
+    const n = this.fpsWin.length;
+    const total = this.fpsWin.reduce((a, b) => a + b, 0);
+    const worst = this.fpsWin.reduce((a, b) => Math.max(a, b), 0);
+    const avg = total > 0 ? (n * 1000) / total : 0;
+    this.fpsEl.textContent = this.drawnInWin === 0 ? `${avg.toFixed(0)} fps  idle (nothing moving)` : `${avg.toFixed(0)} fps  worst ${worst.toFixed(1)} ms`;
+    this.fpsWin = [];
+    this.drawnInWin = 0;
+    this.fpsShownAt = now;
   }
 
   /**
@@ -771,7 +1166,7 @@ export class Studio {
    * shadow layer and looks away from the yard, so nothing else is drawn; that lets plants cast
    * shadows from lower-detail stand-ins the main view never draws.
    */
-  private renderShadows(t: number) {
+  private renderShadows() {
     const r = this.renderer;
     const prev = r.getRenderTarget();
     r.shadowMap.needsUpdate = true;
@@ -780,7 +1175,6 @@ export class Studio {
     r.setRenderTarget(prev);
     r.shadowMap.needsUpdate = false;
     this.shadowDirty = false;
-    this.shadowTime = t;
   }
 
   /** Stop the frame loop (tests and background tabs). */
@@ -790,61 +1184,121 @@ export class Studio {
   }
 
   resume() {
-    if (!this.raf && !this.disposed) this.raf = requestAnimationFrame(this.loop);
+    if (!this.raf && !this.disposed) {
+      this.lastTs = -1;
+      this.invalidate();
+      this.raf = requestAnimationFrame(this.loop);
+    }
   }
 
   /** Render one frame now and return it as a PNG data URL. */
   snapshot(dt = 1 / 60): string {
-    this.renderFrame(dt);
+    this.camera.updateMatrixWorld();
+    this.draw(dt);
     return this.renderer.domElement.toDataURL('image/png');
   }
 
-  /** Render one high-resolution still with the full camera look. */
-  async exportStill(width: number, type = 'image/png', quality?: number): Promise<Blob> {
-    const el = this.renderer.domElement;
-    const w0 = this.container.clientWidth, h0 = this.container.clientHeight;
-    const aspect = w0 / h0;
-    const W = Math.round(width), H = Math.round(width / aspect);
-    const pr0 = this.renderer.getPixelRatio();
-    const q0 = this.post.quality;
-    this.renderer.setPixelRatio(1);
-    this.renderer.setSize(W, H, false);
-    this.post.setQuality('max');
-    this.post.setSize(W, H);
-    this.mirror.setSize(W, H);
-    this.shadowDirty = true;
-    this.stillScale = H / Math.max(1, h0);
-    try {
-      this.renderFrame(0);
-    } finally {
-      this.stillScale = null;
+  /**
+   * Render one high-resolution still with the full camera look, from the current view or from `pose`. It is drawn
+   * off screen with a camera of its own, so the live view never moves, changes size or blinks while it is made.
+   */
+  async exportStill(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }): Promise<Blob> {
+    await this.built();
+    if (this.contextLost) throw new Error('The 3D view is restarting; try again in a moment.');
+    const w0 = Math.max(1, this.container.clientWidth), h0 = Math.max(1, this.container.clientHeight);
+    const W = Math.max(16, Math.round(width)), H = Math.max(16, Math.round(width / (w0 / h0)));
+    const cam = this.camera.clone();
+    const target = this.controls.target.clone();
+    let focus = this.post.focus;
+    if (pose) {
+      cam.position.copy(pose.eye);
+      cam.fov = pose.fov;
+      cam.up.set(0, 1, 0);
+      cam.lookAt(pose.target);
+      target.copy(pose.target);
+      focus = pose.eye.distanceTo(pose.target);
     }
-    const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), type, quality));
-    this.renderer.setPixelRatio(pr0);
-    this.post.setQuality(q0);
-    this.resize();
-    return blob;
+    cam.aspect = W / H;
+    cam.updateProjectionMatrix();
+    this.fitClipPlanes(cam, target);
+    cam.updateMatrixWorld();
+
+    const post = (this.stillPost ??= new PostPipeline(this.renderer));
+    post.setQuality('max');
+    post.setSize(W, H);
+    Object.assign(post.lens, this.post.lens);
+    post.exposure = this.post.exposure;
+    post.focus = focus;
+    const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: false });
+    const pixels = new Uint8Array(W * H * 4);
+    const pr = this.renderer.getPixelRatio();
+    try {
+      this.mirror.setSize(W, H);
+      this.sky.mesh.position.copy(cam.position);
+      // An exported still always gets the plant detail its own size needs.
+      this.drawScene(cam, H, H, post, rt, GLOBAL.uTime.value);
+      if (typeof this.renderer.readRenderTargetPixelsAsync === 'function') {
+        // Start the read now; the live view's buffers are restored before waiting on it.
+        const read = this.renderer.readRenderTargetPixelsAsync(rt, 0, 0, W, H, pixels);
+        this.restoreLive(pr);
+        await read;
+      } else {
+        this.renderer.readRenderTargetPixels(rt, 0, 0, W, H, pixels);
+        this.restoreLive(pr);
+      }
+    } catch (e) {
+      this.restoreLive(pr);
+      throw e;
+    } finally {
+      rt.dispose();
+      // Keep the still pipeline's shaders, not its large buffers.
+      post.setSize(1, 1);
+    }
+    // Rows come bottom-up from WebGL.
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('The image could not be created.');
+    const img = ctx.createImageData(W, H);
+    const row = W * 4;
+    for (let y = 0; y < H; y++) img.data.set(pixels.subarray((H - 1 - y) * row, (H - y) * row), y * row);
+    ctx.putImageData(img, 0, 0);
+    return new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), type, quality));
+  }
+
+  /** After a still: the live view's mirror size and sky, and a fresh live frame. */
+  private restoreLive(pr: number) {
+    this.mirror.setSize(this.size.w * pr || 512, this.size.h * pr || 512);
+    this.sky.mesh.position.copy(this.camera.position);
+    this.invalidate();
   }
 
   /**
-   * A cover picture of the yard from its first generated view (the Overview), for a second screen, as a JPEG. The
-   * camera goes straight back where it was, so whoever is looking around does not notice.
+   * A cover picture of the yard from its first generated view (the Overview), for a second screen, as a JPEG. It is
+   * drawn off screen from that view, so whoever is looking around does not notice.
    */
   async coverImage(width = 1600): Promise<Blob> {
-    const pose = this.savePose();
-    if (this.views.length) this.jumpTo(this.views[0]);
-    try {
-      return await this.exportStill(width, 'image/jpeg', 0.88);
-    } finally {
-      this.restorePose(pose);
-    }
+    await this.built();
+    const v = this.views[0];
+    return this.exportStill(width, 'image/jpeg', 0.88, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined);
   }
 
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.resizeTimer);
     this.resizeObs.disconnect();
+    this.dprQuery?.removeEventListener('change', this.onDprChange);
+    window.removeEventListener('keydown', this.onKey);
+    this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost);
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this.onContextRestored);
+    this.fpsEl?.remove();
+    this.lossNote?.remove();
     this.build?.dispose();
+    this.pending?.dispose();
+    for (const b of this.retired) b.dispose();
+    this.stillPost?.dispose();
     this.assets.dispose();
     this.post.dispose();
     this.mirror.dispose();
