@@ -338,8 +338,28 @@ function gridRaycast(mesh: THREE.Mesh, area: Bounds, nx: number, ny: number) {
   };
 }
 
+/**
+ * Build-stage controls for the ground, shared with the shader: `uSoil` 1 paints bare soil everywhere (the plan's
+ * surfaces are not in yet), and `uCut` opens the ground over the dug-out areas. `uCut` is an encoded distance map
+ * (0.5 on the outline, below it inside): R holds the excavations alone, G the excavations and trenches. `uCutCh`
+ * picks the channel ((1, 0), (0, 1), or (0, 0) for none); `uCutBox` is the map's place in plan space.
+ */
+export interface GroundStageUniforms {
+  uSoil: { value: number };
+  uCut: { value: THREE.Texture | null };
+  uCutBox: { value: THREE.Vector4 };
+  uCutCh: { value: THREE.Vector2 };
+}
+
+const stageUniforms = (): GroundStageUniforms => ({
+  uSoil: { value: 0 },
+  uCut: { value: null },
+  uCutBox: { value: new THREE.Vector4(0, 0, 1, 1) },
+  uCutCh: { value: new THREE.Vector2(0, 0) },
+});
+
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
-function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout): THREE.MeshPhysicalMaterial {
+function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout, stage: GroundStageUniforms): THREE.MeshPhysicalMaterial {
   const soil = soilTextures();
   const sets: PBRSet[] = [soil, ...layerIds.map((id) => materialTextures(materialById.get(id)!))];
   const roughK = [0.97, ...layerIds.map((id) => {
@@ -360,6 +380,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
       s.uniforms[`uT${i}`] = { value: 1 / l.tileMeters };
     });
     s.uniforms.uMacro = { value: soil.map };
+    Object.assign(s.uniforms, stage);
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -377,12 +398,18 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
         `#include <common>
          varying vec3 vGW;
          uniform sampler2D uSplatA; uniform sampler2D uSplatB; uniform vec4 uArea; uniform sampler2D uMacro;
+         uniform float uSoil; uniform sampler2D uCut; uniform vec4 uCutBox; uniform vec2 uCutCh;
          ${decl}`,
       )
       .replace(
         '#include <map_fragment>',
-        `vec2 suv = (vGW.xz - uArea.xy) / uArea.zw;
-         float inside = step(0.0, suv.x) * step(0.0, suv.y) * step(suv.x, 1.0) * step(suv.y, 1.0);
+        `if (uCutCh.x + uCutCh.y > 0.5) {
+           vec2 cuv = (vGW.xz - uCutBox.xy) / uCutBox.zw;
+           if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0 && dot(texture2D(uCut, cuv).rg, uCutCh) < 0.5) discard;
+         }
+         vec2 suv = (vGW.xz - uArea.xy) / uArea.zw;
+         float siteIn = step(0.0, suv.x) * step(0.0, suv.y) * step(suv.x, 1.0) * step(suv.y, 1.0);
+         float inside = siteIn * (1.0 - uSoil);
          vec4 a = texture2D(uSplatA, suv) * inside;
          vec4 b = texture2D(uSplatB, suv) * inside;
          ${weights}
@@ -391,6 +418,8 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
          vec3 alb = ${albedo};
          float macro = texture2D(uMacro, wp * 0.023).g;
          alb *= mix(1.0, 0.86 + macro * 0.3, g0);
+         // Build stages: graded bare dirt, browner than the dry-grass soil around the yard.
+         alb *= mix(vec3(1.0), vec3(1.12, 0.94, 0.76), uSoil * siteIn);
          diffuseColor.rgb *= alb;`,
       )
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = roughness * (${rough});`)
@@ -403,7 +432,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     // The ground is opened along each pool's outline, so the pool's tiled shell shows.
     pools.patchGround(s);
   };
-  mat.customProgramCacheKey = () => `ground-splat-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}`;
+  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}`;
   return mat;
 }
 
@@ -411,7 +440,31 @@ export interface GroundBuild {
   object: THREE.Group;
   /** Surfaces for autofocus and camera collision. */
   surfaces: THREE.Mesh[];
+  /** Height of the site ground mesh itself at a point (its triangles, not the terrain function), so pits meet it exactly. */
+  surface(p: Vec2): number;
+  /** Build-stage look: bare soil, and the ground opened over the pits (see GroundStageUniforms). */
+  stage: GroundStageUniforms;
   dispose(): void;
+}
+
+/** Height on a grid mesh from gridGeometry, read from its own triangles. */
+function gridSampler(g: THREE.BufferGeometry, area: Bounds): (p: Vec2) => number {
+  const { nx, ny } = g.userData.grid as { nx: number; ny: number };
+  const pos = (g.getAttribute('position') as THREE.BufferAttribute).array;
+  const sx = (area.maxX - area.minX) / nx, sz = (area.maxY - area.minY) / ny;
+  const h = (i: number, j: number) => pos[(j * (nx + 1) + i) * 3 + 1];
+  return (p) => {
+    const fx = (p[0] - area.minX) / sx, fz = (p[1] - area.minY) / sz;
+    const i = Math.max(0, Math.min(nx - 1, Math.floor(fx))), j = Math.max(0, Math.min(ny - 1, Math.floor(fz)));
+    const u = Math.max(0, Math.min(1, fx - i)), v = Math.max(0, Math.min(1, fz - j));
+    // Cells are split along the b-c diagonal: triangles (a, c, b) and (b, c, d).
+    if (u + v <= 1) {
+      const a = h(i, j);
+      return a + (h(i + 1, j) - a) * u + (h(i, j + 1) - a) * v;
+    }
+    const d = h(i + 1, j + 1);
+    return d + (h(i, j + 1) - d) * (1 - u) + (h(i + 1, j) - d) * (1 - v);
+  };
 }
 
 export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, pools: PoolLayout): GroundBuild {
@@ -420,7 +473,8 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, p
   const area = gm.area;
   const layers = groundLayers(plan);
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
-  const mat = splatMaterial(layers, area, splats, pools);
+  const stage = stageUniforms();
+  const mat = splatMaterial(layers, area, splats, pools, stage);
   const step = quality === 'draft' ? 0.3 : 0.18;
   const site = new THREE.Mesh(gridGeometry(area, step, gm.grade), mat);
   site.receiveShadow = true;
@@ -441,6 +495,8 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, p
   return {
     object: group,
     surfaces: [site],
+    surface: gridSampler(site.geometry, area),
+    stage,
     dispose() {
       site.geometry.dispose();
       ring.geometry.dispose();

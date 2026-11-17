@@ -29,6 +29,12 @@ finished-work photos in `reference/green-lion-style/`.
   `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and
   keeps a generic builder per plant form as the fallback for a new catalog
   plant that has no file yet.
+  `construction.ts` builds the build stages (demo, excavate, trench,
+  backfill, base, bedding) from the plan's paving, walls and
+  `plan.utilities`: pits cut from a distance field (marching squares; the
+  same field opens the ground mesh), pipes, layers, marking paint,
+  equipment and the cutaway face. Depth rules and names live in
+  `siteplan/utilities.ts`.
 - `src/app/` — the UI: page markup and styles (`page.html`), app logic
   (`main.ts`), the 2D plan editor (`planeditor.ts`), the plan reader prompt
   (`reader.ts`) and PDF import (`pdf.ts`).

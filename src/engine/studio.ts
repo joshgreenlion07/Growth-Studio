@@ -12,6 +12,8 @@ import { PostPipeline, type LensSettings, type Quality } from './post';
 import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from './sky';
 import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
+import { StageLabels } from './stagelabels';
+import type { BuildStage, StageLabel } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
 import { materialById } from '../siteplan/catalog';
 
@@ -169,6 +171,13 @@ export class Studio {
   private fpsWin: number[] = [];
   private fpsShownAt = 0;
   private drawnInWin = 0;
+  /** The build stage shown (see builder/construction.ts); 'finished' is the finished yard. */
+  private stage: BuildStage = 'finished';
+  private stageLabels!: StageLabels;
+  /** Cut away: a vertical plane that clips the near side of the yard, and the slice face drawn on it. */
+  private cutaway: { plane: THREE.Plane; face: THREE.Group | null } | null = null;
+  private clipped = new Set<THREE.Material>();
+  onCutawayChanged: (on: boolean) => void = () => {};
   /** The shadow map is redrawn only when something that casts or lights it changed. */
   private shadowDirty = true;
   /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
@@ -272,6 +281,7 @@ export class Studio {
       togglePointLock: () => this.setPointLock(!this.pointLocked),
     });
     this.measure = new Measurements(container);
+    this.stageLabels = new StageLabels(container);
     this.scene.add(this.measure.group);
 
     // Tap to focus.
@@ -421,6 +431,7 @@ export class Studio {
         if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
       });
       this.shadowDirty = true;
+      this.refreshCutaway();
       if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
       this.updateSky(false);
       if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
@@ -442,6 +453,7 @@ export class Studio {
       if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
     });
     next.setYears(this.state.years);
+    next.setStage(this.stage);
     this.pending = next;
     // Compile the new yard's shaders while the old one stays on screen (in the background where the browser can),
     // then swap. The old yard is released only after that, so every shader both share is kept, not rebuilt.
@@ -468,6 +480,7 @@ export class Studio {
   }
 
   private swapIn(next: SceneBuild, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
+    this.dropCutawayFace();
     const old = this.build;
     if (old) {
       this.scene.remove(old.root);
@@ -487,6 +500,8 @@ export class Studio {
     this.focusSurfaces = next.surfaces.filter((o) => !o.userData?.plantId);
     this.shadowDirty = true;
     this.scene.add(next.root);
+    this.stageLabels.set(next.construction.labels, this.stage);
+    this.refreshCutaway();
     this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
     if (this.measure.visible) this.measure.rebuild(plan, next, this.state.years);
@@ -813,6 +828,105 @@ export class Studio {
   }
 
   /** On shows the totals view. */
+  /** Show a build stage: demo, excavation, open trenches with the pipes, backfill, base rock, bedding, or the finished yard. */
+  setStage(stage: BuildStage) {
+    if (stage === this.stage) return;
+    this.stage = stage;
+    this.pending?.setStage(stage);
+    this.invalidate();
+    if (!this.build) return;
+    this.build.setStage(stage);
+    // Plants built for the stage views join the shadow pass like everything else.
+    this.build.root.traverse((o) => {
+      if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+    });
+    this.shadowDirty = true;
+    this.stageLabels.set(this.build.construction.labels, stage);
+    this.refreshCutaway();
+  }
+
+  get cutawayOn(): boolean {
+    return !!this.cutaway;
+  }
+
+  /**
+   * Cut away the near side of the yard: a vertical plane through the point the camera looks at, square to the view,
+   * hides everything between it and the camera, and the slice face shows the ground there at the current stage
+   * (trenches, pipes, backfill, base, bedding, surface). The plane stays put while the camera moves; turning it on
+   * again aims it at the new view.
+   */
+  setCutaway(on: boolean) {
+    if (!on) {
+      if (!this.cutaway) return;
+      this.dropCutawayFace();
+      for (const m of this.clipped) {
+        m.clippingPlanes = null;
+        m.needsUpdate = true;
+      }
+      this.clipped.clear();
+      this.cutaway = null;
+      this.stageLabels.clip = null;
+      if (this.build) this.stageLabels.set(this.build.construction.labels, this.stage);
+      this.shadowDirty = true;
+      this.invalidate();
+      this.onCutawayChanged(false);
+      return;
+    }
+    const dir = new THREE.Vector3().subVectors(this.controls.target, this.camera.position);
+    dir.y = 0;
+    // Looking straight down: cut along the bottom of the screen instead.
+    if (dir.lengthSq() < 1e-6) dir.set(0, 1, 0).applyQuaternion(this.camera.quaternion).setY(0);
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+    dir.normalize();
+    const plane = new THREE.Plane(dir, -dir.dot(this.controls.target));
+    this.renderer.localClippingEnabled = true;
+    this.dropCutawayFace();
+    this.cutaway = { plane, face: null };
+    this.stageLabels.clip = plane;
+    this.refreshCutaway();
+    this.onCutawayChanged(true);
+  }
+
+  private dropCutawayFace() {
+    const face = this.cutaway?.face;
+    if (!face) return;
+    face.parent?.remove(face);
+    (face.userData.dispose as (() => void) | undefined)?.();
+    this.cutaway!.face = null;
+  }
+
+  /** Redraw the slice face for the current stage and clip every other material in the yard with the plane. */
+  private refreshCutaway() {
+    if (!this.cutaway || !this.build) return;
+    this.dropCutawayFace();
+    const planes = [this.cutaway.plane];
+    this.build.root.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m || o.userData.noClip) return;
+      for (const mat of Array.isArray(m) ? m : [m]) {
+        if (mat.clippingPlanes?.[0] === planes[0]) continue;
+        mat.clippingPlanes = planes;
+        mat.needsUpdate = true;
+        this.clipped.add(mat);
+      }
+    });
+    const face = this.build.construction.section(this.stage, this.cutaway.plane);
+    if (face) this.build.root.add(face);
+    this.cutaway.face = face;
+    this.stageLabels.set([...this.build.construction.labels, ...((face?.userData.labels as StageLabel[] | undefined) ?? [])], this.stage);
+    this.shadowDirty = true;
+    this.invalidate();
+  }
+
+  get buildStage(): BuildStage {
+    return this.stage;
+  }
+
+  /** What a stage shows in this plan, in a sentence or two. */
+  stageNote(stage: BuildStage): string {
+    return this.build?.construction.notes[stage] ?? '';
+  }
+
   setMeasurements(on: boolean) {
     this.setMeasureMode(on ? 'totals' : 'off');
   }
@@ -1113,6 +1227,7 @@ export class Studio {
     this.camera.updateMatrixWorld();
     this.drawScene(this.camera, this.container.clientHeight * lodScale, this.size.h * this.size.pr, this.post, null, t);
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
+    this.stageLabels.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();
     // Yards replaced by a new one are released now that the new one has been drawn (shadow pass included).
     if (this.retired.length) {
@@ -1307,6 +1422,7 @@ export class Studio {
     this.pmrem.dispose();
     this.controls.dispose();
     this.measure.dispose();
+    this.stageLabels.dispose();
     disposeMaterialCache();
     this.renderer.dispose();
     this.renderer.domElement.remove();

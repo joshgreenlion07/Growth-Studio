@@ -250,10 +250,55 @@ export function sampleWallCompare(): SitePlan {
   };
 }
 
+/** A small backyard with every kind of buried run, for the build stages. */
+export function sampleUtilities(): SitePlan {
+  const S = 'sample' as const;
+  const IN = 0.0254;
+  return {
+    schemaVersion: 1,
+    site: { name: 'Build stages: trenches and layers', boundary: [[0, 0], [14, 0], [14, 11], [0, 11]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0 },
+    structures: [{ id: 'house', source: S, kind: 'house', polygon: [[0.5, 0.4], [11, 0.4], [11, 3.5], [0.5, 3.5]], height: 3, roof: 'hip' }],
+    zones: [
+      { id: 'patio', source: S, kind: 'hardscape', catalogId: 'paver-ashlar-gray', polygon: [[1, 3.5], [7, 3.5], [7, 7], [1, 7]] },
+      { id: 'turf', source: S, kind: 'turf', catalogId: 'synthetic-turf', polygon: [[7.5, 4.6], [13.2, 4.6], [13.2, 10], [7.5, 10]] },
+      { id: 'bed', source: S, kind: 'bed', catalogId: 'black-mulch', polygon: [[0.5, 8.1], [7, 8.1], [7, 10.5], [0.5, 10.5]] },
+    ],
+    lines: [{ id: 'wall', source: S, kind: 'wall', catalogId: 'wall-gray-block', points: [[0.5, 7.9], [7, 7.9]], height: 0.6 }],
+    water: [],
+    plants: [],
+    features: [],
+    utilities: {
+      points: [
+        { id: 'panel', source: S, kind: 'panel', position: [9.7, 3.8], label: 'Main panel' },
+        { id: 'meter', source: S, kind: 'gas-meter', position: [10.5, 3.8] },
+        { id: 'stub', source: S, kind: 'gas-stub', position: [7.25, 7.75], label: 'BBQ gas' },
+        { id: 'gfci', source: S, kind: 'outlet', position: [7.55, 7.75], label: 'BBQ outlet' },
+        { id: 'bf', source: S, kind: 'backflow', position: [1.2, 3.9] },
+        { id: 'clock', source: S, kind: 'controller', position: [2.2, 3.85] },
+        { id: 'valves', source: S, kind: 'valves', position: [0.95, 7.55] },
+        { id: 'xfmr', source: S, kind: 'transformer', position: [12.6, 3.85] },
+      ],
+      lines: [
+        {
+          id: 'bbq-run', source: S, points: [[10.1, 3.8], [10.1, 7.75], [7.4, 7.75]], gap: 6 * IN,
+          runs: [
+            { kind: 'gas', label: '3/4 in PE gas pipe', od: 1.05 * IN, cover: 18 * IN, code: 'CPC 1210.1.1', tracer: true },
+            { kind: 'electrical', label: '3/4 in PVC conduit', od: 1.05 * IN, cover: 18 * IN, code: 'CEC Table 300.5' },
+          ],
+        },
+        { id: 'main', source: S, points: [[1.2, 3.9], [1.2, 7.3], [0.95, 7.55]], runs: [{ kind: 'irrigation', label: '1 in mainline', od: 1.315 * IN, cover: 12 * IN, code: 'CPC 609.1' }] },
+        { id: 'lateral', source: S, points: [[0.95, 7.55], [0.95, 9.2], [6.8, 9.2]], runs: [{ kind: 'irrigation', label: '3/4 in lateral', od: 1.05 * IN, cover: 6 * IN, code: 'Green Lion standard' }] },
+        { id: 'lights', source: S, points: [[12.6, 3.85], [13.5, 4.3], [13.5, 10.4], [7.6, 10.4]], runs: [{ kind: 'lighting', label: 'Low-voltage cable', od: 0.4 * IN, cover: 6 * IN, code: 'CEC Table 300.5' }] },
+      ],
+    },
+  };
+}
+
 export const SAMPLES = [
   { id: 'backyard', name: 'Modern backyard', make: sampleBackyard },
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
+  { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
 ];

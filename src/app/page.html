@@ -173,6 +173,14 @@ section.scene-pane.fs #nav-modes { display: flex; }
 section.scene-pane.fs #nav-hint { display: block; }
 #nav-hint kbd { font-family: var(--font-mono); font-size: 10px; color: #fff; }
 .measure-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+#stage-card { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(460px, calc(100% - 150px)); background: rgba(20, 24, 22, 0.8); color: #eceee9; font-size: 12px; line-height: 1.45; padding: 7px 10px 8px; border-radius: 3px; border-left: 3px solid #7dc00f; pointer-events: none; }
+#stage-card b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #fff; margin-bottom: 2px; }
+#stage-card p { margin: 0; }
+section.scene-pane.fs #stage-card { bottom: 52px; }
+.measure-label.stage-label { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #5d6a62; }
+.measure-label.stage-label span { font-family: var(--font-mono); font-weight: 400; }
+.measure-label.sl-trench { border-left-color: #b8821a; }
+.measure-label.sl-area { border-left-color: #2f5b3b; }
 .measure-label { position: absolute; left: 0; top: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.25; color: #1e2621; background: rgba(251, 250, 247, 0.92); padding: 1px 5px; border-radius: 2px; white-space: nowrap; text-align: center; will-change: transform; }
 .measure-label span { display: block; font-size: 10px; color: #4a524c; }
 .measure-label.ml-area, .measure-label.ml-object { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #2f5b3b; }
@@ -314,6 +322,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
           <div id="views" aria-label="Camera views"></div>
           <div id="embed-note" role="status" hidden><p></p></div>
           <div id="updating" hidden>Updating 3D…</div>
+          <div id="stage-card" role="status" aria-live="polite" hidden><b id="stage-title"></b><p id="stage-note"></p></div>
           <div class="scene-tools">
             <div id="nav-modes" role="group" aria-label="Movement">
               <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
@@ -325,6 +334,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
               <button type="button" data-mode="totals" aria-pressed="false" title="Area of each surface, total length of each run, wall height">Totals</button>
               <button type="button" data-mode="edges" aria-pressed="false" title="Every edge length as well">Every edge</button>
             </div>
+            <button id="btn-cutaway" type="button" aria-pressed="false" title="Cut away the near side of the yard at the point you are looking at, to see trenches, pipes and layers from the side (C)">Cut away</button>
             <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F)">Full screen</button>
           </div>
           <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>Esc</kbd> exit</div>
@@ -334,6 +344,10 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
           </div>
         </div>
         <div class="dock">
+          <div class="dock-group">
+            <div class="dock-label"><span>Build stage</span><output id="stage-out">Finished</output></div>
+            <div class="seg" id="stages" role="group" aria-label="Build stage"></div>
+          </div>
           <div class="dock-group">
             <div class="dock-label"><span>Growth</span><output id="growth-out">3 years</output></div>
             <div class="growth">
