@@ -599,6 +599,12 @@ export const OFFERED_LINES = new Set<string>([
   'Coventry Wall III',
   'Artforms',
   'AB Classic',
+  'Castlemanor Grana',
+  'Castlemanor Rustic',
+  'Ashlar Tandem Wall',
+  'Lamina Tandem',
+  'Brisa',
+  'Papyrus Artforms',
 ]);
 
 /** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */
