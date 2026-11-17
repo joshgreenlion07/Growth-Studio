@@ -521,7 +521,28 @@ interface Dig {
 
 const STAGE_LIST = BUILD_STAGES.map((s) => s.id);
 
-export function buildConstruction(plan: SitePlan, ground: (p: Vec2) => number, quality: Quality): ConstructionBuild {
+/**
+ * The utility equipment alone (meters, panels, valves...), which stands in every stage including the finished yard:
+ * cheap to build, so the finished yard shows it without building the rest of the construction views.
+ */
+export function buildEquipment(plan: SitePlan, ground: (p: Vec2) => number): { object: THREE.Group | null; dispose(): void } {
+  const points = plan.utilities?.points ?? [];
+  if (!points.length) return { object: null, dispose() {} };
+  const mats = equipMats();
+  const grp = new THREE.Group();
+  grp.name = 'utility-equipment';
+  for (const p of points) grp.add(equipment(p, ground(p.position), mats));
+  return {
+    object: grp,
+    dispose() {
+      Object.values(mats).forEach((m) => m.dispose());
+      grp.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    },
+  };
+}
+
+/** `withEquipment` false leaves the utility equipment out (the caller shows it from buildEquipment). */
+export function buildConstruction(plan: SitePlan, ground: (p: Vec2) => number, quality: Quality, withEquipment = true): ConstructionBuild {
   const root = new THREE.Group();
   root.name = 'construction';
   const disposables: { dispose(): void }[] = [];
@@ -793,7 +814,7 @@ export function buildConstruction(plan: SitePlan, ground: (p: Vec2) => number, q
   }
 
   // Equipment, in every stage.
-  if (points.length) {
+  if (points.length && withEquipment) {
     const mats = equipMats();
     disposables.push(...Object.values(mats));
     const grp = new THREE.Group();

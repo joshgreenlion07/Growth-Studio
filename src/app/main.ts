@@ -15,7 +15,7 @@ import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
 import { Studio } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
-import { onTexturesChanged } from '../engine/texture-jobs';
+import { onTexturesChanged, setTextureRenderer } from '../engine/texture-jobs';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
 import type { Quality } from '../engine/post';
@@ -120,6 +120,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Painted maps are uploaded through the view's renderer a slice per frame (see texture-jobs.ts).
+  setTextureRenderer(studio.renderer);
   // Painted textures arrive from the worker after the build; redraw when they do.
   onTexturesChanged(() => {
     studio?.invalidate();
@@ -1051,7 +1053,11 @@ function applyEmbedPlan() {
         showStageNote();
         embedReply(true, extra);
       },
-      (e) => embedReply(false, { message: `The plan could not be shown in 3D (${String(e instanceof Error ? e.message : e).slice(0, 160)}).` }),
+      (e) => {
+        console.error(e);
+        embedNote('This plan could not be shown in 3D.');
+        embedReply(false, { message: `The plan could not be shown in 3D (${String(e instanceof Error ? e.message : e).slice(0, 160)}).` });
+      },
     );
   } catch (e) {
     console.error(e);
@@ -1149,7 +1155,17 @@ function initEmbed() {
       // features. The look goes at once; a swatch drawn from the 3D material follows in a second `point` message for
       // the same item, if the pointer is still on it.
       let pointNow = '';
+      // The pointer reports from inside a frame: the look and the swatch are worked out after it (the newest hit wins).
+      let pointHit: Parameters<NonNullable<Studio['onPoint']>>[0] | undefined;
+      let pointTimer = 0;
       studio.onPoint = (hit) => {
+        pointHit = hit;
+        if (!pointTimer) pointTimer = window.setTimeout(() => {
+          pointTimer = 0;
+          sendPoint(pointHit ?? null);
+        }, 0);
+      };
+      const sendPoint = (hit: Parameters<NonNullable<Studio['onPoint']>>[0]) => {
         if (!embedOrigin || libraryOpen()) return;
         const origin = embedOrigin;
         const zone = hit ? plan.zones.find((z) => z.id === hit.id) : undefined;

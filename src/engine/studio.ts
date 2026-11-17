@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { SitePlan } from '../siteplan/types';
 import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
-import { buildScene, hardscapeOnlyChange, type SceneBuild } from '../builder/build';
+import { buildSceneAsync, hardscapeOnlyChange, type SceneBuild } from '../builder/build';
 import { ModelAssets, type AssetKind } from '../builder/models';
 import { WATER_LEVEL, setGroundTextureUnits } from '../builder/ground';
 import { setFlames } from '../builder/features';
@@ -134,7 +134,9 @@ export class Studio {
   /** The yard being warmed up (its shaders compiled) before it replaces the one on screen. */
   private pending: SceneBuild | null = null;
   private buildToken = 0;
-  private whenBuilt: (() => void)[] = [];
+  private whenBuilt: { res: () => void; rej: (e: unknown) => void }[] = [];
+  /** The newest plan's build token once its yard is on screen (or failed); the yard is still being built until then. */
+  private shownToken = 0;
   /** Replaced yards, released after the next drawn frame (their shader programs are shared by the new one until then). */
   private retired: SceneBuild[] = [];
   /** The sky the lighting environment was last made for; it is remade only when that changes. */
@@ -548,8 +550,9 @@ export class Studio {
   /* -------------------------------------------------------------- */
 
   /**
-   * Show a plan. Building happens now (a plan that cannot be built throws here); the returned promise resolves
-   * once the new yard is on screen, after its shaders are warmed (or at once for a paving-only restyle).
+   * Show a plan. Building starts now and runs a slice at a time while the current yard stays on screen; the returned
+   * promise resolves once the new yard is on screen, after its shaders are warmed (or at once for a paving-only
+   * restyle), and rejects when the plan cannot be built.
    */
   setPlan(plan: SitePlan, keepCamera = false): Promise<void> {
     this.applyPlan(plan, keepCamera, true);
@@ -584,7 +587,27 @@ export class Studio {
       this.pending = null;
     }
     const token = ++this.buildToken;
-    const next = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
+    // Built a slice at a time (see buildSceneAsync): the yard on screen keeps drawing meanwhile. A newer plan stops it.
+    // With no yard on screen yet (or an empty one) there is little to draw, so the slices are longer and the first
+    // yard comes sooner.
+    const budgetMs = this.build && (this.build.plantCount > 0 || this.build.surfaces.length > 2) ? 8 : 32;
+    buildSceneAsync(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets, { stale: () => token !== this.buildToken || this.disposed, stage: this.stage, budgetMs }).then(
+      (next) => {
+        if (!next) return;
+        if (token !== this.buildToken || this.disposed) return next.dispose();
+        this.warmAndSwap(next, token, plan, copy, keepCamera);
+      },
+      (e) => {
+        if (token !== this.buildToken) return;
+        this.shownToken = token;
+        const waiting = this.whenBuilt;
+        this.whenBuilt = [];
+        for (const w of waiting) w.rej(e);
+      },
+    );
+  }
+
+  private warmAndSwap(next: SceneBuild, token: number, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
     // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
     next.root.traverse((o) => {
       if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
@@ -597,6 +620,7 @@ export class Studio {
     const swap = () => {
       if (token !== this.buildToken || this.disposed || this.pending !== next) return;
       this.pending = null;
+      this.shownToken = token;
       this.swapIn(next, plan, copy, keepCamera);
     };
     let warm: Promise<unknown> | null = null;
@@ -650,13 +674,13 @@ export class Studio {
     for (const id of next.missingAssets) this.onNeedAsset(id);
     const waiting = this.whenBuilt;
     this.whenBuilt = [];
-    for (const f of waiting) f();
+    for (const f of waiting) f.res();
   }
 
   /** Resolves once the newest plan's yard is on screen. */
   private built(): Promise<void> {
-    if (!this.pending) return Promise.resolve();
-    return new Promise((res) => this.whenBuilt.push(res));
+    if (!this.pending && this.shownToken === this.buildToken) return Promise.resolve();
+    return new Promise((res, rej) => this.whenBuilt.push({ res, rej }));
   }
 
   /**
