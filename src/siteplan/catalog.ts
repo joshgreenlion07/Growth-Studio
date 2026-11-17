@@ -315,11 +315,11 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'composite-gray', name: 'Composite deck, gray', use: 'hardscape', group: 'Decking', recipe: 'deck', palette: ['#8f8a84', '#77726c', '#615d58'], thickness: 0.3 }),
   M({ id: 'wood-deck', name: 'Cedar deck', use: 'hardscape', group: 'Decking', recipe: 'deck', palette: ['#a5714a', '#8a5d3b', '#6f4a2f'], thickness: 0.35 }),
   // Borders (soldier course along hardscape edges)
-  M({ id: 'border-charcoal', name: 'Charcoal soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#55534f', '#4a4845', '#3e3c3a'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-charcoal', name: 'Charcoal soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#55534f', '#4a4845', '#3e3c3a'], pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06 }),
   M({ id: 'border-charcoal-wide', name: 'Charcoal border, 6x12', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#55534f', '#4a4845', '#3e3c3a'], pattern: { kind: 'soldier', sizes: [[6, 12]], joint: 0.15 }, thickness: 0.06 }),
-  M({ id: 'border-tan', name: 'Tan soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#a8916f', '#97805f', '#86704f'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
-  M({ id: 'border-gray', name: 'Gray soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#8f8c87', '#7c7a76', '#6a6865'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
-  M({ id: 'border-light', name: 'Light soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#d6d0c4', '#c6bfb2', '#b3ab9e'], pattern: { kind: 'soldier', sizes: [[4, 8]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-tan', name: 'Tan soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#a8916f', '#97805f', '#86704f'], pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-gray', name: 'Gray soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#8f8c87', '#7c7a76', '#6a6865'], pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06 }),
+  M({ id: 'border-light', name: 'Light soldier border', use: 'border', group: 'Pavers', recipe: 'paver', palette: ['#d6d0c4', '#c6bfb2', '#b3ab9e'], pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06 }),
   // Walls
   M({ id: 'wall-tan-charcoal-cap', name: 'Tan block, charcoal cap', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d2c3a4', '#c4b392', '#b5a383'], wall: { face: 'smoothBlock', cap: '#3d3d3d' } }),
   M({ id: 'wall-gray-block', name: 'Gray block, gray cap', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#a3a09a', '#8f8c87', '#7c7a76'], wall: { face: 'splitFace', cap: '#9c9a95' } }),

@@ -99,14 +99,48 @@ function norm(v: Vec2): Vec2 {
  * Soldier-course border: one quad per edge with UVs running along the edge,
  * so the pavers stand perpendicular to every side of the patio.
  */
+/** True where the outline turns by more than about 20 degrees at vertex i: a real corner, not a point on a curve. */
+function isCorner(pts: Vec2[], i: number): boolean {
+  const n = pts.length, p = pts[(i - 1 + n) % n], q = pts[i], r = pts[(i + 1) % n];
+  const a1 = Math.atan2(q[1] - p[1], q[0] - p[0]), a2 = Math.atan2(r[1] - q[1], r[0] - q[0]);
+  return Math.abs(Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1))) > 0.35;
+}
+
+/**
+ * The mitre joint at each real corner of a border: a thin strip along the cut from the outer corner to the inner one,
+ * where the two runs' pavers are cut to meet at 45 degrees (for a 90 degree corner), as a soldier course is laid.
+ */
+function mitreJoints(outer: Vec2[], inner: Vec2[], y: number): THREE.BufferGeometry | null {
+  const pos: number[] = [], idx: number[] = [];
+  const half = 0.0022;
+  for (let i = 0; i < outer.length; i++) {
+    if (!isCorner(outer, i)) continue;
+    const a = outer[i], b = inner[i];
+    const d = norm([b[0] - a[0], b[1] - a[1]]), nx = -d[1] * half, nz = d[0] * half;
+    const base = pos.length / 3;
+    pos.push(a[0] - nx, y + 0.0008, a[1] - nz, a[0] + nx, y + 0.0008, a[1] + nz, b[0] + nx, y + 0.0008, b[1] + nz, b[0] - nx, y + 0.0008, b[1] - nz);
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  if (!pos.length) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
+  g.setIndex(idx);
+  return g;
+}
+
 function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false): THREE.BufferGeometry {
   const pos: number[] = [], uv: number[] = [], nor: number[] = [], idx: number[] = [];
   const n = outer.length;
   let along = 0;
   for (let i = 0; i < n; i++) {
     const a = outer[i], b = outer[(i + 1) % n], c = inner[(i + 1) % n], d = inner[i];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const dir = norm([b[0] - a[0], b[1] - a[1]]);
+    // A run starts at a real corner: there the pavers' joints are set from the inner corner (where the mitre ends), so
+    // the cut pieces sit at the corner and full pavers follow. Along a curve the joints simply continue.
+    if (isCorner(outer, i)) {
+      along = -((d[0] - a[0]) * dir[0] + (d[1] - a[1]) * dir[1]);
+    }
     const across = (p: Vec2) => Math.abs((p[0] - a[0]) * dir[1] - (p[1] - a[1]) * dir[0]);
     const alongOf = (p: Vec2) => (p[0] - a[0]) * dir[0] + (p[1] - a[1]) * dir[1];
     const base = pos.length / 3;
@@ -130,7 +164,7 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sai
       else uv.push(along + alongOf(p), y - yy);
     }
     idx.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
-    along += len;
+    along += Math.hypot(b[0] - a[0], b[1] - a[1]);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -230,6 +264,11 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         bm.userData.part = 'border';
         bm.userData.catalogId = z.border.catalogId;
         group.add(bm);
+        const mj = mitreJoints(z.polygon, inner, t);
+        if (mj) {
+          geos.push(mj);
+          group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1 }))));
+        }
         surfaces.push(bm);
         if (z.borderLights) {
           // A small round light in the border every ~2.4 m.
