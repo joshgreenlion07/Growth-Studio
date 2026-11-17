@@ -369,7 +369,9 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
   const soil = soilTextures();
   const sets: PBRSet[] = [soil, ...layerIds.map((id) => materialTextures(materialById.get(id)!))];
   const roughK = [0.97, ...layerIds.map((id) => {
-    const r = materialById.get(id)!.recipe;
+    const spec = materialById.get(id)!, r = spec.recipe;
+    // Loose stone drawn stone by stone (spec.pebble): its ground is the bed seen from afar, satin like the stones.
+    if (spec.pebble) return 0.92;
     return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
   })];
   const n = sets.length;

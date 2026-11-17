@@ -1264,6 +1264,7 @@ export class Studio {
     // Plants are culled against this view: the camera has just moved, and its world matrix is otherwise
     // brought up to date only when it is drawn.
     this.build?.plants.update?.(cam, lodPx);
+    this.build?.pebbles.update(cam);
     this.fitTurfFade(cam, devicePx);
     // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
     // plants' size changed, never on a timer while leaves sway.

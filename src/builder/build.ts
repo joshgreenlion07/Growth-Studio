@@ -18,6 +18,7 @@ import { buildPlants, type PlantLayer } from './plants';
 import { poolLayout, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
+import { buildPebbles, type PebbleBuild } from './pebbles';
 import { buildWater, type WaterBuild } from './waterfeatures';
 
 /** SitePlan in, a complete 3D yard out. */
@@ -28,6 +29,8 @@ export interface SceneBuild {
   /** Where each pool sits: its level, coping and the paving cut for it. */
   pools: PoolLayout;
   plants: PlantLayer;
+  /** Beds of loose stone drawn stone by stone; update() picks each tile's detail for the camera. */
+  pebbles: PebbleBuild;
   water: WaterBuild;
   features: FeatureBuild;
   /** Uploaded-model files the plan names that have not arrived yet. */
@@ -169,6 +172,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     return false;
   };
   const turf = buildTurf(plan, gm, quality, blocked);
+  const pebbles = buildPebbles(plan, gm, quality);
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
   // Plants show in water reflections only near water: the reflection of one farther off is
@@ -188,6 +192,11 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     // Lawn blades are left out of reflections for speed.
     turf.object.layers.set(WATER_LAYER_SKIP);
     root.add(turf.object);
+  }
+  if (pebbles.object) {
+    // Stones are left out of reflections too: a few centimeters each, they would only shimmer there.
+    pebbles.object.traverse((o) => o.layers.set(WATER_LAYER_SKIP));
+    root.add(pebbles.object);
   }
 
   const nightLights: NightLight[] = [
@@ -211,6 +220,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     const fin = stage === 'finished';
     hard.object.visible = fin;
     if (turf.object) turf.object.visible = fin;
+    if (pebbles.object) pebbles.object.visible = fin;
     features.object.visible = fin;
     models.object.visible = fin;
     plants.object.visible = fin;
@@ -232,6 +242,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     gm,
     pools,
     plants,
+    pebbles,
     water,
     features,
     missingAssets: models.missing,
@@ -277,6 +288,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       features.dispose();
       models.dispose();
       turf.dispose();
+      pebbles.dispose();
       plants.dispose();
     },
   };

@@ -593,6 +593,22 @@ function turfShown(a: RGB): RGB {
 }
 /** The linear albedo a maker's turf color (sRGB hex, as photographed in sun) is drawn with. */
 export function turfAlbedo(hex: string): RGB {
+  return gradeAlbedo(hex, TURF_LIGHT, TURF_FILL);
+}
+
+/**
+ * Loose stones (spec.pebble): the same grade run backwards, with the light a stone's sunlit top receives. Fitted by
+ * rendering the Mexican beach pebble beds top-down in the default afternoon light.
+ */
+const ROCK_LIGHT: RGB = [1.85, 2.0, 2.65];
+const ROCK_FILL: RGB = [0.008, 0.01, 0.016];
+/** The linear albedo a stone color (sRGB hex, as photographed in daylight) is drawn with. */
+export function rockAlbedo(hex: string): RGB {
+  return gradeAlbedo(hex, ROCK_LIGHT, ROCK_FILL);
+}
+
+/** The linear albedo that shows on screen as `hex` under `light` (per channel) plus `fill`, in the default grade. */
+function gradeAlbedo(hex: string, light: RGB, fill: RGB): RGB {
   const c = new THREE.Color(hex);
   const D = [c.r, c.g, c.b].map((v) => Math.min(0.9, v));
   // contrast, then saturation, backwards (exposure 1, no vignette at the center)
@@ -600,7 +616,7 @@ export function turfAlbedo(hex: string): RGB {
   const l = 0.2126 * A[0] + 0.7152 * A[1] + 0.0722 * A[2];
   A = A.map((v) => l + (v - l) / 1.04);
   const scene = mul3(ACES_IN_INV, mul3(ACES_OUT_INV, A).map(rrtInv)).map((v) => v * 0.6);
-  return scene.map((v, k) => Math.min(0.95, Math.max(0.0005, (v - TURF_FILL[k]) / TURF_LIGHT[k]))) as RGB;
+  return scene.map((v, k) => Math.min(0.95, Math.max(0.0005, (v - fill[k]) / light[k]))) as RGB;
 }
 const turfPaint = (hex: string): RGB => turfAlbedo(hex).map((v) => toSrgb(v)) as RGB;
 
@@ -820,6 +836,36 @@ function dgSet(spec: MaterialSpec): PBRSet {
 }
 
 /** Rounded stones packed together: river rock, black pebble, cobble. */
+/**
+ * The ground under a bed of loose stones (spec.pebble): the same stones packed tight, at their size, in their colors and
+ * shares, darker in the gaps. It shows between the 3D stones and in their place where they are too small to draw.
+ */
+function pebbleGroundSet(spec: MaterialSpec): PBRSet {
+  const P = spec.pebble!;
+  const avg = ((P.minIn + P.maxIn) / 2) * 0.0254;
+  const lin = P.colors.map((x) => rockAlbedo(x.c).map((v) => toSrgb(v)) as RGB);
+  const cum: number[] = [];
+  P.colors.reduce((s, x) => (cum.push(s + x.share), s + x.share), 0);
+  const pickC = (h: number) => lin[Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v))];
+  const cells = Math.max(6, Math.round(1 / (avg * 0.85)));
+  // Scaled to the stones' average color, so a bed reads the same where its 3D stones give way to this texture.
+  const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const avgLin = [0, 1, 2].map((k) => P.colors.reduce((s, x) => s + x.share * toLin(parseInt(x.c.slice(1 + 2 * k, 3 + 2 * k), 16) / 255), 0));
+  const mean = rockAlbedo('#' + avgLin.map((v) => Math.round(toSrgb(v) * 255).toString(16).padStart(2, '0')).join(''));
+  return paint(1024, 1, 8, (u, v) => {
+    const cell = voronoi(u, v, cells, 13, 0.85);
+    const ang = hash(cell.id, 5) * Math.PI;
+    const ex = cell.dx * Math.cos(ang) - cell.dy * Math.sin(ang);
+    const ey = (cell.dx * Math.sin(ang) + cell.dy * Math.cos(ang)) * 1.3;
+    const d = Math.hypot(ex, ey) / (0.46 + hash(cell.id, 1) * 0.08);
+    const dome = Math.sqrt(Math.max(0, 1 - d * d));
+    const pit = vnoise(u * 900, v * 900, 900, 4);
+    if (dome <= 0) return { h: 0, c: mulRGB(lin[0], 0.45), r: 1 };
+    const c = mulRGB(pickC(hash(cell.id, 7)), (0.62 + dome * 0.42) * (0.94 + pit * 0.1));
+    return { h: dome, c, r: 0.72 + pit * 0.15 };
+  }, mean);
+}
+
 function stonesSet(spec: MaterialSpec, cells: number, tile: number, gloss: number): PBRSet {
   const colors = pal(spec);
   return paint(512, tile, 10, (u, v) => {
@@ -1159,7 +1205,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'mulch': return mulchSet(spec);
       case 'dg': return dgSet(spec);
       case 'riverRock': return stonesSet(spec, 13, 1.0, 0.3);
-      case 'blackPebble': return stonesSet(spec, 22, 1.0, 0.65);
+      case 'blackPebble': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 22, 1.0, 0.65);
       case 'cobble': return stonesSet(spec, 7, 1.2, 0.25);
       case 'paver': return paverSet(spec, lay);
       case 'concrete': return concreteSet(spec, spec.finish ?? 'broom');

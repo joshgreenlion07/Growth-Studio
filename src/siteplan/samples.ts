@@ -250,6 +250,31 @@ export function sampleWallCompare(): SitePlan {
   };
 }
 
+/** Mexican beach pebble in the three sizes Green Lion uses: a 10 x 10 ft bed of each, steel-edged, a walk in front. */
+export function samplePebbleSizes(): SitePlan {
+  const S = 'sample' as const;
+  const F = 3.048; // 10 ft
+  const x0 = 0.8, gap = 0.9, y0 = 1.2;
+  const beds = (['half-1', '1-2', '2-3'] as const).map((k, i) => {
+    const x = x0 + i * (F + gap);
+    return { k, poly: [[x, y0], [x + F, y0], [x + F, y0 + F], [x, y0 + F]] as Vec2[], label: ['1/2-1 in', '1-2 in', '2-3 in'][i] };
+  });
+  const W = x0 * 2 + 3 * F + 2 * gap, walkY = y0 + F + 0.3;
+  return {
+    schemaVersion: 1,
+    site: { name: 'Mexican beach pebble: 1/2-1, 1-2 and 2-3 in, 10 x 10 ft beds', boundary: [[0, 0], [W, 0], [W, walkY + 2.2], [0, walkY + 2.2]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      ...beds.map((b) => ({ id: `pebble-${b.k}`, source: S, kind: 'bed' as const, catalogId: `mexican-beach-pebble-${b.k}`, polygon: b.poly, note: `Mexican beach pebble, black, ${b.label}` })),
+      { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[0.4, walkY], [W - 0.4, walkY], [W - 0.4, walkY + 1.2], [0.4, walkY + 1.2]] },
+    ],
+    lines: beds.map((b) => ({ id: `edge-${b.k}`, source: S, kind: 'edging' as const, catalogId: 'steel-edging', points: [...b.poly, b.poly[0]], height: 0.05 })),
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
 /** A small backyard with every kind of buried run, for the build stages. */
 export function sampleUtilities(): SitePlan {
   const S = 'sample' as const;
@@ -300,5 +325,6 @@ export const SAMPLES = [
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
+  { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
 ];
