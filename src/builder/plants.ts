@@ -941,7 +941,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
       m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, sc));
       ao.setMatrixAt(i, m4);
       const proxy = new THREE.Mesh(proxyGeo, proxyMat);
-      proxy.userData = { plantId: p.id, spec, growth, scale: sc };
+      proxy.userData = { plantId: p.id, spec, growth, scale: sc, part: 'plant', catalogId: `plant:${spec.id}` };
       proxy.position.set(p.position[0], y, p.position[1]);
       proxies.push(proxy);
       root.add(proxy);

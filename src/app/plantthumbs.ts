@@ -5,6 +5,8 @@ import { PLANTS, plantById } from '../siteplan/catalog';
 
 const cache = new Map<string, string>();
 const waiting = new Map<string, Set<(url: string) => void>>();
+/** Callers told when a picture cannot be made (see wantThumb's `fail`). */
+const failing = new Map<string, Set<() => void>>();
 const failed = new Set<string>();
 const queue: string[] = [];
 let running = false;
@@ -12,14 +14,19 @@ let running = false;
 /** The picture if it is ready yet. */
 export const thumbUrl = (id: string) => cache.get(id);
 
-/** Call back with the picture as soon as it exists, and make sure it is queued. */
-export function wantThumb(id: string, done: (url: string) => void) {
+/** Call back with the picture as soon as it exists, and make sure it is queued. `fail` is called if it cannot be made. */
+export function wantThumb(id: string, done: (url: string) => void, fail?: () => void) {
   const have = cache.get(id);
   if (have) return done(have);
-  if (failed.has(id)) return;
+  if (failed.has(id)) return fail?.();
   let set = waiting.get(id);
   if (!set) waiting.set(id, (set = new Set()));
   set.add(done);
+  if (fail) {
+    let f = failing.get(id);
+    if (!f) failing.set(id, (f = new Set()));
+    f.add(fail);
+  }
   if (!queue.includes(id)) queue.push(id);
   void pump();
 }
@@ -52,14 +59,20 @@ async function pump() {
       } catch (err) {
         failed.add(id);
         console.warn('Plant picture failed for', id, err);
+        for (const f of failing.get(id) ?? []) f();
       }
       waiting.delete(id);
+      failing.delete(id);
       await new Promise((res) => setTimeout(res, 30));
     }
     r.releaseThumbRenderer();
   } catch (err) {
     console.warn('Plant pictures unavailable', err);
     queue.length = 0;
+    // Nothing more will be drawn this time: tell everyone still waiting (a later request tries again).
+    for (const [id, fs] of failing) if (!cache.has(id)) fs.forEach((f) => f());
+    failing.clear();
+    waiting.clear();
   } finally {
     running = false;
   }

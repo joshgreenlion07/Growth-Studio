@@ -28,6 +28,12 @@ export interface GroundModel {
   inWater(p: Vec2, pad?: number): boolean;
 }
 
+/** Texture units a fragment shader may use on this GPU; the Studio sets it from the renderer (WebGL's minimum is 16). */
+let maxTextureUnits = 16;
+export function setGroundTextureUnits(n: number) {
+  if (Number.isFinite(n) && n >= 16) maxTextureUnits = Math.floor(n);
+}
+
 /** Ground surfaces painted by the splat shader: soil plus up to 8 materials. */
 export const MAX_GROUND_LAYERS = 8;
 
@@ -367,37 +373,44 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
   })];
   const n = sets.length;
+  // Texture units: many GPUs (Apple's among them) have only WebGL's minimum of 16 per fragment shader. Besides the
+  // layers the ground samples the first splat map, the dig-out map, the environment map and its lookup table, the
+  // sun's shadow map, the second splat map (only with more than four materials) and a pool map (only with pools).
+  // Every layer needs its color map; normal maps go to as many layers as still fit (soil and the first layers), the
+  // rest shading flat. Without this, a yard with six or more ground materials failed to compile and lost its ground.
+  const splatB = n - 1 > 4;
+  const fixed = 5 + (splatB ? 1 : 0) + (pools.pools.length ? 1 : 0);
+  const withNormal = Math.max(0, Math.min(n, maxTextureUnits - fixed - n));
   // Physical material so the ground's sky reflection can be toned down:
   // rough mulch and soil reflect far less than the default 4%.
   const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: 0.45 });
   mat.onBeforeCompile = (s) => {
     s.uniforms.uSplatA = { value: splats[0] };
-    s.uniforms.uSplatB = { value: splats[1] };
+    if (splatB) s.uniforms.uSplatB = { value: splats[1] };
     s.uniforms.uArea = { value: new THREE.Vector4(area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY) };
     sets.forEach((l, i) => {
       s.uniforms[`uA${i}`] = { value: l.map };
-      s.uniforms[`uN${i}`] = { value: l.normalMap };
+      if (i < withNormal) s.uniforms[`uN${i}`] = { value: l.normalMap };
       s.uniforms[`uT${i}`] = { value: 1 / l.tileMeters };
     });
-    s.uniforms.uMacro = { value: soil.map };
     Object.assign(s.uniforms, stage);
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    const decl = sets.map((_, i) => `uniform sampler2D uA${i}; uniform sampler2D uN${i}; uniform float uT${i};`).join('\n');
+    const decl = sets.map((_, i) => `uniform sampler2D uA${i};${i < withNormal ? ` uniform sampler2D uN${i};` : ''} uniform float uT${i};`).join('\n');
     const comps = ['a.r', 'a.g', 'a.b', 'a.a', 'b.r', 'b.g', 'b.b', 'b.a'];
     const w = (i: number) => (i === 0 ? 'g0' : `gw${i}`);
     const weights = Array.from({ length: n - 1 }, (_, i) => `float gw${i + 1} = ${comps[i]};`).join(' ');
     const sum = n > 1 ? Array.from({ length: n - 1 }, (_, i) => `gw${i + 1}`).join(' + ') : '0.0';
     const albedo = sets.map((_, i) => `texture2D(uA${i}, wp * uT${i}).rgb * ${w(i)}`).join(' + ');
-    const normal = sets.map((_, i) => `texture2D(uN${i}, wp * uT${i}).xyz * ${w(i)}`).join(' + ');
+    const normal = sets.map((_, i) => (i < withNormal ? `texture2D(uN${i}, wp * uT${i}).xyz * ${w(i)}` : `vec3(0.5, 0.5, 1.0) * ${w(i)}`)).join(' + ');
     const rough = sets.map((_, i) => `${roughK[i].toFixed(3)} * ${w(i)}`).join(' + ');
     s.fragmentShader = s.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
          varying vec3 vGW;
-         uniform sampler2D uSplatA; uniform sampler2D uSplatB; uniform vec4 uArea; uniform sampler2D uMacro;
+         uniform sampler2D uSplatA;${splatB ? ' uniform sampler2D uSplatB;' : ''} uniform vec4 uArea;
          uniform float uSoil; uniform sampler2D uCut; uniform vec4 uCutBox; uniform vec2 uCutCh;
          ${decl}`,
       )
@@ -411,12 +424,12 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
          float siteIn = step(0.0, suv.x) * step(0.0, suv.y) * step(suv.x, 1.0) * step(suv.y, 1.0);
          float inside = siteIn * (1.0 - uSoil);
          vec4 a = texture2D(uSplatA, suv) * inside;
-         vec4 b = texture2D(uSplatB, suv) * inside;
+         ${splatB ? 'vec4 b = texture2D(uSplatB, suv) * inside;' : ''}
          ${weights}
          float g0 = max(0.0, 1.0 - (${sum}));
          vec2 wp = vGW.xz;
          vec3 alb = ${albedo};
-         float macro = texture2D(uMacro, wp * 0.023).g;
+         float macro = texture2D(uA0, wp * 0.023).g;
          alb *= mix(1.0, 0.86 + macro * 0.3, g0);
          // Build stages: graded bare dirt, browner than the dry-grass soil around the yard.
          alb *= mix(vec3(1.0), vec3(1.12, 0.94, 0.76), uSoil * siteIn);
@@ -432,7 +445,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     // The ground is opened along each pool's outline, so the pool's tiled shell shows.
     pools.patchGround(s);
   };
-  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}`;
+  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}-n${withNormal}`;
   return mat;
 }
 

@@ -8,7 +8,8 @@ import { BUILD_STAGES, type BuildStage } from '../builder/construction';
 import { groundModel } from '../builder/ground';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
-import { lookOf } from './looks';
+import { lookOf, lookOfPoint, type Look } from './looks';
+import { swatchFor, swatchNow } from './swatches';
 import { Studio } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
 import { onTexturesChanged } from '../engine/texture-jobs';
@@ -919,6 +920,14 @@ function onEmbedMessage(e: MessageEvent) {
     for (const id of ids) wantThumb(id, (url) => window.parent.postMessage({ source: 'growth-studio', type: 'plant-thumb', id, url }, origin));
     return;
   }
+  if (d.type === 'swatch') {
+    // A swatch for a look the parent shows without pointing at it (a color previewed in its panel): the same picture
+    // the pointer sends, as { type: 'swatch', id, url } (url null when there is none).
+    const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 120) : '';
+    if (!id || !materialById.has(id)) return;
+    void swatchFor(id).then((url) => window.parent.postMessage({ source: 'growth-studio', type: 'swatch', id, url }, origin));
+    return;
+  }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'cover') {
@@ -1017,7 +1026,7 @@ function initEmbed() {
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
     // Only offered looks: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES in the catalog).
-    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf))).map(lookOf);
+    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
@@ -1029,10 +1038,23 @@ function initEmbed() {
     if (studio) {
       studio.onPointer = (on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'pointer', on }, embedOrigin); };
       studio.onPointLock = (locked) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'point-lock', locked }, embedOrigin); };
+      // Everything the pointer lands on has a look: catalog surfaces, lawn and beds, plants, water, structures and
+      // features. The look goes at once; a swatch drawn from the 3D material follows in a second `point` message for
+      // the same item, if the pointer is still on it.
+      let pointNow = '';
       studio.onPoint = (hit) => {
         if (!embedOrigin) return;
-        const spec = hit ? materialById.get(hit.catalogId) : undefined;
-        window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, material: spec ? lookOf(spec) : null }, embedOrigin);
+        const origin = embedOrigin;
+        const zone = hit ? plan.zones.find((z) => z.id === hit.id) : undefined;
+        const laying = hit?.part === 'main' && zone ? layingOf(materialById.get(hit.catalogId), zone.laying) : undefined;
+        const look = hit ? lookOfPoint(hit.catalogId, plan, hit.id) : null;
+        const send = (material: Look | null) => window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, material }, origin);
+        const now = (pointNow = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '');
+        if (!look || !hit) return send(look);
+        const ready = swatchNow(hit.catalogId, laying);
+        if (ready) return send({ ...look, swatch: ready });
+        send(look);
+        void swatchFor(hit.catalogId, laying).then((url) => { if (url && pointNow === now && embedOrigin === origin) send({ ...look, swatch: url }); });
       };
     }
     applyEmbedPlan();
