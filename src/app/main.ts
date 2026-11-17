@@ -1017,7 +1017,7 @@ function initEmbed() {
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
     // Only offered looks: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES in the catalog).
-    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb'))).map(lookOf);
+    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf))).map(lookOf);
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;

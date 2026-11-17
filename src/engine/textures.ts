@@ -198,6 +198,10 @@ function pixelSet(px: PaintedPixels, tileMeters: number): PBRSet {
 
 /** Set while textureSet() runs a recipe only to learn its average color (see previewSet). */
 let previewing = false;
+/** True while a recipe is only being sampled for its stand-in color (see previewSet): a costly recipe can skip its setup. */
+export function paintPreviewing(): boolean {
+  return previewing;
+}
 
 /**
  * Paint a seamless PBR set from a per-pixel function of (u, v) in [0,1). With `mean` (linear RGB), the painted colors

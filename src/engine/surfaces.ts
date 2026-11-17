@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { layingOf, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
-import { hash, hexRGB, mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from './textures';
+import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -555,7 +555,132 @@ function lawnSet(spec: MaterialSpec): PBRSet {
   });
 }
 
+/** The way synthetic turf blades lean (radians, in the ground's x/z plane), shared by the texture and the 3D blades. */
+export const TURF_GRAIN = 0.6;
+
+/*
+ * Turf colors. photoAlbedo's model (render = gain * albedo + sky fill) was measured on flat pavers in the mid tones; a
+ * synthetic lawn is dark, and the final grade (post.ts: filmic ACES curve, saturation 1.04, then contrast 1.08 around
+ * mid gray, which clips the darkest tones to black) crushes dark greens and their blue. So a turf color is turned into
+ * albedo by running that grade backwards exactly, then taking away the sheen (TURF_FILL) and dividing by the light a sunlit pile receives
+ * (TURF_LIGHT, per channel); both fitted by rendering the three MSI turfs top-down in the default afternoon light
+ * against their textures' own pixels. A maker's photographed color then
+ * renders as that color. Keep the constants in step with post.ts (DEFAULT_LENS and the output shader).
+ */
+const TURF_LIGHT: RGB = [1.63, 1.66, 2.5];
+/** Light a pile shows whatever its color (sky sheen off the blades), added before the grade. Fitted with TURF_LIGHT. */
+const TURF_FILL: RGB = [0.011, 0.018, 0];
+const ACES_IN = [[0.59719, 0.35458, 0.04823], [0.076, 0.90834, 0.01566], [0.0284, 0.13383, 0.83777]];
+const ACES_OUT = [[1.60475, -0.53108, -0.07367], [-0.10208, 1.10813, -0.00605], [-0.00327, -0.07276, 1.07602]];
+function inv3(m: number[][]): number[][] {
+  const [[a, b, c], [d, e, f], [g, h, i]] = m;
+  const D = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  return [[(e * i - f * h) / D, (c * h - b * i) / D, (b * f - c * e) / D], [(f * g - d * i) / D, (a * i - c * g) / D, (c * d - a * f) / D], [(d * h - e * g) / D, (b * g - a * h) / D, (a * e - b * d) / D]];
+}
+const ACES_IN_INV = inv3(ACES_IN), ACES_OUT_INV = inv3(ACES_OUT);
+const mul3 = (m: number[][], v: number[]) => m.map((r) => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+/** The inverse of the ACES fit's RRT/ODT curve (post.ts RRTAndODTFit), one channel. */
+function rrtInv(y: number): number {
+  const A = 1 - 0.983729 * y, B = 0.0245786 - 0.43295 * y, C = -0.000090537 - 0.238081 * y;
+  return (-B + Math.sqrt(Math.max(0, B * B - 4 * A * C))) / (2 * A);
+}
+/** How a sunlit pile of this linear albedo shows on screen (linear display), the grade of post.ts run forward. */
+function turfShown(a: RGB): RGB {
+  const v = mul3(ACES_OUT, mul3(ACES_IN, a.map((x, k) => (x * TURF_LIGHT[k] + TURF_FILL[k]) / 0.6)).map((x) => (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.432951) + 0.238081))).map((x) => Math.min(1, Math.max(0, x)));
+  const l = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  return v.map((x) => Math.min(1, Math.max(0, (l + (x - l) * 1.04 - 0.5) * 1.08 + 0.5))) as RGB;
+}
+/** The linear albedo a maker's turf color (sRGB hex, as photographed in sun) is drawn with. */
+export function turfAlbedo(hex: string): RGB {
+  const c = new THREE.Color(hex);
+  const D = [c.r, c.g, c.b].map((v) => Math.min(0.9, v));
+  // contrast, then saturation, backwards (exposure 1, no vignette at the center)
+  let A = D.map((v) => (v - 0.5) / 1.08 + 0.5);
+  const l = 0.2126 * A[0] + 0.7152 * A[1] + 0.0722 * A[2];
+  A = A.map((v) => l + (v - l) / 1.04);
+  const scene = mul3(ACES_IN_INV, mul3(ACES_OUT_INV, A).map(rrtInv)).map((v) => v * 0.6);
+  return scene.map((v, k) => Math.min(0.95, Math.max(0.0005, (v - TURF_FILL[k]) / TURF_LIGHT[k]))) as RGB;
+}
+const turfPaint = (hex: string): RGB => turfAlbedo(hex).map((v) => toSrgb(v)) as RGB;
+
+/**
+ * A maker's synthetic turf seen from above, blade by blade (spec.turf): curled thatch over the dark backing first, then
+ * tens of thousands of blades in the two yarn colors, each leaning along the grain (spread +-40 degrees), dark at its base
+ * and lighter at the tip, drawn with a height test so blades lie over each other as they do in the roll. About 1 mm a
+ * pixel over a 1 m tile, wrapped so it tiles. The whole is scaled to the maker's swatch tone. While only being previewed
+ * it is a flat stand-in of the same tone.
+ */
+function makerTurfSet(spec: MaterialSpec): PBRSet {
+  const T = spec.turf!;
+  const mean = turfAlbedo(T.mean);
+  const S = 1024, TILE = 1.0, pxPerM = S / TILE;
+  if (paintPreviewing()) return paint(S, TILE, 4, () => ({ h: 0.5, c: turfPaint(T.mean), r: 0.72 }), mean);
+  const C = new Float32Array(S * S * 3), H = new Float32Array(S * S), R = new Float32Array(S * S);
+  const yarn = T.yarn.map(turfPaint), tip = turfPaint(T.tip), thatch = T.thatch.map(turfPaint);
+  const r = rng(`turf:${spec.id}`);
+  // The backing and the deep gaps between tufts.
+  const gap = mulRGB(mixRGB(thatch[1], yarn[0], 0.5), 0.32);
+  for (let i = 0; i < S * S; i++) { C[i * 3] = gap[0]; C[i * 3 + 1] = gap[1]; C[i * 3 + 2] = gap[2]; H[i] = 0; R[i] = 0.9; }
+  const put = (x: number, y: number, h: number, c: RGB, rough: number) => {
+    const i = (((y % S) + S) % S) * S + (((x % S) + S) % S);
+    if (h < H[i]) return;
+    H[i] = h; C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2]; R[i] = rough;
+  };
+  // A stroke from (x, y) heading `a` (radians), `len` px long, `w` px wide, turning by `bend` over its length; col(t) and
+  // ht(t) give its color and height at t (0 base .. 1 tip).
+  const stroke = (x: number, y: number, a: number, len: number, w: number, bend: number, col: (t: number) => RGB, ht: (t: number) => number, rough: number) => {
+    const n = Math.max(2, Math.ceil(len / 0.6));
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, aa = a + bend * t, px = x + Math.cos(a + bend * t * 0.5) * len * t, py = y + Math.sin(a + bend * t * 0.5) * len * t;
+      const c = col(t), h = ht(t), hw = Math.max(0.5, w * (1 - t * 0.6)) / 2;
+      for (let s = -hw; s <= hw + 1e-6; s += 0.7) put(Math.round(px - Math.sin(aa) * s), Math.round(py + Math.cos(aa) * s), h, c, rough);
+    }
+  };
+  const pile = (T.pileMm / 1000) * pxPerM;
+  // Thatch: short curly fibers near the backing, wheat and green.
+  const nThatch = Math.round(S * S * (0.006 + T.thatchShow * 0.03));
+  for (let i = 0; i < nThatch; i++) {
+    const c0 = thatch[r() < 0.6 ? 0 : 1], k = 0.75 + r() * 0.5, h0 = 0.08 + r() * 0.22;
+    stroke(r() * S, r() * S, r() * Math.PI * 2, pile * (0.15 + r() * 0.25), 1, (r() - 0.5) * 6, () => mulRGB(c0, k), (t) => h0 + t * 0.05, 0.85);
+  }
+  // Blades: about one per 22 px for a 70 oz face weight.
+  const nBlades = Math.round(((S * S) / 22) * (T.faceOz / 70));
+  for (let i = 0; i < nBlades; i++) {
+    const y0 = yarn[r() < 0.5 ? 0 : 1], k = 0.82 + r() * 0.3;
+    // Leaning blades show most of their length from above, upright ones little of it.
+    const lean = 0.25 + r() * 0.75, len = pile * (0.25 + lean * 0.6) * (0.85 + r() * 0.25);
+    // The canvas is flipped onto the ground (rows run against +z), so the grain is mirrored here to match the blades.
+    const a = -TURF_GRAIN + (r() - 0.5) * 1.4 + (r() < 0.12 ? Math.PI : 0), top = 0.55 + r() * 0.45;
+    const w = T.blade === 'D' ? 1.4 : T.blade === 'W' ? 1.7 : 1.5 + r() * 0.4;
+    stroke(r() * S, r() * S, a, len, w, (r() - 0.5) * 0.5,
+      (t) => mulRGB(mixRGB(y0, tip, Math.max(0, t - 0.55) * 1.2), k * (0.5 + 0.62 * t)),
+      (t) => (0.25 + t * 0.75) * top, 0.55 + r() * 0.15);
+  }
+  // Tone: scale the albedo (red and green, blue following) until the texture's average as shown on screen, pixel by
+  // pixel through the grade, equals the maker's photographed color. Matching the plain average instead leaves a dark, speckled pile too
+  // bright, since the grade's toe lifts the speckle. Fitted on a sample of pixels.
+  const want = new THREE.Color(T.mean), target = [want.r, want.g, want.b];
+  const toLinV = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const sample: RGB[] = [];
+  for (let i = 0; i < S * S; i += 61) sample.push([toLinV(C[i * 3]), toLinV(C[i * 3 + 1]), toLinV(C[i * 3 + 2])]);
+  const k: RGB = [1, 1, 1];
+  for (let it = 0; it < 14; it++) {
+    const m = [0, 0, 0];
+    for (const a of sample) { const d = turfShown([a[0] * k[0], a[1] * k[1], a[2] * k[2]]); m[0] += d[0]; m[1] += d[1]; m[2] += d[2]; }
+    for (let c = 0; c < 2; c++) k[c] *= Math.min(3, Math.max(0.33, ((target[c] + 0.003) / (m[c] / sample.length + 0.003)) ** 0.8));
+    // Blue follows red and green, keeping the yarn's own hue: in a dark green it sits where the grade clips, too touchy to fit.
+    k[2] = Math.sqrt(k[0] * k[1]);
+  }
+  for (let i = 0; i < S * S; i++) for (let c = 0; c < 3; c++) C[i * 3 + c] = toSrgb(Math.min(1, toLinV(C[i * 3 + c]) * k[c]));
+  void mean;
+  return paint(S, TILE, 3, (u, v) => {
+    const i = Math.min(S - 1, Math.floor(v * S)) * S + Math.min(S - 1, Math.floor(u * S));
+    return { h: H[i], c: [C[i * 3], C[i * 3 + 1], C[i * 3 + 2]], r: R[i] };
+  });
+}
+
 function turfSet(spec: MaterialSpec): PBRSet {
+  if (spec.turf) return makerTurfSet(spec);
   const [acc, base] = pal(spec);
   if (spec.id === 'synthetic-turf') {
     // Synthetic grass: an even pile of fine blades in one green, no thatch or patches.

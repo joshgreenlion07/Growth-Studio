@@ -101,6 +101,14 @@ Messages use `window.postMessage`:
   An unknown turf id that names synthetic, artificial, fake or astro turf falls
   back to synthetic grass; any other unknown turf id falls back to `lawn`, with a
   warning.
+- MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
+  `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
+  from MSI's specs (`turf` on the look): a ground texture painted blade by blade
+  in the two yarn colors over curled thatch, and 3D blades at the real pile
+  height (45 or 30 mm) leaning one way (`TURF_GRAIN`). Its tone is matched on
+  screen to MSI's outdoor photos through the grade of `engine/post.ts`
+  (`turfAlbedo`, `TURF_LIGHT`, `TURF_FILL` in `engine/surfaces.ts`); change
+  those with the grade.
 - A hardscape zone's `border` can carry `course: 'sailor'` to lay the border
   pavers end to end; a wall line can carry `cap: 'same' | 'midnight'`.
 - A fence line can carry `topper: 'lattice' | 'cap'`, added above its height.
