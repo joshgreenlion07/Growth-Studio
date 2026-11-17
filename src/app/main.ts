@@ -121,7 +121,14 @@ function bootStudio() {
   }
   studio.onViewsChanged = renderViews;
   // Painted textures arrive from the worker after the build; redraw when they do.
-  onTexturesChanged(() => studio?.invalidate());
+  onTexturesChanged(() => {
+    studio?.invalidate();
+    studio?.noteEvent('textures', 'painted maps swapped in');
+  });
+  if (new URLSearchParams(location.search).get('diag') === '1') {
+    studio.showDiagnostics(true);
+    $<HTMLInputElement>('#diag').checked = true;
+  }
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
   studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
@@ -794,6 +801,7 @@ function initDock() {
     $('#btn-wind').setAttribute('aria-pressed', String(v > 0));
   });
   $<HTMLInputElement>('#motion').addEventListener('change', (e) => studio?.setMotion((e.target as HTMLInputElement).checked));
+  $<HTMLInputElement>('#diag').addEventListener('change', (e) => studio?.showDiagnostics((e.target as HTMLInputElement).checked));
 
   $('#btn-image').addEventListener('click', exportImage);
   initFullscreen();

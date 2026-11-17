@@ -175,6 +175,31 @@ export class Studio {
   private fpsWin: number[] = [];
   private fpsShownAt = 0;
   private drawnInWin = 0;
+  /**
+   * Diagnostics (the readout's longer form): how often each thing that can make the picture jump happened in the last
+   * second, and the latest of them with times, to line up with a flicker on screen. Two switches hold one suspect still.
+   */
+  private diag = { counts: new Map<string, number>(), log: [] as string[], el: null as HTMLDivElement | null };
+  /** Diagnostics switch: keep the near and far planes where they are instead of following the camera. */
+  holdClip = false;
+  /** Diagnostics switch: draw every frame instead of pausing while nothing on screen changes. */
+  alwaysDraw = false;
+
+  /** Count one event for the diagnostics readout (and log it with its time). Cheap when the readout is off. */
+  noteEvent(name: string, detail = '') {
+    if (!this.diag.el) return;
+    this.diag.counts.set(name, (this.diag.counts.get(name) ?? 0) + 1);
+    const d = new Date();
+    const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0').slice(0, 1)}`;
+    const line = `${t}  ${name}${detail ? ` ${detail}` : ''}`;
+    // Repeats of the same event collapse into one line with a count.
+    const last = this.diag.log[0];
+    if (last && last.slice(12).replace(/ ×\d+$/, '') === line.slice(12)) {
+      const n = /×(\d+)$/.exec(last);
+      this.diag.log[0] = `${line} ×${n ? +n[1] + 1 : 2}`;
+    } else this.diag.log.unshift(line);
+    this.diag.log.length = Math.min(this.diag.log.length, 10);
+  }
   /** The build stage shown (see builder/construction.ts); 'finished' is the finished yard. */
   private stage: BuildStage = 'finished';
   private stageLabels!: StageLabels;
@@ -336,6 +361,43 @@ export class Studio {
     }
   };
 
+  /**
+   * Show or hide the diagnostics readout: frame rate, canvas size, and a live count of everything that can make the
+   * picture jump (resizes, depth range changes, shadow redraws, rebuilds, texture swaps, pauses), with the latest
+   * events and their times, and two switches that hold a suspect still.
+   */
+  showDiagnostics(on: boolean) {
+    if (!on) {
+      this.diag.el?.remove();
+      this.diag.el = null;
+      this.holdClip = false;
+      this.alwaysDraw = false;
+      return;
+    }
+    if (this.diag.el) return;
+    const el = document.createElement('div');
+    el.className = 'diag-readout';
+    Object.assign(el.style, {
+      position: 'absolute', left: '8px', bottom: '8px', zIndex: '7', padding: '6px 8px', font: '11px/1.4 ui-monospace, Menlo, monospace', maxWidth: 'min(420px, calc(100% - 16px))',
+      color: '#e8ece6', background: 'rgba(16,20,18,0.82)', borderRadius: '4px', whiteSpace: 'pre-wrap',
+    } as CSSStyleDeclaration);
+    el.innerHTML = `<div data-k="text">Diagnostics starting…</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+      <label><input type="checkbox" data-k="hold"> Hold depth range</label>
+      <label><input type="checkbox" data-k="always"> Draw every frame</label></div>`;
+    el.querySelector<HTMLInputElement>('[data-k="hold"]')!.addEventListener('change', (e) => { this.holdClip = (e.target as HTMLInputElement).checked; this.noteEvent('switch', `hold depth range ${this.holdClip ? 'on' : 'off'}`); });
+    el.querySelector<HTMLInputElement>('[data-k="always"]')!.addEventListener('change', (e) => { this.alwaysDraw = (e.target as HTMLInputElement).checked; this.noteEvent('switch', `draw every frame ${this.alwaysDraw ? 'on' : 'off'}`); });
+    if (getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative';
+    this.container.appendChild(el);
+    this.diag.el = el;
+    this.diag.counts.clear();
+    this.diag.log = [];
+    this.fpsWin = [];
+  }
+
+  get diagnosticsOn() {
+    return !!this.diag.el;
+  }
+
   /** Show or hide a small frame-rate readout (frames per second, and the slowest frame of the last second). */
   showFps(on: boolean) {
     if (!on) {
@@ -360,6 +422,7 @@ export class Studio {
 
   private onContextLost = (e: Event) => {
     e.preventDefault();
+    this.noteEvent('WebGL context lost');
     this.contextLost = true;
     if (!this.lossNote) {
       const n = document.createElement('div');
@@ -485,6 +548,7 @@ export class Studio {
   }
 
   private swapIn(next: SceneBuild, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
+    this.noteEvent('rebuild', 'new yard swapped in');
     this.dropCutawayFace();
     const old = this.build;
     if (old) {
@@ -629,6 +693,7 @@ export class Studio {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return;
     if (w === this.size.w && h === this.size.h && this.renderer.getPixelRatio() === this.size.pr) return;
+    this.noteEvent('resize', `${this.size.w}×${this.size.h} → ${w}×${h}`);
     const now = performance.now();
     const burst = now - this.lastResize < RESIZE_SETTLE_MS;
     this.lastResize = now;
@@ -1157,7 +1222,8 @@ export class Studio {
     if (this.camMoved && this.pointerOn) this.pointDue = true;
     if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending || (this.pointerOn && this.pointDue)) this.stillFrames = 0;
     else this.stillFrames++;
-    if (this.stillFrames > SETTLE_FRAMES) {
+    if (this.stillFrames === SETTLE_FRAMES + 1) this.noteEvent('pause', '(view still, drawing stops)');
+    if (this.stillFrames > SETTLE_FRAMES && !this.alwaysDraw) {
       this.frameStats(dt, false);
       return;
     }
@@ -1205,7 +1271,9 @@ export class Studio {
     const clear = Math.max(cam.position.y - this.yardTop, 6);
     const near = THREE.MathUtils.clamp(Math.min(h, d, clear) * 0.08, 0.05, 2);
     const far = 900;
+    if (this.holdClip && cam === this.camera) return;
     if (Math.abs(near - cam.near) > cam.near * 0.02 || cam.far !== far) {
+      if (cam === this.camera) this.noteEvent('depth range', `near ${cam.near.toFixed(2)} → ${near.toFixed(2)} m`);
       cam.near = near;
       cam.far = far;
       cam.updateProjectionMatrix();
@@ -1285,16 +1353,28 @@ export class Studio {
         this.fpsN = 0;
       }
     }
-    if (!this.fpsEl) return;
+    if (!this.fpsEl && !this.diag.el) return;
     const now = performance.now();
     this.fpsWin.push(dt * 1000);
     if (drawn) this.drawnInWin++;
-    if (now - this.fpsShownAt < 500) return;
+    if (now - this.fpsShownAt < (this.diag.el ? 1000 : 500)) return;
     const n = this.fpsWin.length;
     const total = this.fpsWin.reduce((a, b) => a + b, 0);
     const worst = this.fpsWin.reduce((a, b) => Math.max(a, b), 0);
     const avg = total > 0 ? (n * 1000) / total : 0;
-    this.fpsEl.textContent = this.drawnInWin === 0 ? `${avg.toFixed(0)} fps  idle (nothing moving)` : `${avg.toFixed(0)} fps  worst ${worst.toFixed(1)} ms`;
+    const head = this.drawnInWin === 0 ? `${avg.toFixed(0)} fps  idle (nothing moving)` : `${avg.toFixed(0)} fps  worst ${worst.toFixed(1)} ms`;
+    if (this.fpsEl) this.fpsEl.textContent = head;
+    if (this.diag.el) {
+      const c = (k: string) => this.diag.counts.get(k) ?? 0;
+      const box = this.diag.el.querySelector<HTMLElement>('[data-k="text"]')!;
+      box.textContent = [
+        `${head}  drawn ${this.drawnInWin}/${n} frames`,
+        `canvas ${this.size.w}×${this.size.h} @${this.size.pr.toFixed(2)}x  quality ${this.state.quality}  near ${this.camera.near.toFixed(2)} m`,
+        `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}`,
+        ...this.diag.log,
+      ].join('\n');
+      this.diag.counts.clear();
+    }
     this.fpsWin = [];
     this.drawnInWin = 0;
     this.fpsShownAt = now;
@@ -1306,6 +1386,7 @@ export class Studio {
    * shadows from lower-detail stand-ins the main view never draws.
    */
   private renderShadows() {
+    this.noteEvent('shadows', 'redrawn');
     const r = this.renderer;
     const prev = r.getRenderTarget();
     r.shadowMap.needsUpdate = true;
