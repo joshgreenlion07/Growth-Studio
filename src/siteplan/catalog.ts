@@ -13,6 +13,7 @@
  * the app draws its own look-alike textures, not manufacturer images.
  */
 import { BELGARD_LINES } from './belgard';
+import { approvalOverride } from './approval';
 
 export type PlantForm =
   | 'shadeTree'
@@ -611,14 +612,48 @@ export const OFFERED_LINES = new Set<string>([
   'Castlemanor Rustic',
 ]);
 
-/** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */
-export function isOffered(m: MaterialSpec): boolean {
+/*
+ * Approvals (see approval.ts). Every catalog item has an approval key; the Library turns keys on and off and Area
+ * Planner saves those choices for the team. Without an override, a maker line on the paver or wall shelves is approved
+ * when it is in OFFERED_LINES (mapped in depth); everything else is approved.
+ */
+const GATED_SHELVES = new Set(['Pavers', 'Retaining walls', 'Garden walls']);
+/** Groups whose looks without a maker are generic testers, to be removed as real product lines replace them. */
+const TESTER_GROUPS = new Set<MaterialGroup>(['Pavers', 'Porcelain', 'Natural stone', 'Decking', 'Walls', 'Edging']);
+
+/** A generic paver, wall or curb look (no maker): a tester, kept so saved plans still draw, removable in the Library. */
+export function isTester(m: MaterialSpec): boolean {
+  return !m.maker && !m.auto && !m.id.startsWith('border-of-') && TESTER_GROUPS.has(m.group);
+}
+
+/** The approval key of a look: its maker's line, or the look itself. A `border-of-<paver>` follows its paver. */
+export function approvalKeyOf(m: MaterialSpec): string {
   if (m.id.startsWith('border-of-')) {
     const base = materialById.get(m.id.slice('border-of-'.length));
-    return base ? isOffered(base) : true;
+    if (base) return approvalKeyOf(base);
   }
-  if (!m.maker || (m.shelf !== 'Pavers' && m.shelf !== 'Retaining walls' && m.shelf !== 'Garden walls')) return true;
-  return !!m.line && OFFERED_LINES.has(m.line);
+  // A line's 6 x 9 paver edge is approved on its own: it is often offered where the line's pavers are not.
+  if (m.maker && m.line && m.shelf === 'Paver edge') return `line:${m.maker}|${m.line} 6 x 9 edge`;
+  return m.maker && m.line ? `line:${m.maker}|${m.line}` : `mat:${m.id}`;
+}
+
+let gatedLines: Set<string> | null = null;
+/** Approved when nothing overrides it. */
+function approvedByDefault(key: string): boolean {
+  if (!key.startsWith('line:')) return true;
+  gatedLines ??= new Set(MATERIALS.filter((m) => m.maker && m.line && GATED_SHELVES.has(m.shelf ?? '')).map((m) => approvalKeyOf(m)));
+  if (!gatedLines.has(key)) return true;
+  return OFFERED_LINES.has(key.slice(key.indexOf('|') + 1));
+}
+
+/** True when this key is approved: the Library's override if there is one, else the default. */
+export function isApproved(key: string): boolean {
+  return approvalOverride(key) ?? approvedByDefault(key);
+}
+
+/** True when a person can pick this material: its line or look is approved (see `isApproved`). */
+export function isOffered(m: MaterialSpec): boolean {
+  return isApproved(approvalKeyOf(m));
 }
 
 /** Offered materials for a use; `keep` (the current value) is listed too even when hidden, so it never silently changes. */
