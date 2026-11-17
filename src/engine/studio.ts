@@ -29,6 +29,7 @@ export interface PointHit {
 }
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
+import { FrameBudget } from './framebudget';
 
 /**
  * The 3D runtime: renderer, lighting, sky, camera, post-processing, and the
@@ -59,6 +60,17 @@ THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fra
   /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;/g,
   'float phi = 0.0;',
 );
+
+// The yard always has eight night lights (so a plan that gains a light never recompiles every shader), and three
+// lights every pixel with each of them even while they are off or out of reach (5 m). Skip a light that adds
+// nothing there: in daylight that is every one, and the branch is the same for the whole screen.
+{
+  const chunk = THREE.ShaderChunk.lights_fragment_begin;
+  const at = chunk.indexOf('getPointLightInfo( pointLight, geometryPosition, directLight );');
+  const call = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
+  const end = at < 0 ? -1 : chunk.indexOf(call, at);
+  if (end > 0) THREE.ShaderChunk.lights_fragment_begin = `${chunk.slice(0, end)}if ( directLight.visible ) ${chunk.slice(end)}`;
+}
 
 /**
  * The quality a session starts at. Phones and tablets (a touch screen as the main pointer, or a
@@ -184,6 +196,11 @@ export class Studio {
   holdClip = false;
   /** Diagnostics switch: draw every frame instead of pausing while nothing on screen changes. */
   alwaysDraw = false;
+  /** Render scale and depth of field while the camera moves (see framebudget.ts). */
+  readonly budget: FrameBudget;
+  private frameDt = 0;
+  /** The lawn's tile culling (turf.ts), looked up once per yard. */
+  private turfCull: { build: SceneBuild | null; fn: ((cam: THREE.Vector3, dist: number) => void) | null } = { build: null, fn: null };
 
   /** Count one event for the diagnostics readout (and log it with its time). Cheap when the readout is off. */
   noteEvent(name: string, detail = '') {
@@ -230,6 +247,8 @@ export class Studio {
     setGroundTextureUnits(this.renderer.capabilities.maxTextures);
 
     this.post = new PostPipeline(this.renderer);
+    this.budget = new FrameBudget(this.renderer);
+    this.budget.onChange = (from, to, why) => this.noteEvent('render scale', `${from.toFixed(2)} → ${to.toFixed(2)} (${why})`);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envSky.uniforms.uEnvPass.value = 1;
     this.envScene.add(this.envSky.mesh);
@@ -443,6 +462,7 @@ export class Studio {
     // three restores its own state; everything drawn into textures (lighting environment, shadow map) is redone,
     // and the yard is rebuilt so every buffer and texture is uploaded again.
     this.contextLost = false;
+    this.budget.reset();
     // The old generator's GPU objects died with the old context; a new one starts clean.
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envRT = null;
@@ -677,7 +697,10 @@ export class Studio {
     this.fitShadow();
     this.shadowDirty = true;
     this.mirror.enabled = q !== 'draft';
-    this.mirror.scale = q === 'max' ? 1 : q === 'light' ? 0.25 : 0.5;
+    // Ripples bend the reflection, so it needs less detail than the view: 40% of the view's size at Balanced.
+    this.mirror.scale = q === 'max' ? 1 : q === 'light' ? 0.25 : 0.4;
+    // The Max setting keeps the full picture even while the camera moves.
+    this.budget.adaptive = q !== 'max';
     this.post.setQuality(q);
     this.size.w = 0;
     this.resize();
@@ -1241,7 +1264,8 @@ export class Studio {
     this.moveCamera(dt, now);
     const focusing = Math.abs(1 / Math.max(0.3, this.focusTarget) - this.focusInv) > this.focusInv * 0.002;
     if (this.camMoved && this.pointerOn) this.pointDue = true;
-    if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending || (this.pointerOn && this.pointDue)) this.stillFrames = 0;
+    // Also keep drawing until the view is back at full resolution with its depth of field after moving.
+    if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending || (this.pointerOn && this.pointDue) || this.budget.settling) this.stillFrames = 0;
     else this.stillFrames++;
     if (this.stillFrames === SETTLE_FRAMES + 1) this.noteEvent('pause', '(view still, drawing stops)');
     if (this.stillFrames > SETTLE_FRAMES && !this.alwaysDraw) {
@@ -1307,8 +1331,12 @@ export class Studio {
    */
   private fitTurfFade(cam: THREE.PerspectiveCamera, viewPx: number) {
     const pxPerM = viewPx / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
-    const end = THREE.MathUtils.clamp((0.013 * pxPerM) / 0.35, 18, 90);
+    // Max keeps blades down to a third of a pixel; the other settings stop at about half a pixel.
+    const minPx = this.state.quality === 'max' ? 0.35 : 0.45;
+    const end = THREE.MathUtils.clamp((0.013 * pxPerM) / minPx, 18, 90);
     GLOBAL.uTurfFade.value.set(end * 0.6, end);
+    // Wind motion under about half a pixel is skipped (foliage.ts).
+    GLOBAL.uWindMpp.value = 1 / pxPerM;
   }
 
   /** Draw a frame of the live view. */
@@ -1337,7 +1365,15 @@ export class Studio {
     // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
     const lodScale = this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1;
     this.camera.updateMatrixWorld();
+    // Lower render scale and no depth of field while the camera moves (framebudget.ts).
+    const b = this.budget;
+    b.update(this.camera, dt, this.size.h * this.size.pr, this.post.focus, performance.now());
+    this.post.scale = b.scale;
+    this.post.dofAmount = b.dof;
+    this.frameDt = dt;
+    b.begin();
     this.drawScene(this.camera, this.container.clientHeight * lodScale, this.size.h * this.size.pr, this.post, null, t);
+    b.end();
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     this.stageLabels.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();
@@ -1355,11 +1391,21 @@ export class Studio {
     this.build?.plants.update?.(cam, lodPx);
     this.build?.pebbles.update(cam);
     this.fitTurfFade(cam, devicePx);
+    if (this.turfCull.build !== this.build) {
+      const turf = this.build?.root.getObjectByName('turf');
+      this.turfCull = { build: this.build, fn: (turf?.userData.cullBeyond as typeof this.turfCull.fn) ?? null };
+    }
+    // Lawn tiles whose blades have all shrunk away at this distance are skipped.
+    this.turfCull.fn?.(cam.position, GLOBAL.uTurfFade.value.y);
     // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
     // plants' size changed, never on a timer while leaves sway.
     if (this.shadowDirty) this.renderShadows();
     if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
-      this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces);
+      // The live view's reflection is drawn only while the water is in view and large enough, over the part of the
+      // screen it covers, at the view's render scale; on a frame in two while moving at a reduced scale.
+      const live = target === null;
+      const b = this.budget;
+      this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces, live ? b.scale : 1, live ? devicePx : 0, live ? this.frameDt : 0, live && b.moving && b.scale < 0.9);
     }
     post.render(this.scene, cam, t, target);
   }
@@ -1391,7 +1437,8 @@ export class Studio {
       box.textContent = [
         `${head}  drawn ${this.drawnInWin}/${n} frames`,
         `canvas ${this.size.w}×${this.size.h} @${this.size.pr.toFixed(2)}x  quality ${this.state.quality}  near ${this.camera.near.toFixed(2)} m`,
-        `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}`,
+        `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}  render scale ${c('render scale')}`,
+        `${this.budget.describe()}  mirror ${this.mirror.status}`,
         ...this.diag.log,
       ].join('\n');
       this.diag.counts.clear();
@@ -1542,6 +1589,7 @@ export class Studio {
     this.stillPost?.dispose();
     this.assets.dispose();
     this.post.dispose();
+    this.budget.dispose();
     this.mirror.dispose();
     this.shadowPassTarget.dispose();
     this.envRT?.dispose();
