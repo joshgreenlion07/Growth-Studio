@@ -9,13 +9,13 @@ import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { buildGround, groundModel, WATER_LEVEL, type GroundModel } from './ground';
+import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint } from './hardscape';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
-import { poolLayout, type PoolLayout } from './pools';
+import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
@@ -161,11 +161,19 @@ export async function buildSceneAsync(plan: SitePlan, quality: Quality, mirror: 
   const budget = opts.budgetMs ?? 8;
   const steps = sceneSteps(plan, quality, mirror, sky, assets, opts.stage);
   const frames = frameClock();
+  const t0 = performance.now();
+  const timing: [string, number][] = [];
   try {
     let slice = performance.now();
     for (;;) {
+      const a = performance.now();
       const r = steps.next();
-      if (r.done) return r.value;
+      timing.push([r.done ? 'finish' : r.value, Math.round(performance.now() - a)]);
+      if (r.done) {
+        // For the console and tests: each step's main-thread time, and the whole build's.
+        (globalThis as { __gsBuild?: unknown }).__gsBuild = { ms: Math.round(performance.now() - t0), longest: timing.reduce((m, x) => (x[1] > m[1] ? x : m), ['', 0]), steps: timing };
+        return r.value;
+      }
       if (performance.now() - slice < budget) continue;
       await frames.pause();
       if (opts.stale?.()) {
@@ -228,18 +236,18 @@ function frameClock() {
 }
 
 /** The build, step by step: each `yield` is a place it may pause. */
-function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished'): Generator<void, SceneBuild, void> {
+function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished'): Generator<string, SceneBuild, void> {
   // Sets this yard asks for are painted before any asked for earlier.
   newTextureGeneration();
   const root = new THREE.Group();
   root.name = 'yard';
   const gm = groundModel(plan);
   const ctx = buildContext(plan);
-  yield;
-  const pools = poolLayout(plan, WATER_LEVEL);
-  yield;
-  const ground = buildGround(plan, gm, quality, pools);
-  yield;
+  yield 'context';
+  const pools = yield* poolSteps(plan, WATER_LEVEL);
+  yield 'pools';
+  const ground = yield* groundSteps(plan, gm, quality, pools);
+  yield 'ground';
   // The stage shown (see setStage below) and the plants' age.
   let stage: BuildStage = 'finished';
   let years = 3;
@@ -287,17 +295,17 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   };
   if (openStage !== 'finished') {
     site();
-    yield;
+    yield 'construction';
   }
   let hard = buildHardscape(plan, gm.height, pools);
-  yield;
+  yield 'hardscape';
   const siteC = centroid(plan.site.boundary);
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
-  yield;
+  yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
   const features = buildFeatures(plan.features, gm.height);
   const models = buildModels(plan.models ?? [], gm.height, assets);
-  yield;
+  yield 'water, features, models';
 
   const bodies = bodyGrid(lineBodies(plan));
   // Everything turf blades stay off, indexed once: they are tested for every blade.
@@ -320,12 +328,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     return false;
   };
   const turf = buildTurf(plan, gm, quality, blocked);
-  yield;
+  yield 'turf';
   const pebbles = buildPebbles(plan, gm, quality);
-  yield;
+  yield 'pebbles';
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
-  yield;
+  yield 'placements';
   // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
   // per step, so the plant layer below only places them.
   const species = new Set(placements.map((p) => p.catalogId));
@@ -333,13 +341,13 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     const spec = plantById.get(id);
     if (!spec) continue;
     const geo = speciesGeometry(spec);
-    yield;
+    yield `species ${id}`;
     for (const [g, part] of [[geo.leaves, 'leaf'], [geo.wood, 'wood'], [geo.flowers, 'flower']] as const) {
       if (!g) continue;
       lodGeometry(g, part, 1);
       lodGeometry(g, part, 2);
     }
-    yield;
+    yield `plant detail ${id}`;
   }
   // Plants show in water reflections only near water: the reflection of one farther off is
   // small or hidden. Water boxes are padded by three times the plant's height (4 m at least).
@@ -352,7 +360,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
   const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
-  yield;
+  yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {

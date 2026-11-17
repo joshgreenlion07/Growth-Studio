@@ -250,12 +250,14 @@ function splatTextures(plan: SitePlan, area: Bounds, ppm: number, layers: string
 /* Ground meshes                                                        */
 /* ------------------------------------------------------------------ */
 
-function gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, hole?: Bounds): THREE.BufferGeometry {
+/** A grid mesh over `area`; it pauses (yields) every few rows so a sliced build can let frames through. */
+function* gridGeometry(area: Bounds, step: number, height: (p: Vec2) => number, hole?: Bounds): Generator<string, THREE.BufferGeometry, void> {
   const nx = Math.ceil((area.maxX - area.minX) / step), ny = Math.ceil((area.maxY - area.minY) / step);
   const pos = new Float32Array((nx + 1) * (ny + 1) * 3);
   const uv = new Float32Array((nx + 1) * (ny + 1) * 2);
   const p: Vec2 = [0, 0];
   for (let j = 0, v = 0; j <= ny; j++) {
+    if (j % 16 === 15) yield 'ground grid';
     for (let i = 0; i <= nx; i++, v++) {
       const x = area.minX + ((area.maxX - area.minX) * i) / nx;
       const z = area.minY + ((area.maxY - area.minY) * j) / ny;
@@ -497,15 +499,26 @@ function gridSampler(g: THREE.BufferGeometry, area: Bounds): (p: Vec2) => number
 }
 
 export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, pools: PoolLayout): GroundBuild {
+  const steps = groundSteps(plan, gm, quality, pools);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/** buildGround a piece at a time: each `yield` is a place a sliced build may pause. */
+export function* groundSteps(plan: SitePlan, gm: GroundModel, quality: Quality, pools: PoolLayout): Generator<string, GroundBuild, void> {
   const group = new THREE.Group();
   group.name = 'ground';
   const area = gm.area;
   const layers = groundLayers(plan);
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
+  yield 'ground splats';
   const stage = stageUniforms();
   const mat = splatMaterial(layers, area, splats, pools, stage);
+  yield 'ground material';
   const step = quality === 'draft' ? 0.3 : 0.18;
-  const site = new THREE.Mesh(gridGeometry(area, step, gm.grade), mat);
+  const site = new THREE.Mesh(yield* gridGeometry(area, step, gm.grade), mat);
+  yield 'ground normals';
   site.receiveShadow = true;
   site.name = 'site-ground';
   gridRaycast(site, area, site.geometry.userData.grid.nx, site.geometry.userData.grid.ny);
@@ -514,17 +527,19 @@ export function buildGround(plan: SitePlan, gm: GroundModel, quality: Quality, p
   // Surroundings: coarser terrain that fades into the haze.
   const far = { minX: area.minX - 80, minY: area.minY - 80, maxX: area.maxX + 80, maxY: area.maxY + 80 };
   const surroundMat = mat; // Splat weights are zero outside, which leaves the soil and dry grass layer.
-  const ring = new THREE.Mesh(gridGeometry(far, 2.0, gm.grade, area), surroundMat);
+  const ring = new THREE.Mesh(yield* gridGeometry(far, 2.0, gm.grade, area), surroundMat);
   ring.receiveShadow = true;
   ring.name = 'surround-ground';
   // The ring tucks a few millimeters under the site ground where the two overlap.
   ring.position.y = -0.004;
   group.add(ring);
+  const surface = gridSampler(site.geometry, area);
+  yield 'ground sampler';
 
   return {
     object: group,
     surfaces: [site],
-    surface: gridSampler(site.geometry, area),
+    surface,
     stage,
     dispose() {
       site.geometry.dispose();

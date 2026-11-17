@@ -95,6 +95,14 @@ function poolLevel(plan: SitePlan, outer: Vec2[]): { lift: number; deck: number 
 }
 
 export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
+  const steps = poolSteps(plan, waterLevel);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/** poolLayout a piece at a time: each `yield` is a place a sliced build may pause. */
+export function* poolSteps(plan: SitePlan, waterLevel: number): Generator<string, PoolLayout, void> {
   const pools: PoolPlace[] = [];
   plan.water.forEach((w) => {
     if (w.kind !== 'pool' || !w.polygon || w.polygon.length < 3) return;
@@ -125,7 +133,8 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
   area.maxY = area.minY + H * texel;
   const data = new Uint8Array(W * H * 2).fill(255);
   const enc = (d: number) => Math.round((Math.max(-1, Math.min(1, d / RANGE)) * 0.5 + 0.5) * 255);
-  pools.forEach((pl, k) => {
+  for (let k = 0; k < pools.length; k++) {
+    const pl = pools[k];
     const outerI = outerIdx[k], polyI = new PolygonIndex(pl.poly);
     const b = outerI.box;
     const i0 = Math.max(0, Math.floor((b.minX - RANGE - area.minX) / texel)), i1 = Math.min(W - 1, Math.ceil((b.maxX + RANGE - area.minX) / texel));
@@ -134,6 +143,7 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
     // (the stored distance saturates at RANGE, inside or out), so only blocks near an outline are worked texel by texel.
     const B = 8, reach = RANGE + B * texel * Math.SQRT1_2 + texel;
     for (let bj = j0; bj <= j1; bj += B) {
+      if ((bj - j0) % (B * 4) === B * 3) yield 'pool map';
       for (let bi = i0; bi <= i1; bi += B) {
         const ej = Math.min(j1, bj + B - 1), ei = Math.min(i1, bi + B - 1);
         const cx = area.minX + ((bi + ei) / 2 + 0.5) * texel, cy = area.minY + ((bj + ej) / 2 + 0.5) * texel;
@@ -149,7 +159,7 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
         }
       }
     }
-  });
+  }
   const map = new THREE.DataTexture(data, W, H, THREE.RGFormat);
   map.magFilter = map.minFilter = THREE.LinearFilter;
   map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
