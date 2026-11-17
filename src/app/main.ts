@@ -9,6 +9,8 @@ import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
 import { lookOf } from './looks';
 import { Studio } from '../engine/studio';
+// Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
+import { onTexturesChanged } from '../engine/texture-jobs';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
 import type { Quality } from '../engine/post';
@@ -113,6 +115,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Painted textures arrive from the worker after the build; redraw when they do.
+  onTexturesChanged(() => studio?.invalidate());
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
   studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
@@ -531,7 +535,7 @@ async function serverAsk(prompt: string, image: Blob, signal: AbortSignal): Prom
   const buf = new Uint8Array(await image.arrayBuffer());
   let bin = '';
   for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-  const r = await fetch('/api/read-plan', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, image: btoa(bin), mediaType: image.type || 'image/jpeg' }) });
+  const r = await fetch('api/read-plan', { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, image: btoa(bin), mediaType: image.type || 'image/jpeg' }) });
   if (!r.ok) throw { code: r.status === 413 ? 'image_rejected' : 'upstream_error', message: (await r.json().catch(() => ({}))).error };
   return r.json();
 }
@@ -798,9 +802,12 @@ function initFullscreen() {
  */
 const EMBED_ALLOWED_PARENT_ORIGINS: RegExp[] = [
   /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, // local development, any port
-  /^https:\/\/area-planner-beta\.vercel\.app$/, // Area Planner beta
-  /^https:\/\/area-planner[a-z0-9-]*\.vercel\.app$/, // Area Planner production and preview deployments
-  /^https:\/\/([a-z0-9-]+\.)*greenlionlandscape\.com$/, // Green Lion's own site and subdomains
+  /^https:\/\/area-planner-beta\.vercel\.app$/, // Area Planner (also when the studio is served from it at /studio/)
+  // Area Planner on the joshua-jackson Vercel team only: the production alias (area-planner-joshua-jackson),
+  // per branch (area-planner-git-<branch>-joshua-jackson) and per deployment (area-planner-<hash>-joshua-jackson).
+  // The team suffix cannot be taken by another Vercel account, unlike a bare "area-planner" prefix.
+  /^https:\/\/area-planner(-(git-[a-z0-9-]+|[a-z0-9]+))?-joshua-jackson\.vercel\.app$/,
+  /^https:\/\/(www\.)?greenlionlandscape\.com$/, // Green Lion's own site
 ];
 
 const EMBED_EMPTY_NOTE = 'Draw areas in the Design tab to see them here';
@@ -809,7 +816,9 @@ const EMBED_DEBOUNCE_MS = 150;
 /** Largest uploaded model or picture the embed will read. */
 const EMBED_ASSET_MAX_BYTES = 60 * 1024 * 1024;
 
-let embedPending: { plan: unknown; name: string; refit: boolean } | null = null;
+let embedPending: { plan: unknown; name: string; refit: boolean; frame: string } | null = null;
+/** The parent's coordinate frame of the last plan built (it changes only with a new plan image or scale). */
+let embedLastFrame = '';
 let embedTimer = 0;
 let embedOrigin = '';
 let embedBooted = false;
@@ -832,7 +841,7 @@ function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] 
 
 function onEmbedMessage(e: MessageEvent) {
   if (e.source !== window.parent || !EMBED_ALLOWED_PARENT_ORIGINS.some((re) => re.test(e.origin))) return;
-  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; id?: unknown; kind?: unknown; data?: unknown; ids?: unknown } | null;
+  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; frame?: unknown; id?: unknown; kind?: unknown; data?: unknown; ids?: unknown } | null;
   if (!d || typeof d !== 'object' || d.source !== 'area-planner') return;
   if (d.type === 'asset') {
     // An uploaded file the plan names, sent in answer to `need-asset`. `data: null` means the parent no longer has it.
@@ -864,11 +873,14 @@ function onEmbedMessage(e: MessageEvent) {
     );
     return;
   }
+  // The parent hides the 3D tab: stop drawing (plant thumbnails still render), and start again when it is shown.
+  if (d.type === 'pause') { studio?.pause(); return; }
+  if (d.type === 'resume') { studio?.resume(); return; }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
   // Keep only the newest plan. A refit asked for by any message in the burst still happens.
-  embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit };
+  embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit, frame: typeof d.frame === 'string' ? d.frame : '' };
   clearTimeout(embedTimer);
   if (studio) $('#updating').hidden = false;
   embedTimer = window.setTimeout(applyEmbedPlan, EMBED_DEBOUNCE_MS);
@@ -891,10 +903,16 @@ function applyEmbedPlan() {
     plan = res.plan;
     planName = next.name.trim().slice(0, 80) || plan.site.name;
     embedAsked.clear();
-    studio.setPlan(plan, embedBuilt && !next.refit && sameLot);
+    // The parent can name its coordinate frame; while it is unchanged the coordinates have not
+    // moved, so the camera stays even when the lot outline grows.
+    const sameFrame = !!next.frame && next.frame === embedLastFrame;
+    const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
+    embedLastFrame = next.frame;
     embedBuilt = true;
     embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length + (plan.models?.length ?? 0) ? null : EMBED_EMPTY_NOTE);
-    embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
+    // `built` goes once the new yard is on screen (its shaders are warmed first), not when building starts.
+    const extra = res.warnings.length ? { warnings: res.warnings } : {};
+    shown.then(() => embedReply(true, extra), (e) => embedReply(false, { message: `The plan could not be shown in 3D (${String(e instanceof Error ? e.message : e).slice(0, 160)}).` }));
   } catch (e) {
     console.error(e);
     embedNote('This plan could not be shown in 3D.');
@@ -910,6 +928,13 @@ function initEmbed() {
   $('.dock').append(h('div', { class: 'dock-group dock-end' }, $('#btn-image')));
   embedNote(EMBED_EMPTY_NOTE);
   window.addEventListener('message', onEmbedMessage);
+  // `i` belongs to the parent page (its info panel); pass it on, since the 3D view has the keyboard after a click.
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (!embedOrigin || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (e.key === 'i' || e.key === 'I') window.parent.postMessage({ source: 'growth-studio', type: 'key', key: 'i' }, embedOrigin);
+  });
 
   const boot = () => {
     if (embedBooted) return;
@@ -1110,7 +1135,7 @@ function init() {
   // Capabilities, when opened inside Claude.
   if (!claude?.use && location.protocol.startsWith('http')) {
     // Hosted with the plan-reading server: it answers OPTIONS-free POSTs only, so probe with a tiny bad request.
-    fetch('/api/read-plan', { method: 'POST', body: '{}' }).then((r) => { serverReader = r.status === 400; $('#read-ai-note').hidden = serverReader; }).catch(() => {});
+    fetch('api/read-plan', { method: 'POST', body: '{}' }).then((r) => { serverReader = r.status === 400; $('#read-ai-note').hidden = serverReader; }).catch(() => {});
   }
   if (claude?.use) {
     claude.use('sample').then((s) => { sample = (s as SampleFn) ?? null; $('#read-ai-note').hidden = !!sample; }).catch(() => {});
