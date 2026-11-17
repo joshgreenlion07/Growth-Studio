@@ -83,19 +83,42 @@ export interface PaverPattern {
   /** Tumbled: worn, rounded edges. */
   tumbled?: boolean;
   /** Face texture. */
-  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate';
+  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate' | 'antiqued';
 }
 
 /**
- * Laying pattern for a Belgard-style 3-piece set (6 x 12, 9 x 12 and 12 x 12): 'a' and 'b' are Belgard's
- * published 3-Piece Pattern A and Pattern B, 'random' the old random ashlar. Left out means Pattern A.
+ * Laying pattern of a paver that offers Belgard's published patterns (see `layingsFor`). For the 6 x 12, 9 x 12 and
+ * 12 x 12 set (Catalina Grana, Avalon Slate): 'a' and 'b' are Belgard's 3-Piece Pattern A and Pattern B, 'random' the
+ * old random ashlar. For Antiqued Flat Top (6 x 9, 9 x 9 and 9 x 12): 'a' is its own 3-Piece Pattern A, 'running3' the
+ * 3-Piece Running Bond, and 'running' and 'herringbone' the 1-Piece Running Bond and 45 degree Herringbone of 6 x 9.
+ * Left out, the first pattern the paver offers.
  */
-export type LayingPattern = 'a' | 'b' | 'random';
-export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar' };
-/** True for a paver whose pieces are the 3-piece set the laying patterns are drawn for. */
+export type LayingPattern = 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone';
+export const LAYING_PATTERNS: LayingPattern[] = ['a', 'b', 'random', 'running3', 'running', 'herringbone'];
+export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar', running3: '3-piece running bond', running: '1-piece running bond (6 x 9)', herringbone: '1-piece herringbone (6 x 9)' };
+const sameSizes = (s: [number, number][] | undefined, want: number[][]) => !!s && s.length === want.length && want.every(([a, b], i) => s[i][0] === a && s[i][1] === b);
+/** True for a paver whose pieces are the 6 x 12, 9 x 12 and 12 x 12 set Pattern A and B are drawn for. */
 export function isThreePiece(spec: MaterialSpec | undefined): boolean {
-  const s = spec?.pattern?.sizes;
-  return !!s && spec!.pattern!.kind === 'ashlar' && s.length === 3 && [[6, 12], [9, 12], [12, 12]].every(([a, b], i) => s[i][0] === a && s[i][1] === b);
+  return !!spec?.pattern && spec.pattern.kind === 'ashlar' && sameSizes(spec.pattern.sizes, [[6, 12], [9, 12], [12, 12]]);
+}
+/** True for an Antiqued Flat Top main-course paver (its 3-piece set, or Midnight, sold only as 6 x 9). */
+export function isAntiqued(spec: MaterialSpec | undefined): boolean {
+  return !!spec && spec.use === 'hardscape' && spec.line === 'Antiqued Flat Top';
+}
+/** The laying patterns a paver offers, the default first; empty when it is laid one way only. */
+export function layingsFor(spec: MaterialSpec | undefined): LayingPattern[] {
+  if (isAntiqued(spec)) return spec!.pattern?.kind === 'ashlar' ? ['a', 'running3', 'running', 'herringbone'] : ['running', 'herringbone'];
+  if (isThreePiece(spec)) return ['a', 'b', 'random'];
+  return [];
+}
+/** The pattern a zone is laid in: its own choice when the paver offers it, else the paver's default. */
+export function layingOf(spec: MaterialSpec | undefined, laying?: LayingPattern): LayingPattern | undefined {
+  const all = layingsFor(spec);
+  return laying && all.includes(laying) ? laying : all[0];
+}
+/** A pattern's name for one paver (Antiqued Flat Top's Pattern A has no 12 in courses). */
+export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): string {
+  return isAntiqued(spec) && k === 'a' ? '3-piece Pattern A' : LAYING_NAMES[k];
 }
 
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
@@ -432,10 +455,10 @@ const BELGARD: MaterialSpec[] = [
     const id = `${L.slug}-${slugOf(n)}`;
     const tags = { matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: L.shelf, color: n };
     if (L.shelf === 'Pavers') {
-      const sizes = L.sizes ?? CATALINA_SIZES;
+      const sizes = L.colorSizes?.[n] ?? L.sizes ?? CATALINA_SIZES;
       return [
         M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured' }, thickness: 0.06, ...tags }),
-        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15 }, thickness: 0.06, auto: true }),
+        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, ...(L.face ? { face: L.face } : {}) }, thickness: 0.06, auto: true }),
         // A line that sells its own border stone (Avalon Slate) offers every color as a border on its own too.
         ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured' }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
       ];
@@ -529,6 +552,7 @@ export const OFFERED_LINES = new Set<string>([
   'Avalon Slate',
   'Melville Tandem Wall',
   'Highland Stone',
+  'Antiqued Flat Top',
 ]);
 
 /** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */

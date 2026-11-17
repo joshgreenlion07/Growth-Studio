@@ -87,7 +87,7 @@ Messages use `window.postMessage`:
   listed: a maker paver or wall line is offered once it is mapped in depth from
   the maker's specs (sizes, faces, colors, patterns), by adding its line name to
   `OFFERED_LINES` in `src/siteplan/catalog.ts` (today Catalina Grana, Avalon
-  Slate, Melville Tandem Wall and Highland Stone). Generic looks, curbs and
+  Slate, Antiqued Flat Top, Melville Tandem Wall and Highland Stone). Generic looks, curbs and
   fences are always listed. Hidden lines stay in the catalog, so a plan that
   already uses one still loads and renders, and `point` still describes it.
   `select` carries the id of the plan item that was clicked, or `null` for bare
@@ -122,10 +122,16 @@ Messages use `window.postMessage`:
   They show in the 3D view's Totals and Every edge measurements as a gold
   line with end ticks, the label (if any) and the length, above all other labels.
   Plans without the key load as before.
-- A hardscape zone in a 3-piece paver set (6 x 12, 9 x 12, 12 x 12) can carry
-  `laying: 'a' | 'b' | 'random'`: Belgard's 3-Piece Pattern A (12 in courses),
-  Pattern B, or the old random ashlar. Left out, Pattern A. The looks in the
-  `ready` message carry `laying: true` when they take a laying pattern.
+- A hardscape zone in a paver that offers laying patterns can carry `laying`.
+  The 3-piece set of 6 x 12, 9 x 12 and 12 x 12 (Catalina Grana, Avalon Slate)
+  takes `'a' | 'b' | 'random'`: Belgard's 3-Piece Pattern A (12 in courses),
+  Pattern B, or the old random ashlar. Antiqued Flat Top (6 x 9, 9 x 9, 9 x 12)
+  takes `'a' | 'running3' | 'running' | 'herringbone'`: its own 3-Piece
+  Pattern A, 3-Piece Running Bond, and the 1-Piece Running Bond and 45 degree
+  Herringbone of 6 x 9 (Midnight is sold in 6 x 9 only, so it takes the last
+  two). Left out, or not one the paver offers, the paver's first. The looks in
+  the `ready` message carry `laying: true` and `layings: { id, name }[]` (the
+  default first) when they take a laying pattern.
 - The material pointer (controller Y, or P) marks the center of the view. In
   embed mode the studio sends `{ source: 'growth-studio', type: 'pointer', on }`
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
@@ -183,4 +189,6 @@ Messages use `window.postMessage`:
 
 Plant sizes are typical starting values, not a horticultural reference.
 Surface looks are modeled after common manufacturer lines; the app draws its
-own textures and ships no manufacturer images.
+own textures and ships no manufacturer images. Antiqued Flat Top's face is
+smooth with gently worn, chipped edges and a few shallow dents, like the real
+weathered paver.

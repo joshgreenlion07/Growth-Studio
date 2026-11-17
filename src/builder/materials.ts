@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isThreePiece, materialById, type LayingPattern } from '../siteplan/catalog';
+import { layingOf, materialById, type LayingPattern } from '../siteplan/catalog';
 import { paint, textureSet, type PBRSet } from '../engine/textures';
 import { fbm, vnoise } from '../engine/noise';
 
@@ -29,10 +29,10 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
   return m;
 }
 
-/** A catalog material. `laying` is a zone's laying pattern, used by 3-piece paver sets. */
+/** A catalog material. `laying` is a zone's laying pattern, used by pavers that offer patterns (see layingsFor). */
 export function catalogMaterial(id: string, extra: THREE.MeshStandardMaterialParameters = {}, laying?: LayingPattern): THREE.MeshStandardMaterial {
   const spec = materialById.get(id) ?? materialById.get('concrete-broom')!;
-  const lay = isThreePiece(spec) ? laying ?? 'a' : '';
+  const lay = layingOf(spec, laying) ?? '';
   return pbrMaterial(`cat:${spec.id}:${lay}:${JSON.stringify(extra)}`, materialTextures(spec, laying), extra);
 }
 
