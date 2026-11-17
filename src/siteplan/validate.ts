@@ -1,4 +1,4 @@
-import { FEATURES, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById } from './catalog';
+import { FEATURES, LAYING_PATTERNS, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById, type LayingPattern } from './catalog';
 import { area, uid } from './geometry';
 import type {
   ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, Vec2, WaterFeature, Zone,
@@ -192,7 +192,7 @@ export function cleanPlan(input: unknown): CleanResult {
       const e = num(it.elevation, 0, 0, 3);
       if (e > 0.005) z.elevation = e;
     }
-    if (it.laying === 'a' || it.laying === 'b' || it.laying === 'random') z.laying = it.laying;
+    if (LAYING_PATTERNS.includes(it.laying as LayingPattern)) z.laying = it.laying as LayingPattern;
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };

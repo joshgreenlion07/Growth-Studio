@@ -1,6 +1,6 @@
 // A catalog material as the parent page (Area Planner) sees it: what it is, its colors and sizes, and, for a maker's
 // line, the maker's product page and swatch photo. Used by the `ready` looks list and the material pointer.
-import { isThreePiece, materialById, type MaterialSpec } from '../siteplan/catalog';
+import { layingName, layingsFor, materialById, type MaterialSpec } from '../siteplan/catalog';
 import { BELGARD_MEDIA, makerImage } from '../siteplan/belgard-media';
 
 export interface Look {
@@ -13,6 +13,8 @@ export interface Look {
   color: string;
   sw: string;
   laying?: true;
+  /** The laying patterns the paver offers, the default first. */
+  layings?: { id: string; name: string }[];
   /** Four colors, light to dark, averaged from the maker's swatch. */
   palette: string[];
   /** Piece face sizes in inches. */
@@ -60,7 +62,11 @@ export function lookOf(m: MaterialSpec): Look {
     sw: m.palette[1] ?? m.palette[0],
     palette: m.palette.slice(0, 4),
   };
-  if (isThreePiece(m)) look.laying = true;
+  const lays = layingsFor(m);
+  if (lays.length) {
+    look.laying = true;
+    look.layings = lays.map((k) => ({ id: k, name: layingName(m, k) }));
+  }
   if (sizes?.length) look.sizes = sizes.map(([a, b]) => [a, b]);
   if (sizeText?.length) look.sizeText = sizeText;
   else if (SIZE_TEXT[line]) look.sizeText = SIZE_TEXT[line];

@@ -200,8 +200,15 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sai
   const tri = (pts: Vec2[], toWorld: (p: Vec2) => Vec2, tex: (p: Vec2) => [number, number]) => {
     if (pts.length < 3) return;
     const base = pos.length / 3;
-    for (const p of pts) { const w = toWorld(p); pos.push(w[0], y, w[1]); nor.push(0, 1, 0); uv.push(...tex(p)); }
-    for (let k = 1; k < pts.length - 1; k++) idx.push(base, base + k, base + k + 1);
+    const ws = pts.map(toWorld);
+    for (let k = 0; k < pts.length; k++) { pos.push(ws[k][0], y, ws[k][1]); nor.push(0, 1, 0); uv.push(...tex(pts[k])); }
+    // Wind every top face to face up: a face seen from its back is shaded with its normal turned down.
+    let ar = 0;
+    for (let k = 0; k < ws.length; k++) { const p = ws[k], q = ws[(k + 1) % ws.length]; ar += p[0] * q[1] - q[0] * p[1]; }
+    for (let k = 1; k < pts.length - 1; k++) {
+      if (ar > 0) idx.push(base, base + k + 1, base + k);
+      else idx.push(base, base + k, base + k + 1);
+    }
   };
   for (let i = 0; i < n; i++) {
     const a = outer[i], b = outer[(i + 1) % n], c = inner[(i + 1) % n], d = inner[i];

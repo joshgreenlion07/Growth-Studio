@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isThreePiece, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace, type WallUnit } from '../siteplan/catalog';
+import { layingOf, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from './textures';
@@ -229,7 +229,7 @@ function cobbleLayout(sizes: [number, number][], seed: string): Layout {
  * pattern repeats over, so the texture tiles. Both use the pallet mix by area: 25% 6 x 12, 25% 9 x 12, 50% 12 x 12.
  * A: 12 in wide courses of 6, 9 and 12 in pieces, a 48 x 42 in module. B: a 36 x 30 in module mixing both directions.
  */
-interface PieceModule { pieces: [number, number, number, number][]; v1: [number, number]; v2: [number, number]; P: number }
+interface PieceModule { pieces: [number, number, number, number][]; v1: [number, number]; v2: [number, number]; P: number; /** Laid at 45 degrees. */ diagonal?: boolean }
 const THREE_PIECE: Record<'a' | 'b', PieceModule> = {
   a: {
     pieces: [[0, 0, 12, 9], [0, 9, 12, 9], [12, 0, 12, 6], [12, 6, 12, 9], [12, 15, 12, 12], [12, 27, 12, 9], [12, 36, 12, 6], [24, 0, 12, 12], [24, 12, 12, 6], [24, 18, 12, 12], [24, 30, 12, 12], [36, 0, 12, 6], [36, 6, 12, 12], [36, 18, 12, 6], [36, 24, 12, 12], [36, 36, 12, 6]],
@@ -241,13 +241,38 @@ const THREE_PIECE: Record<'a' | 'b', PieceModule> = {
   },
 };
 
+/*
+ * Antiqued Flat Top's own patterns (6 x 9, 9 x 9 and 9 x 12), traced from Belgard's Antiqued Flat Top pattern sheet
+ * (BEL24-D-309009): the highlighted module of each drawing, measured on a 3 in grid.
+ * a: 3-Piece Pattern A, 11 pieces repeating on (30, -6) and (9, 27); 25% 6 x 9, 37.5% 9 x 9, 37.5% 9 x 12 by area,
+ *    exactly the pallet mix.
+ * running3: 3-Piece Running Bond, 9 in courses of 6, 9 and 12 in pieces, four courses of 48 in repeating every 36 in.
+ * herringbone: 1-Piece Herringbone of 6 x 9 at 45 degrees, as drawn: one piece each way, repeating on (9, 9) and
+ *    (-6, 6), so it repeats square every 18 x sqrt(2) in (the texture holds six of those each way).
+ */
+const ANTIQUED: Record<'a' | 'running3' | 'herringbone', PieceModule> = {
+  a: {
+    pieces: [[0, 0, 9, 6], [9, 0, 9, 12], [18, 0, 9, 9], [27, 0, 12, 9], [18, 9, 12, 9], [30, 9, 9, 9], [9, 12, 9, 9], [18, 18, 6, 9], [24, 18, 9, 9], [33, 18, 6, 9], [9, 21, 9, 6]],
+    v1: [30, -6], v2: [9, 27], P: 288,
+  },
+  running3: {
+    pieces: [[0, 0, 9, 9], [9, 0, 12, 9], [21, 0, 9, 9], [30, 0, 6, 9], [36, 0, 12, 9], [6, 9, 6, 9], [12, 9, 6, 9], [18, 9, 9, 9], [27, 9, 6, 9], [33, 9, 9, 9], [42, 9, 12, 9], [0, 18, 6, 9], [6, 18, 9, 9], [15, 18, 6, 9], [21, 18, 9, 9], [30, 18, 6, 9], [36, 18, 12, 9], [3, 27, 9, 9], [12, 27, 6, 9], [18, 27, 9, 9], [27, 27, 12, 9], [39, 27, 12, 9]],
+    v1: [48, 0], v2: [0, 36], P: 144,
+  },
+  // Six repeats each way, so piece colors do not visibly repeat every 2 ft.
+  herringbone: { pieces: [[0, 0, 9, 6], [-6, -3, 6, 9]], v1: [9, 9], v2: [-6, 6], P: 6 * 18 * Math.SQRT2, diagonal: true },
+};
+
 function moduleLayout(m: PieceModule): Layout {
   const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
   const P = m.P;
+  const R = Math.SQRT1_2;
   return {
     tile: P * IN,
     at(x: number, y: number) {
-      const X = x / IN, Y = y / IN;
+      let X = x / IN, Y = y / IN;
+      // A diagonal pattern is drawn square and turned 45 degrees: its lattice holds (P, 0) and (0, P) once turned.
+      if (m.diagonal) [X, Y] = [(X + Y) * R, (Y - X) * R];
       // Lattice coordinates of the point, then the copy of the module that holds it.
       const a = Math.floor((X * m.v2[1] - Y * m.v2[0]) / det), b = Math.floor((m.v1[0] * Y - m.v1[1] * X) / det);
       for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
@@ -258,7 +283,9 @@ function moduleLayout(m: PieceModule): Layout {
           const [px, py, pw, ph] = m.pieces[k];
           if (qx >= px && qx < px + pw && qy >= py && qy < py + ph) {
             // The id comes from where the piece sits inside the repeat, so the same piece keeps its color across tiles.
-            const cx = ((((ox + px + pw / 2) % P) + P) % P), cy = ((((oy + py + ph / 2) % P) + P) % P);
+            let mx = ox + px + pw / 2, my = oy + py + ph / 2;
+            if (m.diagonal) [mx, my] = [(mx - my) * R, (mx + my) * R];
+            const cx = (((mx % P) + P) % P), cy = (((my % P) + P) % P);
             const rotated = ph > pw;
             const edge = Math.min(qx - px, px + pw - qx, qy - py, py + ph - qy) * IN;
             const along = rotated ? (qy - py) / ph : (qx - px) / pw;
@@ -273,7 +300,11 @@ function moduleLayout(m: PieceModule): Layout {
 
 function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layout {
   const [a, b] = p.sizes[0];
-  if (laying && laying !== 'random' && p.kind === 'ashlar') return moduleLayout(THREE_PIECE[laying]);
+  // 1-piece patterns of 6 x 9 (Antiqued Flat Top): half bond, 9 in along the course; or the 45 degree herringbone.
+  if (laying === 'running') return runningLayout(9, 6, 0.5, false, 24, 16, seed);
+  if (laying === 'herringbone') return moduleLayout(ANTIQUED.herringbone);
+  if (laying === 'running3' || (laying === 'a' && p.face === 'antiqued')) return moduleLayout(ANTIQUED[laying]);
+  if ((laying === 'a' || laying === 'b') && p.kind === 'ashlar') return moduleLayout(THREE_PIECE[laying]);
   switch (p.kind) {
     case 'running': return runningLayout(a, b, 0.5, false, 12, 6, seed);
     case 'soldier': {
@@ -302,9 +333,15 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const lay = layoutFor(p, spec.id, laying);
   const T = lay.tile;
   const J = (p.joint * IN) / 2;
-  const bevel = p.tumbled ? 0.012 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005;
-  const size = T > 5 ? 2048 : 1024;
-  return paint(size, T, p.tumbled ? 12 : p.face === 'slate' ? 15 : 9, (u, v) => {
+  const antiqued = p.face === 'antiqued';
+  const bevel = p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005;
+  const size = T > 5 || antiqued ? 2048 : 1024;
+  // Noise frequencies per tile for the antiqued face, whole numbers so the texture stays seamless.
+  const F = (m: number) => Math.max(2, Math.round(T / m));
+  // The antiqued face's relief is set in real size (1 unit of height is about 4 mm), so a large patio texture and a small
+  // border texture shade the same; the other faces keep their per-pixel strengths.
+  const relief = antiqued ? (0.004 * size) / T : p.tumbled ? 12 : p.face === 'slate' ? 15 : 9;
+  return paint(size, T, relief, (u, v) => {
     const x = u * T, y = v * T;
     const hit = lay.at(x, y);
     const id = hit.id;
@@ -312,16 +349,29 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
     // Tumbled pieces have chipped, wavy edges.
     let edge = hit.edge;
     if (p.tumbled) edge -= (vnoise(u * 90, v * 90, 90, 3) - 0.5) * 0.008;
-    const joint = edge < J;
+    // Antiqued: the arris is worn unevenly and small chips are broken out of the edges and corners, more on some pieces
+    // than others. A chip eats into the piece, so it moves the edge in; corners, near two edges, chip most.
+    let chip = 0;
+    const rim = edge;
+    if (antiqued) {
+      const wob = vnoise(u * F(0.05), v * F(0.05), F(0.05), 21) - 0.5;
+      const cn = vnoise(u * F(0.03), v * F(0.03), F(0.03), 23) * 0.75 + vnoise(u * F(0.011), v * F(0.011), F(0.011), 29) * 0.25;
+      chip = smooth(0.64, 0.76, cn + (r3 - 0.5) * 0.2);
+      edge -= Math.max(0, wob) * 0.003 + chip * (0.004 + 0.009 * cn);
+    }
+    // Joint sand fills only the real joint; a chip is a low notch in the paver, not wider sand.
+    const joint = (antiqued ? rim : edge) < J;
     if (joint) {
       const g = vnoise(u * 500, v * 500, 500, 2);
       return { h: 0, c: mulRGB(JOINT_SAND, 0.75 + g * 0.3), r: 1 };
     }
-    const bev = smooth(J, J + bevel, edge);
+    const bev = antiqued ? 0.12 + 0.88 * smooth(J, J + bevel, edge) : smooth(J, J + bevel, edge);
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
     const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
-    c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * 0.55);
+    c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
+    // DuraFusion blends cloud a third tone through the face in soft drifts.
+    if (antiqued) c = mixRGB(c, pick(colors, r3), smooth(0.5, 0.85, fbm(u + r1 * 1.3, v + r2 * 2.1, F(0.12), 3, 33 + (id % 11))) * 0.45);
     let h = bev;
     let rough = 0.82;
     if (p.face === 'woodgrain') {
@@ -335,6 +385,24 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
       c = mulRGB(c, 0.95 + g * 0.08);
       h = bev * (0.97 + g * 0.03);
       rough = 0.7;
+    } else if (antiqued) {
+      // Antiqued Flat Top: a smooth, gently weathered face. A faint wave across the piece, fine paste with sand grains,
+      // a few small dents and pits, worn patches a little lighter and smoother, and chips showing the rougher, lighter
+      // broken concrete under the face.
+      const und = fbm(u + r2 * 3.3, v + r1 * 2.2, F(0.25), 3, 51);
+      const fine = vnoise(u * F(0.0035), v * F(0.0035), F(0.0035), 53);
+      const vo = voronoi(u, v, F(0.06), 57 + (id % 3));
+      // Dents: a few shallow, uneven dings (a noise wobble breaks the round shape), and fewer fine pin holes.
+      const dw = (vnoise(u * F(0.008), v * F(0.008), F(0.008), 63) - 0.5) * 0.08;
+      const pit = vo.id > 0.9 ? 1 - smooth(0.03, 0.09 + (vo.id - 0.9) * 0.9, vo.f1 + dw) : 0;
+      const vo2 = voronoi(u, v, F(0.022), 59);
+      const pin = vo2.id > 0.95 ? 1 - smooth(0.04, 0.13, vo2.f1) : 0;
+      const wear = smooth(0.55, 0.8, fbm(u + 7.1, v + 3.3, F(0.09), 4, 61 + (id % 7)));
+      const broken = chip * (1 - smooth(0.002, 0.02, rim));
+      c = mulRGB(c, 1.01 + fine * 0.05 - pit * 0.08 - pin * 0.06 + wear * 0.04);
+      c = mixRGB(c, mulRGB(mixRGB(c, [0.62, 0.6, 0.56], 0.25), 1.04), broken * 0.35);
+      h = bev * (0.9 + und * 0.1 + fine * 0.03 - pit * 0.45 - pin * 0.3 - broken * 0.5);
+      rough = 0.64 + fine * 0.06 + pit * 0.12 + pin * 0.08 + broken * 0.18 - wear * 0.07;
     } else if (p.face === 'slate') {
       // Cleft slate (Avalon Slate): each stone carries its own rippled cleft, ridges a few centimeters apart running
       // roughly along the stone and leaning a little differently on each, broken into a few shallow terraces.
@@ -780,9 +848,9 @@ export function latticeAlpha(): THREE.Texture {
 /* Dispatch                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Textures for a catalog material. `laying` picks the laying pattern of a 3-piece paver set (Pattern A when left out). */
+/** Textures for a catalog material. `laying` picks the laying pattern of a paver that offers patterns (its first when left out). */
 export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
-  const lay: LayingPattern | undefined = isThreePiece(spec) ? laying ?? 'a' : undefined;
+  const lay = layingOf(spec, laying);
   return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, () => {
     switch (spec.recipe) {
       case 'lawn': return lawnSet(spec);

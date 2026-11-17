@@ -1,4 +1,4 @@
-import { FEATURES, LAYING_NAMES, MATERIALS, PLANTS, featureById, isOffered, isThreePiece, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, isAntiqued, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -357,12 +357,14 @@ function renderInspector() {
     box.append(h('h3', { text: z.kind === 'turf' ? 'Lawn or turf' : z.kind === 'bed' ? 'Planting bed' : 'Patio or path' }), confirmAI(z) ?? '');
     box.append(field('Material', selectEl('z-mat', matOptions(use, z.catalogId), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
     if (z.kind === 'hardscape') {
-      if (isThreePiece(materialById.get(z.catalogId))) {
-        box.append(field('Laying pattern', selectEl('z-laying', (['a', 'b', 'random'] as LayingPattern[]).map((k) => ({ value: k, label: LAYING_NAMES[k] })), z.laying ?? 'a', (v) => {
+      const zm = materialById.get(z.catalogId);
+      const lays = layingsFor(zm);
+      if (lays.length) {
+        box.append(field('Laying pattern', selectEl('z-laying', lays.map((k) => ({ value: k, label: layingName(zm, k) })), layingOf(zm, z.laying) ?? lays[0], (v) => {
           snapshot();
           z.laying = v as LayingPattern;
           changed();
-        }, 'Laying pattern'), 'Belgard 3-piece patterns for the 6 x 12, 9 x 12 and 12 x 12 set.'));
+        }, 'Laying pattern'), isAntiqued(zm) ? "Belgard's Antiqued Flat Top patterns." : 'Belgard 3-piece patterns for the 6 x 12, 9 x 12 and 12 x 12 set.'));
       }
       box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border', z.border?.catalogId)], z.border?.catalogId ?? '', (v) => {
         snapshot();

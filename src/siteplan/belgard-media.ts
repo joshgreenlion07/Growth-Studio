@@ -28,7 +28,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   "Antiqued Flat Top": {
     page: "https://www.belgard.com/product/antiqued-flat-top/",
     sizes: ["6 x 9 x 2 3/8\" / 9 x 9 x 2 3/8\" / 9 x 12 x 2 3/8\"", "6 x 9 x 2 3/8\""],
-    images: { "Cream Tan Brown": "stlzr9xsnfl9jzmku0hy-2.jpg", "Gray Charcoal Tan": "93120ce5a68a525c886e97386135478e55e7f5e2.jpg", "Gray/Charcoal": "puiylflzuvkpvsciydrp.jpg", "Midnight": "nh3i0sajpenafrg6bdlt.jpg", "Shaded Gray": "403_NC_Shaded_Gray_DF_Flat-top-Antiqued_Modular.jpg", "Tan Brown Charcoal": "zs8f8b3djogokrjmblkj.jpg" },
+    images: { "Cream Tan Brown": "stlzr9xsnfl9jzmku0hy-2.jpg", "Gray Charcoal Tan": "93120ce5a68a525c886e97386135478e55e7f5e2.jpg", "Gray Charcoal": "puiylflzuvkpvsciydrp.jpg", "Midnight": "nh3i0sajpenafrg6bdlt.jpg", "Shaded Gray": "403_NC_Shaded_Gray_DF_Flat-top-Antiqued_Modular.jpg", "Tan Brown Charcoal": "zs8f8b3djogokrjmblkj.jpg" },
   },
   "Dimensions 6": {
     page: "https://www.belgard.com/product/dimensions-6/",

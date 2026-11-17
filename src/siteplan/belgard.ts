@@ -10,8 +10,10 @@ export interface MakerLine {
   shelf: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb';
   sizes?: [number, number][];
   /** Paver face and joint width (in), when the line differs from the usual textured face and 0.2 in joint. */
-  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate';
+  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate' | 'antiqued';
   joint?: number;
+  /** Colors sold in other sizes than the line's (Antiqued Flat Top Midnight: 6 x 9 only). */
+  colorSizes?: Record<string, [number, number][]>;
   /** The line sells a matching 6 x 9 border stone, offered in every color. */
   border?: boolean;
   /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
@@ -33,14 +35,21 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Rainier", ['#736455', '#6d6052', '#665c51', '#5f574f']],
     ["Victorian", ['#888074', '#7e7466', '#746a5d', '#5d564d']],
   ] },
-  // Antiqued Flat Top keeps the textured face (fine aggregate and pores), a close starting point for its look.
-  { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], face: 'textured', colors: [
-    ["Cream Tan Brown", ['#897362', '#836d5c', '#7e6957', '#776252']],
-    ["Gray Charcoal Tan", ['#7f7971', '#7c736b', '#776e66', '#6e6760']],
-    ["Gray/Charcoal", ['#7f7e7b', '#787774', '#6f6e6b', '#61605d']],
-    ["Midnight", ['#4b4a48', '#484745', '#474644', '#444341']],
-    ["Shaded Gray", ['#847f79', '#817c75', '#7f7973', '#7b7670']],
-    ["Tan Brown Charcoal", ['#7a695d', '#736459', '#6f6157', '#6a5c54']],
+  // Antiqued Flat Top (Heritage Collection), from Belgard's Pacific (Stockton) cut sheet, 01/2025: a 60 mm (2 3/8 in)
+  // 3-piece set of 6 x 9, 9 x 9 and 9 x 12, and a 6 x 9 accent piece for borders. "Gently weathered smooth face".
+  // Pallet layer: 8 of 6 x 9, 8 of 9 x 9, 6 of 9 x 12 (25%, 37.5%, 37.5% by area); Midnight is sold in 6 x 9 only.
+  // Colors are the 8 the Pacific region lists. Six are read from Belgard's web swatch photos; Brown Beige Charcoal and
+  // Tan Red Charcoal have no web photo and are read from the cut sheet's swatches, matched to the web photos through the
+  // six colors both show (the print is within 1% of the photos on average).
+  { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], face: 'antiqued', joint: 0.15, border: true, colorSizes: { Midnight: [[6, 9]] }, colors: [
+    ["Brown Beige Charcoal", ['#93857c', '#857871', '#756964', '#635a57']],
+    ["Cream Tan Brown", ['#8f7a66', '#86715e', '#7f6958', '#766152']],
+    ["Gray Charcoal", ['#7f7f7a', '#767571', '#6b6a67', '#5f5e5c']],
+    ["Gray Charcoal Tan", ['#7d7872', '#817162', '#756c64', '#68645f']],
+    ["Midnight", ['#4e4e4c', '#4a4947', '#474644', '#444341']],
+    ["Shaded Gray", ['#86817b', '#817c75', '#7d7871', '#78736d']],
+    ["Tan Brown Charcoal", ['#836c59', '#77665a', '#6f6158', '#665c56']],
+    ["Tan Red Charcoal", ['#906d59', '#86614e', '#7c5a47', '#6d4f3e']],
   ] },
   { slug: 'dimensions-6', name: "Dimensions 6", shelf: 'Pavers', sizes: [[3, 6], [6, 6], [6, 9]], colors: [
     ["Anthracite", ['#5d5957', '#565250', '#524e4c', '#4d4947']],
