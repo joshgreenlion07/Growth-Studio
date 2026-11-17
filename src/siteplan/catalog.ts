@@ -122,7 +122,13 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
 }
 
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
-export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn';
+export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
+/**
+ * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
+ * 'tumbled' (Castlemanor Grana), 'tumbledRough' (Castlemanor Rustic), 'ashlar' (Ashlar Tandem), 'lamina' (Lamina
+ * Tandem), 'chiseled' (Brisa) and 'papyrus' (Papyrus Artforms).
+ */
+export type UnitFace = 'tumbled' | 'tumbledRough' | 'ashlar' | 'lamina' | 'chiseled' | 'papyrus';
 
 /**
  * A maker's wall unit: course height and unit face lengths (inches), an optional virtual joint inside each unit (inches
@@ -138,6 +144,13 @@ export interface WallUnit {
   capIn?: number;
   capOver?: number;
   bond?: 'random' | 'half' | 'stack';
+  /**
+   * A maker's laying pattern, overriding `bond`: courses from the bottom up, repeating, each with where its first joint
+   * falls (inches along the wall) and its unit lengths in order. Every course must add up to the same length.
+   */
+  pattern?: { start: number; lengths: number[] }[];
+  /** Units made of two half-height faces offset along the wall (Lamina's Z-shaped units): the upper half's offset, in. */
+  halfShift?: number;
 }
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 

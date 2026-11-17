@@ -5,7 +5,7 @@
  * in linear light, 120 px, 12 px inset). No Belgard image ships with the app.
  * `shelf` is where the line sits in the catalogue; `sizes` are the paver sizes in inches.
  */
-import type { WallUnit } from './catalog';
+import type { UnitFace, WallUnit } from './catalog';
 
 export interface MakerLine {
   slug: string;
@@ -20,7 +20,7 @@ export interface MakerLine {
   /** The line sells a matching 6 x 9 border stone, offered in every color. */
   border?: boolean;
   /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
-  wall?: { face: 'smoothUnit' | 'roughHewn'; unit: WallUnit };
+  wall?: { face: 'smoothUnit' | 'roughHewn' | UnitFace; unit: WallUnit };
   colors: [string, string[]][];
 }
 
