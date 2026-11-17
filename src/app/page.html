@@ -76,7 +76,7 @@ header.top {
 .btn-danger { color: var(--danger); }
 select { border: 1px solid var(--line); background: var(--panel); padding: 5px 6px; border-radius: 4px; max-width: 100%; }
 
-main.work { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; min-height: 0; }
+main.work { grid-row: 2; display: grid; grid-template-columns: minmax(300px, 400px) 1fr; min-height: 0; }
 aside.plan-pane { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--panel); min-height: 0; }
 aside.plan-pane > * { flex: 0 0 auto; }
 #tools { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
@@ -156,6 +156,55 @@ section.scene-pane { position: relative; min-width: 0; min-height: 0; background
 #growth { width: 170px; accent-color: var(--accent); }
 .cam { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
 .cam input[type="range"] { width: 90px; accent-color: var(--accent); }
+
+/* Library: a panel over the left of the 3D view; the view itself shows the chosen product. */
+.library { position: absolute; z-index: 6; left: 0; top: 0; bottom: 0; width: min(420px, 100%); display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+html.library-open .dock, html.library-open #views, html.library-open .scene-tools, html.library-open #stage-card, html.library-open #embed-note, html.library-open #nav-hint, html.library-open #height-meter { display: none !important; }
+html.library-open section.scene-pane { grid-template-rows: 1fr; }
+html.library-open aside.plan-pane, html.library-open #mobile-tabs { display: none !important; }
+html.library-open main.work { grid-template-columns: minmax(0, 1fr); }
+html.library-open section.scene-pane { display: grid !important; height: auto; }
+.lib-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.lib-head b { font-size: 15px; }
+.lib-mode { flex: 1 1 140px; color: var(--ink-2); font-size: 11px; }
+.lib-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.lib-tabs button { font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); cursor: pointer; }
+.lib-tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.lib-note { margin: 8px 12px 0; padding: 6px 8px; border-radius: 4px; background: var(--warn-soft); color: var(--ink); }
+.lib-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lib-search { padding: 6px 8px; font: inherit; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); }
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.lib-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.lib-card.is-off { opacity: 0.72; }
+.lib-open { display: flex; flex-direction: column; gap: 6px; padding: 0; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.lib-pic { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.lib-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-big { width: 72px; flex: none; aspect-ratio: 1; }
+.lib-txt b { display: block; font-weight: 600; }
+.lib-txt small { display: block; color: var(--ink-2); font-size: 11px; }
+.lib-badge { align-self: flex-start; font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); }
+.lib-badge.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.lib-badge.off { color: var(--ink-2); }
+.lib-detail-head { display: flex; gap: 10px; align-items: center; }
+.lib-detail-head h3 { margin: 0; font-size: 17px; }
+.lib-detail-head p { margin: 2px 0 0; }
+.library h4 { margin: 6px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+.lib-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.lib-chips button { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); cursor: pointer; }
+.lib-chips button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.lib-chips i { width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--line); }
+.lib-approve { padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.lib-switch { display: flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
+.lib-switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.lib-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 6px 0 0; }
+.lib-facts dt { color: var(--ink-2); }
+.lib-facts dd { margin: 0; }
+.lib-foot { margin: 6px 0 0; }
+.linklike { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-align: left; }
+@media (max-width: 760px) {
+  .library { top: auto; height: 58%; width: 100%; border-right: 0; border-top: 1px solid var(--line); }
+  .lib-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
 
 /* Full screen: the scene alone, with a height meter on the right edge. */
 .scene-tools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 4px; }
@@ -323,7 +372,9 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
           <div id="embed-note" role="status" hidden><p></p></div>
           <div id="updating" hidden>Updating 3D…</div>
           <div id="stage-card" role="status" aria-live="polite" hidden><b id="stage-title"></b><p id="stage-note"></p></div>
+          <div id="library" class="library" hidden aria-label="Library"></div>
           <div class="scene-tools">
+            <button id="btn-library" type="button" aria-pressed="false" title="Product library: every plant, material and feature in 3D">Library</button>
             <div id="nav-modes" role="group" aria-label="Movement">
               <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
               <button type="button" data-mode="fly" aria-pressed="false" title="Fly freely (V or controller A)">Fly</button>

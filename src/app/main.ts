@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, isAntiqued, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -10,6 +10,8 @@ import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
 import { swatchFor, swatchNow } from './swatches';
+import { closeLibrary, libraryOpen, openLibrary } from './library';
+import { getApprovals, setApprovals } from '../siteplan/approval';
 import { Studio } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
 import { onTexturesChanged } from '../engine/texture-jobs';
@@ -138,7 +140,8 @@ function scheduleRebuild() {
   $('#updating').hidden = false;
   rebuildTimer = window.setTimeout(() => {
     try {
-      studio?.setPlan(plan, true).then(showStageNote, () => {});
+      // While the Library is open its sample is on screen; the plan is shown again when it closes.
+      if (!libraryOpen()) studio?.setPlan(plan, true).then(showStageNote, () => {});
     } catch (e) {
       console.error(e);
       toast('Part of the plan could not be built in 3D. Check the last change.', 'warn');
@@ -721,6 +724,7 @@ function stepStage(by: number) {
 
 function initStages() {
   $('#btn-cutaway').addEventListener('click', () => studio?.setCutaway(!studio.cutawayOn));
+  $('#btn-library').addEventListener('click', () => setLibrary(!libraryOpen()));
   const seg = $('#stages');
   for (const s of BUILD_STAGES) {
     const b = h('button', { type: 'button', 'data-stage': s.id, text: s.label, 'aria-pressed': String(s.id === 'finished'), title: `${s.title} ([ and ] step through the stages)` });
@@ -928,6 +932,14 @@ function onEmbedMessage(e: MessageEvent) {
     void swatchFor(id).then((url) => window.parent.postMessage({ source: 'growth-studio', type: 'swatch', id, url }, origin));
     return;
   }
+  if (d.type === 'approvals') {
+    // The team's approvals, saved by the parent (sent after `ready` and after each change made in the Library).
+    embedOrigin ||= e.origin;
+    setApprovals((d as { approvals?: { on?: unknown; off?: unknown } }).approvals as { on: string[]; off: string[] } | null ?? null);
+    postCatalog(true);
+    return;
+  }
+  if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open); return; }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'cover') {
@@ -980,6 +992,12 @@ function applyEmbedPlan() {
     // The parent can name its coordinate frame; while it is unchanged the coordinates have not
     // moved, so the camera stays even when the lot outline grows.
     const sameFrame = !!next.frame && next.frame === embedLastFrame;
+    if (libraryOpen()) {
+      // The Library's sample stays on screen; this plan is shown when the Library closes.
+      embedLastFrame = next.frame;
+      embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
+      return;
+    }
     const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
     embedLastFrame = next.frame;
     embedBuilt = true;
@@ -1001,6 +1019,54 @@ function applyEmbedPlan() {
     const why = e instanceof Error ? e.message : String(e);
     embedReply(false, { message: `The plan could not be built in 3D (${why.slice(0, 160)}).` });
   }
+}
+
+/** The looks the parent can offer: approved pavers, borders, walls, fences, curbs, maker turf and bed fills. */
+function embedLooks(): Look[] {
+  return MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
+}
+
+/**
+ * What the parent's own catalogs should offer: approved plants, placeable features and structures, with the
+ * approvals themselves. After an approvals change the looks go again too, as `materials`.
+ */
+function postCatalog(withMaterials: boolean) {
+  const to = embedOrigin || '*';
+  if (withMaterials) window.parent.postMessage({ source: 'growth-studio', type: 'materials', materials: embedLooks() }, to);
+  window.parent.postMessage({
+    source: 'growth-studio',
+    type: 'catalog',
+    approvals: getApprovals(),
+    plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint })),
+    structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
+  }, to);
+}
+
+/** The camera and growth year to go back to when the Library closes. */
+let libraryReturn: { pose: ReturnType<Studio['savePose']>; years: number } | null = null;
+
+/** Open or close the Library over the 3D view; closing shows the plan again where the camera was. */
+function setLibrary(open: boolean) {
+  if (!studio || open === libraryOpen()) return;
+  if (!open) return closeLibrary();
+  const s = studio;
+  libraryReturn = { pose: s.savePose(), years: s.state.years };
+  s.setPointer(false);
+  openLibrary({
+    studio: s,
+    canApprove: () => EMBED && !!embedOrigin,
+    approve: (key, on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'approve', key, on }, embedOrigin); },
+    onToggle: (isOpen) => {
+      $('#btn-library').setAttribute('aria-pressed', String(isOpen));
+      if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'library', open: isOpen }, embedOrigin);
+      if (isOpen) return;
+      const back = libraryReturn;
+      libraryReturn = null;
+      if (back) setYears(back.years);
+      s.setPlan(plan, false).then(() => { if (back) s.restorePose(back.pose); showStageNote(); }, () => {});
+    },
+  }, $('#library'));
 }
 
 function initEmbed() {
@@ -1026,14 +1092,14 @@ function initEmbed() {
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
     // Only offered looks: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES in the catalog).
-    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
-    window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
+    window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: embedLooks() }, '*');
+    postCatalog(false);
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
       embedAsked.add(id);
       window.parent.postMessage({ source: 'growth-studio', type: 'need-asset', id }, embedOrigin);
     };
-    if (studio) studio.onPick = (id) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
+    if (studio) studio.onPick = (id) => { if (embedOrigin && !libraryOpen()) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
     // The material pointer (controller Y or P): tell the parent what it is on, with the material's details.
     if (studio) {
       studio.onPointer = (on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'pointer', on }, embedOrigin); };
@@ -1043,7 +1109,7 @@ function initEmbed() {
       // the same item, if the pointer is still on it.
       let pointNow = '';
       studio.onPoint = (hit) => {
-        if (!embedOrigin) return;
+        if (!embedOrigin || libraryOpen()) return;
         const origin = embedOrigin;
         const zone = hit ? plan.zones.find((z) => z.id === hit.id) : undefined;
         const laying = hit?.part === 'main' && zone ? layingOf(materialById.get(hit.catalogId), zone.laying) : undefined;

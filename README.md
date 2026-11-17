@@ -221,6 +221,24 @@ Messages use `window.postMessage`:
   depths, covers and amounts. Cut away (button or `C`) clips the yard on the
   near side of a vertical plane through the point the camera looks at and
   draws the ground in section there for the current stage.
+- **Library and approvals.** The Library button (top right of the 3D view) opens a panel listing every product:
+  plants, trees, turf, bark/mulch/rock, maker paver, wall and curb lines, concrete, and the features
+  (pergolas, gazebo, kitchens, fire, water, spa, accents) with the attached roof and California room. Each
+  opens on a sample in the 3D view (a 10 x 10 ft patio, a 10 ft wall or curb run, a plant at Install to 10
+  years) with its colors, laying patterns and scenes. Generic paver, wall and curb looks are listed apart as
+  testers and can be removed. Its Approve toggle decides what the parent offers; the parent saves the choices:
+  - Studio to parent: `{ type: 'approve', key, on }` when the person toggles Approve or removes a tester, and
+    `{ type: 'library', open }` when the Library opens or closes.
+  - Parent to studio: `{ source: 'area-planner', type: 'approvals', approvals: { on: string[], off: string[] } }`
+    (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
+  - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
+    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint }` and
+    `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
+    `ready`, now filtered to approved looks.
+  - Keys (`src/siteplan/approval.ts`): `line:<maker>|<line>` (a line's paver edge is `line:<maker>|<line> 6 x 9 edge`), `mat:<id>`, `plant:<id>`, `feature:<id>`,
+    `structure:cover`, `structure:calroom`. Without an override a maker paver or wall line is approved when
+    it is in `OFFERED_LINES`; everything else is approved. The toggle waits for the parent's `approvals` echo
+    and goes back if none comes. On the studio's own site the Library is view-only.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
