@@ -138,10 +138,10 @@ table.mini th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06
 
 section.scene-pane { position: relative; min-width: 0; min-height: 0; background: var(--scene); display: grid; grid-template-rows: 1fr auto; }
 #scene { position: relative; min-height: 0; overflow: hidden; }
-#views { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+#views { position: absolute; z-index: 3; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
 .view-btn { pointer-events: auto; border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; }
 .view-btn:hover, .view-btn[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
-#updating { position: absolute; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
+#updating { position: absolute; z-index: 3; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
 #loading, #scene-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); padding: 24px; text-align: center; }
 #scene-error { background: var(--paper); }
 .dock { max-height: 45vh; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: flex-end; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
@@ -228,10 +228,15 @@ html.embed #btn-second { display: none; }
 #nav-modes button:first-child { border-radius: 3px 0 0 3px; }
 #nav-modes button:last-child { border-radius: 0 3px 3px 0; }
 section.scene-pane.fs #nav-modes { display: flex; }
-#nav-hint { position: absolute; left: 12px; bottom: 12px; display: none; max-width: calc(100% - 130px); background: rgba(20, 24, 22, 0.72); color: #e7e9e4; font-size: 11px; line-height: 1.5; padding: 5px 9px; border-radius: 3px; pointer-events: none; }
+#nav-hint { position: absolute; z-index: 3; left: 12px; bottom: 12px; display: none; max-width: calc(100% - 130px); background: rgba(20, 24, 22, 0.72); color: #e7e9e4; font-size: 11px; line-height: 1.5; padding: 5px 9px; border-radius: 3px; pointer-events: none; }
 section.scene-pane.fs #nav-hint { display: block; }
 #nav-hint kbd { font-family: var(--font-mono); font-size: 10px; color: #fff; }
-.measure-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+/* Labels over the 3D view: ONE composited layer for all of them, made once and kept (will-change on the layer, never
+   on a label, and labels hide by visibility). Per-label layers came and went every frame as labels showed and hid,
+   changing the set of layers Chrome composites over the WebGL canvas each frame (on macOS, the CALayer tree); one
+   steady layer keeps that set the same from frame to frame. contain: strict keeps label moves from reaching layout
+   or paint outside the layer. */
+.measure-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; will-change: transform; contain: strict; }
 #stage-card { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(460px, calc(100% - 150px)); background: rgba(20, 24, 22, 0.8); color: #eceee9; font-size: 12px; line-height: 1.45; padding: 7px 10px 8px; border-radius: 3px; border-left: 3px solid #7dc00f; pointer-events: none; }
 #stage-card b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #fff; margin-bottom: 2px; }
 #stage-card p { margin: 0; }
@@ -240,7 +245,7 @@ section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label.stage-label span { font-family: var(--font-mono); font-weight: 400; }
 .measure-label.sl-trench { border-left-color: #b8821a; }
 .measure-label.sl-area { border-left-color: #2f5b3b; }
-.measure-label { position: absolute; left: 0; top: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.25; color: #1e2621; background: rgba(251, 250, 247, 0.92); padding: 1px 5px; border-radius: 2px; white-space: nowrap; text-align: center; will-change: transform; }
+.measure-label { position: absolute; left: 0; top: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.25; color: #1e2621; background: rgba(251, 250, 247, 0.92); padding: 1px 5px; border-radius: 2px; white-space: nowrap; text-align: center; }
 .measure-label span { display: block; font-size: 10px; color: #4a524c; }
 .measure-label.ml-area, .measure-label.ml-object { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #2f5b3b; }
 .measure-label.ml-area span, .measure-label.ml-object span { font-family: var(--font-mono); font-weight: 400; }
@@ -260,7 +265,7 @@ section.scene-pane.fs { position: fixed; inset: 0; z-index: 30; display: grid !i
 section.scene-pane.fs .dock { display: none; }
 #views { right: calc(50% + 6px); }
 section.scene-pane.fs #views { display: none; }
-#height-meter { position: absolute; right: 14px; top: 50px; bottom: 50px; width: 74px; display: none; pointer-events: none; color: #f4f3ef; font-family: var(--font-mono); font-size: 11px; }
+#height-meter { position: absolute; z-index: 3; right: 14px; top: 50px; bottom: 50px; width: 74px; display: none; pointer-events: none; color: #f4f3ef; font-family: var(--font-mono); font-size: 11px; }
 section.scene-pane.fs #height-meter { display: block; }
 .hm-scale { position: absolute; right: 0; top: 0; bottom: 34px; width: 6px; background: rgba(20, 24, 22, 0.55); border-radius: 3px; }
 .hm-tick { position: absolute; right: 10px; transform: translateY(50%); white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
