@@ -59,6 +59,13 @@ export interface LineItem extends ItemBase {
   /** Steps: riser height and tread depth, meters. `height` is the total rise. */
   riser?: number;
   tread?: number;
+  /** Curbs: how much of the curb shows above grade, meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. */
+  reveal?: number;
+  /**
+   * Paver edging (an edging line whose catalogId is a paver border look, use 'border'): one row of 6 x 9 pavers along
+   * the line, centered on it. soldier (default): long side across the run. sailor: long side along it.
+   */
+  course?: 'soldier' | 'sailor';
 }
 
 export type WaterKind = 'pond' | 'pool' | 'fountain' | 'stream' | 'pondless';
