@@ -129,42 +129,116 @@ function mitreJoints(outer: Vec2[], inner: Vec2[], y: number): THREE.BufferGeome
   return g;
 }
 
-function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false): THREE.BufferGeometry {
+/** Clip a polygon to a convex polygon (both in the same 2D frame), Sutherland-Hodgman. */
+function clipConvex(subject: Vec2[], clip: Vec2[]): Vec2[] {
+  let area = 0;
+  for (let i = 0; i < clip.length; i++) { const a = clip[i], b = clip[(i + 1) % clip.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const C = area < 0 ? [...clip].reverse() : clip;
+  let out = subject;
+  for (let i = 0; i < C.length && out.length; i++) {
+    const a = C[i], b = C[(i + 1) % C.length];
+    const inside = (p: Vec2) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) >= -1e-9;
+    const cross = (p: Vec2, q: Vec2): Vec2 => {
+      const d1 = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+      const d2 = (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]);
+      const t = d1 / (d1 - d2);
+      return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+    };
+    const next: Vec2[] = [];
+    for (let k = 0; k < out.length; k++) {
+      const p = out[k], q = out[(k + 1) % out.length];
+      if (inside(q)) { if (!inside(p)) next.push(cross(p, q)); next.push(q); }
+      else if (inside(p)) next.push(cross(p, q));
+    }
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * Piece lengths for one straight run of the course between two corners: whole pavers from each corner, so the corners
+ * stay clean (each starts with a whole paver cut only on its mitre), and whatever does not fit goes in the middle of
+ * the run: one cut paver, or, when that would be a sliver under half a paver, two equal cut pavers that blend in.
+ */
+function runPieces(L: number, P: number): number[] {
+  const n = Math.floor(L / P + 1e-6), r = L - n * P;
+  if (r < 0.002) return Array(n).fill(P);
+  if (n === 0) return [L];
+  if (r >= P / 2) { const h = Math.floor(n / 2); return [...Array(h).fill(P), r, ...Array(n - h).fill(P)]; }
+  const h = Math.floor((n - 1) / 2);
+  return [...Array(h).fill(P), (P + r) / 2, (P + r) / 2, ...Array(n - 1 - h).fill(P)];
+}
+
+/**
+ * The border band, paver by paver: a soldier course (`pieceIn` = the paver's short side along the edge, its long side
+ * across) or a sailor course (long side along). Runs between real corners are laid by runPieces and meet on a mitre at
+ * each corner; a border with no real corners (a curve) runs continuously. Each paver maps to its own cell of the
+ * border texture, so its joints fall exactly where the pavers do. The outer face down to the base follows the same pieces.
+ */
+function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false, pieceIn = sailor ? 9 : 6): THREE.BufferGeometry {
   const pos: number[] = [], uv: number[] = [], nor: number[] = [], idx: number[] = [];
   const n = outer.length;
-  let along = 0;
+  const P = pieceIn * 0.0254;
+  const S: number[] = [0];
+  for (let i = 0; i < n; i++) { const a = outer[i], b = outer[(i + 1) % n]; S.push(S[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const total = S[n];
+  // The pavers along the whole outline: [start, end] in arc length from vertex 0 (may run past `total` and wrap).
+  const pieces: [number, number][] = [];
+  const corners = outer.map((_, i) => i).filter((i) => isCorner(outer, i));
+  if (!corners.length) {
+    let s0 = 0;
+    for (const l of runPieces(total, P)) { pieces.push([s0, s0 + l]); s0 += l; }
+  } else {
+    for (let k = 0; k < corners.length; k++) {
+      const a = S[corners[k]];
+      let b = S[corners[(k + 1) % corners.length]];
+      if (b <= a + 1e-9) b += total;
+      let s0 = a;
+      for (const l of runPieces(b - a, P)) { pieces.push([s0, s0 + l]); s0 += l; }
+    }
+  }
+  const tri = (pts: Vec2[], toWorld: (p: Vec2) => Vec2, tex: (p: Vec2) => [number, number]) => {
+    if (pts.length < 3) return;
+    const base = pos.length / 3;
+    for (const p of pts) { const w = toWorld(p); pos.push(w[0], y, w[1]); nor.push(0, 1, 0); uv.push(...tex(p)); }
+    for (let k = 1; k < pts.length - 1; k++) idx.push(base, base + k, base + k + 1);
+  };
   for (let i = 0; i < n; i++) {
     const a = outer[i], b = outer[(i + 1) % n], c = inner[(i + 1) % n], d = inner[i];
+    const len = S[i + 1] - S[i];
+    if (len < 1e-6) continue;
     const dir = norm([b[0] - a[0], b[1] - a[1]]);
-    // A run starts at a real corner: there the pavers' joints are set from the inner corner (where the mitre ends), so
-    // the cut pieces sit at the corner and full pavers follow. Along a curve the joints simply continue.
-    if (isCorner(outer, i)) {
-      along = -((d[0] - a[0]) * dir[0] + (d[1] - a[1]) * dir[1]);
-    }
-    const across = (p: Vec2) => Math.abs((p[0] - a[0]) * dir[1] - (p[1] - a[1]) * dir[0]);
-    const alongOf = (p: Vec2) => (p[0] - a[0]) * dir[0] + (p[1] - a[1]) * dir[1];
-    const base = pos.length / 3;
-    for (const p of [a, b, c, d]) {
-      pos.push(p[0], y, p[1]);
-      nor.push(0, 1, 0);
-      // u runs along the edge, v across the band: the soldier texture's
-      // long side (v) points into the patio.
-      // Sailor course: turn the texture a quarter so the pavers' long side runs along the edge.
-      if (sailor) uv.push(across(p), along + alongOf(p));
-      else uv.push(along + alongOf(p), across(p));
-    }
-    idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
-    // Outer face down to the base.
-    const sb = pos.length / 3;
-    const nrm = [-dir[1], dir[0]];
-    for (const [p, yy] of [[a, y], [b, y], [b, y0], [a, y0]] as [Vec2, number][]) {
-      pos.push(p[0], yy, p[1]);
-      nor.push(nrm[0], 0, nrm[1]);
-      if (sailor) uv.push(y - yy, along + alongOf(p));
-      else uv.push(along + alongOf(p), y - yy);
-    }
-    idx.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
-    along += Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let nin: Vec2 = [-dir[1], dir[0]];
+    if ((d[0] - a[0]) * nin[0] + (d[1] - a[1]) * nin[1] < 0) nin = [dir[1], -dir[0]];
+    const local = (p: Vec2): Vec2 => [(p[0] - a[0]) * dir[0] + (p[1] - a[1]) * dir[1], (p[0] - a[0]) * nin[0] + (p[1] - a[1]) * nin[1]];
+    const world = (q: Vec2): Vec2 => [a[0] + dir[0] * q[0] + nin[0] * q[1], a[1] + dir[1] * q[0] + nin[1] * q[1]];
+    const trap = [local(a), local(b), local(c), local(d)];
+    const W = Math.max(trap[2][1], trap[3][1]) + 0.01;
+    const nrm = [-nin[0], -nin[1]];
+    pieces.forEach(([ps, pe], j) => {
+      for (const shift of [0, total, -total]) {
+        const s0 = ps - shift, s1 = pe - shift;
+        if (s1 <= S[i] + 1e-7 || s0 >= S[i + 1] - 1e-7) continue;
+        // The parts at this edge's ends reach past it so the mitre clip, not the edge, decides where they stop.
+        const u0 = s0 <= S[i] + 1e-7 ? -1 : s0 - S[i];
+        const u1 = s1 >= S[i + 1] - 1e-7 ? len + 1 : s1 - S[i];
+        const along = (u: number) => j * P + (u + S[i] - s0);
+        const tex = (q: Vec2): [number, number] => (sailor ? [q[1], along(q[0])] : [along(q[0]), q[1]]);
+        tri(clipConvex([[u0, -0.01], [u1, -0.01], [u1, W], [u0, W]], trap), world, tex);
+        // Outer face of this paver, down to the base.
+        const o0 = Math.max(0, u0), o1 = Math.min(len, u1);
+        if (o1 - o0 > 1e-5) {
+          const sb = pos.length / 3;
+          for (const [u, yy] of [[o0, y], [o1, y], [o1, y0], [o0, y0]] as [number, number][]) {
+            const w = world([u, 0]);
+            pos.push(w[0], yy, w[1]);
+            nor.push(nrm[0], 0, nrm[1]);
+            uv.push(...((sailor ? [y - yy, along(u)] : [along(u), y - yy]) as [number, number]));
+          }
+          idx.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
+        }
+      }
+    });
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -256,7 +330,9 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const w = Math.max(0.08, Math.min(0.6, z.border.width));
         const inner = insetPolygon(z.polygon, w);
         field = inner;
-        const bg = borderGeometry(z.polygon, inner, t, -0.06, z.border.course === 'sailor');
+        const sailor = z.border.course === 'sailor';
+        const pz = materialById.get(z.border.catalogId)?.pattern?.sizes?.[0] ?? [6, 9];
+        const bg = borderGeometry(z.polygon, inner, t, -0.06, sailor, sailor ? Math.max(pz[0], pz[1]) : Math.min(pz[0], pz[1]));
         geos.push(bg);
         const bm = new THREE.Mesh(bg, mat(catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide })));
         bm.receiveShadow = true;
