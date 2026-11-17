@@ -54,6 +54,8 @@ export interface NavHost {
   home(): void;
   toggleFly(): void;
   toggleMeasure(): void;
+  /** The material pointer: a mark at the center of the view that reports the material under it. */
+  togglePointer(): void;
 }
 
 export class Navigation {
@@ -88,6 +90,7 @@ export class Navigation {
       const first = this.host.mode() !== 'orbit';
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === 'm') { this.host.toggleMeasure(); return; }
+      if (k === 'p') { this.host.togglePointer(); return; }
       if (!first) return;
       if (k === 'v') { this.host.toggleFly(); return; }
       if (k === 'Home') { this.host.home(); return; }
@@ -169,13 +172,15 @@ export class Navigation {
       lift = (b(BTN.RB) ? 1 : 0) - (b(BTN.LB) ? 1 : 0);
       fast = b(BTN.LS);
       if (tapped(BTN.X)) this.host.toggleMeasure();
+      // Y turns the material pointer on and off; B goes home.
+      if (tapped(BTN.Y)) this.host.togglePointer();
       if (first) {
         if (tapped(BTN.A)) this.host.toggleFly();
-        if (tapped(BTN.Y)) this.host.home();
+        if (tapped(BTN.B)) this.host.home();
       } else {
         if (tapped(BTN.RIGHT)) this.host.stepView(1);
         if (tapped(BTN.LEFT)) this.host.stepView(-1);
-        if (tapped(BTN.Y)) this.host.home();
+        if (tapped(BTN.B)) this.host.home();
       }
       this.prev = pad.buttons.map((x) => x.pressed);
     }

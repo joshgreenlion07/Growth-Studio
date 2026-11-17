@@ -13,6 +13,14 @@ import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from
 import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
+import { materialById } from '../siteplan/catalog';
+
+/** What the material pointer is on: the plan item, which part of it, and that part's catalog material. */
+export interface PointHit {
+  id: string;
+  part: string;
+  catalogId: string;
+}
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
 
@@ -97,6 +105,14 @@ export class Studio {
   onFrameStats: (fps: number) => void = () => {};
   /** A click (not a drag) on the scene: the id of the plan item under it, or null for bare ground. */
   onPick: (id: string | null) => void = () => {};
+  /** The material pointer was turned on or off (controller Y, the P key, or setPointer). */
+  onPointer: (on: boolean) => void = () => {};
+  /** The pointer moved onto another material, or onto nothing (null). */
+  onPoint: (hit: PointHit | null) => void = () => {};
+  private pointerOn = false;
+  private pointKey = '';
+  private pointT = 0;
+  private reticle: HTMLDivElement | null = null;
   /** Uploaded-model files that have been handed over (see builder/models.ts). */
   private assets = new ModelAssets();
   /** The plan names an uploaded file that has not been handed over yet. */
@@ -199,6 +215,8 @@ export class Studio {
       },
       // M or controller X steps through Off, Totals, Every edge.
       toggleMeasure: () => this.setMeasureMode(MEASURE_MODES[(MEASURE_MODES.indexOf(this.measure.mode) + 1) % MEASURE_MODES.length]),
+      // P or controller Y: the material pointer.
+      togglePointer: () => this.setPointer(!this.pointerOn),
     });
     this.measure = new Measurements(container);
     this.scene.add(this.measure.group);
@@ -538,6 +556,62 @@ export class Studio {
     this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: performance.now(), dur: 1400 };
   }
 
+  get pointer() {
+    return this.pointerOn;
+  }
+
+  /** Show or hide the material pointer, a mark at the center of the view that reports what it is on. */
+  setPointer(on: boolean) {
+    if (on === this.pointerOn) return;
+    this.pointerOn = on;
+    if (!this.reticle) {
+      const r = document.createElement('div');
+      r.className = 'point-reticle';
+      r.setAttribute('aria-hidden', 'true');
+      r.append(document.createElement('i'), document.createElement('span'));
+      this.container.appendChild(r);
+      this.reticle = r;
+    }
+    this.reticle.hidden = !on;
+    this.pointKey = '';
+    this.pointT = 0;
+    this.onPointer(on);
+    if (!on) this.onPoint(null);
+    else this.nav.pulse(60, 0.3);
+  }
+
+  /** The surface at the center of the view, at most about eight times a second; reports it when it changes. */
+  private updatePointer() {
+    const now = performance.now();
+    if (now - this.pointT < 120) return;
+    this.pointT = now;
+    const hit = this.pointAtCenter();
+    const key = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '';
+    if (key === this.pointKey) return;
+    this.pointKey = key;
+    const label = this.reticle?.querySelector('span');
+    if (label) {
+      const m = hit ? materialById.get(hit.catalogId) : undefined;
+      label.textContent = m ? m.name : '';
+    }
+    this.reticle?.classList.toggle('on', !!hit);
+    this.onPoint(hit);
+  }
+
+  private pointAtCenter(): PointHit | null {
+    if (!this.build) return null;
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hard = this.build.root.getObjectByName('hardscape');
+    const hit = this.raycaster.intersectObjects(hard ? [...this.build.surfaces, hard] : this.build.surfaces, true)[0];
+    let part = '', catalogId = '';
+    for (let o: THREE.Object3D | null = hit ? hit.object : null; o; o = o.parent) {
+      if (!part && typeof o.userData?.part === 'string') { part = o.userData.part; catalogId = String(o.userData.catalogId ?? ''); }
+      const id = o.userData?.itemId;
+      if (typeof id === 'string') return part && catalogId ? { id, part, catalogId } : null;
+    }
+    return null;
+  }
+
   private pickAt(cx: number, cy: number): string | null {
     if (!this.build) return null;
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -649,6 +723,7 @@ export class Studio {
       this.mirror.render(this.renderer, this.scene, this.camera, this.build.water.surfaces);
     }
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
+    if (this.pointerOn) this.updatePointer();
     this.post.render(this.scene, this.camera, t);
 
     const fps = dt > 0 ? 1 / dt : 60;

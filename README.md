@@ -106,6 +106,22 @@ Messages use `window.postMessage`:
   `laying: 'a' | 'b' | 'random'`: Belgard's 3-Piece Pattern A (12 in courses),
   Pattern B, or the old random ashlar. Left out, Pattern A. The looks in the
   `ready` message carry `laying: true` when they take a laying pattern.
+- The material pointer (controller Y, or P) marks the center of the view. In
+  embed mode the studio sends `{ source: 'growth-studio', type: 'pointer', on }`
+  when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
+  id, part, material }` when what it is on changes: `part` is `main`, `border`,
+  `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
+  null. The parent can send `{ source: 'area-planner', type: 'pointer', on }`.
+- Looks (in `ready` and `point`) are `{ id, name, use, maker, line, shelf,
+  color, sw, palette, sizes?, sizeText?, thicknessIn?, face?, image?, page?,
+  laying? }`: `image` is the maker's swatch photo and `page` its product page,
+  both on the maker's site (`src/siteplan/belgard-media.ts`).
+- Full screen in embed mode: the studio sends `{ type: 'fullscreen-request' }`;
+  a parent that answers `{ source: 'area-planner', type: 'fullscreen', on: true }`
+  within 300 ms takes over (so its own panels stay on screen), later sends
+  `{ ..., on: false }` when it leaves full screen, and gets `{ type:
+  'fullscreen-exit' }` when the person leaves it from inside 3D. Without an
+  answer the studio goes full screen by itself.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
