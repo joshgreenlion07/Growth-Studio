@@ -196,6 +196,9 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     ...structs.porchLights.slice(0, 2).map((p) => ({ position: p, color: '#ffc27a', intensity: 3.5, distance: 7, flicker: false })),
   ];
 
+  tagPointables(plan, [structs.object, water.object, features.object, models.object]);
+  // The site ground carries lawn, beds and rock painted from the plan: the pointer asks the ground model which zone a hit is in.
+  for (const g of ground.surfaces) g.userData.pointGround = true;
   const surfaces = [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...models.surfaces, ...plants.proxies];
   const glow = [...structs.glass, ...features.glow, ...hard.glow];
 
@@ -277,4 +280,26 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       plants.dispose();
     },
   };
+}
+
+/**
+ * What the material pointer reports for built items that are not a catalog material's surface: each object that names
+ * its plan item (userData.itemId) but no part gets one, with a `<kind>:<id>` catalogId (see pointKind in
+ * siteplan/material-info.ts). Paving, walls, curbs, fences, steps and stepping stones tag themselves; lawn and beds
+ * are found through the ground model, and plants through their proxies.
+ */
+function tagPointables(plan: SitePlan, roots: THREE.Object3D[]) {
+  const what = new Map<string, [string, string]>();
+  for (const s of plan.structures) what.set(s.id, ['structure', `structure:${s.kind}`]);
+  for (const w of plan.water) what.set(w.id, ['water', `water:${w.kind}`]);
+  for (const f of plan.features) what.set(f.id, ['feature', `feature:${f.catalogId}`]);
+  for (const m of plan.models ?? []) what.set(m.id, ['model', `model:${m.kind}`]);
+  for (const r of roots) r.traverse((o) => {
+    const id = o.userData.itemId;
+    if (typeof id !== 'string' || typeof o.userData.part === 'string') return;
+    const w = what.get(id);
+    if (!w) return;
+    o.userData.part = w[0];
+    o.userData.catalogId = w[1];
+  });
 }

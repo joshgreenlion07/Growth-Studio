@@ -343,6 +343,10 @@ export const MATERIALS: MaterialSpec[] = [
   // Mulch and rock
   M({ id: 'black-mulch', name: 'Black mulch', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#3a342f', '#221e1b'] }),
   M({ id: 'brown-mulch', name: 'Red-brown bark', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#6e4a2f', '#4a3121'] }),
+  // Natural fir bark (the plain brown bark most beds get) and humus: dark, fine composted organic matter, drawn with the
+  // DG recipe's fine grain in soil browns. Palettes are typical bagged and bulk colors, not a maker's.
+  M({ id: 'fir-bark', name: 'Fir bark mulch, natural brown', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#8a5c3a', '#5e3d27'] }),
+  M({ id: 'humus', name: 'Humus (compost)', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#4b3828', '#2c2017'] }),
   M({ id: 'decomposed-granite', name: 'Decomposed granite', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#b39a78', '#8f7a5d'] }),
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
   M({ id: 'black-pebble', name: 'Black beach pebble', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble', palette: ['#4a4a48', '#2a2a29', '#151515'] }),

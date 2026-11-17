@@ -148,17 +148,42 @@ Messages use `window.postMessage`:
 - The material pointer (controller Y, or P) marks the center of the view. In
   embed mode the studio sends `{ source: 'growth-studio', type: 'pointer', on }`
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
-  id, part, material }` when what it is on changes: `part` is `main`, `border`,
-  `edge` (paver edging), `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
-  null. The parent can send `{ source: 'area-planner', type: 'pointer', on }`.
+  id, part, material }` when what it is on changes. Everything built from the
+  plan can be pointed at. `part` is `main`, `border`, `edge` (paver edging),
+  `wall`, `cap`, `curb`, `fence`, `steps` or `stone` for a catalog surface;
+  `turf` or `bed` for a lawn, synthetic grass, mulch, bark, humus, rock or DG
+  zone (painted on the ground, found by the zone under the hit point); and
+  `plant`, `water`, `structure`, `feature` or `model` for the rest. `id` is the
+  plan item's id (a mass-planted bed's plants report the bed). `material` is
+  the look (below), or null on bare ground or sky. Right after it, once a
+  swatch has been drawn from the 3D material, the studio sends the same
+  `point` again with `material.swatch` set, if the pointer is still on it (a
+  swatch made before goes in the first message). The parent can send
+  `{ source: 'area-planner', type: 'pointer', on }`.
 - Pressing the right stick (or L) locks the pointed material: the studio sends
   `{ source: 'growth-studio', type: 'point-lock', locked }` and no `point`
   messages while locked; letting go sends what the pointer is on at once. The
   parent can send `{ source: 'area-planner', type: 'point-lock', locked }`.
-- Looks (in `ready` and `point`) are `{ id, name, use, maker, line, shelf,
-  color, sw, palette, sizes?, sizeText?, thicknessIn?, face?, image?, page?,
-  laying? }`: `image` is the maker's swatch photo and `page` its product page,
-  both on the maker's site (`src/siteplan/belgard-media.ts`).
+- Looks (in `ready` and `point`) are `{ id, name, kind, use, group, about,
+  spec, maker, line, shelf, color, sw, palette, sizes?, sizeText?,
+  thicknessIn?, face?, image?, page?, laying?, botanical?, swatch? }`:
+  `kind` is `material`, `plant`, `water`, `structure`, `feature` or `model`
+  (the last five have ids `<kind>:<id>`, such as `plant:lavender` or
+  `water:pool`); `group` is what the panel shows above the name (Concrete,
+  Mulch and rock, Synthetic turf, Shrubs...); `about` is a plain sentence or
+  two; `spec` is typical install lines (mulch 3 in deep, DG 3 in compacted,
+  concrete 4 in slab with its finish, turf pile and face weight) or, for a
+  plant, its container, sizes and spacing (`src/siteplan/material-info.ts`).
+  `image` is the maker's swatch photo and `page` its product page, both on the
+  maker's site (`src/siteplan/belgard-media.ts`). `swatch` is a 256 px JPEG
+  `data:` URL drawn from the material's own painted texture (or the plant's
+  rendered picture, or the pool tile), in `point` messages only
+  (`src/app/swatches.ts`). A parent can ask for one catalog material's
+  swatch with `{ source: 'area-planner', type: 'swatch', id }` and gets
+  `{ source: 'growth-studio', type: 'swatch', id, url }` (`url` null when there
+  is none). The `ready` list also carries every bed fill and
+  rock (shelves `Bed fill`, `Rock`, `Decomposed granite`), so the parent can
+  offer them for a bed.
 - Full screen in embed mode: the studio sends `{ type: 'fullscreen-request' }`;
   a parent that answers `{ source: 'area-planner', type: 'fullscreen', on: true }`
   within 300 ms takes over (so its own panels stay on screen), later sends

@@ -15,9 +15,13 @@ import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
 import type { BuildStage, StageLabel } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
-import { materialById } from '../siteplan/catalog';
+import { pointName } from '../siteplan/material-info';
 
-/** What the material pointer is on: the plan item, which part of it, and that part's catalog material. */
+/**
+ * What the material pointer is on: the plan item, which part of it, and that part's catalog material. Parts: main,
+ * border, edge, wall, cap, curb, fence, steps, stone (catalog materials), turf and bed (a lawn or bed zone on the
+ * ground, its material), plant, water, structure, feature and model (catalogId `<kind>:<id>`, see pointKind).
+ */
 export interface PointHit {
   id: string;
   part: string;
@@ -1020,8 +1024,7 @@ export class Studio {
     this.pointKey = key;
     const label = this.reticle?.querySelector('span');
     if (label) {
-      const m = hit ? materialById.get(hit.catalogId) : undefined;
-      label.textContent = m ? m.name : '';
+      label.textContent = hit ? pointName(hit.catalogId) : '';
     }
     this.reticle?.classList.toggle('on', !!hit);
     this.onPoint(hit);
@@ -1031,10 +1034,26 @@ export class Studio {
     if (!this.build) return null;
     this.raycaster.setFromCamera(this.v2.set(0, 0), this.camera);
     const hard = this.build.root.getObjectByName('hardscape');
-    const hit = this.raycaster.intersectObjects(hard ? [...this.build.surfaces, hard] : this.build.surfaces, true)[0];
+    // Water is tested too: a pool or pond is something to point at, though it is not a focus surface.
+    const hits = this.raycaster.intersectObjects([...this.build.surfaces, ...(hard ? [hard] : []), ...this.build.water.surfaces], true);
+    let hit = hits[0];
+    if (!hit) return null;
+    // Lawn, beds, rock and DG are painted on the one site ground mesh: the zone on top at the hit point is the item.
+    // The ground stays level over a pool and is only opened there in the shader, so a hit on it over water goes on
+    // to what is below (the pool's water).
+    for (let i = 0; hit?.object.userData?.pointGround; hit = hits[++i]) {
+      const p: [number, number] = [hit.point.x, hit.point.z];
+      const z = this.build.gm.zoneAt(p);
+      if (z && z.catalogId) return { id: z.id, part: z.kind === 'hardscape' ? 'main' : z.kind, catalogId: z.catalogId };
+      if (!this.build.gm.inWater(p)) return null;
+    }
+    if (!hit) return null;
     let part = '', catalogId = '';
-    for (let o: THREE.Object3D | null = hit ? hit.object : null; o; o = o.parent) {
+    for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
       if (!part && typeof o.userData?.part === 'string') { part = o.userData.part; catalogId = String(o.userData.catalogId ?? ''); }
+      // A plant's proxy names its placement; a mass-planted bed's plants (<bed id>-fill-<n>) report the bed.
+      const plant = o.userData?.plantId;
+      if (typeof plant === 'string') return part && catalogId ? { id: plant.replace(/-fill-\d+$/, ''), part, catalogId } : null;
       const id = o.userData?.itemId;
       if (typeof id === 'string') return part && catalogId ? { id, part, catalogId } : null;
     }
