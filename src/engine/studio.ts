@@ -800,7 +800,7 @@ export class Studio {
   }
 
   /** Render one high-resolution still with the full camera look. */
-  async exportStill(width: number): Promise<Blob> {
+  async exportStill(width: number, type = 'image/png', quality?: number): Promise<Blob> {
     const el = this.renderer.domElement;
     const w0 = this.container.clientWidth, h0 = this.container.clientHeight;
     const aspect = w0 / h0;
@@ -819,11 +819,25 @@ export class Studio {
     } finally {
       this.stillScale = null;
     }
-    const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), 'image/png'));
+    const blob = await new Promise<Blob>((res, rej) => el.toBlob((b) => (b ? res(b) : rej(new Error('The image could not be created.'))), type, quality));
     this.renderer.setPixelRatio(pr0);
     this.post.setQuality(q0);
     this.resize();
     return blob;
+  }
+
+  /**
+   * A cover picture of the yard from its first generated view (the Overview), for a second screen, as a JPEG. The
+   * camera goes straight back where it was, so whoever is looking around does not notice.
+   */
+  async coverImage(width = 1600): Promise<Blob> {
+    const pose = this.savePose();
+    if (this.views.length) this.jumpTo(this.views[0]);
+    try {
+      return await this.exportStill(width, 'image/jpeg', 0.88);
+    } finally {
+      this.restorePose(pose);
+    }
   }
 
   dispose() {

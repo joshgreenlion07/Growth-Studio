@@ -146,6 +146,10 @@ Messages use `window.postMessage`:
   `{ ..., on: false }` when it leaves full screen, and gets `{ type:
   'fullscreen-exit' }` when the person leaves it from inside 3D. Without an
   answer the studio goes full screen by itself.
+- Cover picture: the parent sends `{ source: 'area-planner', type: 'cover' }`
+  and gets `{ source: 'growth-studio', type: 'cover', ok: true, data: Blob }` (a
+  1600 px JPEG of the yard from the Overview view; the camera returns at once),
+  or `{ ..., ok: false, message }` before a plan is built.
 - Stepping stones are `features` with `catalogId: 'stepping-stone-24'` (a Belgard
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
   grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
