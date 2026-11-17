@@ -39,7 +39,7 @@ export function swatchFor(catalogId: string, laying?: LayingPattern): Promise<st
 
 function make(catalogId: string, laying?: LayingPattern): Promise<string | null> {
   const [kind, id] = pointKind(catalogId);
-  if (kind === 'plant') return new Promise((res) => wantThumb(id, res));
+  if (kind === 'plant') return new Promise((res) => wantThumb(id, res, () => res(null)));
   if (kind === 'water' && id === 'pool') return fromSet(poolTile());
   if (kind !== 'material') return Promise.resolve(null);
   const spec = materialById.get(id);

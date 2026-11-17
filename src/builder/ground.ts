@@ -28,8 +28,11 @@ export interface GroundModel {
   inWater(p: Vec2, pad?: number): boolean;
 }
 
-/** Texture units the ground's layers may use (16 in all, less the splat, dig-out, pool, environment and shadow maps). */
-const GROUND_SAMPLERS = 9;
+/** Texture units a fragment shader may use on this GPU; the Studio sets it from the renderer (WebGL's minimum is 16). */
+let maxTextureUnits = 16;
+export function setGroundTextureUnits(n: number) {
+  if (Number.isFinite(n) && n >= 16) maxTextureUnits = Math.floor(n);
+}
 
 /** Ground surfaces painted by the splat shader: soil plus up to 8 materials. */
 export const MAX_GROUND_LAYERS = 8;
@@ -370,17 +373,20 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
   })];
   const n = sets.length;
-  // WebGL guarantees 16 texture units per fragment shader, and many GPUs (Apple's among them) have no more. The
-  // splat maps, the dig-out map, a pool map, the sky's environment map and shadow maps take up to seven; every layer
-  // needs its color map, and normal maps go to as many layers as still fit (soil and the first layers), the rest
-  // shading flat. Without this, a yard with six or more ground materials failed to compile and lost its ground.
-  const withNormal = Math.max(0, Math.min(n, GROUND_SAMPLERS - n));
+  // Texture units: many GPUs (Apple's among them) have only WebGL's minimum of 16 per fragment shader. Besides the
+  // layers the ground samples the first splat map, the dig-out map, the environment map and its lookup table, the
+  // sun's shadow map, the second splat map (only with more than four materials) and a pool map (only with pools).
+  // Every layer needs its color map; normal maps go to as many layers as still fit (soil and the first layers), the
+  // rest shading flat. Without this, a yard with six or more ground materials failed to compile and lost its ground.
+  const splatB = n - 1 > 4;
+  const fixed = 5 + (splatB ? 1 : 0) + (pools.pools.length ? 1 : 0);
+  const withNormal = Math.max(0, Math.min(n, maxTextureUnits - fixed - n));
   // Physical material so the ground's sky reflection can be toned down:
   // rough mulch and soil reflect far less than the default 4%.
   const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: 0.45 });
   mat.onBeforeCompile = (s) => {
     s.uniforms.uSplatA = { value: splats[0] };
-    s.uniforms.uSplatB = { value: splats[1] };
+    if (splatB) s.uniforms.uSplatB = { value: splats[1] };
     s.uniforms.uArea = { value: new THREE.Vector4(area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY) };
     sets.forEach((l, i) => {
       s.uniforms[`uA${i}`] = { value: l.map };
@@ -404,7 +410,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
         '#include <common>',
         `#include <common>
          varying vec3 vGW;
-         uniform sampler2D uSplatA; uniform sampler2D uSplatB; uniform vec4 uArea;
+         uniform sampler2D uSplatA;${splatB ? ' uniform sampler2D uSplatB;' : ''} uniform vec4 uArea;
          uniform float uSoil; uniform sampler2D uCut; uniform vec4 uCutBox; uniform vec2 uCutCh;
          ${decl}`,
       )
@@ -418,7 +424,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
          float siteIn = step(0.0, suv.x) * step(0.0, suv.y) * step(suv.x, 1.0) * step(suv.y, 1.0);
          float inside = siteIn * (1.0 - uSoil);
          vec4 a = texture2D(uSplatA, suv) * inside;
-         vec4 b = texture2D(uSplatB, suv) * inside;
+         ${splatB ? 'vec4 b = texture2D(uSplatB, suv) * inside;' : ''}
          ${weights}
          float g0 = max(0.0, 1.0 - (${sum}));
          vec2 wp = vGW.xz;
@@ -439,7 +445,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     // The ground is opened along each pool's outline, so the pool's tiled shell shows.
     pools.patchGround(s);
   };
-  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}`;
+  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}-n${withNormal}`;
   return mat;
 }
 

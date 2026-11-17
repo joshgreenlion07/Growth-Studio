@@ -4,7 +4,7 @@ import type { SitePlan } from '../siteplan/types';
 import { bounds, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import { buildScene, hardscapeOnlyChange, type SceneBuild } from '../builder/build';
 import { ModelAssets, type AssetKind } from '../builder/models';
-import { WATER_LEVEL } from '../builder/ground';
+import { WATER_LEVEL, setGroundTextureUnits } from '../builder/ground';
 import { setFlames } from '../builder/features';
 import { disposeMaterialCache } from '../builder/materials';
 import { GLOBAL } from './foliage';
@@ -202,6 +202,7 @@ export class Studio {
     this.renderer.domElement.setAttribute('aria-label', '3D view of the yard');
     container.appendChild(this.renderer.domElement);
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
+    setGroundTextureUnits(this.renderer.capabilities.maxTextures);
 
     this.post = new PostPipeline(this.renderer);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -1041,11 +1042,14 @@ export class Studio {
     // Lawn, beds, rock and DG are painted on the one site ground mesh: the zone on top at the hit point is the item.
     // The ground stays level over a pool and is only opened there in the shader, so a hit on it over water goes on
     // to what is below (the pool's water).
+    const pools = (this.plan?.water ?? []).filter((w) => w.kind === 'pool' && w.polygon && w.polygon.length > 2);
     for (let i = 0; hit?.object.userData?.pointGround; hit = hits[++i]) {
       const p: [number, number] = [hit.point.x, hit.point.z];
+      // Over a pool first: a pool drawn inside a lawn or bed is the pool, not the lawn.
+      if (pools.some((w) => pointInPolygon(p, w.polygon!))) continue;
       const z = this.build.gm.zoneAt(p);
       if (z && z.catalogId) return { id: z.id, part: z.kind === 'hardscape' ? 'main' : z.kind, catalogId: z.catalogId };
-      if (!this.build.gm.inWater(p)) return null;
+      return null;
     }
     if (!hit) return null;
     let part = '', catalogId = '';
