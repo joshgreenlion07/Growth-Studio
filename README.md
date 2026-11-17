@@ -53,7 +53,7 @@ Messages use `window.postMessage`:
 | --- | --- |
 | Studio to parent, once it has started | `{ source: 'growth-studio', type: 'ready', materials }` |
 | Studio to parent, when the scene is clicked | `{ source: 'growth-studio', type: 'select', id }` |
-| Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit }` |
+| Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit, frame? }` |
 | Studio to parent, after each plan it applies | `{ source: 'growth-studio', type: 'built', ok: true }` or `{ source: 'growth-studio', type: 'built', ok: false, message }` |
 | Studio to parent, when the plan names an uploaded file it does not have | `{ source: 'growth-studio', type: 'need-asset', id }` |
 | Parent to studio, in answer | `{ source: 'area-planner', type: 'asset', id, kind: 'glb' or 'image', data: Blob }` (`data: null` when the parent no longer has the file) |
@@ -115,7 +115,8 @@ Messages use `window.postMessage`:
   (`contain` keeps its proportions, `stretch` fills the drawn width, depth and
   `height` exactly) with its front (+z) on the long side that faces down the
   page; `turn` adds quarter turns. An `image` stands up as a flat board across
-  the footprint. Files over 60 MB and Draco-compressed models are refused with
+  the footprint. Files over 60 MB, Draco-compressed models and models that
+  point to outside files or web addresses (only embedded data is read) are refused with
   a message. A file is forgotten when a later plan no longer names it.
 - `plan.rulers` carries dimensions the person drew with Area Planner's ruler:
   `{ id, a: [x, y], b: [x, y], label? }`, in meters like everything else.
@@ -158,7 +159,16 @@ Messages use `window.postMessage`:
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
   changed, the view is re-framed anyway, so nobody is left looking at bare
-  ground. The first plan is always framed.
+  ground, unless the plan carries the same `frame` string as the last one:
+  `frame` names the parent's coordinate frame (Area Planner changes it only
+  with a new plan image or scale), so with an unchanged `frame` the camera
+  stays even when the lot outline grows. The first plan is always framed.
+- `{ source: 'area-planner', type: 'pause' }` stops drawing the 3D view (for a
+  hidden tab; plant pictures still render); `{ ..., type: 'resume' }` starts it
+  again on the next frame.
+- The `i` key pressed inside the 3D view (no modifier keys, not in a text
+  field) is passed on as `{ source: 'growth-studio', type: 'key', key: 'i' }`
+  to the origin that sent the plan.
 - Messages that arrive within 150 ms of each other are applied as one
   rebuild, using the newest plan. Each rebuild gets one `built` reply.
 - Wait for `ready` before sending. It is sent to any parent (`'*'`) and holds
@@ -168,8 +178,13 @@ Messages use `window.postMessage`:
 - Plans are accepted only from the iframe's parent, and only from the origins
   listed in `EMBED_ALLOWED_PARENT_ORIGINS` in `src/app/main.ts`: local
   development (`http://localhost:*`, `http://127.0.0.1:*`),
-  `https://area-planner*.vercel.app`, and `https://greenlionlandscape.com` and
-  its subdomains. Anything else is ignored silently.
+  `https://area-planner-beta.vercel.app`, the Area Planner preview deployments
+  of the `joshua-jackson` Vercel team (`https://area-planner-git-<branch>-joshua-jackson.vercel.app`,
+  `https://area-planner-<hash>-joshua-jackson.vercel.app`), and
+  `https://greenlionlandscape.com` (and `www.`). Anything else is ignored silently.
+- The build uses relative asset paths, so the studio also works under a
+  sub-path, such as Area Planner's `/studio/` rewrite to this deployment
+  (same origin as the planner, which Safari does not throttle).
 - If the iframe has a `sandbox` attribute, it needs `allow-scripts`, and
   `allow-downloads` for Save image.
 
