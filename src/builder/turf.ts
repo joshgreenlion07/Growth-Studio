@@ -46,7 +46,7 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
   if (!turf.length) return { object: null, dispose() {} };
   const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.115 : 0.085;
   const r = rng('turf');
-  const pts: { p: Vec2; c: THREE.Color; k: number }[] = [];
+  const pts: { p: Vec2; c: THREE.Color; k: number; even: boolean }[] = [];
   for (const z of turf) {
     const spec = materialById.get(z.catalogId);
     const pal = spec?.palette ?? ['#6f9a3c', '#4d7a2e'];
@@ -55,6 +55,8 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
     const synthetic = spec?.recipe === 'turfArtificial';
     const putting = z.catalogId === 'putting-green';
     if (putting) continue;
+    // Synthetic grass: every tuft the same green and height, so it reads as artificial turf.
+    const even = z.catalogId === 'synthetic-turf';
     const b = bounds(z.polygon);
     for (let y = b.minY; y < b.maxY; y += step) {
       for (let x = b.minX; x < b.maxX; x += step) {
@@ -62,8 +64,10 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
         // The zone on top at p is this one only when p is inside it.
         if (gm.zoneAt(p) !== z) continue;
         if (blocked(p)) continue;
-        const c = base.clone().lerp(acc, synthetic ? 0.4 + r() * 0.3 : r()).multiplyScalar(synthetic ? 0.92 + r() * 0.12 : 0.8 + r() * 0.35);
-        pts.push({ p, c, k: synthetic ? 0.6 : 1 });
+        const c = even
+          ? base.clone().lerp(acc, 0.55 + r() * 0.1).multiplyScalar(0.98 + r() * 0.05)
+          : base.clone().lerp(acc, synthetic ? 0.4 + r() * 0.3 : r()).multiplyScalar(synthetic ? 0.92 + r() * 0.12 : 0.8 + r() * 0.35);
+        pts.push({ p, c, k: even ? 0.75 : synthetic ? 0.6 : 1, even });
       }
     }
   }
@@ -78,11 +82,11 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
   im.customDepthMaterial = foliageDepthMaterial(opts);
   im.frustumCulled = false;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
-  pts.forEach(({ p, c, k: hk }, i) => {
+  pts.forEach(({ p, c, k: hk, even }, i) => {
     t.set(p[0], gm.height(p), p[1]);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * Math.PI * 2);
-    const k = 0.8 + r() * 0.5;
-    s.set(k, k * hk * (0.85 + r() * 0.3), k);
+    const k = even ? 0.95 + r() * 0.12 : 0.8 + r() * 0.5;
+    s.set(k, k * hk * (even ? 0.96 + r() * 0.08 : 0.85 + r() * 0.3), k);
     m.compose(t, q, s);
     im.setMatrixAt(i, m);
     im.setColorAt(i, c);

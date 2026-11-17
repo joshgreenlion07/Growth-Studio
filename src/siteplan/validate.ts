@@ -67,8 +67,15 @@ function pickMaterial(raw: unknown, use: string, fallback: string, warnings: str
   if (typeof id === 'string') {
     // Accept a close name match ("pavers" -> first paver).
     const lower = id.toLowerCase();
-    const hit = MATERIALS.find((m) => m.use === use && (m.id.includes(lower) || m.name.toLowerCase().includes(lower)));
+    const fake = use === 'turf' && /synth|artificial|fake|astro/.test(lower);
+    // "grass" is in Synthetic grass's name, but a plain grass id means a natural lawn: only a fake-sounding id may match it.
+    const hit = MATERIALS.find((m) => m.use === use && (fake || m.id !== 'synthetic-turf') && (m.id.includes(lower) || m.name.toLowerCase().includes(lower)));
     if (hit) return hit.id;
+    // Fake grass under another name must not fall back to natural lawn.
+    if (fake) {
+      warnings.push(`${label}: "${id}" isn't in the catalog, so it uses Synthetic grass.`);
+      return 'synthetic-turf';
+    }
     warnings.push(`${label}: "${id}" isn't in the catalog, so it uses ${materialById.get(fallback)!.name}.`);
   }
   return fallback;
@@ -147,6 +154,22 @@ export function cleanPlan(input: unknown): CleanResult {
         if (!at) continue;
         const ok = op.kind === 'door' ? 'door' : 'window';
         st.openings.push({ kind: ok, at, width: num(op.width, ok === 'door' ? 0.9 : 1.2, 0.3, 8) });
+      }
+    }
+    if (kind === 'cover' && it.walls !== undefined && it.walls !== null) {
+      // One entry per edge. A repeated closing point was dropped from the polygon, so its extra entry goes too.
+      const raw = Array.isArray(it.walls) ? it.walls : null;
+      // A point that could not be read was dropped too, and then the edges no longer line up with the entries.
+      const given = Array.isArray(it.polygon) ? it.polygon.map(vec) : [];
+      const lost = given.some((p) => p === null);
+      const closed = !lost && given.length === polygon.length + 1;
+      const w = raw && closed && raw.length === polygon.length + 1 ? raw.slice(0, -1) : raw;
+      if (!lost && w && w.length === polygon.length && w.every((x) => typeof x === 'boolean')) {
+        st.walls = w as boolean[];
+      } else {
+        warnings.push(lost
+          ? `Cover "${st.id}": a corner could not be read, so its walls can't be matched to its edges and it is shown open on every side.`
+          : `Cover "${st.id}": walls needs one true or false per edge (${polygon.length}), so it is shown open on every side.`);
       }
     }
     plan.structures.push(st);
