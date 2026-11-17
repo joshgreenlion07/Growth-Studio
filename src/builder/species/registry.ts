@@ -40,6 +40,7 @@ import { build as elephantEar } from './tropicals/elephant-ear';
 import { build as ajuga } from './groundcover/ajuga';
 import { build as spreadingJuniper } from './groundcover/spreading-juniper';
 import { build as verbena } from './groundcover/verbena';
+import { build as rosemaryPointeDuRaz } from './groundcover/rosemary-pointe-du-raz';
 import { build as groundcover } from './groundcover/groundcover';
 
 import { build as yewPineColumn } from './trees/yew-pine-column';
@@ -54,6 +55,8 @@ import { build as japaneseMapleCoralBark } from './trees/japanese-maple-coral-ba
 import { build as gardeniaVeitchii } from './shrubs/gardenia-veitchii';
 import { build as camelliaYuletide } from './shrubs/camellia-yuletide';
 import { build as xylosma } from './shrubs/xylosma';
+import { build as salviaHotLips } from './perennials/salvia-hot-lips';
+import { build as spanishLavenderOttoQuast } from './perennials/spanish-lavender-otto-quast';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -99,6 +102,8 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'gardenia-veitchii': gardeniaVeitchii,
   'camellia-yuletide': camelliaYuletide,
   'xylosma': xylosma,
+  'salvia-hot-lips': salviaHotLips,
+  'spanish-lavender-otto-quast': spanishLavenderOttoQuast,
   'annual-color': annualColor,
   'foxtail-fern': foxtailFern,
   'variegated-yucca': variegatedYucca,
@@ -110,6 +115,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'ajuga': ajuga,
   'spreading-juniper': spreadingJuniper,
   'verbena': verbena,
+  'rosemary-pointe-du-raz': rosemaryPointeDuRaz,
   'groundcover': groundcover,
   'meyer-lemon': meyerLemon,
   'mexican-lime': mexicanLime,
