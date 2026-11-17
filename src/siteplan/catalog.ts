@@ -155,6 +155,19 @@ export interface WallUnit {
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 
 /**
+ * Loose stone sold by size (1/2-1 in, 1-2 in, ...), drawn as individual 3D stones over a matching ground texture. Sizes
+ * are a stone's long side in inches. `wide` and `thick` are the other two sides as shares of the long side (ranges): beach
+ * pebbles are flattened ovals. `colors` are sRGB as photographed, with how often each shows (`share`, summing to 1).
+ */
+export interface PebbleSpec {
+  minIn: number;
+  maxIn: number;
+  wide: [number, number];
+  thick: [number, number];
+  colors: { c: string; share: number }[];
+}
+
+/**
  * A synthetic turf product as its maker lists it. Colors are sRGB as photographed (turned into albedo like any maker
  * color). `yarn` is the two blade colors (field green, olive green), `thatch` the curled fibers near the backing. `mean`
  * is the lawn's average color in the maker's outdoor photos: the texture is matched to it on screen.
@@ -210,7 +223,9 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf';
+  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock';
+  /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
+  pebble?: PebbleSpec;
   /** Synthetic turf made to a maker's spec (pile, yarn and thatch colors, blade shape), drawn blade by blade. */
   turf?: TurfSpec;
   /** The color name alone, without the line name. */
@@ -364,6 +379,17 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
   M({ id: 'black-pebble', name: 'Black beach pebble', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble', palette: ['#4a4a48', '#2a2a29', '#151515'] }),
   M({ id: 'lava-rock', name: 'Black lava rock', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a3836', '#252322'] }),
+  // Mexican beach pebble, the black (charcoal and slate) grade Green Lion buys, unpolished: smooth flattened ovals, fine
+  // pitted surface, a few lighter gray and rust-stained stones. Sold by size; drawn stone by stone (builder/pebbles.ts).
+  ...([[0.5, 1, 'half-1', '1/2-1 in'], [1, 2, '1-2', '1-2 in'], [2, 3, '2-3', '2-3 in']] as const).map(([lo, hi, key, label]) => M({
+    id: `mexican-beach-pebble-${key}`, name: `Mexican beach pebble, ${label}`, use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
+    palette: ['#4a5051', '#3c4143', '#303436', '#25282a'],
+    pebble: { minIn: lo, maxIn: hi, wide: [0.62, 0.86], thick: [0.34, 0.52], colors: [
+      { c: '#25282a', share: 0.24 }, { c: '#303436', share: 0.26 }, { c: '#3c4143', share: 0.2 }, { c: '#4a5051', share: 0.13 },
+      { c: '#555a54', share: 0.09 }, { c: '#767a77', share: 0.06 }, { c: '#6b5c4c', share: 0.02 },
+    ] },
+    matches: `Mexican beach pebble, black, ${label}`, maker: 'Natural stone', line: 'Mexican beach pebble', shelf: 'Rock', color: label,
+  })),
   M({ id: 'white-cobble', name: 'White and tan cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#e3ddd1', '#cfc5b4', '#b5a993'] }),
   M({ id: 'cobble', name: 'River cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#c2b8a6', '#8f8679', '#6d675e'] }),
   // Pavers

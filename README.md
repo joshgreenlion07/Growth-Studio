@@ -101,6 +101,15 @@ Messages use `window.postMessage`:
   An unknown turf id that names synthetic, artificial, fake or astro turf falls
   back to synthetic grass; any other unknown turf id falls back to `lawn`, with a
   warning.
+- Mexican beach pebble, black, in the three sizes Green Lion buys
+  (`mexican-beach-pebble-half-1`, `-1-2`, `-2-3`: 1/2-1, 1-2 and 2-3 in;
+  shelf `Rock`, `pebble` on the look) is drawn as individual stones
+  (`builder/pebbles.ts`): smooth, flattened, slightly lopsided ovals at the sold
+  size range, piled and tipped, in 1.5 m tiles that show detailed stones up
+  close, plainer ones farther off and none past where a stone is a couple of
+  pixels; the ground's pebble texture fills the gaps and the distance, matched
+  to the stones' average color. Draft quality shows the texture alone. The
+  sample "Mexican beach pebble sizes" has a 10 x 10 ft bed of each.
 - MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
   `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
   from MSI's specs (`turf` on the look): a ground texture painted blade by blade
