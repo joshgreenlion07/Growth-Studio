@@ -5,10 +5,11 @@ import { PendingTexture, setTexturePainter, type PBRSet } from './textures';
  * turns worker painting on; without it every set is painted on the main
  * thread as before.
  *
- * A set requested here is already in use with its flat stand-in maps. When the
- * worker answers, its frames are applied one per animation frame, a few
- * frames apart, so the material eases from its average color into the painted
- * texture and no single frame uploads more than one set.
+ * A set requested here is already in use with its flat stand-in maps. Painted
+ * sets are held until the worker queue is empty (or HOLD_MS has passed) and
+ * then swapped in together in one frame, so the yard changes once instead of
+ * popping surface by surface (one pop, and a crossfade, per set read as
+ * flicker and stutter on a full plan).
  *
  * Painted pixels arrive as RGBA ArrayBuffers (transferred, no copy) and are
  * uploaded as ImageData. Unlike ImageBitmap, ImageData honours `flipY` and the
@@ -16,12 +17,10 @@ import { PendingTexture, setTexturePainter, type PBRSet } from './textures';
  * canvas-painted ones did.
  */
 
-/** Blend amounts of the crossfade frames before the painted set. */
-const FADE_STEPS = [0.35, 0.7];
-/** Milliseconds between the frames of one set's crossfade. */
-const FADE_GAP_MS = 45;
-/** With more sets than this waiting, skip their crossfades and show them painted at once. */
-const BUSY_QUEUE = 6;
+/** No crossfade frames: each set goes straight from its flat stand-in to the painted maps. */
+const FADE_STEPS: number[] = [];
+/** Longest a painted set waits for the rest of the queue before it is shown anyway (a slow worker never stalls the view). */
+const HOLD_MS = 1500;
 /** Workers that never say they are ready within this time are given up on. */
 const READY_TIMEOUT_MS = 10000;
 
@@ -48,9 +47,9 @@ interface Slot {
 
 interface Apply {
   job: Job;
-  /** Worker frames, or null to paint the set here (the worker failed). */
+  /** Worker frames (the painted set is the last), or null to paint the set here (the worker failed). */
   frames: Frame[] | null;
-  next: number;
+  /** When the painted set came back (performance.now()). */
   due: number;
 }
 
@@ -152,37 +151,30 @@ function pump() {
 }
 
 function queueApply(job: Job, frames: Frame[] | null) {
-  applying.push({ job, frames, next: 0, due: 0 });
+  applying.push({ job, frames, due: performance.now() });
   if (!raf) raf = requestAnimationFrame(tick);
 }
 
 function tick(now: number) {
   raf = 0;
-  const busy = applying.length > BUSY_QUEUE;
-  const i = applying.findIndex((a) => a.due <= now);
-  if (i >= 0) {
-    const a = applying[i];
-    if (!a.frames) {
-      stats.fallback++;
-      const painted = a.job.make();
-      swap(a.job, [painted.map.image, painted.normalMap.image, painted.roughnessMap.image] as TexImageSource[], true);
-      finish(a.job);
-      applying.splice(i, 1);
-    } else {
-      // Busy (a first load): go straight to the painted set.
-      if (busy) a.next = a.frames.length - 1;
-      const f = a.frames[a.next];
-      swap(a.job, f.maps.map((m) => new ImageData(new Uint8ClampedArray(m), f.size, f.size)), true);
-      a.frames[a.next] = { size: f.size, maps: [] };
-      a.next++;
-      a.due = now + FADE_GAP_MS;
-      if (a.next >= a.frames.length) {
-        finish(a.job);
-        applying.splice(i, 1);
+  const busy = waiting.length > 0 || slots.some((sl) => !sl.dead && sl.job);
+  const oldest = applying.reduce((m, a) => Math.min(m, a.due), Infinity);
+  if (applying.length && (!busy || now - oldest >= HOLD_MS)) {
+    // Everything painted so far lands in this one frame.
+    for (const a of applying.splice(0)) {
+      if (!a.frames) {
+        stats.fallback++;
+        const painted = a.job.make();
+        swap(a.job, [painted.map.image, painted.normalMap.image, painted.roughnessMap.image] as TexImageSource[], true);
+      } else {
+        const f = a.frames[a.frames.length - 1];
+        swap(a.job, f.maps.map((m) => new ImageData(new Uint8ClampedArray(m), f.size, f.size)), true);
+        a.frames.length = 0;
       }
+      finish(a.job);
     }
+    for (const fn of listeners) fn();
   }
-  if (i >= 0) for (const fn of listeners) fn();
   if (applying.length && !raf) raf = requestAnimationFrame(tick);
 }
 
