@@ -388,7 +388,7 @@ export const build: SpeciesBuilder = (spec) => {
   // Primary canes, each aimed at its own patch of the shell; the first few are the staked nursery plant.
   const canes: Cane[] = [];
   const NP = 26;
-  const early = new Set([0, 1, 2, 3, 5, 7, 9, 12, 15]);
+  const early = new Set([0, 1, 3, 5, 8, 11, 14, 18, 22]);
   for (let k = 0; k < NP; k++) {
     const yk = lerp(0.95, -0.35, Math.pow((k + 0.5) / NP, 0.9));
     const rad = Math.sqrt(1 - yk * yk), th = k * 2.39996 + off * 1.3;
@@ -399,7 +399,7 @@ export const build: SpeciesBuilder = (spec) => {
     const inner = polyLen(pts);
     // Long whips arch out of the mound and hang, here and there.
     if (yk > -0.15 && r() < 0.5) pts = whip(pts, R * (0.2 + r() * 0.2), 1.3 + r() * 0.9);
-    const birth = early.has(k) ? 0 : clamp(0.08 + (k / NP) * 0.5 + r() * 0.2, 0, 0.8);
+    const birth = early.has(k) ? 0 : clamp(0.08 + r() * 0.62, 0, 0.8);
     const len = polyLen(pts);
     canes.push({ pts, whipFrom: inner / len, r0: 0.014 + r() * 0.005, r1: 0.0035, birth, level: 0, len });
   }
@@ -491,7 +491,7 @@ export const build: SpeciesBuilder = (spec) => {
   const nodes: { p: THREE.Vector3; dir: THREE.Vector3; cane: number; t: number; rad: number }[] = [];
   canes.forEach((c, ci) => {
     let az = r() * TAU;
-    let t = (c.level === 0 ? 0.2 : 0.05) + r() * 0.04;
+    let t = (c.level === 0 ? 0.12 : 0.05) + r() * 0.04;
     while (t < 0.99) {
       const at = along(c.pts, t);
       az += 2.39996 + (r() - 0.5) * 0.6;
