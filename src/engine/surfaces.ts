@@ -276,7 +276,14 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
   if (laying && laying !== 'random' && p.kind === 'ashlar') return moduleLayout(THREE_PIECE[laying]);
   switch (p.kind) {
     case 'running': return runningLayout(a, b, 0.5, false, 12, 6, seed);
-    case 'soldier': return runningLayout(a, b, 0, false, Math.max(1, Math.round(48 / b)), Math.round(48 / a), seed);
+    case 'soldier': {
+      // One course of pavers: a pieces along the edge, b across. The tile must hold whole pieces both ways, or the
+      // band (exactly b wide, from the tile's edge) straddles two rows; so it is a common multiple of a and b, >= 36 in.
+      const gcd = (x: number, y: number): number => (y ? gcd(y, x % y) : x);
+      const lcm = (a * b) / gcd(Math.round(a * 8), Math.round(b * 8)) * 8;
+      const L = lcm * Math.max(1, Math.ceil(36 / lcm));
+      return runningLayout(a, b, 0, false, Math.round(L / b), Math.round(L / a), seed);
+    }
     case 'plank': return runningLayout(a, b, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
     case 'grid': return runningLayout(a, b, 0, false, 2, 2, seed);
     case 'herringbone': return herringboneLayout(a, b);
