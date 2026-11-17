@@ -32,6 +32,11 @@ export const DEFAULT_LENS: LensSettings = {
   grain: 0.012,
 };
 
+/**
+ * Depth of field, gathered at half resolution (a quarter of the pixels, the costliest pass by far). Sizes are in
+ * full-resolution pixels. Alpha carries how much of the result is blur spilled over from out-of-focus things in
+ * front, so the full-resolution composite can keep sharp pixels sharp and still show that spill.
+ */
 const DOF_FRAG = /* glsl */ `
 uniform sampler2D tColor;
 uniform sampler2D tDepth;
@@ -56,6 +61,7 @@ void main(){
   float c0 = cz.x;
   vec3 sum = texture2D(tColor, vUv).rgb;
   float wsum = 1.0;
+  float wFront = 0.0;
   if (uMaxCoc > 0.0) {
     float ga = 2.39996323;
     for (int i = 1; i < SAMPLES; i++) {
@@ -70,9 +76,33 @@ void main(){
       float w = smoothstep(r - 1.0, r + 1.0, cs);
       sum += texture2D(tColor, uv).rgb * w;
       wsum += w;
+      if (s.y < cz.y) wFront += w * smoothstep(1.0, 3.0, s.x);
     }
   }
-  gl_FragColor = vec4(sum / wsum, 1.0);
+  gl_FragColor = vec4(sum / wsum, clamp(wFront / wsum * 2.0, 0.0, 1.0));
+}`;
+
+/** Full resolution: the sharp image where in focus, the half-resolution blur where not (or where blur spills over). */
+const COMPOSE_FRAG = /* glsl */ `
+uniform sampler2D tColor;
+uniform sampler2D tDepth;
+uniform sampler2D tBlur;
+uniform vec2 uRes;
+uniform float uNear;
+uniform float uFar;
+uniform float uFocus;
+uniform float uBlur;
+uniform float uDof;
+varying vec2 vUv;
+float linDepth(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
+void main(){
+  vec3 sharp = texture2D(tColor, vUv).rgb;
+  if (uDof < 0.5) { gl_FragColor = vec4(sharp, 1.0); return; }
+  float z = linDepth(texture2D(tDepth, vUv).x);
+  float c = uBlur * abs(1.0 / uFocus - 1.0 / z) * uRes.y;
+  vec4 b = texture2D(tBlur, vUv);
+  float k = max(smoothstep(0.75, 2.5, c), b.a);
+  gl_FragColor = vec4(mix(sharp, b.rgb, k), 1.0);
 }`;
 
 const OUT_FRAG = /* glsl */ `
@@ -122,7 +152,11 @@ export type Quality = 'draft' | 'light' | 'balanced' | 'max';
 export class PostPipeline {
   sceneRT: THREE.WebGLRenderTarget;
   private rtA: THREE.WebGLRenderTarget;
+  /** Half-resolution depth-of-field gather. */
+  private rtHalf: THREE.WebGLRenderTarget;
   private dofQuad: FullScreenQuad;
+  private composeQuad: FullScreenQuad;
+  private composeMat: THREE.ShaderMaterial;
   private outQuad: FullScreenQuad;
   private dofMat: THREE.ShaderMaterial;
   private outMat: THREE.ShaderMaterial;
@@ -137,6 +171,7 @@ export class PostPipeline {
   constructor(private renderer: THREE.WebGLRenderer) {
     this.sceneRT = this.makeSceneRT(4);
     this.rtA = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    this.rtHalf = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
     this.dofMat = new THREE.ShaderMaterial({
       uniforms: {
         tColor: { value: null },
@@ -171,9 +206,30 @@ export class PostPipeline {
       depthTest: false,
       depthWrite: false,
     });
+    this.composeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tColor: { value: null },
+        tDepth: { value: null },
+        tBlur: { value: null },
+        uRes: { value: new THREE.Vector2(1, 1) },
+        uNear: { value: 0.1 },
+        uFar: { value: 1000 },
+        uFocus: { value: 10 },
+        uBlur: { value: 0.003 },
+        uDof: { value: 1 },
+      },
+      vertexShader: VERT,
+      fragmentShader: COMPOSE_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.composeQuad = new FullScreenQuad(this.composeMat);
     this.dofQuad = new FullScreenQuad(this.dofMat);
     this.outQuad = new FullScreenQuad(this.outMat);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.55, 1.6);
+    // A soft knee: light fades into the bloom over a range instead of switching on at the threshold, so a small
+    // highlight that brightens and dims (a ripple glint, a metal edge) does not blink a whole halo on and off.
+    (this.bloom.highPassUniforms as Record<string, THREE.IUniform>).smoothWidth.value = 0.9;
   }
 
   private makeSceneRT(samples: number) {
@@ -196,12 +252,17 @@ export class PostPipeline {
   }
 
   setSize(w: number, h: number) {
+    w = Math.max(1, Math.round(w));
+    h = Math.max(1, Math.round(h));
+    if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
     this.sceneRT.setSize(w, h);
     this.rtA.setSize(w, h);
+    this.rtHalf.setSize(Math.max(1, Math.ceil(w / 2)), Math.max(1, Math.ceil(h / 2)));
     this.bloom.setSize(w, h);
     this.dofMat.uniforms.uRes.value.set(w, h);
+    this.composeMat.uniforms.uRes.value.set(w, h);
     this.outMat.uniforms.uRes.value.set(w, h);
   }
 
@@ -214,6 +275,11 @@ export class PostPipeline {
     let src: THREE.WebGLRenderTarget = this.sceneRT;
     const L = this.lens;
     const useDof = L.dof && this.quality !== 'draft';
+    const useBloom = L.bloom > 0.01 && this.quality !== 'draft';
+    const c = this.composeMat.uniforms;
+    c.tColor.value = this.sceneRT.texture;
+    c.tDepth.value = this.sceneRT.depthTexture;
+    c.uDof.value = 0;
     if (useDof) {
       const u = this.dofMat.uniforms;
       u.tColor.value = this.sceneRT.texture;
@@ -226,22 +292,23 @@ export class PostPipeline {
       const aperture = focal / L.fStop;
       u.uBlur.value = (aperture * focal) / 0.024 * 0.5;
       u.uMaxCoc.value = (this.quality === 'max' ? 22 : 15) * (this.h / 1080);
-      r.setRenderTarget(this.rtA);
+      r.setRenderTarget(this.rtHalf);
       this.dofQuad.render(r);
+      c.tBlur.value = this.rtHalf.texture;
+      c.uNear.value = u.uNear.value;
+      c.uFar.value = u.uFar.value;
+      c.uFocus.value = u.uFocus.value;
+      c.uBlur.value = u.uBlur.value;
+      c.uDof.value = 1;
+    }
+    if (useDof || useBloom) {
+      // Into a plain full-size buffer: the focus blend, or only a copy out of the multisampled target for bloom.
+      r.setRenderTarget(this.rtA);
+      this.composeQuad.render(r);
       src = this.rtA;
     }
-    if (L.bloom > 0.01 && this.quality !== 'draft') {
+    if (useBloom) {
       // Bloom adds onto the source buffer.
-      if (src === this.sceneRT) {
-        // Copy out of the multisampled target first.
-        const u = this.dofMat.uniforms;
-        u.tColor.value = this.sceneRT.texture;
-        u.tDepth.value = this.sceneRT.depthTexture;
-        u.uMaxCoc.value = 0;
-        r.setRenderTarget(this.rtA);
-        this.dofQuad.render(r);
-        src = this.rtA;
-      }
       this.bloom.strength = L.bloom;
       this.bloom.renderToScreen = false;
       this.bloom.render(r, src, src, 0, false);
@@ -262,6 +329,9 @@ export class PostPipeline {
   dispose() {
     this.sceneRT.dispose();
     this.rtA.dispose();
+    this.rtHalf.dispose();
+    this.composeMat.dispose();
+    this.composeQuad.dispose();
     this.bloom.dispose();
     this.dofMat.dispose();
     this.outMat.dispose();

@@ -439,6 +439,26 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
 /* Concrete                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * A row of Belgard Melville Curb units: smooth, dense precast faces with a tight butt joint every 24 in along the run
+ * (u runs along the curb on its faces and top). The tile is two units long.
+ */
+function curbSet(spec: MaterialSpec): PBRSet {
+  const [a, b] = pal(spec);
+  const U = 0.6096, T = 2 * U;
+  return paint(1024, T, 4, (u, v) => {
+    const x = u * T;
+    const joint = Math.min(Math.abs(x - U), x, T - x) < 0.0022;
+    const unit = x < U ? 0 : 1;
+    // Seamless noise over the tile; the second unit is a shade apart, as cast units are.
+    const mott = fbm(u, v, 6, 4, 11);
+    let c = mixRGB(a, b, mott * 0.8 + unit * 0.12);
+    c = mulRGB(c, 0.97 + fbm(u, v, 18, 3, 5) * 0.05);
+    if (joint) c = mulRGB(c, 0.42);
+    return { h: joint ? 0 : 0.6 + mott * 0.04, c, r: joint ? 0.95 : 0.6 };
+  });
+}
+
 function concreteSet(spec: MaterialSpec, finish: ConcreteFinish): PBRSet {
   const [a, b] = pal(spec);
   const T = 3.05; // 10 ft, saw cuts every 5 ft
@@ -940,7 +960,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'deck': return deckSet(spec);
       case 'wall': return wallSet(spec, spec.wall?.face ?? 'splitFace');
       case 'fence': return fenceSet(spec, spec.fence ?? 'boardOnBoard');
-      case 'curb': return concreteSet(spec, 'smooth');
+      case 'curb': return curbSet(spec);
       case 'steelEdging': return steelSet(spec);
     }
   });

@@ -15,7 +15,9 @@ finished-work photos in `reference/green-lion-style/`.
   focus blur, bloom and grade (`post.ts`), generated camera views (`views.ts`),
   controller, keyboard and first-person walk / fly movement (`navigation.ts`),
   the measurements overlay (`measure.ts`), and the runtime that ties it
-  together (`studio.ts`). Full screen (button or F) switches to walk mode and
+  together (`studio.ts`: frame loop on the display's frame times, render on
+  demand, build-then-warm-then-swap on new plans, off-screen stills; see
+  "Smooth rendering" in the README before changing any of it). Full screen (button or F) switches to walk mode and
   shows the height meter; leaving it restores the orbit camera.
 - `src/builder/` — SitePlan to 3D: ground splat, turf, hardscape with borders,
   walls and fences, water features and waterfalls, structures, features,

@@ -6,7 +6,7 @@ import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { latticeAlpha, materialTextures, photoAlbedo, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
-import { bandGeometry, extendPath, linePath } from './linepath';
+import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
 
 /**
@@ -256,6 +256,123 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sai
   return g;
 }
 
+/**
+ * Paver edging along a drawn line: one row of pavers `w` meters wide, centered on the line, laid paver by paver the way
+ * a border is (borderGeometry): runs between real corners (and the line's two ends) take whole pavers from each end and
+ * any cut piece in the middle (runPieces), runs meet on a mitre at each corner, and each paver maps to its own cell of
+ * the soldier texture. `pieceIn` is the paver's side along the run (inches). Works for an open line and for a closed one
+ * (its first point repeated last). Top faces wind upward; both long sides and the open ends have a face down to `y0`.
+ * Returns the course and the thin mitre-joint strips at its corners.
+ */
+function edgeCourseGeometry(line: Vec2[], w: number, pieceIn: number, sailor: boolean, y: number, y0: number): { top: THREE.BufferGeometry; joints: THREE.BufferGeometry | null } | null {
+  const p: Vec2[] = [];
+  for (const q of line) if (!p.length || Math.hypot(q[0] - p[p.length - 1][0], q[1] - p[p.length - 1][1]) > 1e-6) p.push(q);
+  const closed = p.length > 3 && Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 1e-6;
+  if (closed) p.pop();
+  const n = p.length;
+  if (n < 2) return null;
+  const h = w / 2;
+  const dirOf = (a: Vec2, b: Vec2) => norm([b[0] - a[0], b[1] - a[1]]);
+  // The two long edges, mitred at every point (capped on very sharp turns). L is on the left of the direction of travel.
+  const Lp: Vec2[] = [], Rp: Vec2[] = [];
+  for (let i = 0; i < n; i++) {
+    const din = closed || i > 0 ? dirOf(p[(i - 1 + n) % n], p[i]) : null;
+    const dout = closed || i < n - 1 ? dirOf(p[i], p[(i + 1) % n]) : null;
+    const a = (din ?? dout)!, b = (dout ?? din)!;
+    let nx = -(a[1] + b[1]), ny = a[0] + b[0], m = h;
+    const nl = Math.hypot(nx, ny);
+    if (nl < 1e-6) { nx = -a[1]; ny = a[0]; }
+    else { nx /= nl; ny /= nl; m = h / Math.max(0.35, nx * -a[1] + ny * a[0]); }
+    Lp.push([p[i][0] + nx * m, p[i][1] + ny * m]);
+    Rp.push([p[i][0] - nx * m, p[i][1] - ny * m]);
+  }
+  const E = closed ? n : n - 1;
+  const S: number[] = [0];
+  for (let i = 0; i < E; i++) { const a = p[i], b = p[(i + 1) % n]; S.push(S[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const total = S[E];
+  if (total < 1e-4) return null;
+  const P = pieceIn * 0.0254;
+  // Where runs start and stop: real corners, and an open line's two ends.
+  const corner = (i: number) => (closed || (i > 0 && i < n - 1)) && isCorner(p, i);
+  const stops = p.map((_, i) => i).filter((i) => corner(i) || (!closed && (i === 0 || i === n - 1)));
+  const pieces: [number, number][] = [];
+  const lay = (a: number, b: number) => { let s0 = a; for (const l of runPieces(b - a, P)) { pieces.push([s0, s0 + l]); s0 += l; } };
+  if (closed && !stops.length) lay(0, total);
+  else if (closed) for (let k = 0; k < stops.length; k++) { const a = S[stops[k]]; let b = S[stops[(k + 1) % stops.length]]; if (b <= a + 1e-9) b += total; lay(a, b); }
+  else for (let k = 0; k + 1 < stops.length; k++) lay(S[stops[k]], S[stops[k + 1]]);
+
+  const pos: number[] = [], uv: number[] = [], nor: number[] = [], idx: number[] = [];
+  // A flat polygon (world xz points), wound so its face points along `want`.
+  const poly = (pts: [number, number, number][], uvs: [number, number][], want: [number, number, number]) => {
+    if (pts.length < 3) return;
+    let nx = 0, ny = 0, nz = 0;
+    for (let k = 0; k < pts.length; k++) {
+      const a = pts[k], b = pts[(k + 1) % pts.length];
+      nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    const flip = nx * want[0] + ny * want[1] + nz * want[2] < 0;
+    const base = pos.length / 3;
+    pts.forEach((q, k) => { pos.push(...q); nor.push(...want); uv.push(...uvs[k]); });
+    for (let k = 1; k < pts.length - 1; k++) idx.push(...(flip ? [base, base + k + 1, base + k] : [base, base + k, base + k + 1]));
+  };
+  for (let i = 0; i < E; i++) {
+    const a = p[i], i1 = (i + 1) % n, len = S[i + 1] - S[i];
+    if (len < 1e-6) continue;
+    const dir = dirOf(a, p[i1]), nrm: Vec2 = [-dir[1], dir[0]];
+    const local = (q: Vec2): Vec2 => [(q[0] - a[0]) * dir[0] + (q[1] - a[1]) * dir[1], (q[0] - a[0]) * nrm[0] + (q[1] - a[1]) * nrm[1]];
+    const world = (q: Vec2): Vec2 => [a[0] + dir[0] * q[0] + nrm[0] * q[1], a[1] + dir[1] * q[0] + nrm[1] * q[1]];
+    const trap = [local(Lp[i]), local(Lp[i1]), local(Rp[i1]), local(Rp[i])];
+    pieces.forEach(([ps, pe], j) => {
+      for (const shift of closed ? [0, total, -total] : [0]) {
+        const s0 = ps - shift, s1 = pe - shift;
+        if (s1 <= S[i] + 1e-7 || s0 >= S[i + 1] - 1e-7) continue;
+        // The parts at this edge's ends reach past it so the mitre (or the square end), not the edge, decides where they stop.
+        const u0 = s0 <= S[i] + 1e-7 ? -1 : s0 - S[i];
+        const u1 = s1 >= S[i + 1] - 1e-7 ? len + 1 : s1 - S[i];
+        const along = (u: number) => j * P + (u + S[i] - s0);
+        const tex = (q: Vec2): [number, number] => (sailor ? [q[1] + h, along(q[0])] : [along(q[0]), q[1] + h]);
+        const cell = clipConvex([[u0, -h - 0.01], [u1, -h - 0.01], [u1, h + 0.01], [u0, h + 0.01]], trap);
+        poly(cell.map((q) => { const wq = world(q); return [wq[0], y, wq[1]] as [number, number, number]; }), cell.map(tex), [0, 1, 0]);
+      }
+    });
+    // The two long sides, down to the base.
+    for (const [A, B, s] of [[Lp[i], Lp[i1], 1], [Rp[i], Rp[i1], -1]] as [Vec2, Vec2, number][]) {
+      const L2 = Math.hypot(B[0] - A[0], B[1] - A[1]);
+      poly([[A[0], y, A[1]], [B[0], y, B[1]], [B[0], y0, B[1]], [A[0], y0, A[1]]], [[S[i], 0], [S[i] + L2, 0], [S[i] + L2, y - y0], [S[i], y - y0]], [nrm[0] * s, 0, nrm[1] * s]);
+    }
+  }
+  // An open line's two square ends.
+  if (!closed) {
+    for (const [i, s] of [[0, -1], [n - 1, 1]] as [number, number][]) {
+      const d = i === 0 ? dirOf(p[0], p[1]) : dirOf(p[n - 2], p[n - 1]), A = Lp[i], B = Rp[i];
+      poly([[A[0], y, A[1]], [B[0], y, B[1]], [B[0], y0, B[1]], [A[0], y0, A[1]]], [[0, 0], [w, 0], [w, y - y0], [0, y - y0]], [d[0] * s, 0, d[1] * s]);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  // The mitre joint at each real corner: a thin strip across the course along the cut.
+  const cuts = p.map((_, i) => i).filter(corner);
+  let joints: THREE.BufferGeometry | null = null;
+  if (cuts.length) {
+    const jp: number[] = [], ji: number[] = [];
+    const half = 0.0022;
+    for (const i of cuts) {
+      const a = Lp[i], b = Rp[i], d = norm([b[0] - a[0], b[1] - a[1]]), nx = -d[1] * half, nz = d[0] * half;
+      const base = jp.length / 3;
+      jp.push(a[0] - nx, y + 0.0008, a[1] - nz, a[0] + nx, y + 0.0008, a[1] + nz, b[0] + nx, y + 0.0008, b[1] + nz, b[0] - nx, y + 0.0008, b[1] - nz);
+      ji.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    joints = new THREE.BufferGeometry();
+    joints.setAttribute('position', new THREE.Float32BufferAttribute(jp, 3));
+    joints.setAttribute('normal', new THREE.Float32BufferAttribute(jp.map((_, k) => (k % 3 === 1 ? 1 : 0)), 3));
+    joints.setIndex(ji);
+  }
+  return { top: g, joints };
+}
+
 export interface HardscapeBuild {
   object: THREE.Group;
   surfaces: THREE.Mesh[];
@@ -350,7 +467,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const mj = mitreJoints(z.polygon, inner, t);
         if (mj) {
           geos.push(mj);
-          group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1 }))));
+          group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }))));
         }
         surfaces.push(bm);
         if (z.borderLights) {
@@ -628,7 +745,23 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       const cap = bandGeometry(extendPath(path, over), (d) => d - half - over * (1 - f(d)), (d) => d + half + over * (1 + f(d)), path.pts.map(() => l.height), path.pts.map(() => capTop));
       put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else {
-      put('curb', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map((p) => height(p) + 0.07), true));
+      // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
+      const rev = Math.max(0.004, Math.min(CURB_TALL, l.reveal ?? CURB_REVEAL));
+      const top = path.pts.map((p) => height(p) + rev);
+      const bot = path.pts.map((p, k) => Math.min(top[k] - CURB_TALL, height(p) - 0.01));
+      put('curb', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, bot, top, true));
+    }
+  } else if (l.kind === 'edging' && spec?.recipe === 'paver') {
+    // Paver edging: one row of 6 x 9 pavers along the line, centered on it, just above the paving around it.
+    const sailor = l.course === 'sailor';
+    const pz = spec.pattern?.sizes?.[0] ?? [6, 9];
+    const across = (sailor ? Math.min(pz[0], pz[1]) : Math.max(pz[0], pz[1])) * 0.0254;
+    const along = sailor ? Math.max(pz[0], pz[1]) : Math.min(pz[0], pz[1]);
+    const y = (spec.thickness ?? 0.06) + zones.length * 0.0015 + 0.0005;
+    const course = edgeCourseGeometry(l.points, across, along, sailor, y, -0.06);
+    if (course) {
+      put('pavers', catalogMaterial(l.catalogId, { side: THREE.DoubleSide }), course.top, false);
+      if (course.joints) put('mitre', plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1 }), course.joints, false);
     }
   } else {
     for (let i = 0; i < l.points.length - 1; i++) {
@@ -648,7 +781,7 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     m.receiveShadow = true;
     m.userData.itemId = l.id;
     // What the material pointer reports: the wall face or its cap, a curb, or a fence.
-    m.userData.part = l.kind === 'wall' ? (key === 'cap' ? 'cap' : 'wall') : l.kind === 'fence' ? 'fence' : 'curb';
+    m.userData.part = l.kind === 'wall' ? (key === 'cap' ? 'cap' : 'wall') : l.kind === 'fence' ? 'fence' : key === 'pavers' || key === 'mitre' ? 'edge' : 'curb';
     m.userData.catalogId = l.catalogId;
     g.add(m);
   }

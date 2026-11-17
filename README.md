@@ -53,7 +53,7 @@ Messages use `window.postMessage`:
 | --- | --- |
 | Studio to parent, once it has started | `{ source: 'growth-studio', type: 'ready', materials }` |
 | Studio to parent, when the scene is clicked | `{ source: 'growth-studio', type: 'select', id }` |
-| Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit }` |
+| Parent to studio | `{ source: 'area-planner', type: 'siteplan', plan, name, refit, frame? }` |
 | Studio to parent, after each plan it applies | `{ source: 'growth-studio', type: 'built', ok: true }` or `{ source: 'growth-studio', type: 'built', ok: false, message }` |
 | Studio to parent, when the plan names an uploaded file it does not have | `{ source: 'growth-studio', type: 'need-asset', id }` |
 | Parent to studio, in answer | `{ source: 'area-planner', type: 'asset', id, kind: 'glb' or 'image', data: Blob }` (`data: null` when the parent no longer has the file) |
@@ -85,7 +85,7 @@ Messages use `window.postMessage`:
 - `materials` lists the paver, border and wall looks the parent can offer:
   `{ id, name, use, maker, line, shelf, color, sw }[]`: who makes it, its
   product line, the catalogue shelf it sits on (Pavers, Retaining walls,
-  Garden walls, Curb), the color name alone and one swatch color. Generic
+  Garden walls, Curb, Paver edge), the color name alone and one swatch color. Generic
   looks have an empty `maker`. Each maker paver color also has a matching
   border, `border-of-<id>`, which is not listed. Only offered lines are
   listed: a maker paver or wall line is offered once it is mapped in depth from
@@ -119,7 +119,8 @@ Messages use `window.postMessage`:
   (`contain` keeps its proportions, `stretch` fills the drawn width, depth and
   `height` exactly) with its front (+z) on the long side that faces down the
   page; `turn` adds quarter turns. An `image` stands up as a flat board across
-  the footprint. Files over 60 MB and Draco-compressed models are refused with
+  the footprint. Files over 60 MB, Draco-compressed models and models that
+  point to outside files or web addresses (only embedded data is read) are refused with
   a message. A file is forgotten when a later plan no longer names it.
 - `plan.rulers` carries dimensions the person drew with Area Planner's ruler:
   `{ id, a: [x, y], b: [x, y], label? }`, in meters like everything else.
@@ -140,7 +141,7 @@ Messages use `window.postMessage`:
   embed mode the studio sends `{ source: 'growth-studio', type: 'pointer', on }`
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
   id, part, material }` when what it is on changes: `part` is `main`, `border`,
-  `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
+  `edge` (paver edging), `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
   null. The parent can send `{ source: 'area-planner', type: 'pointer', on }`.
 - Pressing the right stick (or L) locks the pointed material: the studio sends
   `{ source: 'growth-studio', type: 'point-lock', locked }` and no `point`
@@ -158,7 +159,8 @@ Messages use `window.postMessage`:
   answer the studio goes full screen by itself.
 - Cover picture: the parent sends `{ source: 'area-planner', type: 'cover' }`
   and gets `{ source: 'growth-studio', type: 'cover', ok: true, data: Blob }` (a
-  1600 px JPEG of the yard from the Overview view; the camera returns at once),
+  1600 px JPEG of the yard from the Overview view, drawn off screen: the live
+  view does not move, resize or blink),
   or `{ ..., ok: false, message }` before a plan is built.
 - Stepping stones are `features` with `catalogId: 'stepping-stone-24'` (a Belgard
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
@@ -190,20 +192,63 @@ Messages use `window.postMessage`:
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
   changed, the view is re-framed anyway, so nobody is left looking at bare
-  ground. The first plan is always framed.
+  ground, unless the plan carries the same `frame` string as the last one:
+  `frame` names the parent's coordinate frame (Area Planner changes it only
+  with a new plan image or scale), so with an unchanged `frame` the camera
+  stays even when the lot outline grows. The first plan is always framed.
+- `{ source: 'area-planner', type: 'pause' }` stops drawing the 3D view (for a
+  hidden tab; plant pictures still render); `{ ..., type: 'resume' }` starts it
+  again on the next frame.
+- The `i` key pressed inside the 3D view (no modifier keys, not in a text
+  field) is passed on as `{ source: 'growth-studio', type: 'key', key: 'i' }`
+  to the origin that sent the plan.
 - Messages that arrive within 150 ms of each other are applied as one
   rebuild, using the newest plan. Each rebuild gets one `built` reply.
+  The new yard's shaders are compiled while the old yard stays on screen;
+  `built` is sent once the new yard is showing.
 - Wait for `ready` before sending. It is sent to any parent (`'*'`) and holds
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
+- Curbs (`kind: 'edging'` with a curb look) are Belgard Melville Curb units:
+  4 in thick, 24 in long with a joint between units, 6 1/2 in tall. `reveal`
+  is how much stands above grade in meters (0 to 0.1651); left out, 3 in.
+- Paver edging is a `kind: 'edging'` line whose `catalogId` is a look on the
+  `Paver edge` shelf (`paver-edge-<line>-<color>`, use `border`): one row of
+  6 x 9 pavers centered on the line, laid paver by paver with mitres at
+  corners. `course: 'sailor'` turns the pavers long side along the run; left
+  out, a soldier course. The shelf holds every color Belgard sells as a 6 x 9
+  unit in its Pacific Stockton region (Dimensions Single Unit and Antiqued Flat
+  Top); `PAVER_EDGE_DEFAULT` is Dimensions Single Unit Anthracite.
 - Plans are accepted only from the iframe's parent, and only from the origins
   listed in `EMBED_ALLOWED_PARENT_ORIGINS` in `src/app/main.ts`: local
   development (`http://localhost:*`, `http://127.0.0.1:*`),
-  `https://area-planner*.vercel.app`, and `https://greenlionlandscape.com` and
-  its subdomains. Anything else is ignored silently.
+  `https://area-planner-beta.vercel.app`, Area Planner on the `joshua-jackson`
+  Vercel team (`https://area-planner-joshua-jackson.vercel.app`,
+  `https://area-planner-git-<branch>-joshua-jackson.vercel.app`,
+  `https://area-planner-<hash>-joshua-jackson.vercel.app`), and
+  `https://greenlionlandscape.com` (and `www.`). Anything else is ignored silently.
+- The build uses relative asset paths, so the studio also works under a
+  sub-path, such as Area Planner's `/studio/` rewrite to this deployment
+  (same origin as the planner, which Safari does not throttle).
 - If the iframe has a `sandbox` attribute, it needs `allow-scripts`, and
   `allow-downloads` for Save image.
+
+## Smooth rendering
+- Frame rate readout: add `?fps=1` to the address (or press F9 in the 3D view)
+  for frames per second and the slowest frame of the last half second. It
+  says "idle" while nothing on screen changes.
+- Drawing pauses while nothing moves (Motion off, or no wind, water or fire,
+  and the camera at rest) to save battery and heat; the loop keeps running,
+  so the next input is drawn in the very next frame.
+- A new plan is built and its shaders compiled before it replaces the old
+  yard; plants share one shader, and the lighting environment is remade only
+  when the sky changes.
+- Shadows are cast from the plants' still pose and redrawn only when the yard,
+  sun or growth changes. Lawn blades fade into the ground only where they
+  would be thinner than a third of a pixel.
+- Losing WebGL (Safari can take it away under memory pressure) shows
+  "Restoring the 3D view" and rebuilds the yard when it comes back.
 
 ## Next steps
 1. Replace the starter catalog with Green Lion's plant list (names, container

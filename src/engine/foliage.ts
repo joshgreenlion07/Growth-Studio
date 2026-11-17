@@ -16,7 +16,17 @@ export const GLOBAL = {
   uWindDir: { value: new THREE.Vector2(0.8, 0.6).normalize() },
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunColor: { value: new THREE.Color(1, 1, 1) },
+  /**
+   * Lawn blades shrink into the ground between these distances from the camera (x start, y gone), set each frame
+   * from the view's pixel density, so blades are never drawn thinner than about a pixel (sub-pixel blades twinkle).
+   */
+  uTurfFade: { value: new THREE.Vector2(14, 26) },
 };
+
+/** No wind: shadows are cast from the plants' still pose, so they never step or crawl while the leaves sway. */
+const STILL_WIND = { value: 0 };
+/** No distance fade (everything but the lawn). */
+const NO_FADE = { value: new THREE.Vector2(0, 0) };
 
 export interface GrowthUniforms {
   /** 0 at install, 1 at maturity. */
@@ -37,6 +47,8 @@ export interface FoliageOptions {
   flutter: number;
   /** Light passing through leaves when backlit, 0..1. */
   translucency: number;
+  /** Shrink into the ground with distance (the lawn's blades; see GLOBAL.uTurfFade). */
+  fade?: boolean;
 }
 
 const VERT_HEAD = /* glsl */ `
@@ -48,6 +60,7 @@ uniform float uGrow;
 uniform vec2 uSize;
 uniform float uBend;
 uniform float uFlutter;
+uniform vec2 uFade;
 attribute float aBirth;
 attribute vec3 aAnchor;
 attribute float aSway;
@@ -84,15 +97,21 @@ vec4 gsWorld = modelMatrix * mvPosition;
   gsWorld.y -= abs(b) * 0.15 * aSway;
   float fl = sin(uTime * 7.3 + dot(position, vec3(3.1, 1.7, 2.3)) * 3.0) * uFlutter * uWind * aSway;
   gsWorld.xyz += vec3(fl, fl * 0.6, -fl * 0.8);
+  if (uFade.y > 0.0) {
+    // Collapse onto the base point (nothing left to draw) before the part gets thinner than a pixel.
+    float keep = 1.0 - smoothstep(uFade.x, uFade.y, distance(cameraPosition, baseW.xyz));
+    gsWorld.xyz = mix(baseW.xyz, gsWorld.xyz, keep);
+  }
 }
 mvPosition = viewMatrix * gsWorld;
 gl_Position = projectionMatrix * mvPosition;
 `;
 
-function bindCommon(shader: THREE.WebGLProgramParametersWithUniforms, o: FoliageOptions) {
+function bindCommon(shader: THREE.WebGLProgramParametersWithUniforms, o: FoliageOptions, still = false) {
   const g = o.growth ?? growthUniforms();
   shader.uniforms.uTime = GLOBAL.uTime;
-  shader.uniforms.uWind = GLOBAL.uWind;
+  shader.uniforms.uWind = still ? STILL_WIND : GLOBAL.uWind;
+  shader.uniforms.uFade = o.fade ? GLOBAL.uTurfFade : NO_FADE;
   shader.uniforms.uWindDir = GLOBAL.uWindDir;
   shader.uniforms.uGrow = g.uGrow;
   shader.uniforms.uSize = g.uSize;
@@ -142,15 +161,20 @@ export function patchFoliage<M extends THREE.MeshStandardMaterial>(mat: M, o: Fo
          }`,
       );
   };
-  mat.customProgramCacheKey = () => `foliage-${o.bend}-${o.flutter}-${o.translucency}-${mat.alphaTest}`;
+  // The shader text is the same for every plant (the values above are uniforms), so all of them share one
+  // program; three adds alpha test and the other material switches to the key itself.
+  mat.customProgramCacheKey = () => 'foliage';
   return mat;
 }
 
-/** Depth material for shadows that matches the patched vertex motion. */
+/**
+ * Depth material for shadows: the growth of the patched vertex motion, but the still pose (no wind), so a shadow
+ * map drawn once stays right while the leaves sway, and is redrawn only when something really changes.
+ */
 export function foliageDepthMaterial(o: FoliageOptions, map?: THREE.Texture, alphaTest = 0): THREE.MeshDepthMaterial {
   const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: map ?? null, alphaTest });
-  m.onBeforeCompile = (shader) => bindCommon(shader, o);
-  m.customProgramCacheKey = () => `foliage-depth-${o.bend}-${o.flutter}-${alphaTest}`;
+  m.onBeforeCompile = (shader) => bindCommon(shader, o, true);
+  m.customProgramCacheKey = () => 'foliage-depth';
   return m;
 }
 

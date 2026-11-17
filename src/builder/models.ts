@@ -61,13 +61,59 @@ export class ModelAssets {
   }
 }
 
+const OUTSIDE_FILE = 'This 3D file points to other files or web addresses. Export it again as a single self-contained .glb.';
+
+/** The glTF JSON of a .glb (or a .gltf text file), or null when it is neither. */
+function gltfJson(buf: ArrayBuffer): unknown {
+  const dv = new DataView(buf);
+  let text: string;
+  if (buf.byteLength >= 20 && dv.getUint32(0, true) === 0x46546c67) {
+    // GLB: 12-byte header, then the JSON chunk (length, type 'JSON', bytes).
+    const len = dv.getUint32(12, true);
+    if (dv.getUint32(16, true) !== 0x4e4f534a || 20 + len > buf.byteLength) return null;
+    text = new TextDecoder().decode(new Uint8Array(buf, 20, len));
+  } else {
+    text = new TextDecoder().decode(buf);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/** Every `uri` in the file must be embedded data; anything else would make the browser fetch it. */
+function onlyEmbedded(node: unknown): boolean {
+  if (Array.isArray(node)) return node.every(onlyEmbedded);
+  if (!node || typeof node !== 'object') return true;
+  for (const [k, v] of Object.entries(node)) {
+    if (k === 'uri' && (typeof v !== 'string' || !/^data:/i.test(v))) return false;
+    if (typeof v === 'object' && !onlyEmbedded(v)) return false;
+  }
+  return true;
+}
+
 async function readGlb(data: Blob): Promise<LoadedAsset> {
   let scene: THREE.Object3D;
+  const buf = await data.arrayBuffer();
+  const json = gltfJson(buf);
+  if (json && !onlyEmbedded(json)) throw new Error(OUTSIDE_FILE);
+  // Second line of defence: the loader itself may only read the file's own data
+  // (data: URIs, and the blob: URLs it makes for embedded pictures).
+  let blocked = false;
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    if (/^(data|blob):/i.test(url)) return url;
+    blocked = true;
+    return 'data:,';
+  });
   try {
-    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(await data.arrayBuffer(), '');
+    const gltf = await new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder).parseAsync(buf, '');
+    if (blocked) throw new Error(OUTSIDE_FILE);
     scene = gltf.scene;
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
+    if (blocked || why === OUTSIDE_FILE) throw new Error(OUTSIDE_FILE);
     if (/draco/i.test(why)) throw new Error('This 3D file uses Draco compression. Export it again as a plain .glb.');
     throw new Error('This file could not be read as a .glb 3D model.');
   }

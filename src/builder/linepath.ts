@@ -11,11 +11,17 @@ import type { LineItem, Vec2, Zone } from '../siteplan/types';
  * stays one smooth body instead of short pieces that each pick their own side.
  */
 
+/** Melville Curb unit, meters: thickness, height and length (4 x 24 x 6 1/2 in, belgard.com). */
+export const CURB_THICK = 0.1016, CURB_TALL = 0.1651, CURB_UNIT = 0.6096;
+/** How much of a curb shows above grade when the plan does not say: 3 in. */
+export const CURB_REVEAL = 0.0762;
+
 /** Thickness in meters of a line that is built as a solid body: a wall or a concrete curb. 0 for the rest. */
 export function lineThickness(l: LineItem): number {
   const spec = materialById.get(l.catalogId);
   if (l.kind === 'wall') return (spec?.wall?.face ?? 'splitFace') === 'plaster' ? 0.25 : 0.3;
-  if (l.kind === 'edging' && spec?.recipe === 'curb') return 0.15;
+  // Curbs are Belgard Melville Curb units: 4 in thick (24 in long, 6 1/2 in tall).
+  if (l.kind === 'edging' && spec?.recipe === 'curb') return CURB_THICK;
   return 0;
 }
 
