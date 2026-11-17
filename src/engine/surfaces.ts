@@ -4,6 +4,7 @@ import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
 import { WALL_FACES } from './wallfaces';
+import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -836,10 +837,10 @@ function dgSet(spec: MaterialSpec): PBRSet {
 }
 
 /**
- * The ground under black humus (spec.crumb): the same fill seen from farther off and in the gaps between the 3D crumbs.
- * Fine dark soil with damp, darker hollows; crumbs and soft clumps raised in it, lit on top; shredded bark and fiber
- * strands, a few lighter; rare pale specks. Matched to the photos' average color (`mean`), so the bed reads the same where
- * its 3D crumbs give way to this texture.
+ * A soil fill (spec.crumb: black humus, compost, dirt) as the ground paints it: the clod relief of humus-field.ts (the same the 3D bed surface is
+ * raised by, so the two agree) in soft dark browns. Clod tops a little drier and lighter, the fines between them a
+ * little darker and velvety, never black; a few short, dark shreds of bark; a very rare pale fleck. Matched to `mean`.
+ * Carries the bed's lumps by its normals where the 3D surface has sunk away (past ~12 m) and in every hollow.
  */
 function humusGroundSet(spec: MaterialSpec): PBRSet {
   const C = spec.crumb!;
@@ -851,56 +852,34 @@ function humusGroundSet(spec: MaterialSpec): PBRSet {
   const speck = C.speck.map(hexRGB);
   const m = hexRGB(C.mean);
   const mean: RGB = [toLin(m[0]), toLin(m[1]), toLin(m[2])];
-  return paint(1024, 0.8, 2.6, (u, v) => {
-    // Damp, darker hollows and drier tops: faint here (the tile repeats every 0.8 m); the bed's own lumps and the 3D
-    // pieces carry the larger changes.
-    const damp = fbm(u, v, 4, 3, 21);
-    const fine = vnoise(u * 700, v * 700, 700, 22), fine2 = vnoise(u * 340, v * 340, 340, 23);
-    let c = mulRGB(mixRGB(soil[2], soil[1], 0.3 + fine2 * 0.5), 0.86 + fine * 0.12);
-    let h = fine * 0.1 + fine2 * 0.12;
-    let r = 0.97;
-    // Crumbs, 2 to 6 mm: rounded, a little lighter on top, dark where they meet, edges broken by the grain.
-    const cr = voronoi(u + (fine - 0.5) * 0.003, v + (fine2 - 0.5) * 0.003, 190, 24, 1);
-    const crumb = smooth(0.55, 0.1, cr.f1 / (0.7 + cr.id * 0.5));
-    if (cr.id > 0.25) {
-      const t = crumb * (0.6 + 0.4 * fine);
-      c = mixRGB(mulRGB(c, 0.9), mulRGB(pickSoil(hash(cr.id, 3)), 0.86 + 0.16 * crumb), t * 0.8);
-      h += t * 0.45;
-    }
-    // Soft clumps, 1 to 3 cm, a few: lumpy outlines, granular tops, a dark rim where they sit in the fines.
-    const cl = voronoi(u + (fine2 - 0.5) * 0.012, v + (fine - 0.5) * 0.012, 46, 25, 0.95);
-    if (cl.id > 0.8) {
-      const d = cl.f1 / (0.62 + cl.id * 0.3);
-      const lump = smooth(0.5, 0.25, d), rim = smooth(0.42, 0.5, d) * smooth(0.6, 0.5, d);
-      c = mulRGB(c, 1 - rim * 0.35);
-      if (lump > 0) {
-        const t = lump * (0.55 + 0.45 * fine2);
-        c = mixRGB(c, mulRGB(pickSoil(hash(cl.id, 5)), 0.75 + 0.25 * fine), t);
-        h += t * 0.45;
-      }
-    }
-    // Shredded bark and fibers: thin strands at random turns, mostly dark, a few lighter brown.
-    const fc = voronoi(u, v, 26, 26, 1);
-    const ang = fc.id * Math.PI * 2, ca = Math.cos(ang), sa = Math.sin(ang);
-    const along = (fc.dx * ca + fc.dy * sa) / 0.4, across = (-fc.dx * sa + fc.dy * ca) * 45;
-    if (Math.abs(along) < 1 && fc.id > 0.45) {
-      const strand = smooth(1, 0.3, Math.abs(across + Math.sin(along * 3 + fc.id * 9) * 0.8)) * smooth(1, 0.6, Math.abs(along));
+  // Normals at about half the relief's true slope: soft, as crumbly soil reads.
+  const px = CLOD_TILE / 1024;
+  return paint(1024, CLOD_TILE, 0.55 / (2 * px), (u, v) => {
+    const f = clodField(u, v, C.style);
+    const soft = vnoise(u * 9, v * 9, 9, 61), velvet = vnoise(u * 70, v * 70, 70, 62);
+    let c = mixRGB(soil[2], soil[1], 0.35 + soft * 0.5);
+    if (f.id >= 0) c = mixRGB(c, pickSoil(f.id), 0.25);
+    // Drier, lighter clod tops; darker but still brown down in the fines.
+    c = mulRGB(c, (0.86 + 0.2 * f.top) * (0.95 + 0.07 * velvet));
+    let h = f.h;
+    // A few short shreds of dark bark, lying in the hollows.
+    const fc = voronoi(u, v, 18, 63, 1);
+    if (fc.id > 1 - 0.38 * C.style.fibers && f.top < 0.6) {
+      const ang = fc.id * Math.PI * 9, ca = Math.cos(ang), sa = Math.sin(ang);
+      const along = (fc.dx * ca + fc.dy * sa) / 0.3, across = (-fc.dx * sa + fc.dy * ca) * 70 + Math.sin(along * 2.5 + fc.id * 20) * 1.2;
+      const strand = smooth(1, 0.4, Math.abs(across)) * smooth(1, 0.5, Math.abs(along));
       if (strand > 0) {
-        const fcol = fc.id > 0.85 ? fiber[1 + Math.floor(hash(fc.id, 7) * 2)] : fiber[hash(fc.id, 8) > 0.5 ? 3 : 0];
-        c = mixRGB(c, mulRGB(fcol, 0.85 + 0.25 * fine), strand * 0.85);
-        h += strand * 0.35;
-        r = 0.92;
+        const light = fc.id > 1 - 0.38 * C.style.fibers * C.style.lightFibers;
+        c = mixRGB(c, mulRGB(fiber[light ? 1 + Math.floor(hash(fc.id, 9) * 2) : hash(fc.id, 8) > 0.5 ? 3 : 0], 0.8 + 0.2 * velvet), strand * (light ? 0.8 : 0.6));
+        h += strand * 0.0006;
       }
     }
-    // Pale specks: perlite and sand, rare.
-    const sp = voronoi(u, v, 260, 27, 1);
-    if (sp.id > 0.992) {
-      const t = smooth(0.22, 0.08, sp.f1);
-      c = mixRGB(c, speck[sp.id > 0.995 ? 0 : 1], t);
-      h += t * 0.3;
-    }
-    c = mulRGB(c, 0.93 + damp * 0.14);
-    return { h, c, r };
+    // Perlite: a very rare, tiny pale fleck.
+    const sp = voronoi(u, v, 300, 64, 1);
+    if (sp.id > 0.9985) c = mixRGB(c, speck[1], smooth(0.18, 0.06, sp.f1) * 0.6);
+    // The roughness channel carries the clod height instead (the ground's humus layer is matte by a constant): the 3D
+    // bed surface is raised by it, so it stands exactly where this texture's normals say.
+    return { h, c, r: f.h / CLOD_MAX };
   }, mean);
 }
 

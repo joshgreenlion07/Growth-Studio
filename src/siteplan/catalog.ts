@@ -184,7 +184,18 @@ export interface CrumbSpec {
   mean: string;
   /** How high the spread fill crowns above grade toward the middle of a bed, meters. */
   mound: number;
+  /**
+   * The relief (engine/humus-field.ts ClodStyle): how much of the surface is clods (1 = clods everywhere, lower leaves
+   * more fine, powdery soil), their size (1 = 3-5 cm), how many shreds of bark and wood show in the fines (0..1), and the
+   * share of those that are lighter, drier fiber.
+   */
+  style: { clods: number; scale: number; fibers: number; lightFibers: number };
+  /** Loose pieces lying on top, per square meter: soft clods, and shreds of bark or wood (length range, inches). */
+  loose: { clods: number; shreds: number; shredIn: [number, number] };
 }
+
+/** What a bed fill is, for ordering and defaults: bark and mulch, soil (humus, compost, dirt), rock and gravel, or DG. */
+export type FillType = 'bark' | 'humus' | 'rock' | 'dg';
 
 /**
  * A synthetic turf product as its maker lists it. Colors are sRGB as photographed (turned into albedo like any maker
@@ -245,8 +256,12 @@ export interface MaterialSpec {
   shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock';
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
   pebble?: PebbleSpec;
-  /** Soft fill drawn crumb by crumb (black humus): its soil, fiber and speck colors and how it mounds. */
+  /** Soft fill drawn as a bed of clods (black humus, compost, dirt): its soil, fiber and speck colors, relief and mound. */
   crumb?: CrumbSpec;
+  /** Bed fills: what kind of fill it is, the depth it is usually spread (in), and for rock, DG and gravel its weight (tons per cubic yard). */
+  fillType?: FillType;
+  depthIn?: number;
+  tonsPerCuYd?: number;
   /** Synthetic turf made to a maker's spec (pile, yarn and thatch colors, blade shape), drawn blade by blade. */
   turf?: TurfSpec;
   /** The color name alone, without the line name. */
@@ -394,17 +409,42 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'brown-mulch', name: 'Red-brown bark', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#6e4a2f', '#4a3121'] }),
   // Natural fir bark (the plain brown bark most beds get). Palettes are typical bagged and bulk colors, not a maker's.
   M({ id: 'fir-bark', name: 'Fir bark mulch, natural brown', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#8a5c3a', '#5e3d27'] }),
-  // Black humus, the compost mix Green Lion spreads in beds: near-black, fine and crumbly when freshly spread and a little
-  // damp, with soft clumps, shredded bark and wood fibers, a few lighter strands and pale specks (perlite, sand). Colors
-  // from photos of bulk black humus and humus/compost mix spread in beds. Drawn crumb by crumb (builder/humus.ts); the id
-  // stays `humus` so saved plans keep it.
+  // Soil fills, drawn as a bed of soft clods (builder/humus.ts, engine/humus-field.ts). Colors are albedo, set so each
+  // renders in the default light at the tones measured from photos of it spread in beds.
+  // Black humus, the compost mix Green Lion spreads in beds: near-black, crumbly and a little damp when fresh, lumpy with
+  // soft clods, a few short shreds of dark bark, a very rare pale fleck. The id stays `humus` so saved plans keep it.
   M({ id: 'humus', name: 'Black humus (compost mix)', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a302a', '#211b18'],
     crumb: {
       soil: [{ c: '#352f28', share: 0.3 }, { c: '#3f372e', share: 0.28 }, { c: '#2c261d', share: 0.2 }, { c: '#483f34', share: 0.16 }, { c: '#53493b', share: 0.06 }],
       fiber: ['#4f3f2d', '#65523d', '#7f6a4f', '#3c3024'],
       speck: ['#bdb8aa', '#9c9482'],
-      mean: '#3b342b',
-      mound: 0.05,
+      mean: '#3e352d',
+      mound: 0.035,
+      style: { clods: 1, scale: 1, fibers: 0.6, lightFibers: 0.1 },
+      loose: { clods: 22, shreds: 6, shredIn: [0.4, 1.2] },
+    } }),
+  // Compost: dark brown, a little lighter and coarser than black humus, with plenty of woody bits and shredded fiber,
+  // some of it lighter brown.
+  M({ id: 'compost', name: 'Compost', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#4a3a2c', '#2e241b'],
+    crumb: {
+      soil: [{ c: '#3f3427', share: 0.3 }, { c: '#4a3c2d', share: 0.28 }, { c: '#342b20', share: 0.2 }, { c: '#554535', share: 0.16 }, { c: '#62503c', share: 0.06 }],
+      fiber: ['#5a4630', '#7a6044', '#97795a', '#46362a'],
+      speck: ['#b0a690', '#928872'],
+      mean: '#4a3d30',
+      mound: 0.04,
+      style: { clods: 0.85, scale: 1.25, fibers: 1, lightFibers: 0.45 },
+      loose: { clods: 26, shreds: 30, shredIn: [0.6, 2] },
+    } }),
+  // Dirt / topsoil: medium brown, fine, drier and more powdery, few clods and hardly a fiber.
+  M({ id: 'topsoil', name: 'Dirt / topsoil', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#6e5a46', '#4c3d2f'],
+    crumb: {
+      soil: [{ c: '#5e4a38', share: 0.3 }, { c: '#685340', share: 0.28 }, { c: '#523f30', share: 0.2 }, { c: '#735e4a', share: 0.16 }, { c: '#806a54', share: 0.06 }],
+      fiber: ['#5a4636', '#6e5946', '#7f6a55', '#4e3d2f'],
+      speck: ['#a89a86', '#8e8270'],
+      mean: '#64503e',
+      mound: 0.03,
+      style: { clods: 0.45, scale: 0.75, fibers: 0.12, lightFibers: 0 },
+      loose: { clods: 8, shreds: 1, shredIn: [0.4, 0.8] },
     } }),
   M({ id: 'decomposed-granite', name: 'Decomposed granite', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#b39a78', '#8f7a5d'] }),
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
@@ -620,6 +660,24 @@ export const FEATURES: FeatureSpec[] = [
 ];
 
 export const plantById = new Map(PLANTS.map((p) => [p.id, p]));
+/**
+ * Bed fills, as Area Planner orders them: the kind of fill, the depth it is usually spread (in), and for rock, gravel
+ * and DG the weight of a cubic yard (tons; bark and soil are ordered by the yard). DG is its own kind: it is compacted
+ * and ordered by the ton like gravel, but laid as a surface, not a loose bed.
+ */
+function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | 'tonsPerCuYd'> {
+  if (m.recipe === 'mulch') return { fillType: 'bark', depthIn: 3 };
+  if (m.crumb) return { fillType: 'humus', depthIn: m.id === 'topsoil' ? 3 : 2.5 };
+  if (m.id === 'decomposed-granite') return { fillType: 'dg', depthIn: 3, tonsPerCuYd: 1.4 };
+  // Lava rock is porous and light.
+  if (m.id === 'lava-rock') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 0.7 };
+  if (m.pebble) return { fillType: 'rock', depthIn: m.pebble.maxIn <= 1 ? 2 : m.pebble.maxIn <= 2 ? 2.5 : 3, tonsPerCuYd: 1.45 };
+  if (m.recipe === 'blackPebble') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 1.45 };
+  if (m.recipe === 'cobble') return { fillType: 'rock', depthIn: 3.5, tonsPerCuYd: 1.4 };
+  return { fillType: 'rock', depthIn: 3, tonsPerCuYd: 1.4 };
+}
+for (const m of MATERIALS) if (m.use === 'bed') Object.assign(m, bedFill(m));
+
 export const materialById = new Map(MATERIALS.map((m) => [m.id, m]));
 export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
 

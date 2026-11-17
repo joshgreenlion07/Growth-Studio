@@ -53,6 +53,14 @@ const BED: Record<string, Omit<MaterialInfo, 'group'>> = {
     about: 'Black humus: a dark, fine compost mix, spread loose and crumbly. A rich near-black finish that holds moisture, feeds the soil and makes plants stand out; it settles a little over the first weeks and is worked in when beds are replanted.',
     spec: ['Black humus / compost mix, spread 2 to 3 in', 'Raked even, crowned slightly and settled against the edging', 'Kept 1 to 2 in back from stems and trunks', 'Ordered by the cubic yard; top up about 1 in a year'],
   },
+  compost: {
+    about: 'Compost: dark brown, fully broken-down organic matter with plenty of woody bits and shredded fiber. Coarser and a little lighter than black humus; spread on beds it feeds the soil, holds water and keeps weeds down.',
+    spec: ['Compost, spread 2 to 3 in', 'Raked even, crowned slightly and settled against the edging', 'Kept 1 to 2 in back from stems and trunks', 'Ordered by the cubic yard'],
+  },
+  topsoil: {
+    about: 'Dirt / topsoil: screened, medium-brown soil, fine and dry with few clods or fibers. Used to fill and level beds and low spots before planting or seeding.',
+    spec: ['Topsoil, spread 2 to 4 in', 'Raked smooth and lightly firmed', 'Graded to drain away from the house', 'Ordered by the cubic yard'],
+  },
   'decomposed-granite': {
     about: 'Decomposed granite (DG): crushed granite fines that pack down into a firm, natural tan surface for paths, patios and between stepping stones.',
     spec: ['3 in deep, compacted in two lifts', 'Over weed fabric on compacted subgrade', 'Stabilizer added for walking paths', 'Held by edging along every side'],
