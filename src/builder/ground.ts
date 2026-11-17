@@ -205,7 +205,21 @@ function splatTextures(plan: SitePlan, area: Bounds, ppm: number, layers: string
   const A = new Uint8Array(W * Hh * 4), B = new Uint8Array(W * Hh * 4);
   const acc = new Float32Array(MAX_GROUND_LAYERS + 1);
   for (let y = 0; y < Hh; y++) {
+    const r0 = Math.max(0, y - 1) * W, r1 = y * W, r2 = Math.min(Hh - 1, y + 1) * W;
     for (let x = 0; x < W; x++) {
+      // Most texels sit inside one area: all nine neighbors the same layer, so that layer's weight is full.
+      if (x > 0 && x < W - 1) {
+        const l = idx[r1 + x];
+        if (
+          idx[r1 + x - 1] === l && idx[r1 + x + 1] === l &&
+          idx[r0 + x - 1] === l && idx[r0 + x] === l && idx[r0 + x + 1] === l &&
+          idx[r2 + x - 1] === l && idx[r2 + x] === l && idx[r2 + x + 1] === l
+        ) {
+          if (l >= 1 && l <= 4) A[(r1 + x) * 4 + l - 1] = 255;
+          else if (l >= 5 && l <= 8) B[(r1 + x) * 4 + l - 5] = 255;
+          continue;
+        }
+      }
       acc.fill(0);
       for (let j = -1; j <= 1; j++) {
         const yy = Math.min(Hh - 1, Math.max(0, y + j));

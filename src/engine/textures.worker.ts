@@ -1,17 +1,20 @@
 import { runRecipe } from './texture-recipes';
-import { clearTextureSets, type PaintedPixels } from './textures';
+import { clearTextureSets, paintCappedFrom, setPaintSizeCap, type PaintedPixels } from './textures';
 
 /**
  * The texture worker: paints procedural PBR sets off the main thread.
  *
- * Page -> worker  { type: 'paint', id, key, flat: [[r,g,b] albedo, [r,g,b] normal, [r,g,b] roughness], steps }
+ * Page -> worker  { type: 'paint', id, key, flat: [[r,g,b] albedo, [r,g,b] normal, [r,g,b] roughness], steps, preview }
  * Worker -> page  { type: 'ready' } once loaded
+ *                 { type: 'preview', id, full, frames: [{ size, maps }] } a quick low-resolution copy (only when asked for,
+ *                   and only for a set larger than PREVIEW_SIZE that is not stored yet); the page asks again for the rest
  *                 { type: 'done', id, frames: [{ size, maps: [albedo, normal, roughness] }] }
  *                 { type: 'fail', id, message }
  *
- * Each map is RGBA bytes (an ArrayBuffer, transferred). The last frame is the
- * painted set; the ones before it are the crossfade from the flat stand-in
- * color (`steps` are the blend amounts), at half size to keep them light.
+ * Each map is RGBA bytes (an ArrayBuffer, transferred), rows bottom first, so
+ * the page uploads it as it is (no flip), followed by its mip levels (see withMips). The last frame is the painted set;
+ * the ones before it are the crossfade from the flat stand-in color (`steps`
+ * are the blend amounts), at half size to keep them light.
  *
  * Painted sets are kept in IndexedDB (gzip of the raw channels) under the
  * worker's own file name, which carries a content hash in the Vite build, so a
@@ -24,7 +27,11 @@ interface PaintJob {
   key: string;
   flat: [number, number, number][];
   steps: number[];
+  preview?: boolean;
 }
+
+/** Side of the quick first copy of a large set (a sixteenth of the work of a 2048 px set). */
+const PREVIEW_SIZE = 512;
 
 interface Poster {
   postMessage(message: unknown, transfer?: Transferable[]): void;
@@ -51,12 +58,26 @@ async function run(job: PaintJob) {
     let px = await cacheGet(job.key);
     const fromCache = !!px;
     if (!px) {
-      const set = runRecipe(job.key);
-      clearTextureSets();
+      // A first copy at low resolution, when the set is larger than that: the page shows it while the rest is painted.
+      setPaintSizeCap(job.preview ? PREVIEW_SIZE : 0);
+      let set: ReturnType<typeof runRecipe>;
+      let capped = 0;
+      try {
+        set = runRecipe(job.key);
+        capped = paintCappedFrom();
+      } finally {
+        clearTextureSets();
+        setPaintSizeCap(0);
+      }
       const img = (t: unknown) => (t as { image?: { pixels?: PaintedPixels } }).image?.pixels;
       px = set ? img(set.map) ?? null : null;
       if (!px || img(set!.normalMap) !== px || img(set!.roughnessMap) !== px) {
         port.postMessage({ type: 'fail', id: job.id, message: `no worker recipe for ${job.key}` });
+        return;
+      }
+      if (job.preview && capped) {
+        const maps = [px.albedo, px.normal, px.rough].map((m, i) => withMips(m, px!.size, i === 0));
+        port.postMessage({ type: 'preview', id: job.id, full: capped, frames: [{ size: px.size, maps }] }, maps);
         return;
       }
     }
@@ -78,12 +99,52 @@ function framesFor(px: PaintedPixels, job: PaintJob) {
   if (job.steps.length) {
     const half = px.size >= 512 ? px.size / 2 : px.size;
     const small = half === px.size ? maps : maps.map((m) => downsample(m, px.size));
-    for (const t of job.steps) frames.push({ size: half, maps: small.map((m, i) => blend(m, job.flat[i], t)) });
+    for (const t of job.steps) frames.push({ size: half, maps: small.map((m, i) => withMips(new Uint8ClampedArray(blend(m, job.flat[i], t)), half, i === 0)) });
   }
-  // The painted maps themselves; copied so the cached arrays stay usable for storing.
-  frames.push({ size: px.size, maps: maps.map((m) => m.slice().buffer) });
+  // The painted maps themselves; copied (flipped) so the cached arrays stay usable for storing.
+  frames.push({ size: px.size, maps: maps.map((m, i) => withMips(m, px.size, i === 0)) });
   return frames;
 }
+
+/**
+ * A square RGBA map as the page uploads it: rows bottom first (as GL stores a texture uploaded with flipY), followed by
+ * its whole mip chain down to 1 px, each level a 2x2 box filter of the one above (in linear light for the sRGB color
+ * map, as GL's generateMipmap does). With the levels made here the page never asks the GPU to make them, so the
+ * upload can go a slice at a time without waiting on the GPU.
+ */
+function withMips(src: Uint8ClampedArray, size: number, srgb: boolean): ArrayBuffer {
+  let total = 0;
+  for (let s = size; s >= 1; s >>= 1) total += s * s * 4;
+  const out = new Uint8Array(total);
+  const row = size * 4;
+  for (let y = 0; y < size; y++) out.set(src.subarray(y * row, y * row + row), (size - 1 - y) * row);
+  let at = 0;
+  for (let s = size; s > 1; s >>= 1) {
+    const h = s >> 1, next = at + s * s * 4;
+    for (let y = 0; y < h; y++) {
+      const r0 = at + y * 2 * s * 4, r1 = r0 + s * 4;
+      for (let x = 0; x < h; x++) {
+        const a = r0 + x * 8, b = r1 + x * 8, o = next + (y * h + x) * 4;
+        for (let c = 0; c < 4; c++) {
+          if (srgb && c < 3) out[o + c] = TO_SRGB8[(TO_LIN[out[a + c]] + TO_LIN[out[a + 4 + c]] + TO_LIN[out[b + c]] + TO_LIN[out[b + 4 + c]]) >> 2];
+          else out[o + c] = (out[a + c] + out[a + 4 + c] + out[b + c] + out[b + 4 + c] + 2) >> 2;
+        }
+      }
+    }
+    at = next;
+  }
+  return out.buffer;
+}
+
+/** 8-bit sRGB to 12-bit linear, and back. */
+const TO_LIN = new Uint16Array(256).map((_, i) => {
+  const v = i / 255;
+  return Math.round((v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * 4095);
+});
+const TO_SRGB8 = new Uint8Array(4096).map((_, i) => {
+  const v = i / 4095;
+  return Math.round((v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055) * 255);
+});
 
 /** 2x2 box filter of a square RGBA map (it tiles, so no edge cases). */
 function downsample(src: Uint8ClampedArray, size: number): Uint8ClampedArray {
