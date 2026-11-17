@@ -1333,7 +1333,8 @@ export class Studio {
     // brought up to date only when it is drawn.
     this.build?.plants.update?.(cam, lodPx);
     this.build?.pebbles.update(cam);
-    this.build?.humus.update(cam);
+    // The soil fills' relief comes in over a few frames once its painted maps arrive.
+    if (this.build?.humus.update(cam)) this.invalidate();
     this.fitTurfFade(cam, devicePx);
     // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
     // plants' size changed, never on a timer while leaves sway.
@@ -1371,6 +1372,7 @@ export class Studio {
       box.textContent = [
         `${head}  drawn ${this.drawnInWin}/${n} frames`,
         `canvas ${this.size.w}×${this.size.h} @${this.size.pr.toFixed(2)}x  quality ${this.state.quality}  near ${this.camera.near.toFixed(2)} m`,
+        ...(this.build?.humus.object ? [`soil fills: ${this.build.humus.counts.sheetTiles} tiles (${this.build.humus.shown.near} fine, ${this.build.humus.shown.far} coarse shown), ${this.build.humus.shown.pieces} of ${this.build.humus.counts.clods + this.build.humus.counts.shreds} pieces shown, ${(this.build.humus.shown.triangles / 1e6).toFixed(2)}M triangles in ${this.build.humus.shown.draws} draws (before culling)`] : []),
         `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}`,
         ...this.diag.log,
       ].join('\n');

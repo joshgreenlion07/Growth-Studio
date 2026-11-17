@@ -120,7 +120,8 @@ Messages use `window.postMessage`:
   share, and fiber) and by the fill's larger lie (shovel and rake heaps, ridges,
   a few mounds), wearing the ground's own texture for that fill, which is painted
   from the same relief (its height rides in the texture's roughness channel). Near
-  tiles are divided every 1 cm, farther ones every 3 cm, and the relief sinks into
+  tiles are finely divided (2 cm at Balanced; Light uses the coarse 4-5 cm grid
+  everywhere and half the loose pieces), and the relief sinks into
   the textured ground at 7-10 m. A few loose clods and short shreds of bark lie on
   top. Draft quality shows the texture alone. The sample "Soil fills: black humus,
   compost, dirt" has a 10 x 10 ft bed of each and a long humus bed along a lawn.

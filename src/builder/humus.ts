@@ -19,27 +19,33 @@ import type { Quality } from '../engine/post';
  * the fill is painted from, read from that texture's roughness channel) and by the fill's larger lie (shovel and rake
  * heaps, ridges and hollows, a few mounds; baked with the ground height and the bed mask into a small per-bed texture). It
  * wears the ground's own humus texture, so its color and fine shading are the ground's. It is cut into 2 m tiles: near
- * ones divided every 1 cm, the rest every 3 cm; past ~7 m the relief sinks smoothly into the ground (the sheet drops
+ * ones finely divided (1.25 cm at High, 2 cm at Balanced; Light uses the coarse grid everywhere), the rest every
+ * 4 cm, each tile with a short skirt so no crack shows where a fine tile meets a coarse one; past ~7 m the relief sinks smoothly into the ground (the sheet drops
  * just below it), where the texture alone carries the bed. At the bed's edge it dips under the ground, so the fill
  * settles against the edging.
  *
  * On it, a few loose clods (soft lumps 2-6 cm, crumbs stuck over a core) and short, dark shreds of bark, each shrinking
  * away into the surface over the last stretch before it stops drawing.
  *
- * Nothing pops: every switch has a dead band, and a tile or piece hides only once its relief or size has shrunk to
+ * Nothing pops: a fill's relief and pieces come in with its painted maps (uReady), every switch has a dead band, and a tile or piece hides only once its relief or size has shrunk to
  * nothing. Nothing is allocated per frame; programs are shared and warmed with the yard.
  */
 
 const SHEET_TILE = 2;
-const NEAR_SEGS = 200;
-const MID_SEGS = 64;
+/** Squares a side of a near and a far sheet tile, by quality (Light draws the far grid everywhere). */
+const NEAR_SEGS: Record<Quality, number> = { max: 160, balanced: 100, light: 0, draft: 0 };
+const MID_SEGS: Record<Quality, number> = { max: 56, balanced: 48, light: 40, draft: 0 };
+/** How far a tile's rim hangs below its surface, meters: covers the cracks where a fine tile meets a coarse one. */
+const SKIRT = 0.02;
+/** Seconds over which a fill's relief and loose pieces come in once its painted maps have arrived. */
+const READY_RAMP = 0.25;
 /** The sheet sits this far down, so the deepest hollows and the faded-out sheet are just under the ground. */
 const SINK = 0.006;
 /** Base height and edge mask texel, meters. */
 const BASE_STEP = 0.04;
-const PIECE_TILE = 1.5;
+const PIECE_TILE = 3;
 const IN = 0.0254;
-const CLUMP_SHAPES = 4;
+const CLUMP_SHAPES = 2;
 const shapeCache = new Map<string, THREE.BufferGeometry>();
 
 /** Distances (meters, balanced quality): the sheet's fine division, and where each kind fades out. */
@@ -68,11 +74,16 @@ function clodAt(x: number, z: number, st: ClodStyle): number {
 
 /** A flat grid over one sheet tile (x and z from 0 to SHEET_TILE), `segs` squares a side. */
 function gridShape(segs: number): THREE.BufferGeometry {
-  const key = `grid:${segs}`;
-  const hit = shapeCache.get(key);
-  if (hit) return hit;
+  // Built per yard (not cached): each yard sets its own bounding sphere on it.
   const n = segs + 1;
-  const pos = new Float32Array(n * n * 3), nor = new Float32Array(n * n * 3), uv = new Float32Array(n * n * 2);
+  // The grid, then a skirt: each rim vertex again, marked to hang SKIRT below (aSkirt), joined to the rim both ways round.
+  const rim: number[] = [];
+  for (let i = 0; i < segs; i++) rim.push(i);
+  for (let j = 0; j < segs; j++) rim.push(j * n + segs);
+  for (let i = segs; i > 0; i--) rim.push(segs * n + i);
+  for (let j = segs; j > 0; j--) rim.push(j * n);
+  const total = n * n + rim.length;
+  const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), uv = new Float32Array(total * 2), skirt = new Float32Array(total);
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const k = j * n + i;
@@ -83,7 +94,16 @@ function gridShape(segs: number): THREE.BufferGeometry {
       uv[k * 2 + 1] = j / segs;
     }
   }
-  const idx = new (n * n > 65535 ? Uint32Array : Uint16Array)(segs * segs * 6);
+  rim.forEach((v, r) => {
+    const k = n * n + r;
+    pos[k * 3] = pos[v * 3];
+    pos[k * 3 + 2] = pos[v * 3 + 2];
+    nor[k * 3 + 1] = 1;
+    uv[k * 2] = uv[v * 2];
+    uv[k * 2 + 1] = uv[v * 2 + 1];
+    skirt[k] = 1;
+  });
+  const idx = new (total > 65535 ? Uint32Array : Uint16Array)(segs * segs * 6 + rim.length * 12);
   let o = 0;
   for (let j = 0; j < segs; j++) {
     for (let i = 0; i < segs; i++) {
@@ -92,12 +112,17 @@ function gridShape(segs: number): THREE.BufferGeometry {
       idx[o++] = b; idx[o++] = c; idx[o++] = d;
     }
   }
+  for (let r = 0; r < rim.length; r++) {
+    const a = rim[r], b = rim[(r + 1) % rim.length], c = n * n + r, d = n * n + ((r + 1) % rim.length);
+    idx[o++] = a; idx[o++] = c; idx[o++] = b; idx[o++] = b; idx[o++] = c; idx[o++] = d;
+    idx[o++] = a; idx[o++] = b; idx[o++] = c; idx[o++] = b; idx[o++] = d; idx[o++] = c;
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('aSkirt', new THREE.BufferAttribute(skirt, 1));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
-  shapeCache.set(key, g);
   return g;
 }
 
@@ -107,6 +132,8 @@ interface SheetUniforms {
   uBaseRef: { value: number };
   uBaseStep: { value: number };
   uFade: { value: THREE.Vector2 };
+  /** 0 while the fill's painted maps are still on their way (its relief would show as a flat plate), then 1. */
+  uReady: { value: number };
 }
 
 /**
@@ -131,7 +158,8 @@ function sheetMaterial(spec: MaterialSpec, shared: SheetUniforms, lod: number): 
         '#include <common>',
         `#include <common>
 uniform sampler2D uClod; uniform sampler2D uBase; uniform vec4 uBaseBox; uniform float uBaseRef; uniform float uBaseStep;
-uniform float uClodScale; uniform float uClodMax; uniform vec2 uFade; uniform float uLod;
+uniform float uClodScale; uniform float uClodMax; uniform vec2 uFade; uniform float uLod; uniform float uReady;
+attribute float aSkirt;
 // The bed's base texture: r ground height (above uBaseRef), g bed mask, b the fill's larger lie (humus-field macroHeight).
 vec4 hS(vec2 xz) { return textureLod(uBase, (xz - uBaseBox.xy) * uBaseBox.zw, 0.0); }`,
       )
@@ -142,7 +170,7 @@ vec4 hB = hS(hXZ), hBx = hS(hXZ + vec2(uBaseStep, 0.0)), hBz = hS(hXZ + vec2(0.0
 float hMask = clamp(hB.g, 0.0, 1.0);
 float hBase = hB.r + uBaseRef;
 float hK = hMask * (1.0 - smoothstep(uFade.x, uFade.y, distance(vec3(hXZ.x, hBase, hXZ.y), cameraPosition)));
-float hY = hBase - ${SINK.toFixed(4)} + (textureLod(uClod, hXZ * uClodScale, uLod).g * uClodMax + hB.b) * hK - (1.0 - hMask) * 0.03;
+float hY = hBase - ${SINK.toFixed(4)} + (textureLod(uClod, hXZ * uClodScale, uLod).g * uClodMax * uReady + hB.b) * hK - (1.0 - hMask) * 0.03;
 // The normal follows the ground and the larger lie; the clods' own shading comes from the normal map, as on the ground.
 vec3 objectNormal = normalize(vec3(-(hBx.r - hB.r + (hBx.b - hB.b) * hK), uBaseStep, -(hBz.r - hB.r + (hBz.b - hB.b) * hK)));
 #ifdef USE_MAP
@@ -152,10 +180,10 @@ vec3 objectNormal = normalize(vec3(-(hBx.r - hB.r + (hBx.b - hB.b) * hK), uBaseS
   vNormalMapUv = hXZ * uClodScale;
 #endif`,
       )
-      .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hY - modelMatrix[3][1], position.z);');
+      .replace('#include <begin_vertex>', `vec3 transformed = vec3(position.x, hY - modelMatrix[3][1] - aSkirt * ${SKIRT.toFixed(3)}, position.z);`);
   };
   // The near and the far sheet compile to one program; only the clod mip level differs.
-  m.customProgramCacheKey = () => 'humus-sheet-2';
+  m.customProgramCacheKey = () => 'humus-sheet-3';
   return m;
 }
 
@@ -282,7 +310,7 @@ function clumpShape(s: number, near: boolean): THREE.BufferGeometry {
     for (let i = 0; i < n; i++) {
       d.set(r() - 0.5, r() * 0.9 - 0.2, r() - 0.5).normalize();
       const sz = 0.26 + r() * 0.28;
-      const piece = blob(s * 31 + i * 7, 1, 1.4);
+      const piece = blob(s * 31 + i * 7, 0, 1.4);
       e.set(r() * 6, r() * 6, r() * 6);
       q.setFromEuler(e);
       m.compose(d.multiply(new THREE.Vector3(0.4, 0.28, 0.4)), q, new THREE.Vector3(sz, sz * (0.7 + r() * 0.4), sz));
@@ -324,25 +352,27 @@ function skinSet() {
 }
 
 /** A matte piece material whose pieces shrink away between uFade.x and uFade.y meters from the camera. */
-function pieceMaterial(fade: THREE.Vector2): THREE.MeshPhysicalMaterial {
+function pieceMaterial(fade: THREE.Vector2, ready: { value: number }): THREE.MeshPhysicalMaterial {
   const set = skinSet();
   // Physical only to turn the sky's reflection down to the ground's: soil has no glint.
   const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, map: set.map, normalMap: set.normalMap, roughness: 1, metalness: 0, specularIntensity: 0.3 });
   m.normalScale.set(0.6, 0.6);
   m.onBeforeCompile = (s) => {
     s.uniforms.uFade = { value: fade };
+    s.uniforms.uReady = ready;
     s.vertexShader = s.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform vec2 uFade;')
+      .replace('#include <common>', '#include <common>\nuniform vec2 uFade; uniform float uReady;')
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
 #ifdef USE_INSTANCING
   vec3 hPiece = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-  transformed *= 1.0 - smoothstep(uFade.x, uFade.y, distance(hPiece, cameraPosition));
+  // Pieces come in with their fill's relief (uReady) and shrink away with distance.
+  transformed *= uReady * (1.0 - smoothstep(uFade.x, uFade.y, distance(hPiece, cameraPosition)));
 #endif`,
       );
   };
-  m.customProgramCacheKey = () => 'humus-piece-2';
+  m.customProgramCacheKey = () => 'humus-piece-3';
   return m;
 }
 
@@ -378,19 +408,25 @@ interface Tile {
 
 export interface HumusBuild {
   object: THREE.Object3D | null;
-  /** Show each tile's near or far look, or none, for the camera about to draw. */
-  update(cam: THREE.Camera): void;
+  /**
+   * Show each tile's near or far look, or none, for the camera about to draw, and bring each fill's relief in once its
+   * painted maps arrive. True while that is still under way: draw another frame.
+   */
+  update(cam: THREE.Camera): boolean;
   /** What was built, for the diagnostics readout and tests. */
   counts: { sheetTiles: number; clods: number; shreds: number };
+  /** What the last update() left showing (before frustum culling): tiles, loose pieces, triangles, draw calls. */
+  shown: { near: number; far: number; pieces: number; triangles: number; draws: number };
   dispose(): void;
 }
 
 /** Humus over every bed zone whose material has spec.crumb, where that zone is the top one. */
 export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) => number, quality: Quality): HumusBuild {
   const counts = { sheetTiles: 0, clods: 0, shreds: 0 };
+  const shown = { near: 0, far: 0, pieces: 0, triangles: 0, draws: 0 };
   // Draft quality (the slowest devices) keeps the ground's humus texture alone.
   const zones = quality === 'draft' ? [] : plan.zones.filter((z) => materialById.get(z.catalogId)?.crumb);
-  if (!zones.length) return { object: null, update() {}, counts, dispose() {} };
+  if (!zones.length) return { object: null, update: () => false, counts, shown, dispose() {} };
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.65;
   const group = new THREE.Group();
   group.name = 'humus';
@@ -398,12 +434,25 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
   const owned: THREE.Object3D[] = [];
   const mats: THREE.Material[] = [];
   const baseTexes: THREE.DataTexture[] = [];
-  const nearGeo = gridShape(NEAR_SEGS), farGeo = gridShape(MID_SEGS);
+  // Light quality draws the coarse grid everywhere, and half the loose pieces.
+  const nearGeo = NEAR_SEGS[quality] ? gridShape(NEAR_SEGS[quality]) : null, farGeo = gridShape(MID_SEGS[quality]);
+  const fewer = quality === 'light' ? 0.5 : 1;
   let spreadMax = 0;
+  const fadeC = new THREE.Vector2(CLOD_FADE[0] * reach, CLOD_FADE[1] * reach), fadeS = new THREE.Vector2(SHRED_FADE[0] * reach, SHRED_FADE[1] * reach);
+  // Per fill: its relief's readiness (0 until its painted maps arrive) and the loose pieces' materials, which share it.
+  const readies: { ready: { value: number }; tex: THREE.Texture }[] = [];
+  const pieceMats = new Map<string, { c: THREE.Material; s: THREE.Material }>();
   // One surface per fill (black humus, compost, dirt): its own maps, base height and bed mask.
   for (const id of new Set(zones.map((z) => z.catalogId))) {
     const spec = materialById.get(id)!;
     const mine = zones.filter((z) => z.catalogId === id);
+    const tex = materialTextures(spec).roughnessMap;
+    // Maps already painted (cached) count as ready at once: only maps still on their way bring the relief in.
+    const ready = { value: tex.userData.flat ? 0 : 1 };
+    readies.push({ ready, tex });
+    const pm = { c: pieceMaterial(fadeC, ready), s: pieceMaterial(fadeS, ready) };
+    pieceMats.set(id, pm);
+    mats.push(pm.c, pm.s);
     const isFill = (p: Vec2) => {
       const z = gm.zoneAt(p);
       return !!z && z.catalogId === id && mine.includes(z);
@@ -459,6 +508,7 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
       uBaseRef: { value: ref },
       uBaseStep: { value: step },
       uFade: { value: new THREE.Vector2(SHEET_FADE[0] * reach, SHEET_FADE[1] * reach) },
+      uReady: ready,
     };
     const sheetNear = sheetMaterial(spec, shared, 0), sheetFar = sheetMaterial(spec, shared, 1.6);
     mats.push(sheetNear, sheetFar);
@@ -482,6 +532,7 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
         const mid = (lo + hi) / 2;
         const make = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
           const mesh = new THREE.Mesh(geo, mat);
+          mesh.userData.tris = geo.index!.count / 3;
           mesh.position.set(tx, mid, tz);
           mesh.receiveShadow = true;
           mesh.castShadow = false;
@@ -493,19 +544,18 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
         };
         tiles.push({
           box: new THREE.Box3(new THREE.Vector3(tx, lo - 0.05, tz), new THREE.Vector3(tx + SHEET_TILE, hi + CLOD_MAX + 0.08, tz + SHEET_TILE)),
-          slots: [{ near: [make(nearGeo, sheetNear)], far: [make(farGeo, sheetFar)], nearTo: SHEET_NEAR * reach, hideAt: shared.uFade.value.y, state: -1 }],
+          slots: [nearGeo
+            ? { near: [make(nearGeo, sheetNear)], far: [make(farGeo, sheetFar)], nearTo: SHEET_NEAR * reach, hideAt: shared.uFade.value.y, state: -1 }
+            : { near: [make(farGeo, sheetFar)], far: [], nearTo: 0, hideAt: shared.uFade.value.y, state: -1 }],
         });
         counts.sheetTiles++;
       }
     }
   }
-  // The tiles share the two grids (and so one bounding sphere each, set to hold the tallest tile's relief).
-  for (const g of [nearGeo, farGeo]) g.boundingSphere = new THREE.Sphere(new THREE.Vector3(SHEET_TILE / 2, 0, SHEET_TILE / 2), Math.hypot(SHEET_TILE / 2, SHEET_TILE / 2, spreadMax + CLOD_MAX + 0.1));
+  // The tiles share this yard's two grids (and so one bounding sphere each, set to hold the tallest tile's relief).
+  for (const g of nearGeo ? [nearGeo, farGeo] : [farGeo]) g.boundingSphere = new THREE.Sphere(new THREE.Vector3(SHEET_TILE / 2, 0, SHEET_TILE / 2), Math.hypot(SHEET_TILE / 2, SHEET_TILE / 2, spreadMax + CLOD_MAX + 0.1));
 
-  // Loose clods and shreds, instanced in 1.5 m tiles.
-  const fadeC = new THREE.Vector2(CLOD_FADE[0] * reach, CLOD_FADE[1] * reach), fadeS = new THREE.Vector2(SHRED_FADE[0] * reach, SHRED_FADE[1] * reach);
-  const matC = pieceMaterial(fadeC), matS = pieceMaterial(fadeS);
-  mats.push(matC, matS);
+  // Loose clods and shreds, instanced in 3 m tiles (two clod shapes and the shreds: at most three draws a tile).
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), t = new THREE.Vector3(), eu = new THREE.Euler();
   const instanced = (geo: THREE.BufferGeometry, mat: THREE.Material, list: Piece[], name: string, share?: THREE.InstancedMesh) => {
     const im = new THREE.InstancedMesh(geo, mat, list.length);
@@ -525,13 +575,16 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
     im.castShadow = false;
     im.receiveShadow = true;
     im.computeBoundingSphere();
+    im.userData.tris = (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
+    im.userData.pieces = list.length;
     group.add(im);
     owned.push(im);
     return im;
   };
   for (const z of zones) {
     const zs = materialById.get(z.catalogId)!;
-    const pieces = placePieces(z, gm, surface, zs.crumb!);
+    const pieces = placePieces(z, gm, surface, zs.crumb!, fewer);
+    const { c: matC, s: matS } = pieceMats.get(zs.id)!;
     counts.clods += pieces.clods.length;
     counts.shreds += pieces.shreds.length;
     const byTile = new Map<string, { box: THREE.Box3; c: Piece[]; s: Piece[] }>();
@@ -568,11 +621,14 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
   }
 
   const at = new THREE.Vector3();
+  let last = performance.now();
   return {
     object: group,
     counts,
+    shown,
     update(cam) {
       cam.getWorldPosition(at);
+      let changed = false;
       for (const tile of tiles) {
         const d = tile.box.distanceToPoint(at);
         for (const s of tile.slots) {
@@ -583,15 +639,40 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
           else st = d < s.nearTo * (s.state === 1 ? 1.06 : 0.94) ? 1 : 2;
           if (st === s.state) continue;
           s.state = st;
+          changed = true;
           for (const m of s.near) m.visible = st === 1;
           for (const m of s.far) m.visible = st === 2;
         }
       }
+      if (changed) {
+        shown.near = shown.far = shown.pieces = shown.triangles = shown.draws = 0;
+        for (const o of group.children) {
+          if (!o.visible) continue;
+          const im = o as THREE.InstancedMesh;
+          shown.draws++;
+          shown.triangles += im.isInstancedMesh ? im.userData.tris * im.count : o.userData.tris;
+          if (im.isInstancedMesh) shown.pieces += im.userData.pieces;
+          else if ((o as THREE.Mesh).geometry === nearGeo) shown.near++;
+          else shown.far++;
+        }
+      }
+      // A fill whose painted maps have just arrived brings its relief and pieces in over READY_RAMP seconds, together.
+      const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      let pending = false;
+      for (const r of readies) {
+        if (r.ready.value >= 1 || r.tex.userData.flat) continue;
+        r.ready.value = Math.min(1, r.ready.value + dt / READY_RAMP);
+        pending = true;
+      }
+      return pending;
     },
     dispose() {
       owned.forEach((o) => (o as THREE.InstancedMesh).isInstancedMesh && (o as THREE.InstancedMesh).dispose());
       mats.forEach((m) => m.dispose());
       baseTexes.forEach((t) => t.dispose());
+      nearGeo?.dispose();
+      farGeo.dispose();
     },
   };
 }
@@ -600,7 +681,7 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
  * The loose pieces of one bed, each set on the bed surface exactly as the GPU raises it (base, clods and macro lie), kept
  * inside the bed: soft clods of 2-6 cm, a few per square foot, and short shreds of bark, mostly dark, partly buried.
  */
-function placePieces(z: Zone, gm: GroundModel, surface: (p: Vec2) => number, C: CrumbSpec) {
+function placePieces(z: Zone, gm: GroundModel, surface: (p: Vec2) => number, C: CrumbSpec, fewer: number) {
   const r = rng(`humus:${z.id}`);
   const b = bounds(z.polygon);
   const inside = (x: number, y: number, pad: number) =>
@@ -618,7 +699,7 @@ function placePieces(z: Zone, gm: GroundModel, surface: (p: Vec2) => number, C: 
     return s + p[0] * q[1] - q[0] * p[1];
   }, 0)) / 2;
   const clods: Piece[] = [], shreds: Piece[] = [];
-  const nClods = Math.round(area * C.loose.clods), nShreds = Math.round(area * C.loose.shreds);
+  const nClods = Math.round(area * C.loose.clods * fewer), nShreds = Math.round(area * C.loose.shreds * fewer);
   for (let i = 0; i < nClods * 3 && clods.length < nClods; i++) {
     const px = b.minX + r() * (b.maxX - b.minX), py = b.minY + r() * (b.maxY - b.minY);
     const u = r() * r();
