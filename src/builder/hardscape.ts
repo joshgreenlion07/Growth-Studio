@@ -38,8 +38,54 @@ export function slab(poly: Vec2[], y0: number, y1: number, bevel = 0.008, holes:
   });
   g.rotateX(Math.PI / 2);
   g.translate(0, y1 - bevel, 0);
+  dropDegenerate(g);
   g.computeVertexNormals();
   return g;
+}
+
+/**
+ * Removes the zero-area triangles of a non-indexed geometry (in place) and returns how many it removed.
+ *
+ * A drawn outline often has a point twice, or three points exactly in line (a traced curve, a pen path, an edge
+ * snapped to another). Extruded, those give triangles with no area: side and bevel faces of zero width, and cap
+ * triangles on a straight run. Their normal is the zero vector. They cover nothing, but after the camera transform
+ * a hairline of one can still land on a single multisample of a pixel; the lighting then normalizes a zero normal,
+ * the pixel becomes NaN, and the bloom spreads it into a black square (see HDR_CLEAN in engine/post.ts). So they are
+ * taken out here, before the normals are computed.
+ */
+export function dropDegenerate(g: THREE.BufferGeometry, minArea = 1e-9): number {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (g.index || !pos) return 0;
+  const P = pos.array as ArrayLike<number>;
+  const nt = Math.floor(pos.count / 3);
+  // keptBefore[t]: how many of the triangles before t stay.
+  const keptBefore = new Uint32Array(nt + 1);
+  for (let t = 0; t < nt; t++) {
+    const o = t * 9;
+    const ux = P[o + 3] - P[o], uy = P[o + 4] - P[o + 1], uz = P[o + 5] - P[o + 2];
+    const vx = P[o + 6] - P[o], vy = P[o + 7] - P[o + 1], vz = P[o + 8] - P[o + 2];
+    const area = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+    // Written so a NaN area is dropped too.
+    keptBefore[t + 1] = keptBefore[t] + (area >= minArea ? 1 : 0);
+  }
+  const kept = keptBefore[nt];
+  if (kept === nt) return 0;
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.getAttribute(name) as THREE.BufferAttribute;
+    const n = a.itemSize * 3;
+    const src = a.array as Float32Array;
+    const out = new (src.constructor as Float32ArrayConstructor)(kept * n);
+    for (let t = 0; t < nt; t++) if (keptBefore[t + 1] > keptBefore[t]) out.set(src.subarray(t * n, (t + 1) * n), keptBefore[t] * n);
+    g.setAttribute(name, new THREE.BufferAttribute(out, a.itemSize, a.normalized));
+  }
+  // Material groups (caps and sides) keep their triangles in the same order.
+  const groups = g.groups.map((gr) => {
+    const t0 = Math.min(nt, Math.floor(gr.start / 3)), t1 = Math.min(nt, Math.floor((gr.start + gr.count) / 3));
+    return { start: keptBefore[t0] * 3, count: (keptBefore[t1] - keptBefore[t0]) * 3, materialIndex: gr.materialIndex };
+  });
+  g.clearGroups();
+  for (const gr of groups) if (gr.count > 0) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  return nt - kept;
 }
 
 /** Grow a simple polygon outward by `d` meters (the mirror image of insetPolygon). */
