@@ -40,12 +40,30 @@ import { build as elephantEar } from './tropicals/elephant-ear';
 import { build as ajuga } from './groundcover/ajuga';
 import { build as spreadingJuniper } from './groundcover/spreading-juniper';
 import { build as verbena } from './groundcover/verbena';
+import { build as rosemaryPointeDuRaz } from './groundcover/rosemary-pointe-du-raz';
 import { build as groundcover } from './groundcover/groundcover';
 
 import { build as yewPineColumn } from './trees/yew-pine-column';
 import { build as gaura } from './perennials/gaura';
 import { build as liriope } from './grasses/liriope';
 import { build as purpleConeflower } from './perennials/purple-coneflower';
+import { build as meyerLemon } from './trees/meyer-lemon';
+import { build as mexicanLime } from './trees/mexican-lime';
+import { build as photiniaStandard } from './trees/photinia-standard';
+import { build as redMapleAutumnBlaze } from './trees/red-maple-autumn-blaze';
+import { build as japaneseMapleCoralBark } from './trees/japanese-maple-coral-bark';
+import { build as gardeniaVeitchii } from './shrubs/gardenia-veitchii';
+import { build as camelliaYuletide } from './shrubs/camellia-yuletide';
+import { build as xylosma } from './shrubs/xylosma';
+import { build as salviaHotLips } from './perennials/salvia-hot-lips';
+import { build as spanishLavenderOttoQuast } from './perennials/spanish-lavender-otto-quast';
+import { build as bougainvillea } from './shrubs/bougainvillea';
+import { build as maidenGrassMorningLight } from './grasses/maiden-grass-morning-light';
+import { build as roseFlowerCarpetRed } from './shrubs/rose-flower-carpet-red';
+import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro';
+import { build as daylilyRed } from './perennials/daylily-red';
+import { build as fortnightLily } from './perennials/fortnight-lily';
+import { build as cannaTropicanna } from './tropicals/canna-tropicanna';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -62,6 +80,8 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'blue-point-juniper': bluePointJuniper,
   'blue-juniper-column': blueJuniperColumn,
   'blue-spruce': blueSpruce,
+  'red-maple-autumn-blaze': redMapleAutumnBlaze,
+  'japanese-maple-coral-bark': japaneseMapleCoralBark,
   'boxwood': boxwood,
   'westringia': westringia,
   'euonymus-variegated': euonymusVariegated,
@@ -86,6 +106,15 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'gaura': gaura,
   'liriope': liriope,
   'purple-coneflower': purpleConeflower,
+  'gardenia-veitchii': gardeniaVeitchii,
+  'camellia-yuletide': camelliaYuletide,
+  'xylosma': xylosma,
+  'salvia-hot-lips': salviaHotLips,
+  'spanish-lavender-otto-quast': spanishLavenderOttoQuast,
+  'daylily-stella-de-oro': daylilyStellaDeOro,
+  'daylily-red': daylilyRed,
+  'fortnight-lily': fortnightLily,
+  'canna-tropicanna': cannaTropicanna,
   'annual-color': annualColor,
   'foxtail-fern': foxtailFern,
   'variegated-yucca': variegatedYucca,
@@ -97,5 +126,12 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'ajuga': ajuga,
   'spreading-juniper': spreadingJuniper,
   'verbena': verbena,
+  'rosemary-pointe-du-raz': rosemaryPointeDuRaz,
   'groundcover': groundcover,
+  'meyer-lemon': meyerLemon,
+  'mexican-lime': mexicanLime,
+  'photinia-standard': photiniaStandard,
+  'bougainvillea': bougainvillea,
+  'maiden-grass-morning-light': maidenGrassMorningLight,
+  'rose-flower-carpet-red': roseFlowerCarpetRed,
 };
