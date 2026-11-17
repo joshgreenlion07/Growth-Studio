@@ -935,10 +935,11 @@ function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn' | Unit
   const bond = pattern ? 'pattern' : unit.bond ?? 'random';
   const period = pattern ? pattern[0].lengths.reduce((a, b) => a + b, 0) : unit.lengths[0];
   const H = unit.course * IN;
-  // A square tile, a whole number of courses tall (about 6 ft). Half and stack bonds and patterns repeat seamlessly
+  // A square tile, a whole number of courses tall (about 6 ft, at least two courses: an 18 in tile of 36 in panels would
+  // spread 1,024 texels over 18 ft and blur fine detail). Half and stack bonds and patterns repeat seamlessly
   // only when the tile holds whole units (or whole pattern repeats) across, a half bond an even number of courses and a
   // pattern a whole number of its courses, so those take the next size that does.
-  let rows = Math.max(6, Math.round(72 / unit.course));
+  let rows = Math.max(2, Math.round(72 / unit.course));
   if (bond !== 'random') {
     for (let n = rows; n <= rows * 3; n++) {
       const across = (n * unit.course) / period;
@@ -1013,7 +1014,7 @@ function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn' | Unit
       return { h: bev * (0.94 + g * 0.04), c, r: 0.72 + cloud * 0.08 };
     }
     return roughStone(u, v, T, id, colors, edge, J, vj);
-  }, spec.maker ? wallFaceMean(spec) : undefined);
+  }, spec.maker ? (wallFaceMean(spec).map((m) => m * (recipe?.lift ?? 1)) as RGB) : undefined);
 }
 
 /**

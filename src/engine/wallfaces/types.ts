@@ -42,4 +42,9 @@ export interface WallFaceRecipe {
   texel(t: WallTexel): WallSample;
   /** The cap is the textured stone cap (rough or chiseled edges) rather than a plain colored slab. */
   roughCap?: boolean;
+  /**
+   * Brightens the face's matched average color (1 = none): deep relief and wide dark joints shade darker in the renderer
+   * than in the swatch photo, so such a face is lifted until it renders as the photo (measured in the 3D view).
+   */
+  lift?: number;
 }
