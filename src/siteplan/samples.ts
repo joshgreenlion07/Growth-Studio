@@ -359,11 +359,44 @@ export function sampleUtilities(): SitePlan {
   };
 }
 
+/**
+ * Two real products together: a SunVilla Stratus 10 x 13 ft louvered pergola on a patio of Basalite Premier Slab
+ * 24 x 24 in Midnight Terrace (12 x 9 slabs, about 23 1/2 x 17 1/2 ft), lawn around it and a bed of fountain grass
+ * behind. No house and no street, the way Area Planner plans arrive.
+ */
+export function sampleStratusPremier(): SitePlan {
+  const S = 'sample' as const;
+  const slab = (23.5 * 0.0254); // one slab with its joint
+  const x0 = 2.2, y0 = 3.0, x1 = x0 + 12 * slab, y1 = y0 + 9 * slab;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return {
+    schemaVersion: 1,
+    site: { name: 'SunVilla Stratus on Basalite Premier Slab, Midnight Terrace', boundary: [[0, 0], [12, 0], [12, 11], [0, 11]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: [[0, 0], [12, 0], [12, 11], [0, 11]] },
+      { id: 'bed', source: S, kind: 'bed', catalogId: 'black-mulch', polygon: [[0.6, 0.6], [11.4, 0.6], [11.4, 2.2], [0.6, 2.2]] },
+      { id: 'patio', source: S, kind: 'hardscape', catalogId: 'premier-slab-midnight-terrace', polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], note: 'Basalite Premier Slab 24 x 24, Midnight Terrace' },
+    ],
+    lines: [],
+    water: [],
+    plants: [
+      ...[1.4, 2.6, 3.8, 5.0, 6.2, 7.4, 8.6, 9.8].map((x, i) => ({ id: `fg${i}`, source: S, catalogId: 'fountain-grass', position: [x, 1.5 + (i % 2) * 0.35] as Vec2 })),
+      { id: 'olive', source: S, catalogId: 'olive-tree', position: [10.8, 1.4] },
+    ],
+    features: [
+      { id: 'stratus', source: S, catalogId: 'sunvilla-stratus-10x13', position: [cx, cy], rotationDeg: 0 },
+      { id: 'lounge', source: S, catalogId: 'lounge-set', position: [cx, cy + 0.1], rotationDeg: 0 },
+    ],
+  };
+}
+
 export const SAMPLES = [
   { id: 'backyard', name: 'Modern backyard', make: sampleBackyard },
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
+  { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },

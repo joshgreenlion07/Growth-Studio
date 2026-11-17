@@ -13,6 +13,7 @@
  * the app draws its own look-alike textures, not manufacturer images.
  */
 import { BELGARD_LINES } from './belgard';
+import { BASALITE_LINES } from './basalite';
 import { approvalOverride } from './approval';
 
 export type PlantForm =
@@ -85,6 +86,11 @@ export interface PaverPattern {
   tumbled?: boolean;
   /** Face texture. */
   face?: 'smooth' | 'textured' | 'woodgrain' | 'slate' | 'antiqued';
+  /**
+   * How the colors blend inside a piece. Left out, each piece takes one tone mottled with a second. 'cloud': all the
+   * tones drift through every piece in broad, soft streaks (Basalite Premier Slab colors such as Midnight Terrace).
+   */
+  blend?: 'cloud';
 }
 
 /**
@@ -312,6 +318,13 @@ export interface FeatureSpec {
   kind: FeatureKind;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
+  /** A maker's product, drawn to its published size: the maker, its product page, and plain facts for the panel. */
+  maker?: string;
+  page?: string;
+  about?: string;
+  facts?: string[];
+  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola). */
+  model?: 'stratus';
   placeholder: true;
 }
 
@@ -613,6 +626,16 @@ const SLABS = BELGARD_LINES.find((l) => l.slug === 'dimensions-slabs');
 MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ id: `${SLAB_24_PREFIX}${slugOf(n)}`, name: `Dimensions Slab 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [[24, 24]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Dimensions Slabs', maker: 'Belgard', line: 'Dimensions Slabs 24 x 24', shelf: 'Pavers', color: n })));
 
 /*
+ * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm (23 1/2 in) square slab, 60 mm thick, laid in a grid on
+ * its spacer joints. Its colors are clouded blends. Basalite sells no border stone for it, so it has no matching border.
+ */
+for (const L of BASALITE_LINES) {
+  for (const [n, palette] of L.colors) {
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud' }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+  }
+}
+
+/*
  * Paver edging: a single row of 6 x 9 pavers laid along a drawn line (a soldier course, or a sailor course), in any color
  * Belgard sells as a 6 x 9 unit where Green Lion orders (Belgard's Pacific Stockton region, read from belgard.com):
  * Dimensions Single Unit 6 x 9 x 2 3/8 in, and Antiqued Flat Top (its 6 x 9 border stone). Catalina Grana's border and
@@ -648,6 +671,12 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'fire-table', name: 'Fire table, rectangular', group: 'Fire', kind: 'fireTable', footprint: [1.5, 0.75] }),
   F({ id: 'fire-pit', name: 'Fire pit, round stone', group: 'Fire', kind: 'firePit', footprint: [1.3, 1.3] }),
   F({ id: 'pergola-louvered', name: 'Louvered pergola, aluminum', group: 'Shade', kind: 'pergolaLouvered', footprint: [4.3, 3.7] }),
+  // SunVilla Stratus 10 x 13 ft motorized pergola (sunvilla.com): overall 157.3 in L x 118.7 in W x 98.6 in H, aluminum
+  // frame in a matte charcoal finish, battery-driven louvered roof, an integrated gutter and LED lighting in the roof.
+  F({ id: 'sunvilla-stratus-10x13', name: 'SunVilla Stratus 10 \u00d7 13 ft louvered pergola', group: 'Shade', kind: 'pergolaLouvered', model: 'stratus', footprint: [157.3 * 0.0254, 118.7 * 0.0254],
+    maker: 'SunVilla', page: 'https://sunvilla.com/products/sunvilla-stratus-10-x-13-motorized-pergola',
+    about: 'SunVilla Stratus: a freestanding aluminum pergola with a motorized louvered roof that turns from open sky to full cover, an integrated gutter, and LED lighting built into the roof.',
+    facts: ['Overall 157.3 in L x 118.7 in W x 98.6 in H (about 13 x 10 ft, 8 ft 2 in tall)', 'Aluminum frame, charcoal finish; square posts on base plates', 'Louvers driven by a 20 V battery motor (two batteries and charger included)', 'Integrated gutter; LED lighting in the roof'] }),
   F({ id: 'pergola-wood', name: 'Wood pergola', group: 'Shade', kind: 'pergolaWood', footprint: [3.6, 3.0] }),
   F({ id: 'gazebo', name: 'Hardtop gazebo', group: 'Shade', kind: 'gazebo', footprint: [3.6, 3.6] }),
   F({ id: 'umbrella', name: 'Market umbrella', group: 'Shade', kind: 'umbrella', footprint: [2.7, 2.7] }),
@@ -726,6 +755,7 @@ export const LEGACY_IDS: Record<string, string> = {
  */
 export const OFFERED_LINES = new Set<string>([
   'Dimensions Slabs 24 x 24',
+  'Premier Slab',
   'Catalina Grana',
   'Avalon Slate',
   'Melville Tandem Wall',

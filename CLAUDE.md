@@ -59,7 +59,7 @@ finished-work photos in `reference/green-lion-style/`.
   `engine/surfaces.ts`. Manufacturer photos (Belgard, Basalite) are color and
   pattern references only; do not embed them. The one exception is the material
   panel (owner's decision, 2026-11-16): it shows the maker's swatch photo loaded
-  live from the maker's site by its address (`siteplan/belgard-media.ts`); the
+  live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`); the
   photo is never copied into the app or used as a texture.
 - Use only real Green Lion content. Plant sizes and the catalog are starting
   values until Green Lion's own plant and material list replaces them. Never
