@@ -310,8 +310,9 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Newport Gray", ['#888175', '#74726b', '#686762', '#5c5c58']],
   ] },
   // Castlemanor Grana: tumbled units, smooth faces with rounded, chipped edges, 6 in courses of 6, 12 and 16 in faces at
-  // random; tumbled cap 3 x 10 x 12 in, about 1 in over. (Napoli and Slate are also sold untumbled in one region.)
-  { slug: 'castlemanor-grana', name: "Castlemanor Grana", shelf: 'Garden walls', wall: { face: 'tumbled', unit: { course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1 } }, colors: [
+  // random; tumbled cap 3 x 10 x 12 in, about 1 in over. Not offered until its 'tumbled' face is drawn; the units will be
+  // { face: 'tumbled', unit: { course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1 } }.
+  { slug: 'castlemanor-grana', name: "Castlemanor Grana", shelf: 'Garden walls', colors: [
     ["Avondale", ['#c1af9b', '#b6a48f', '#a39481', '#73695c']],
     ["Colonial", ['#b1a295', '#a29081', '#8e847b', '#6a635b']],
     ["Midnight", ['#7d7a76', '#6d6c69', '#62615f', '#43413e']],
@@ -323,8 +324,9 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Slate", ['#96928b', '#85817b', '#76736f', '#52514e']],
     ["Teak", ['#6c645d', '#625a56', '#5c5351', '#564e4c']],
   ] },
-  // Castlemanor Rustic: the same units with a rough, pitted, tumbled face; tumbled cap about 1 1/2 in over.
-  { slug: 'castlemanor-rustic', name: "Castlemanor Rustic", shelf: 'Garden walls', wall: { face: 'tumbledRough', unit: { course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1.5 } }, colors: [
+  // Castlemanor Rustic: the same units with a rough, pitted, tumbled face; tumbled cap about 1 1/2 in over. Not offered
+  // until its 'tumbledRough' face is drawn ({ course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1.5 }).
+  { slug: 'castlemanor-rustic', name: "Castlemanor Rustic", shelf: 'Garden walls', colors: [
     ["Colonial", ['#907f6e', '#7d6d5c', '#6c5e50', '#52483e']],
     ["Misty Mountain", ['#a69e95', '#958d84', '#878077', '#615b55']],
     ["Napoli", ['#cdc5bb', '#b9b1a7', '#a29990', '#6f6760']],

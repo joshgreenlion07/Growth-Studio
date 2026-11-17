@@ -599,8 +599,6 @@ export const OFFERED_LINES = new Set<string>([
   'Coventry Wall III',
   'Artforms',
   'AB Classic',
-  'Castlemanor Grana',
-  'Castlemanor Rustic',
   'Ashlar Tandem Wall',
   'Lamina Tandem',
   'Brisa',

@@ -2,7 +2,7 @@ import { smooth } from '../noise';
 import { hash, mulRGB } from '../textures';
 import type { WallFaceRecipe } from './types';
 
-/** Placeholder until this face is drawn: a plain face with dark joints. */
+/** Placeholder until this face is drawn (Castlemanor Grana is not offered or given this face until then): a plain face with dark joints. */
 export const tumbled: WallFaceRecipe = {
   normal: 6,
   texel(t) {
