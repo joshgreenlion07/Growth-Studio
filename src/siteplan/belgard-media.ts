@@ -67,7 +67,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   },
   "AB Classic": {
     page: "https://www.belgard.com/product/ab-classic-collection/",
-    sizes: [],
+    sizes: ["8 x 18 x 12\"", "8 x 16 x 8\"", "4 x 18 x 12\""],
     images: { "Brown Beige Charcoal": "33d73ebed1a483370922d31c19ef55ef4293fc28.jpg", "Buff": "0f8270523c5b546498db8b60b3edf42ed5e51aa9-2.jpg", "Charcoal": "7a69cfe6afc2f81332f2f91cff9a655f01aaad12-2.jpg", "Dakota Blend": "bb972d8469c65cd8bf2c3eb847a61a6982c2a77c-2.jpg", "Danville Blend": "699d36b74de58e48a3f721b730a37d535aa5d6d0-2.jpg", "Driftwood": "edzb00pqrkxuhgpa1uhs.jpg", "Granite Gray": "dbbf17e785611f18e4d9990217e4ce7d5eee22b4.jpg", "Gray": "6b6c80f8c95a2a4f05474c6a4c81e44687d96b8b.jpg", "Gray Charcoal Tan": "b2aa00093a63b62b2fd7f332a78e05db9e1d5e1e.jpg", "Grey": "emd2iabxrfgju6fa0m5i-2.jpg", "Mocha": "mhebot3feddoi2j5iqd8.jpg", "Pewter Blend": "68404fd409a951ad6b6ff0b74f5b633f9787571b-2.jpg", "Rocky Mountain": "plbsahsemja44dtsjntf-2.jpg", "Sable": "4acf6074e484521380e06270db38f7f3795d5a73.jpg", "Sable Blend": "n0xsfssqkstmgf1xh9c8.jpg", "Silverado": "5377d34a572b8887d894352fea41e98605cb3b42.jpg", "Tan": "621bbc77417882ae56a1a0dca6d93f473a4e4fa7.jpg", "Tan Brown Charcoal": "0ae2359318f407dfc30f0a1e56ccf4e9c6b386d1.jpg", "Thunderhead": "pbl0vacfaylzzglg8fut.jpg", "Toccoa": "llk5uvzsn5x10whzjrne-2.jpg" },
   },
   "Easton Stone": {
@@ -112,7 +112,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   },
   "Coventry Wall III": {
     page: "https://www.belgard.com/product/coventry-wall-iii/",
-    sizes: [],
+    sizes: ["6 x 8 x 10\" / 6 x 10 x 10\" / 6 x 16 x 10\"", "6 x 16 x 10\"", "3 x 12 x 16\""],
     images: { "Dakota Blend": "awuxntdxmgldgwrwbv3x-2.jpg", "Harvest Blend": "lfsy0fxbwgw4v7bgquqn.jpg", "Pewter Blend": "k0fuymav2qq0yss9jbwv-2.jpg" },
   },
   "Highland Stone": {
