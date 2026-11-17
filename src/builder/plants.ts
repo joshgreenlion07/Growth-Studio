@@ -7,6 +7,7 @@ import { LEAF_CELL, aoDisc, bark, leafAtlas, leafCellUV } from '../engine/textur
 import { GeoBuilder, card, tube } from './geobuilder';
 import type { SpeciesGeo, SpeciesLook } from './species/kit';
 import { SPECIES } from './species/registry';
+import { settleLeafTextures } from './species/kit';
 import { REFLECTION_ONLY_LAYER, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from '../engine/water';
 
 /**
@@ -446,6 +447,7 @@ function annuals(spec: PlantSpec): SpeciesGeo {
 const geoCache = new Map<string, SpeciesGeo>();
 
 export function speciesGeometry(spec: PlantSpec): SpeciesGeo {
+  settleLeafTextures();
   let g = geoCache.get(spec.id);
   if (g) return g;
   const own = SPECIES[spec.id];

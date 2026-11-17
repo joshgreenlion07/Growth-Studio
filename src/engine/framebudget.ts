@@ -54,6 +54,8 @@ export class FrameBudget {
 
   /** GPU frame times arrive through gpuFrame() (gputimer.ts); without them the frame interval is used. */
   timed = false;
+  /** Smoothed main-thread time of drawing a live frame (ms), from cpuFrame(). */
+  cpuMs = 0;
   private samples = 0;
   private upAt = -1e9;
   private upBlockedUntil = 0;
@@ -79,6 +81,11 @@ export class FrameBudget {
     this.log?.push({ ms, scale, moving });
     if (this.log && this.log.length > 2000) this.log.splice(0, 1000);
     if (moving && Math.abs(scale - this.moveScale) < 0.005) this.sample(ms);
+  }
+
+  /** Main-thread time Studio spent drawing the last live frame (ms). */
+  cpuFrame(ms: number) {
+    this.cpuMs = this.cpuMs ? this.cpuMs + (ms - this.cpuMs) * 0.1 : ms;
   }
 
   /** Recent GPU times of moving frames at the moving scale; decisions use their median, so a one-off spike (a texture upload, a shadow redraw) does not count. */
@@ -150,7 +157,10 @@ export class FrameBudget {
           this.frameMs = this.samples ? this.frameMs + (ms - this.frameMs) * 0.1 : ms;
           this.samples++;
         }
-        if (this.samples >= 15 && this.frameMs > FRAME_SLOW) this.setMove(this.moveScale - 0.1, `${this.frameMs.toFixed(1)} ms frames`, now);
+        // Slow frames are blamed on the GPU (and the scale lowered) only when the page's own work per frame is well
+        // under the frame interval; frames slow because of work on the main thread would not get faster.
+        const gpuBound = this.cpuMs > 0 && this.cpuMs < this.frameMs * 0.6;
+        if (this.samples >= 15 && this.frameMs > FRAME_SLOW && gpuBound) this.setMove(this.moveScale - 0.1, `${this.frameMs.toFixed(1)} ms frames, ${this.cpuMs.toFixed(1)} ms of script`, now);
         else if (this.samples >= 120 && this.frameMs < FRAME_SMOOTH && this.moveScale < 1 && now > this.upBlockedUntil) this.setMove(this.moveScale + 0.05, 'smooth', now);
       } else if (this.samples >= 10 && this.gpuMs > GPU_HIGH) {
         // Most of the frame scales with the pixel count; step at most 0.15 at a time.

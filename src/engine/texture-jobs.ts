@@ -591,7 +591,19 @@ setTexturePainter({
     pump();
   },
   nextGeneration() {
-    gen++;
+    return ++gen;
+  },
+  cancelGeneration(g: number) {
+    for (const j of jobs) {
+      if (j.gen !== g || j.state === 'done' || j.demanded || j.swatch) continue;
+      // As if a yard had drawn with it and let it go: dropped from the queue until something asks for it again.
+      j.seen = true;
+      if (j.state === 'waiting') {
+        j.state = 'dropped';
+        stats.dropped++;
+      }
+    }
+    pump();
   },
   demand: setDemand,
 });

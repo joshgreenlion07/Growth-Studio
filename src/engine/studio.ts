@@ -229,6 +229,9 @@ export class Studio {
   readonly budget: FrameBudget;
   private frameDt = 0;
   private frameDirty = true;
+  /** The plan a sliced build is working on (null when none), and a paving-only change to apply once it is shown. */
+  private inflight: { copy: SitePlan; json: string } | null = null;
+  private restyleAfter: { plan: SitePlan; copy: SitePlan; keepCamera: boolean } | null = null;
   /** The lawn's tile culling (turf.ts), looked up once per yard. */
   private turfCull: { build: SceneBuild | null; fn: ((cam: THREE.Vector3, dist: number) => void) | null } = { build: null, fn: null };
 
@@ -565,20 +568,28 @@ export class Studio {
     // A new paving or wall material (the 3D material picker) rebuilds only the paving and lines.
     if (restyle && this.build && this.builtPlan && hardscapeOnlyChange(this.builtPlan, copy)) {
       this.plan = plan;
-      this.build.restyleHardscape(plan);
-      this.builtPlan = copy;
-      this.build.root.getObjectByName('hardscape')?.traverse((o) => {
-        if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
-      });
-      this.shadowDirty = true;
-      this.refreshCutaway();
-      if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
-      this.updateSky(false);
-      if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
-      this.invalidate();
+      this.restyle(plan, copy, keepCamera);
       return;
     }
+    // The same while a yard is still being built: that build goes on, and the newest such change is applied to it
+    // right after it is swapped in, instead of starting the whole build again for every pick.
+    if (restyle && this.inflight) {
+      const json = JSON.stringify(copy);
+      if (json === this.inflight.json) {
+        // Back to the plan being built (a pick undone): nothing to apply afterwards.
+        this.plan = plan;
+        this.restyleAfter = null;
+        return;
+      }
+      if (hardscapeOnlyChange(this.inflight.copy, copy)) {
+        this.plan = plan;
+        this.restyleAfter = { plan, copy, keepCamera };
+        return;
+      }
+    }
     this.plan = plan;
+    this.restyleAfter = null;
+    this.inflight = { copy, json: JSON.stringify(copy) };
     // Until the new yard is built, nothing may be restyled.
     this.builtPlan = null;
     // A yard still warming up from an earlier plan is dropped: only the newest is shown.
@@ -591,20 +602,50 @@ export class Studio {
     // With no yard on screen yet (or an empty one) there is little to draw, so the slices are longer and the first
     // yard comes sooner.
     const budgetMs = this.build && (this.build.plantCount > 0 || this.build.surfaces.length > 2) ? 8 : 32;
-    buildSceneAsync(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets, { stale: () => token !== this.buildToken || this.disposed, stage: this.stage, budgetMs }).then(
-      (next) => {
+    buildSceneAsync(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets, { stale: () => token !== this.buildToken || this.disposed, stage: this.stage, budgetMs })
+      .then((next) => {
         if (!next) return;
         if (token !== this.buildToken || this.disposed) return next.dispose();
         this.warmAndSwap(next, token, plan, copy, keepCamera);
-      },
-      (e) => {
-        if (token !== this.buildToken) return;
-        this.shownToken = token;
-        const waiting = this.whenBuilt;
-        this.whenBuilt = [];
-        for (const w of waiting) w.rej(e);
-      },
-    );
+      })
+      // A failure in the build or in getting it ready to show (warmAndSwap) settles everyone waiting with the error.
+      .catch((e) => this.buildFailed(token, e));
+  }
+
+  /** The newest build failed: whoever waits for it (setPlan, the embed's `built` reply, stills) gets the error. */
+  private buildFailed(token: number, e: unknown) {
+    console.error('Growth Studio: the yard could not be built.', e);
+    if (token !== this.buildToken) return;
+    if (this.pending) {
+      try {
+        this.pending.dispose();
+      } catch {
+        /* already broken */
+      }
+      this.pending = null;
+    }
+    this.inflight = null;
+    this.restyleAfter = null;
+    this.shownToken = token;
+    const waiting = this.whenBuilt;
+    this.whenBuilt = [];
+    for (const w of waiting) w.rej(e);
+  }
+
+  /** Swap only the paving and lines of the yard on screen for `plan`'s (a hardscapeOnlyChange). */
+  private restyle(plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
+    if (!this.build) return;
+    this.build.restyleHardscape(plan);
+    this.builtPlan = copy;
+    this.build.root.getObjectByName('hardscape')?.traverse((o) => {
+      if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+    });
+    this.shadowDirty = true;
+    this.refreshCutaway();
+    if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
+    this.updateSky(false);
+    if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+    this.invalidate();
   }
 
   private warmAndSwap(next: SceneBuild, token: number, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
@@ -620,24 +661,55 @@ export class Studio {
     const swap = () => {
       if (token !== this.buildToken || this.disposed || this.pending !== next) return;
       this.pending = null;
+      try {
+        this.swapIn(next, plan, copy, keepCamera);
+      } catch (e) {
+        this.buildFailed(token, e);
+        return;
+      }
       this.shownToken = token;
-      this.swapIn(next, plan, copy, keepCamera);
+      this.inflight = null;
+      // Paving or wall picks made while this yard was being built: the newest one, applied now.
+      const after = this.restyleAfter;
+      this.restyleAfter = null;
+      if (after) {
+        try {
+          this.restyle(after.plan, after.copy, true);
+        } catch (e) {
+          console.error('Growth Studio: the paving could not be restyled.', e);
+        }
+      }
+      const waiting = this.whenBuilt;
+      this.whenBuilt = [];
+      for (const f of waiting) f.res();
     };
     let warm: Promise<unknown> | null = null;
     // Programs are compiled for the current render target's color space: the yard is drawn into the post
     // pipeline's linear HDR target (and the mirror's), not the canvas, so warm that variant.
     const r = this.renderer;
     const prevTarget = r.getRenderTarget();
-    try {
-      r.setRenderTarget(this.post.sceneRT);
-      warm = r.compileAsync(next.root, this.camera, this.scene);
-    } catch {
-      warm = null;
-    } finally {
-      r.setRenderTarget(prevTarget);
+    // No warm-up on a lost context (its compile checks would never answer); and never wait more than 3 s for one.
+    if (!this.contextLost) {
+      try {
+        r.setRenderTarget(this.post.sceneRT);
+        warm = r.compileAsync(next.root, this.camera, this.scene);
+      } catch {
+        warm = null;
+      } finally {
+        r.setRenderTarget(prevTarget);
+      }
     }
-    if (warm) warm.then(swap, swap);
-    else swap();
+    if (warm) {
+      let done = false;
+      const once = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        swap();
+      };
+      const timer = window.setTimeout(once, 3000);
+      warm.then(once, once);
+    } else swap();
   }
 
   private swapIn(next: SceneBuild, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
@@ -672,9 +744,7 @@ export class Studio {
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
     this.invalidate();
     for (const id of next.missingAssets) this.onNeedAsset(id);
-    const waiting = this.whenBuilt;
-    this.whenBuilt = [];
-    for (const f of waiting) f.res();
+    // Whoever waits for this yard is told by warmAndSwap, after any paving picks made meanwhile are applied.
   }
 
   /** Resolves once the newest plan's yard is on screen. */
@@ -1474,8 +1544,10 @@ export class Studio {
     this.post.dofAmount = b.dof;
     this.frameDt = dt;
     this.gpuTimer?.begin(b);
+    const cpu0 = performance.now();
     this.drawScene(this.camera, this.container.clientHeight * lodScale, this.size.h * this.size.pr, this.post, null, t);
     this.gpuTimer?.end();
+    b.cpuFrame(performance.now() - cpu0);
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     this.stageLabels.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();

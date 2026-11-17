@@ -150,9 +150,10 @@ vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(){
   vec3 c = texture2D(tColor, min(vUv * uUvScale, uUvMax)).rgb * uExposure / 0.6;
-  // A NaN or Inf from the HDR buffer would turn the pixel black: show it as nothing instead.
+  // A NaN or Inf from the HDR buffer would turn the pixel black: show it as nothing instead. Tested before the clamp
+  // (clamp of NaN is undefined), and also as c != c, which a compiler that drops isnan still keeps.
+  if (any(isnan(c)) || any(isinf(c)) || any(notEqual(c, c))) c = vec3(0.0);
   c = clamp(c, vec3(0.0), vec3(6.0e4));
-  if (any(isnan(c))) c = vec3(0.0);
   // Warmth before tone mapping, like a white-balance shift.
   c *= vec3(1.0 + uWarmth * 0.08, 1.0, 1.0 - uWarmth * 0.1);
   c = aces(c);

@@ -21,7 +21,8 @@ import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
 import { buildHumus, type HumusBuild } from './humus';
 import { buildWater, type WaterBuild } from './waterfeatures';
-import { newTextureGeneration, textureDemand } from '../engine/textures';
+import { cancelTextureGeneration, newTextureGeneration, textureDemand } from '../engine/textures';
+import { deferLeafTextures, finishLeafTextures } from './species/kit';
 
 /** SitePlan in, a complete 3D yard out. */
 
@@ -162,7 +163,8 @@ export interface BuildSliceOptions {
  */
 export async function buildSceneAsync(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, opts: BuildSliceOptions = {}): Promise<SceneBuild | null> {
   const budget = opts.budgetMs ?? 8;
-  const steps = sceneSteps(plan, quality, mirror, sky, assets, opts.stage);
+  const meta = { gen: 0 };
+  const steps = sceneSteps(plan, quality, mirror, sky, assets, opts.stage, meta);
   const frames = frameClock();
   const t0 = performance.now();
   const timing: [string, number][] = [];
@@ -181,10 +183,15 @@ export async function buildSceneAsync(plan: SitePlan, quality: Quality, mirror: 
       await frames.pause();
       if (opts.stale?.()) {
         steps.return(undefined as never);
+        // Paint jobs only this build asked for are not painted ahead of the newer build's.
+        cancelTextureGeneration(meta.gen);
         return null;
       }
       slice = performance.now();
     }
+  } catch (e) {
+    cancelTextureGeneration(meta.gen);
+    throw e;
   } finally {
     frames.stop();
   }
@@ -239,9 +246,9 @@ function frameClock() {
 }
 
 /** The build, step by step: each `yield` is a place it may pause. */
-function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished'): Generator<string, SceneBuild, void> {
+function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished', meta: { gen: number } = { gen: 0 }): Generator<string, SceneBuild, void> {
   // Sets this yard asks for are painted before any asked for earlier.
-  newTextureGeneration();
+  meta.gen = newTextureGeneration();
   const root = new THREE.Group();
   root.name = 'yard';
   const gm = groundModel(plan);
@@ -341,18 +348,27 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   yield 'placements';
   // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
   // per step, so the plant layer below only places them.
+  // A species' leaf textures are read back and color-bled in steps of their own (finishLeafTextures), so no single step
+  // holds the page for long; they are all finished before the plants are placed.
   const species = new Set(placements.map((p) => p.catalogId));
-  for (const id of species) {
-    const spec = plantById.get(id);
-    if (!spec) continue;
-    const geo = speciesGeometry(spec);
-    yield `species ${id}`;
-    for (const [g, part] of [[geo.leaves, 'leaf'], [geo.wood, 'wood'], [geo.flowers, 'flower']] as const) {
-      if (!g) continue;
-      lodGeometry(g, part, 1);
-      lodGeometry(g, part, 2);
+  deferLeafTextures(true);
+  try {
+    for (const id of species) {
+      const spec = plantById.get(id);
+      if (!spec) continue;
+      const geo = speciesGeometry(spec);
+      yield `species ${id}`;
+      yield* finishLeafTextures();
+      for (const [g, part] of [[geo.leaves, 'leaf'], [geo.wood, 'wood'], [geo.flowers, 'flower']] as const) {
+        if (!g) continue;
+        lodGeometry(g, part, 1);
+        lodGeometry(g, part, 2);
+      }
+      yield `plant detail ${id}`;
     }
-    yield `plant detail ${id}`;
+    yield* finishLeafTextures();
+  } finally {
+    deferLeafTextures(false);
   }
   // Plants show in water reflections only near water: the reflection of one farther off is
   // small or hidden. Water boxes are padded by three times the plant's height (4 m at least).
@@ -467,6 +483,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     },
     dispose() {
       textureDemand(build, null);
+      // A yard dropped before it was shown (a newer plan came while it warmed up) leaves no paint jobs at the front.
+      cancelTextureGeneration(meta.gen);
       ctx.dispose();
       ground.dispose();
       construction.dispose();

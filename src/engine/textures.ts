@@ -50,8 +50,13 @@ export interface TexturePainter {
   available(): boolean;
   /** Paint `key` in a worker and swap the result into `set`, whose maps are stand-ins. `make` paints it here if the worker fails. */
   request(key: string, set: PBRSet, make: () => PBRSet): void;
-  /** Sets requested from now on are newer than every earlier one (and painted first). */
-  nextGeneration(): void;
+  /** Sets requested from now on are newer than every earlier one (and painted first). Returns the new generation. */
+  nextGeneration(): number;
+  /**
+   * A build that asked for sets in generation `gen` was cancelled (a newer plan came): its sets no yard has drawn
+   * with are no longer wanted, so they are not painted at the top of the queue (one asked for again is revived).
+   */
+  cancelGeneration(gen: number): void;
   /** The texture sources `owner` (a built yard) draws with now; null when it is gone. */
   demand(owner: object, sources: Set<THREE.Source<unknown>> | null): void;
 }
@@ -61,8 +66,13 @@ export function setTexturePainter(p: TexturePainter | null) {
 }
 
 /** A new build or restyle starts: the sets it asks for are painted before any asked for earlier. */
-export function newTextureGeneration() {
-  painter?.nextGeneration();
+export function newTextureGeneration(): number {
+  return painter?.nextGeneration() ?? 0;
+}
+
+/** A build (or restyle) of generation `gen` was cancelled before it was shown (see TexturePainter.cancelGeneration). */
+export function cancelTextureGeneration(gen: number) {
+  if (gen) painter?.cancelGeneration(gen);
 }
 
 /**
