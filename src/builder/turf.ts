@@ -7,6 +7,7 @@ import { GeoBuilder } from './geobuilder';
 import type { GroundModel } from './ground';
 import type { Quality } from '../engine/post';
 import { TURF_GRAIN, turfAlbedo } from '../engine/surfaces';
+import { WATER_LAYER_SKIP } from '../engine/water';
 
 /** Instanced lawn blades over every turf zone. */
 
@@ -94,10 +95,64 @@ export interface TurfBuild {
   dispose(): void;
 }
 
+/** Lawn blades are instanced in square tiles this many meters across, so tiles out of view or past the blades' fade are skipped. */
+const TILE = 4;
+
+/**
+ * Blades as instanced meshes, one per tile of the lawn. Each tile is culled against the view by its bounding sphere,
+ * and `cullBeyond` (on the returned group's userData, called before each frame) hides tiles whose nearest blade is
+ * past the distance where blades have shrunk away (GLOBAL.uTurfFade), so far lawn costs nothing.
+ */
+function tiledBlades(
+  name: string, geo: THREE.BufferGeometry, mat: THREE.Material, depth: THREE.Material,
+  items: { m: THREE.Matrix4; c: THREE.Color }[],
+): { group: THREE.Group; meshes: THREE.InstancedMesh[] } {
+  const tiles = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+  const p = new THREE.Vector3();
+  for (const it of items) {
+    p.setFromMatrixPosition(it.m);
+    const key = `${Math.floor(p.x / TILE)},${Math.floor(p.z / TILE)}`;
+    const list = tiles.get(key) ?? [];
+    list.push(it);
+    tiles.set(key, list);
+  }
+  const group = new THREE.Group();
+  group.name = name;
+  const meshes: THREE.InstancedMesh[] = [];
+  const boxes: THREE.Box3[] = [];
+  for (const list of tiles.values()) {
+    const im = new THREE.InstancedMesh(geo, mat, list.length);
+    im.name = name;
+    im.receiveShadow = true;
+    im.castShadow = false;
+    im.customDepthMaterial = depth;
+    list.forEach((it, i) => {
+      im.setMatrixAt(i, it.m);
+      im.setColorAt(i, it.c);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.computeBoundingSphere();
+    // Padded for the blades' sway.
+    im.boundingSphere!.radius += 0.1;
+    im.computeBoundingBox();
+    boxes.push(im.boundingBox!.clone());
+    // Lawn blades are left out of reflections (each tile, not only the group: layers are not inherited).
+    im.layers.set(WATER_LAYER_SKIP);
+    group.add(im);
+    meshes.push(im);
+  }
+  group.userData.cullBeyond = (cam: THREE.Vector3, dist: number) => {
+    for (let i = 0; i < meshes.length; i++) meshes[i].visible = dist <= 0 || boxes[i].distanceToPoint(cam) < dist;
+  };
+  return { group, meshes };
+}
+
 export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blocked: (p: Vec2) => boolean): TurfBuild {
   const turf = plan.zones.filter((z) => z.kind === 'turf');
   if (!turf.length) return { object: null, dispose() {} };
-  const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.115 : 0.085;
+  // Balanced: blades at a 12 cm gauge (each tuft is about 11 cm across, so the lawn still reads as full).
+  const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.12 : 0.085;
   const r = rng('turf');
   const pts: { p: Vec2; c: THREE.Color; k: number; even: boolean }[] = [];
   // A maker's turf (spec.turf) gets its own blades, one instanced mesh per product.
@@ -141,10 +196,16 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
   }
   const makerMeshes = [...maker.values()].filter((m) => m.pts.length).map((m) => makerTurfMesh(m.spec, m.pts, gm, r));
   if (!pts.length && !makerMeshes.length) return { object: null, dispose() {} };
+  const cullAll = (grp: THREE.Object3D, parts: THREE.Object3D[]) => {
+    grp.userData.cullBeyond = (cam: THREE.Vector3, dist: number) => {
+      for (const o of parts) o.userData.cullBeyond?.(cam, dist);
+    };
+  };
   if (!pts.length) {
     const grp = new THREE.Group();
     grp.name = 'turf';
     makerMeshes.forEach((m) => grp.add(m.mesh));
+    cullAll(grp, makerMeshes.map((m) => m.mesh));
     return { object: grp, dispose() { makerMeshes.forEach((m) => m.dispose()); } };
   }
   const geo = tuftGeometry();
@@ -152,77 +213,62 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
   // Blades fade into the ground farther off, where the ground's own lawn texture carries the color.
   const opts = { bend: 0.035, flutter: 0, translucency: 0.35, fade: true };
   const mat = patchFoliage(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, side: THREE.DoubleSide }), opts);
-  const im = new THREE.InstancedMesh(geo, mat, pts.length);
-  im.name = 'turf';
-  im.receiveShadow = true;
-  im.castShadow = false;
-  im.customDepthMaterial = foliageDepthMaterial(opts);
-  im.frustumCulled = false;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
-  pts.forEach(({ p, c, k: hk, even }, i) => {
+  const depth = foliageDepthMaterial(opts);
+  const q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
+  const items = pts.map(({ p, c, k: hk, even }) => {
     t.set(p[0], gm.height(p), p[1]);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * Math.PI * 2);
     const k = even ? 0.95 + r() * 0.12 : 0.8 + r() * 0.5;
     s.set(k, k * hk * (even ? 0.96 + r() * 0.08 : 0.85 + r() * 0.3), k);
-    m.compose(t, q, s);
-    im.setMatrixAt(i, m);
-    im.setColorAt(i, c);
+    return { m: new THREE.Matrix4().compose(t, q, s), c };
   });
-  im.instanceMatrix.needsUpdate = true;
-  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  const tiled = tiledBlades('turf', geo, mat, depth, items);
   void GLOBAL;
-  let object: THREE.Object3D = im;
+  let object: THREE.Object3D = tiled.group;
   if (makerMeshes.length) {
     const grp = new THREE.Group();
     grp.name = 'turf';
-    grp.add(im);
+    grp.add(tiled.group);
     makerMeshes.forEach((m) => grp.add(m.mesh));
+    cullAll(grp, [tiled.group, ...makerMeshes.map((m) => m.mesh)]);
     object = grp;
   }
   return {
     object,
     dispose() {
-      im.dispose();
+      for (const im of tiled.meshes) im.dispose();
       geo.dispose();
       mat.dispose();
-      im.customDepthMaterial?.dispose();
+      depth.dispose();
       makerMeshes.forEach((m) => m.dispose());
     },
   };
 }
 
 /** One maker turf's blades over its points: a patch at each, turned at random, the same height (the pile is even). */
-function makerTurfMesh(spec: MaterialSpec, pts: Vec2[], gm: GroundModel, r: () => number): { mesh: THREE.InstancedMesh; dispose(): void } {
+function makerTurfMesh(spec: MaterialSpec, pts: Vec2[], gm: GroundModel, r: () => number): { mesh: THREE.Object3D; dispose(): void } {
   const geo = makerTuftGeometry(spec);
   // Polyethylene blades: a soft sheen, no flutter (blades a millimeter wide only sparkle when they move).
   const opts = { bend: 0.01, flutter: 0, translucency: 0.3, fade: true };
   const mat = patchFoliage(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }), opts);
-  const im = new THREE.InstancedMesh(geo, mat, pts.length);
-  im.name = `turf-${spec.id}`;
-  im.receiveShadow = true;
-  im.castShadow = false;
-  im.customDepthMaterial = foliageDepthMaterial(opts);
-  im.frustumCulled = false;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3(), c = new THREE.Color();
+  const depth = foliageDepthMaterial(opts);
+  const q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
   // The patch keeps its grain: turned only a little, so the whole lawn leans one way, as rolls are laid.
-  pts.forEach((p, i) => {
+  const items = pts.map((p) => {
     t.set(p[0], gm.height(p), p[1]);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (r() - 0.5) * 0.5);
     const k = 0.95 + r() * 0.1;
     s.set(k, 0.97 + r() * 0.06, k);
-    m.compose(t, q, s);
-    im.setMatrixAt(i, m);
-    im.setColorAt(i, c.setScalar(0.94 + r() * 0.1));
+    return { m: new THREE.Matrix4().compose(t, q, s), c: new THREE.Color().setScalar(0.94 + r() * 0.1) };
   });
-  im.instanceMatrix.needsUpdate = true;
-  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  const tiled = tiledBlades(`turf-${spec.id}`, geo, mat, depth, items);
   return {
-    mesh: im,
+    mesh: tiled.group,
     dispose() {
-      im.dispose();
+      for (const im of tiled.meshes) im.dispose();
       geo.dispose();
       mat.dispose();
-      im.customDepthMaterial?.dispose();
+      depth.dispose();
     },
   };
 }

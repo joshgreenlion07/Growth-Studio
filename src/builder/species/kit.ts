@@ -142,49 +142,106 @@ export function leafTexture(key: string, w: number, h: number, draw: (g: CanvasR
   cv.height = h;
   const g = cv.getContext('2d', { willReadFrequently: true })!;
   draw(g, w, h);
-  const src = g.getImageData(0, 0, w, h).data;
-  bleed(src, w, h, 12);
-  // Flip rows so v = 1 is the canvas top.
-  const out = new Uint8Array(src.length);
-  for (let y = 0; y < h; y++) out.set(src.subarray(y * w * 4, (y + 1) * w * 4), (h - 1 - y) * w * 4);
-  const t = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
+  const t = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   t.generateMipmaps = true;
   t.minFilter = THREE.LinearMipmapLinearFilter;
   t.magFilter = THREE.LinearFilter;
   t.anisotropy = 8;
-  t.needsUpdate = true;
   texCache.set(key, t);
+  const finish = () => {
+    const src = g.getImageData(0, 0, w, h).data;
+    bleed(src, w, h, 12);
+    // Flip rows so v = 1 is the canvas top.
+    const out = t.image.data as Uint8Array;
+    for (let y = 0; y < h; y++) out.set(src.subarray(y * w * 4, (y + 1) * w * 4), (h - 1 - y) * w * 4);
+    t.needsUpdate = true;
+  };
+  // In a sliced yard build the readback and color bleed (the costly half) run as steps of their own (see
+  // finishLeafTextures); anywhere else at once. Either way they are done before anything draws with the texture.
+  if (deferring) unfinished.push(finish);
+  else finish();
   return t;
 }
 
-/** Spread the color of solid pixels into neighboring transparent and faint ones (alpha is kept). */
+let deferring = false;
+const unfinished: (() => void)[] = [];
+
+/**
+ * While on, leaf textures painted by species builders leave their readback and color bleed for
+ * finishLeafTextures, so building one species stays a short step. Turn it off before the yard is drawn.
+ */
+export function deferLeafTextures(on: boolean) {
+  deferring = on;
+}
+
+/**
+ * Finish every leaf texture still waiting, unless a sliced build is deferring them (it finishes them itself). Called
+ * before a species model is handed out, so a model left by a cancelled build never draws with an unfinished texture.
+ */
+export function settleLeafTextures() {
+  if (!deferring) while (unfinished.length) unfinished.shift()!();
+}
+
+/** Finish the leaf textures left by deferLeafTextures, one per step. */
+export function* finishLeafTextures(): Generator<string, void, void> {
+  while (unfinished.length) {
+    unfinished.shift()!();
+    yield 'leaf texture';
+  }
+}
+
+/**
+ * Spread the color of solid pixels into neighboring transparent and faint ones (alpha is kept): `passes` rings, each
+ * taking the average color of its already filled 4-neighbors. Only the ring next to the filled area is visited on
+ * each pass, not the whole image.
+ */
 function bleed(d: Uint8ClampedArray, w: number, h: number, passes: number) {
   const n = w * h;
-  let filled = new Uint8Array(n);
+  const filled = new Uint8Array(n);
   // Faint antialiased edge pixels hold unreliable color (canvas alpha is
   // premultiplied), so they take their color from solid neighbors too.
   for (let i = 0; i < n; i++) filled[i] = d[i * 4 + 3] >= 96 ? 1 : 0;
-  for (let pass = 0; pass < passes; pass++) {
-    const next = filled.slice();
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (filled[i]) continue;
-        let r = 0, gg = 0, b = 0, c = 0;
-        if (x > 0 && filled[i - 1]) { r += d[(i - 1) * 4]; gg += d[(i - 1) * 4 + 1]; b += d[(i - 1) * 4 + 2]; c++; }
-        if (x < w - 1 && filled[i + 1]) { r += d[(i + 1) * 4]; gg += d[(i + 1) * 4 + 1]; b += d[(i + 1) * 4 + 2]; c++; }
-        if (y > 0 && filled[i - w]) { r += d[(i - w) * 4]; gg += d[(i - w) * 4 + 1]; b += d[(i - w) * 4 + 2]; c++; }
-        if (y < h - 1 && filled[i + w]) { r += d[(i + w) * 4]; gg += d[(i + w) * 4 + 1]; b += d[(i + w) * 4 + 2]; c++; }
-        if (!c) continue;
-        d[i * 4] = r / c;
-        d[i * 4 + 1] = gg / c;
-        d[i * 4 + 2] = b / c;
-        next[i] = 1;
-      }
+  // The first ring: unfilled pixels with a filled neighbor.
+  const inRing = new Uint8Array(n);
+  let ring: number[] = [];
+  const consider = (i: number, list: number[]) => {
+    if (filled[i] || inRing[i]) return;
+    inRing[i] = 1;
+    list.push(i);
+  };
+  for (let i = 0; i < n; i++) {
+    if (!filled[i]) continue;
+    const x = i % w, y = (i / w) | 0;
+    if (x > 0) consider(i - 1, ring);
+    if (x < w - 1) consider(i + 1, ring);
+    if (y > 0) consider(i - w, ring);
+    if (y < h - 1) consider(i + w, ring);
+  }
+  for (let pass = 0; pass < passes && ring.length; pass++) {
+    // Colors from the previous rings only: pixels filled in this ring are marked after it.
+    for (const i of ring) {
+      const x = i % w, y = (i / w) | 0;
+      let r = 0, gg = 0, b = 0, c = 0;
+      if (x > 0 && filled[i - 1]) { r += d[(i - 1) * 4]; gg += d[(i - 1) * 4 + 1]; b += d[(i - 1) * 4 + 2]; c++; }
+      if (x < w - 1 && filled[i + 1]) { r += d[(i + 1) * 4]; gg += d[(i + 1) * 4 + 1]; b += d[(i + 1) * 4 + 2]; c++; }
+      if (y > 0 && filled[i - w]) { r += d[(i - w) * 4]; gg += d[(i - w) * 4 + 1]; b += d[(i - w) * 4 + 2]; c++; }
+      if (y < h - 1 && filled[i + w]) { r += d[(i + w) * 4]; gg += d[(i + w) * 4 + 1]; b += d[(i + w) * 4 + 2]; c++; }
+      d[i * 4] = r / c;
+      d[i * 4 + 1] = gg / c;
+      d[i * 4 + 2] = b / c;
     }
-    filled = next;
+    for (const i of ring) filled[i] = 1;
+    const next: number[] = [];
+    for (const i of ring) {
+      const x = i % w, y = (i / w) | 0;
+      if (x > 0) consider(i - 1, next);
+      if (x < w - 1) consider(i + 1, next);
+      if (y > 0) consider(i - w, next);
+      if (y < h - 1) consider(i + w, next);
+    }
+    ring = next;
   }
 }
 

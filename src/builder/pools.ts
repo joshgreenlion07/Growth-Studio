@@ -95,6 +95,14 @@ function poolLevel(plan: SitePlan, outer: Vec2[]): { lift: number; deck: number 
 }
 
 export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
+  const steps = poolSteps(plan, waterLevel);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/** poolLayout a piece at a time: each `yield` is a place a sliced build may pause. */
+export function* poolSteps(plan: SitePlan, waterLevel: number): Generator<string, PoolLayout, void> {
   const pools: PoolPlace[] = [];
   plan.water.forEach((w) => {
     if (w.kind !== 'pool' || !w.polygon || w.polygon.length < 3) return;
@@ -125,21 +133,33 @@ export function poolLayout(plan: SitePlan, waterLevel: number): PoolLayout {
   area.maxY = area.minY + H * texel;
   const data = new Uint8Array(W * H * 2).fill(255);
   const enc = (d: number) => Math.round((Math.max(-1, Math.min(1, d / RANGE)) * 0.5 + 0.5) * 255);
-  pools.forEach((pl, k) => {
+  for (let k = 0; k < pools.length; k++) {
+    const pl = pools[k];
     const outerI = outerIdx[k], polyI = new PolygonIndex(pl.poly);
     const b = outerI.box;
     const i0 = Math.max(0, Math.floor((b.minX - RANGE - area.minX) / texel)), i1 = Math.min(W - 1, Math.ceil((b.maxX + RANGE - area.minX) / texel));
     const j0 = Math.max(0, Math.floor((b.minY - RANGE - area.minY) / texel)), j1 = Math.min(H - 1, Math.ceil((b.maxY + RANGE - area.minY) / texel));
-    for (let j = j0; j <= j1; j++) {
-      for (let i = i0; i <= i1; i++) {
-        const x = area.minX + (i + 0.5) * texel, y = area.minY + (j + 0.5) * texel;
-        const o = (j * W + i) * 2;
-        // Stored distances stop at RANGE, so edges farther away are not searched for.
-        data[o] = Math.min(data[o], enc(signedDist(x, y, outerI, RANGE)));
-        data[o + 1] = Math.min(data[o + 1], enc(signedDist(x, y, polyI, RANGE)));
+    // In blocks of B x B texels: a block with no outline edge within RANGE of any of its texels is all one value
+    // (the stored distance saturates at RANGE, inside or out), so only blocks near an outline are worked texel by texel.
+    const B = 8, reach = RANGE + B * texel * Math.SQRT1_2 + texel;
+    for (let bj = j0; bj <= j1; bj += B) {
+      if ((bj - j0) % (B * 4) === B * 3) yield 'pool map';
+      for (let bi = i0; bi <= i1; bi += B) {
+        const ej = Math.min(j1, bj + B - 1), ei = Math.min(i1, bi + B - 1);
+        const cx = area.minX + ((bi + ei) / 2 + 0.5) * texel, cy = area.minY + ((bj + ej) / 2 + 0.5) * texel;
+        const far = [outerI, polyI].map((idx) => (idx.dist(cx, cy, reach) >= reach ? enc(idx.contains(cx, cy) ? -RANGE : RANGE) : -1));
+        for (let j = bj; j <= ej; j++) {
+          for (let i = bi; i <= ei; i++) {
+            const x = area.minX + (i + 0.5) * texel, y = area.minY + (j + 0.5) * texel;
+            const o = (j * W + i) * 2;
+            // Stored distances stop at RANGE, so edges farther away are not searched for.
+            data[o] = Math.min(data[o], far[0] >= 0 ? far[0] : enc(signedDist(x, y, outerI, RANGE)));
+            data[o + 1] = Math.min(data[o + 1], far[1] >= 0 ? far[1] : enc(signedDist(x, y, polyI, RANGE)));
+          }
+        }
       }
     }
-  });
+  }
   const map = new THREE.DataTexture(data, W, H, THREE.RGFormat);
   map.magFilter = map.minFilter = THREE.LinearFilter;
   map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;

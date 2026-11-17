@@ -6,21 +6,23 @@ import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
-import { buildConstruction, type BuildStage, type ConstructionBuild } from './construction';
+import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { buildGround, groundModel, WATER_LEVEL, type GroundModel } from './ground';
+import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint } from './hardscape';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
-import { buildPlants, type PlantLayer } from './plants';
-import { poolLayout, type PoolLayout } from './pools';
+import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
 import { buildHumus, type HumusBuild } from './humus';
 import { buildWater, type WaterBuild } from './waterfeatures';
+import { cancelTextureGeneration, newTextureGeneration, textureDemand } from '../engine/textures';
+import { deferLeafTextures, finishLeafTextures } from './species/kit';
 
 /** SitePlan in, a complete 3D yard out. */
 
@@ -135,24 +137,185 @@ export function hardscapeOnlyChange(prev: SitePlan, next: SitePlan): boolean {
   return strip(prev) === strip(next);
 }
 
-export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } }, assets: ModelAssets | null = null): SceneBuild {
+type SkyUniforms = { uZenith: { value: THREE.Color }; uHorizon: { value: THREE.Color }; uNight: { value: number } };
+
+/** Build a yard in one go (the main thread is busy until it is done). */
+export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null = null): SceneBuild {
+  const steps = sceneSteps(plan, quality, mirror, sky, assets);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+export interface BuildSliceOptions {
+  /** True once the result is no longer wanted (a newer plan came): the build stops at its next pause and gives null. */
+  stale?: () => boolean;
+  /** Main-thread time per slice. */
+  budgetMs?: number;
+  /** The build stage the yard opens at: anything but 'finished' builds the construction views as part of the build. */
+  stage?: BuildStage;
+}
+
+/**
+ * Build a yard a few milliseconds at a time, so the yard on screen keeps drawing (and the page keeps responding)
+ * while the next one is built. Each step of the build (the ground, the paving, one plant species...) runs whole;
+ * between steps the build pauses whenever its slice is used up, and waits for a frame when one is due.
+ */
+export async function buildSceneAsync(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, opts: BuildSliceOptions = {}): Promise<SceneBuild | null> {
+  const budget = opts.budgetMs ?? 8;
+  const meta = { gen: 0 };
+  const steps = sceneSteps(plan, quality, mirror, sky, assets, opts.stage, meta);
+  const frames = frameClock();
+  const t0 = performance.now();
+  const timing: [string, number][] = [];
+  try {
+    let slice = performance.now();
+    for (;;) {
+      const a = performance.now();
+      const r = steps.next();
+      timing.push([r.done ? 'finish' : r.value, Math.round(performance.now() - a)]);
+      if (r.done) {
+        // For the console and tests: each step's main-thread time, and the whole build's.
+        (globalThis as { __gsBuild?: unknown }).__gsBuild = { ms: Math.round(performance.now() - t0), longest: timing.reduce((m, x) => (x[1] > m[1] ? x : m), ['', 0]), steps: timing };
+        return r.value;
+      }
+      if (performance.now() - slice < budget) continue;
+      await frames.pause();
+      if (opts.stale?.()) {
+        steps.return(undefined as never);
+        // Paint jobs only this build asked for are not painted ahead of the newer build's.
+        cancelTextureGeneration(meta.gen);
+        return null;
+      }
+      slice = performance.now();
+    }
+  } catch (e) {
+    cancelTextureGeneration(meta.gen);
+    throw e;
+  } finally {
+    frames.stop();
+  }
+}
+
+/**
+ * Pauses between build slices: a frame is let through when one is due (16 ms or more since the last), otherwise the
+ * build goes on at once after other waiting tasks. A hidden page draws no frames: then it never waits for one.
+ */
+function frameClock() {
+  let last = performance.now();
+  let on = true;
+  let raf = 0;
+  const tick = () => {
+    last = performance.now();
+    if (on) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  const channel = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+  const queue: (() => void)[] = [];
+  if (channel) channel.port1.onmessage = () => queue.shift()?.();
+  const soon = () =>
+    new Promise<void>((res) => {
+      if (!channel) return void setTimeout(res, 0);
+      queue.push(res);
+      channel.port2.postMessage(0);
+    });
+  return {
+    pause(): Promise<void> {
+      const since = performance.now() - last;
+      // No frame due yet, or none coming (a hidden page or panel draws none): go on at once.
+      if (since < 16 || since > 100 || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return soon();
+      const seen = last;
+      return new Promise<void>((res) => {
+        let done = false;
+        const go = () => {
+          if (done) return;
+          done = true;
+          res();
+        };
+        const wait = () => (last !== seen ? go() : requestAnimationFrame(() => setTimeout(go, 0)));
+        wait();
+        setTimeout(go, 50);
+      });
+    },
+    stop() {
+      on = false;
+      cancelAnimationFrame(raf);
+      channel?.port1.close();
+    },
+  };
+}
+
+/** The build, step by step: each `yield` is a place it may pause. */
+function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished', meta: { gen: number } = { gen: 0 }): Generator<string, SceneBuild, void> {
+  // Sets this yard asks for are painted before any asked for earlier.
+  meta.gen = newTextureGeneration();
   const root = new THREE.Group();
   root.name = 'yard';
   const gm = groundModel(plan);
   const ctx = buildContext(plan);
-  const pools = poolLayout(plan, WATER_LEVEL);
-  const ground = buildGround(plan, gm, quality, pools);
-  const construction = buildConstruction(plan, ground.surface, quality);
-  if (construction.cut) {
-    ground.stage.uCut.value = construction.cut.texture;
-    ground.stage.uCutBox.value.copy(construction.cut.box);
+  yield 'context';
+  const pools = yield* poolSteps(plan, WATER_LEVEL);
+  yield 'pools';
+  const ground = yield* groundSteps(plan, gm, quality, pools);
+  yield 'ground';
+  // The stage shown (see setStage below) and the plants' age.
+  let stage: BuildStage = 'finished';
+  let years = 3;
+  // The construction views (pits, trenches, pipes, base and bedding) are built the first time a stage or the cutaway
+  // asks for them; the finished yard shows only the utility equipment.
+  const equip = buildEquipment(plan, ground.surface);
+  const constructionRoot = new THREE.Group();
+  constructionRoot.name = 'construction';
+  if (equip.object) constructionRoot.add(equip.object);
+  let built: ConstructionBuild | null = null;
+  const site = (): ConstructionBuild => {
+    if (built) return built;
+    const c = buildConstruction(plan, ground.surface, quality, false);
+    built = c;
+    constructionRoot.add(c.object);
+    // New meshes join the yard's layers as the rest did (shadows): the caller re-tags after setStage.
+    if (c.cut) {
+      ground.stage.uCut.value = c.cut.texture;
+      ground.stage.uCutBox.value.copy(c.cut.box);
+    }
+    c.setStage(stage);
+    return c;
+  };
+  const construction: ConstructionBuild = {
+    object: constructionRoot,
+    get cut() {
+      return built ? built.cut : null;
+    },
+    get labels() {
+      return built ? built.labels : [];
+    },
+    get notes() {
+      return site().notes;
+    },
+    setStage(st: BuildStage) {
+      if (st !== 'finished' || built) site().setStage(st);
+    },
+    section(st: BuildStage, plane: THREE.Plane) {
+      return site().section(st, plane);
+    },
+    dispose() {
+      built?.dispose();
+      equip.dispose();
+    },
+  };
+  if (openStage !== 'finished') {
+    site();
+    yield 'construction';
   }
   let hard = buildHardscape(plan, gm.height, pools);
+  yield 'hardscape';
   const siteC = centroid(plan.site.boundary);
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
+  yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
   const features = buildFeatures(plan.features, gm.height);
   const models = buildModels(plan.models ?? [], gm.height, assets);
+  yield 'water, features, models';
 
   const bodies = bodyGrid(lineBodies(plan));
   // Everything turf blades stay off, indexed once: they are tested for every blade.
@@ -175,10 +338,38 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     return false;
   };
   const turf = buildTurf(plan, gm, quality, blocked);
+  yield 'turf';
   const pebbles = buildPebbles(plan, gm, quality);
+  yield 'pebbles';
   const humus = buildHumus(plan, gm, ground.surface, quality);
+  yield 'soil fills';
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
+  yield 'placements';
+  // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
+  // per step, so the plant layer below only places them.
+  // A species' leaf textures are read back and color-bled in steps of their own (finishLeafTextures), so no single step
+  // holds the page for long; they are all finished before the plants are placed.
+  const species = new Set(placements.map((p) => p.catalogId));
+  deferLeafTextures(true);
+  try {
+    for (const id of species) {
+      const spec = plantById.get(id);
+      if (!spec) continue;
+      const geo = speciesGeometry(spec);
+      yield `species ${id}`;
+      yield* finishLeafTextures();
+      for (const [g, part] of [[geo.leaves, 'leaf'], [geo.wood, 'wood'], [geo.flowers, 'flower']] as const) {
+        if (!g) continue;
+        lodGeometry(g, part, 1);
+        lodGeometry(g, part, 2);
+      }
+      yield `plant detail ${id}`;
+    }
+    yield* finishLeafTextures();
+  } finally {
+    deferLeafTextures(false);
+  }
   // Plants show in water reflections only near water: the reflection of one farther off is
   // small or hidden. Water boxes are padded by three times the plant's height (4 m at least).
   const waterBoxes = plan.water.map((w) => {
@@ -190,6 +381,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
   const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
+  yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {
@@ -226,8 +418,6 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
 
   // Build stages: before the yard is finished only plants that were already there (and the neighbors' trees) stand.
   // They are built the first time a stage asks for them.
-  let stage: BuildStage = 'finished';
-  let years = 3;
   let standing: PlantLayer | null = null;
   const applyStage = () => {
     const fin = stage === 'finished';
@@ -246,12 +436,13 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     }
     if (standing) standing.object.visible = !fin;
     ground.stage.uSoil.value = fin ? 0 : 1;
-    const open = !construction.cut ? 0 : stage === 'trench' ? 2 : stage === 'excavate' || stage === 'backfill' || stage === 'base' || stage === 'bedding' ? 1 : 0;
+    const cut = fin ? null : site().cut;
+    const open = !cut ? 0 : stage === 'trench' ? 2 : stage === 'excavate' || stage === 'backfill' || stage === 'base' || stage === 'bedding' ? 1 : 0;
     ground.stage.uCutCh.value.set(open === 1 ? 1 : 0, open === 2 ? 1 : 0);
     construction.setStage(stage);
   };
 
-  return {
+  const build: SceneBuild = {
     root,
     gm,
     pools,
@@ -272,6 +463,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       applyStage();
     },
     restyleHardscape(next: SitePlan) {
+      newTextureGeneration();
       const old = hard;
       hard = buildHardscape(next, gm.height, pools);
       root.remove(old.object);
@@ -285,6 +477,8 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       swap(glow, old.glow, hard.glow);
       old.dispose();
       hard.object.visible = stage === 'finished';
+      // The colors this replaced are no longer drawn: their paint jobs are dropped.
+      textureDemand(build, root);
     },
     setYears(y: number) {
       years = y;
@@ -292,6 +486,9 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       standing?.setYears(y);
     },
     dispose() {
+      textureDemand(build, null);
+      // A yard dropped before it was shown (a newer plan came while it warmed up) leaves no paint jobs at the front.
+      cancelTextureGeneration(meta.gen);
       ctx.dispose();
       ground.dispose();
       construction.dispose();
@@ -308,6 +505,8 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       plants.dispose();
     },
   };
+  textureDemand(build, root);
+  return build;
 }
 
 /**

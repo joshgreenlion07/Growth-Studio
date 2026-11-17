@@ -50,10 +50,55 @@ export interface TexturePainter {
   available(): boolean;
   /** Paint `key` in a worker and swap the result into `set`, whose maps are stand-ins. `make` paints it here if the worker fails. */
   request(key: string, set: PBRSet, make: () => PBRSet): void;
+  /** Sets requested from now on are newer than every earlier one (and painted first). Returns the new generation. */
+  nextGeneration(): number;
+  /**
+   * A build that asked for sets in generation `gen` was cancelled (a newer plan came): its sets no yard has drawn
+   * with are no longer wanted, so they are not painted at the top of the queue (one asked for again is revived).
+   */
+  cancelGeneration(gen: number): void;
+  /** The texture sources `owner` (a built yard) draws with now; null when it is gone. */
+  demand(owner: object, sources: Set<THREE.Source<unknown>> | null): void;
 }
 let painter: TexturePainter | null = null;
 export function setTexturePainter(p: TexturePainter | null) {
   painter = p;
+}
+
+/** A new build or restyle starts: the sets it asks for are painted before any asked for earlier. */
+export function newTextureGeneration(): number {
+  return painter?.nextGeneration() ?? 0;
+}
+
+/** A build (or restyle) of generation `gen` was cancelled before it was shown (see TexturePainter.cancelGeneration). */
+export function cancelTextureGeneration(gen: number) {
+  if (gen) painter?.cancelGeneration(gen);
+}
+
+/**
+ * Tell the painter which sets a yard draws with (null: the yard is gone). Sets no yard draws with any more (a color
+ * previewed and then replaced) are dropped from the paint queue, so the newest pick is painted first.
+ */
+export function textureDemand(owner: object, root: THREE.Object3D | null) {
+  if (!painter) return;
+  if (!root) return painter.demand(owner, null);
+  const out = new Set<THREE.Source<unknown>>();
+  const add = (v: unknown) => {
+    if (v && (v as THREE.Texture).isTexture) out.add((v as THREE.Texture).source);
+  };
+  const seen = new Set<THREE.Material>();
+  root.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (!m) return;
+    for (const mat of Array.isArray(m) ? m : [m]) {
+      if (seen.has(mat)) continue;
+      seen.add(mat);
+      for (const v of Object.values(mat)) add(v);
+      const u = (mat as THREE.ShaderMaterial).uniforms;
+      if (u) for (const x of Object.values(u)) (Array.isArray(x?.value) ? x.value : [x?.value]).forEach(add);
+    }
+  });
+  painter.demand(owner, out);
 }
 
 /**
@@ -64,6 +109,8 @@ export class PendingTexture extends THREE.Texture {
   group: Set<THREE.Texture> | null = null;
   clone(): this {
     const c = super.clone();
+    // Painted maps hold raw pixels (see texture-jobs.ts): a clone made after they arrived uploads them the same way.
+    (c as { isDataTexture?: boolean }).isDataTexture = (this as { isDataTexture?: boolean }).isDataTexture;
     if (this.group) {
       (c as PendingTexture).group = this.group;
       this.group.add(c);
@@ -196,6 +243,18 @@ function pixelSet(px: PaintedPixels, tileMeters: number): PBRSet {
   return { map: tex(px.albedo), normalMap: tex(px.normal), roughnessMap: tex(px.rough), tileMeters };
 }
 
+/** In the texture worker: paint no map larger than this (a quick first copy of a large set); 0 paints full size. */
+let sizeCap = 0;
+let cappedFrom = 0;
+export function setPaintSizeCap(n: number) {
+  sizeCap = n;
+  cappedFrom = 0;
+}
+/** The full size of the largest map painted smaller than its recipe asks for since setPaintSizeCap (0: none was). */
+export function paintCappedFrom(): number {
+  return cappedFrom;
+}
+
 /** Set while textureSet() runs a recipe only to learn its average color (see previewSet). */
 let previewing = false;
 /** True while a recipe is only being sampled for its stand-in color (see previewSet): a costly recipe can skip its setup. */
@@ -209,7 +268,14 @@ export function paintPreviewing(): boolean {
  */
 export function paint(size: number, tileMeters: number, normalStrength: number, fn: (u: number, v: number) => Sample, mean?: RGB): PBRSet {
   if (previewing) return previewSet(tileMeters, fn, mean);
-  const px = paintPixels(size, normalStrength, fn, mean);
+  let k = normalStrength;
+  if (sizeCap && size > sizeCap) {
+    // A quick low-resolution copy: relief is in texels, so it is scaled to keep the same slopes.
+    k = (normalStrength * sizeCap) / size;
+    cappedFrom = Math.max(cappedFrom, size);
+    size = sizeCap;
+  }
+  const px = paintPixels(size, k, fn, mean);
   return IN_WORKER ? pixelSet(px, tileMeters) : canvasSet(px, tileMeters);
 }
 

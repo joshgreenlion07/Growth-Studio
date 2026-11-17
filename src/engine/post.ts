@@ -46,20 +46,24 @@ uniform float uFar;
 uniform float uFocus;
 uniform float uBlur;
 uniform float uMaxCoc;
+/** The drawn part of the scene buffers (see PostPipeline.scale): uv scale and the largest uv inside it. */
+uniform vec2 uUvScale;
+uniform vec2 uUvMax;
 varying vec2 vUv;
 #ifndef SAMPLES
 #define SAMPLES 32
 #endif
 float linDepth(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
+vec2 suv(vec2 uv){ return min(uv * uUvScale, uUvMax); }
 vec2 cocAt(vec2 uv){
-  float z = linDepth(texture2D(tDepth, uv).x);
+  float z = linDepth(texture2D(tDepth, suv(uv)).x);
   float c = uBlur * abs(1.0 / uFocus - 1.0 / z) * uRes.y;
   return vec2(clamp(c, 0.0, uMaxCoc), z);
 }
 void main(){
   vec2 cz = cocAt(vUv);
   float c0 = cz.x;
-  vec3 sum = texture2D(tColor, vUv).rgb;
+  vec3 sum = texture2D(tColor, suv(vUv)).rgb;
   float wsum = 1.0;
   float wFront = 0.0;
   if (uMaxCoc > 0.0) {
@@ -74,7 +78,7 @@ void main(){
       // blurred samples in front spill over us.
       float cs = s.y > cz.y ? min(s.x, c0) : s.x;
       float w = smoothstep(r - 1.0, r + 1.0, cs);
-      sum += texture2D(tColor, uv).rgb * w;
+      sum += texture2D(tColor, suv(uv)).rgb * w;
       wsum += w;
       if (s.y < cz.y) wFront += w * smoothstep(1.0, 3.0, s.x);
     }
@@ -93,15 +97,30 @@ uniform float uFar;
 uniform float uFocus;
 uniform float uBlur;
 uniform float uDof;
+uniform vec2 uUvScale;
+uniform vec2 uUvMax;
+uniform vec2 uHalfScale;
+uniform vec2 uHalfMax;
+uniform vec2 uTexel;
+uniform float uSharpen;
 varying vec2 vUv;
 float linDepth(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
 void main(){
-  vec3 sharp = texture2D(tColor, vUv).rgb;
-  if (uDof < 0.5) { gl_FragColor = vec4(sharp, 1.0); return; }
-  float z = linDepth(texture2D(tDepth, vUv).x);
+  // The scene may be drawn into only part of its buffer (a lower render scale while the camera moves): this pass
+  // scales it up to the full size, with a light sharpen so the picture does not go soft.
+  vec2 uv = min(vUv * uUvScale, uUvMax);
+  vec3 sharp = texture2D(tColor, uv).rgb;
+  if (uSharpen > 0.0) {
+    vec3 n = texture2D(tColor, min(uv + vec2(uTexel.x, 0.0), uUvMax)).rgb + texture2D(tColor, max(uv - vec2(uTexel.x, 0.0), vec2(0.0))).rgb
+      + texture2D(tColor, min(uv + vec2(0.0, uTexel.y), uUvMax)).rgb + texture2D(tColor, max(uv - vec2(0.0, uTexel.y), vec2(0.0))).rgb;
+    // Limited so a bright edge (a sun glint) does not ring.
+    sharp = max(sharp + (sharp - n * 0.25) * uSharpen, sharp * 0.5);
+  }
+  if (uDof <= 0.0) { gl_FragColor = vec4(sharp, 1.0); return; }
+  float z = linDepth(texture2D(tDepth, uv).x);
   float c = uBlur * abs(1.0 / uFocus - 1.0 / z) * uRes.y;
-  vec4 b = texture2D(tBlur, vUv);
-  float k = max(smoothstep(0.75, 2.5, c), b.a);
+  vec4 b = texture2D(tBlur, min(vUv * uHalfScale, uHalfMax));
+  float k = max(smoothstep(0.75, 2.5, c), b.a) * uDof;
   gl_FragColor = vec4(mix(sharp, b.rgb, k), 1.0);
 }`;
 
@@ -115,6 +134,8 @@ uniform float uVignette;
 uniform float uGrain;
 uniform float uTime;
 uniform vec2 uRes;
+uniform vec2 uUvScale;
+uniform vec2 uUvMax;
 varying vec2 vUv;
 vec3 RRTAndODTFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
 vec3 aces(vec3 color){
@@ -128,7 +149,11 @@ vec3 aces(vec3 color){
 vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main(){
-  vec3 c = texture2D(tColor, vUv).rgb * uExposure / 0.6;
+  vec3 c = texture2D(tColor, min(vUv * uUvScale, uUvMax)).rgb * uExposure / 0.6;
+  // A NaN or Inf from the HDR buffer would turn the pixel black: show it as nothing instead. Tested before the clamp
+  // (clamp of NaN is undefined), and also as c != c, which a compiler that drops isnan still keeps.
+  if (any(isnan(c)) || any(isinf(c)) || any(notEqual(c, c))) c = vec3(0.0);
+  c = clamp(c, vec3(0.0), vec3(6.0e4));
   // Warmth before tone mapping, like a white-balance shift.
   c *= vec3(1.0 + uWarmth * 0.08, 1.0, 1.0 - uWarmth * 0.1);
   c = aces(c);
@@ -167,6 +192,21 @@ export class PostPipeline {
   focus = 10;
   exposure = 1;
   quality: Quality = 'balanced';
+  /**
+   * Share of the full size (each axis) the scene is drawn at, 0.5 to 1. The buffers keep their full size (resizing
+   * them would clear the canvas); the scene and the depth of field fill only the lower-left part, and the compose
+   * pass scales that up to the full size. Studio lowers it while the camera moves on a slow GPU.
+   */
+  scale = 1;
+  /** How much depth of field shows, 0 to 1 (Studio fades it out while the camera moves). At 0 its pass is skipped. */
+  dofAmount = 1;
+  /**
+   * While the camera and the focus hold perfectly still (only leaves and water move), the blur is gathered on every
+   * other frame and the frame between reuses it: it is out of focus, so a one-frame-old blur of a swaying leaf cannot
+   * be told apart. The sharp image and the focus mask are always current.
+   */
+  dofHalfRate = false;
+  private lastDof = { view: new THREE.Matrix4(), proj: new THREE.Matrix4(), key: '', reused: true };
 
   constructor(private renderer: THREE.WebGLRenderer) {
     this.sceneRT = this.makeSceneRT(4);
@@ -182,6 +222,8 @@ export class PostPipeline {
         uFocus: { value: 10 },
         uBlur: { value: 0.003 },
         uMaxCoc: { value: 14 },
+        uUvScale: { value: new THREE.Vector2(1, 1) },
+        uUvMax: { value: new THREE.Vector2(1, 1) },
       },
       defines: { SAMPLES: 32 },
       vertexShader: VERT,
@@ -200,6 +242,8 @@ export class PostPipeline {
         uGrain: { value: 0 },
         uTime: { value: 0 },
         uRes: { value: new THREE.Vector2(1, 1) },
+        uUvScale: { value: new THREE.Vector2(1, 1) },
+        uUvMax: { value: new THREE.Vector2(1, 1) },
       },
       vertexShader: VERT,
       fragmentShader: OUT_FRAG,
@@ -217,6 +261,12 @@ export class PostPipeline {
         uFocus: { value: 10 },
         uBlur: { value: 0.003 },
         uDof: { value: 1 },
+        uUvScale: { value: new THREE.Vector2(1, 1) },
+        uUvMax: { value: new THREE.Vector2(1, 1) },
+        uHalfScale: { value: new THREE.Vector2(1, 1) },
+        uHalfMax: { value: new THREE.Vector2(1, 1) },
+        uTexel: { value: new THREE.Vector2(1, 1) },
+        uSharpen: { value: 0 },
       },
       vertexShader: VERT,
       fragmentShader: COMPOSE_FRAG,
@@ -257,24 +307,52 @@ export class PostPipeline {
     if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
+    this.lastDof.reused = true;
     this.sceneRT.setSize(w, h);
     this.rtA.setSize(w, h);
     this.rtHalf.setSize(Math.max(1, Math.ceil(w / 2)), Math.max(1, Math.ceil(h / 2)));
     this.bloom.setSize(w, h);
-    this.dofMat.uniforms.uRes.value.set(w, h);
     this.composeMat.uniforms.uRes.value.set(w, h);
     this.outMat.uniforms.uRes.value.set(w, h);
   }
 
+  /** The drawn size at the current scale, and the uv transform from full-size coordinates into it. */
+  private applyScale(s: number) {
+    const w = this.w, h = this.h;
+    const sw = Math.max(1, Math.round(w * s)), sh = Math.max(1, Math.round(h * s));
+    this.sceneRT.viewport.set(0, 0, sw, sh);
+    const hw = this.rtHalf.width, hh = this.rtHalf.height;
+    const shw = Math.max(1, Math.ceil(sw / 2)), shh = Math.max(1, Math.ceil(sh / 2));
+    this.rtHalf.viewport.set(0, 0, shw, shh);
+    // Samples stay half a texel inside the drawn area, so nothing from outside it (stale pixels) bleeds in.
+    const d = this.dofMat.uniforms, c = this.composeMat.uniforms, o = this.outMat.uniforms;
+    d.uRes.value.set(sw, sh);
+    d.uUvScale.value.set(sw / w, sh / h);
+    d.uUvMax.value.set((sw - 0.5) / w, (sh - 0.5) / h);
+    c.uUvScale.value.copy(d.uUvScale.value);
+    c.uUvMax.value.copy(d.uUvMax.value);
+    c.uHalfScale.value.set(shw / hw, shh / hh);
+    c.uHalfMax.value.set((shw - 0.5) / hw, (shh - 0.5) / hh);
+    c.uTexel.value.set(1 / w, 1 / h);
+    // Sharpen in proportion to how far the picture is scaled up.
+    c.uSharpen.value = s < 0.999 ? Math.min(0.5, (1 - s) * 1.4) : 0;
+    o.uUvScale.value.copy(d.uUvScale.value);
+    o.uUvMax.value.copy(d.uUvMax.value);
+    return sh;
+  }
+
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, toTarget: THREE.WebGLRenderTarget | null = null) {
     const r = this.renderer;
+    const scale = toTarget ? 1 : THREE.MathUtils.clamp(this.scale, 0.5, 1);
+    const sh = this.applyScale(scale);
     r.setRenderTarget(this.sceneRT);
     r.clear();
     r.render(scene, camera);
 
     let src: THREE.WebGLRenderTarget = this.sceneRT;
     const L = this.lens;
-    const useDof = L.dof && this.quality !== 'draft';
+    const dofAmount = toTarget ? 1 : THREE.MathUtils.clamp(this.dofAmount, 0, 1);
+    const useDof = L.dof && this.quality !== 'draft' && dofAmount > 0.001;
     const useBloom = L.bloom > 0.01 && this.quality !== 'draft';
     const c = this.composeMat.uniforms;
     c.tColor.value = this.sceneRT.texture;
@@ -291,17 +369,31 @@ export class PostPipeline {
       const focal = 0.012 / Math.tan((camera.fov * Math.PI) / 360);
       const aperture = focal / L.fStop;
       u.uBlur.value = (aperture * focal) / 0.024 * 0.5;
-      u.uMaxCoc.value = (this.quality === 'max' ? 22 : 15) * (this.h / 1080);
-      r.setRenderTarget(this.rtHalf);
-      this.dofQuad.render(r);
+      u.uMaxCoc.value = (this.quality === 'max' ? 22 : 15) * (sh / 1080);
+      const last = this.lastDof;
+      const key = `${scale}|${u.uFocus.value}|${u.uBlur.value}|${u.uNear.value}|${u.uFar.value}|${u.uMaxCoc.value}|${this.quality}`;
+      const still = !toTarget && this.dofHalfRate && !last.reused && key === last.key && camera.matrixWorld.equals(last.view) && camera.projectionMatrix.equals(last.proj);
+      if (still) last.reused = true;
+      else {
+        r.setRenderTarget(this.rtHalf);
+        this.dofQuad.render(r);
+        if (!toTarget) {
+          last.view.copy(camera.matrixWorld);
+          last.proj.copy(camera.projectionMatrix);
+          last.key = key;
+          last.reused = false;
+        }
+      }
       c.tBlur.value = this.rtHalf.texture;
       c.uNear.value = u.uNear.value;
       c.uFar.value = u.uFar.value;
       c.uFocus.value = u.uFocus.value;
       c.uBlur.value = u.uBlur.value;
-      c.uDof.value = 1;
+      c.uDof.value = dofAmount;
     }
-    if (useDof || useBloom) {
+    // A frame without the gather leaves nothing to reuse next time.
+    if (!useDof && !toTarget) this.lastDof.reused = true;
+    if (useDof || useBloom || scale < 1) {
       // Into a plain full-size buffer: the focus blend, or only a copy out of the multisampled target for bloom.
       r.setRenderTarget(this.rtA);
       this.composeQuad.render(r);
@@ -315,6 +407,11 @@ export class PostPipeline {
     }
     const o = this.outMat.uniforms;
     o.tColor.value = src.texture;
+    if (src !== this.sceneRT) {
+      // Already scaled up to the full size by the compose pass.
+      o.uUvScale.value.set(1, 1);
+      o.uUvMax.value.set(1, 1);
+    }
     o.uExposure.value = this.exposure;
     o.uContrast.value = L.contrast;
     o.uSaturation.value = L.saturation;
