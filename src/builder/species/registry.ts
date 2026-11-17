@@ -46,6 +46,10 @@ import { build as yewPineColumn } from './trees/yew-pine-column';
 import { build as gaura } from './perennials/gaura';
 import { build as liriope } from './grasses/liriope';
 import { build as purpleConeflower } from './perennials/purple-coneflower';
+import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro';
+import { build as daylilyRed } from './perennials/daylily-red';
+import { build as fortnightLily } from './perennials/fortnight-lily';
+import { build as cannaTropicanna } from './tropicals/canna-tropicanna';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -86,6 +90,10 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'gaura': gaura,
   'liriope': liriope,
   'purple-coneflower': purpleConeflower,
+  'daylily-stella-de-oro': daylilyStellaDeOro,
+  'daylily-red': daylilyRed,
+  'fortnight-lily': fortnightLily,
+  'canna-tropicanna': cannaTropicanna,
   'annual-color': annualColor,
   'foxtail-fern': foxtailFern,
   'variegated-yucca': variegatedYucca,
