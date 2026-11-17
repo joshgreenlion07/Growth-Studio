@@ -858,7 +858,7 @@ export function buildConstruction(plan: SitePlan, ground: (p: Vec2) => number, q
   /* ---------------- Cutaway face ---------------- */
 
   const siteBox = pad(bounds(plan.site.boundary), 4);
-  const deepest = Math.max(0.6, ...digs.map((d) => d.cut.depth), ...trenches.map((t) => t.spec.depth)) + 0.35;
+  const deepest = Math.max(0.9, ...digs.map((d) => d.cut.depth), ...trenches.map((t) => t.spec.depth)) + 0.6;
   const sectionMats = new Map<string, THREE.MeshStandardMaterial>();
   const sectionMat = (key: string): { mat: THREE.MeshStandardMaterial; tile: number } => {
     const layer = key === 'soil' || key === 'fill' ? 'cut' : key === 'backfill' || key === 'base' || key === 'sand' || key === 'fines' ? key : null;

@@ -224,13 +224,14 @@ Messages use `window.postMessage`:
   the compacted base rock and the bedding layer under it for the build stages.
   Left out: pavers and flagstone 4 in base under 1 in sand, concrete 4 in
   base, synthetic grass 3 in base under 1 in fines. Other surfaces are not dug.
-- Build stages (the dock's Build stage control, `[` and `]`): Demo (bare
+- Build stages (the dock's Build stage control, the Stage menu over the 3D view, which stays in full screen, or `[` and `]`): Demo (bare
   ground, white marking paint around each dig, trench routes in APWA colors),
   Excavate, Trench (open trenches with the pipes at their cover, tracer wire on
   plastic gas pipe), Backfill, Base rock, Sand and Finished. Labels give
   depths, covers and amounts. Cut away (button or `C`) clips the yard on the
-  near side of a vertical plane through the point the camera looks at and
-  draws the ground in section there for the current stage.
+  near side of a vertical plane through the point the camera looks at (in
+  walk or fly, the ground ahead), draws the ground in section there for the
+  current stage, and moves the camera to face the cut.
 - **Library and approvals.** The Library button (top right of the 3D view) opens a panel listing every product:
   plants, trees, turf, bark/mulch/rock, maker paver, wall and curb lines, concrete, and the features
   (pergolas, gazebo, kitchens, fire, water, spa, accents) with the attached roof and California room. Each
