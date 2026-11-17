@@ -19,6 +19,7 @@ import { poolLayout, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
+import { buildHumus, type HumusBuild } from './humus';
 import { buildWater, type WaterBuild } from './waterfeatures';
 
 /** SitePlan in, a complete 3D yard out. */
@@ -31,6 +32,8 @@ export interface SceneBuild {
   plants: PlantLayer;
   /** Beds of loose stone drawn stone by stone; update() picks each tile's detail for the camera. */
   pebbles: PebbleBuild;
+  /** Black humus beds drawn crumb by crumb; update() picks each tile's detail for the camera. */
+  humus: HumusBuild;
   water: WaterBuild;
   features: FeatureBuild;
   /** Uploaded-model files the plan names that have not arrived yet. */
@@ -173,6 +176,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   };
   const turf = buildTurf(plan, gm, quality, blocked);
   const pebbles = buildPebbles(plan, gm, quality);
+  const humus = buildHumus(plan, gm, ground.surface, quality);
 
   const placements = [...expandPlants(plan, gm), ...ctx.trees];
   // Plants show in water reflections only near water: the reflection of one farther off is
@@ -198,6 +202,11 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     pebbles.object.traverse((o) => o.layers.set(WATER_LAYER_SKIP));
     root.add(pebbles.object);
   }
+  if (humus.object) {
+    // Crumbs are left out of reflections too: millimeters each, they would only shimmer there.
+    humus.object.traverse((o) => o.layers.set(WATER_LAYER_SKIP));
+    root.add(humus.object);
+  }
 
   const nightLights: NightLight[] = [
     ...features.lights,
@@ -221,6 +230,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     hard.object.visible = fin;
     if (turf.object) turf.object.visible = fin;
     if (pebbles.object) pebbles.object.visible = fin;
+    if (humus.object) humus.object.visible = fin;
     features.object.visible = fin;
     models.object.visible = fin;
     plants.object.visible = fin;
@@ -243,6 +253,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     pools,
     plants,
     pebbles,
+    humus,
     water,
     features,
     missingAssets: models.missing,
@@ -289,6 +300,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       models.dispose();
       turf.dispose();
       pebbles.dispose();
+      humus.dispose();
       plants.dispose();
     },
   };

@@ -4,6 +4,7 @@ import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
 import { WALL_FACES } from './wallfaces';
+import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -835,6 +836,53 @@ function dgSet(spec: MaterialSpec): PBRSet {
   });
 }
 
+/**
+ * A soil fill (spec.crumb: black humus, compost, dirt) as the ground paints it: the clod relief of humus-field.ts (the same the 3D bed surface is
+ * raised by, so the two agree) in soft dark browns. Clod tops a little drier and lighter, the fines between them a
+ * little darker and velvety, never black; a few short, dark shreds of bark; a very rare pale fleck. Matched to `mean`.
+ * Carries the bed's lumps by its normals where the 3D surface has sunk away (past ~12 m) and in every hollow.
+ */
+function humusGroundSet(spec: MaterialSpec): PBRSet {
+  const C = spec.crumb!;
+  const soil = C.soil.map((x) => hexRGB(x.c));
+  const cum: number[] = [];
+  C.soil.reduce((t, x) => (cum.push(t + x.share), t + x.share), 0);
+  const pickSoil = (h: number) => soil[Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v))];
+  const fiber = C.fiber.map(hexRGB);
+  const speck = C.speck.map(hexRGB);
+  const m = hexRGB(C.mean);
+  const mean: RGB = [toLin(m[0]), toLin(m[1]), toLin(m[2])];
+  // Normals at about half the relief's true slope: soft, as crumbly soil reads.
+  const px = CLOD_TILE / 1024;
+  return paint(1024, CLOD_TILE, 0.55 / (2 * px), (u, v) => {
+    const f = clodField(u, v, C.style);
+    const soft = vnoise(u * 9, v * 9, 9, 61), velvet = vnoise(u * 70, v * 70, 70, 62);
+    let c = mixRGB(soil[2], soil[1], 0.35 + soft * 0.5);
+    if (f.id >= 0) c = mixRGB(c, pickSoil(f.id), 0.25);
+    // Drier, lighter clod tops; darker but still brown down in the fines.
+    c = mulRGB(c, (0.86 + 0.2 * f.top) * (0.95 + 0.07 * velvet));
+    let h = f.h;
+    // A few short shreds of dark bark, lying in the hollows.
+    const fc = voronoi(u, v, 18, 63, 1);
+    if (fc.id > 1 - 0.38 * C.style.fibers && f.top < 0.6) {
+      const ang = fc.id * Math.PI * 9, ca = Math.cos(ang), sa = Math.sin(ang);
+      const along = (fc.dx * ca + fc.dy * sa) / 0.3, across = (-fc.dx * sa + fc.dy * ca) * 70 + Math.sin(along * 2.5 + fc.id * 20) * 1.2;
+      const strand = smooth(1, 0.4, Math.abs(across)) * smooth(1, 0.5, Math.abs(along));
+      if (strand > 0) {
+        const light = fc.id > 1 - 0.38 * C.style.fibers * C.style.lightFibers;
+        c = mixRGB(c, mulRGB(fiber[light ? 1 + Math.floor(hash(fc.id, 9) * 2) : hash(fc.id, 8) > 0.5 ? 3 : 0], 0.8 + 0.2 * velvet), strand * (light ? 0.8 : 0.6));
+        h += strand * 0.0006;
+      }
+    }
+    // Perlite: a very rare, tiny pale fleck.
+    const sp = voronoi(u, v, 300, 64, 1);
+    if (sp.id > 0.9985) c = mixRGB(c, speck[1], smooth(0.18, 0.06, sp.f1) * 0.6);
+    // The roughness channel carries the clod height instead (the ground's humus layer is matte by a constant): the 3D
+    // bed surface is raised by it, so it stands exactly where this texture's normals say.
+    return { h, c, r: f.h / CLOD_MAX };
+  }, mean);
+}
+
 /** Rounded stones packed together: river rock, black pebble, cobble. */
 /**
  * The ground under a bed of loose stones (spec.pebble): the same stones packed tight, at their size, in their colors and
@@ -1203,7 +1251,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'lawn': return lawnSet(spec);
       case 'turfArtificial': return turfSet(spec);
       case 'mulch': return mulchSet(spec);
-      case 'dg': return dgSet(spec);
+      case 'dg': return spec.crumb ? humusGroundSet(spec) : dgSet(spec);
       case 'riverRock': return stonesSet(spec, 13, 1.0, 0.3);
       case 'blackPebble': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 22, 1.0, 0.65);
       case 'cobble': return stonesSet(spec, 7, 1.2, 0.25);

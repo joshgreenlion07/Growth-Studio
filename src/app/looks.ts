@@ -32,6 +32,12 @@ export interface Look {
   layings?: { id: string; name: string }[];
   /** Four colors, light to dark, averaged from the maker's swatch. */
   palette: string[];
+  /** Bed fills: 'bark', 'humus' (humus, compost, dirt), 'rock' (rock, gravel, pebble) or 'dg'. */
+  fillType?: 'bark' | 'humus' | 'rock' | 'dg';
+  /** Bed fills: the depth it is usually spread, inches. */
+  depthIn?: number;
+  /** Rock, gravel and DG: tons per cubic yard (left out for bark and soil, ordered by the yard). */
+  tonsPerCuYd?: number;
   /** Piece face sizes in inches. */
   sizes?: [number, number][];
   /** Sizes as the maker lists them, with thickness. */
@@ -91,11 +97,16 @@ export function lookOf(m: MaterialSpec): Look {
     spec: info.spec,
     maker,
     line,
-    shelf: tag.shelf ?? SHELF[m.use] ?? (m.use === 'bed' ? (m.recipe === 'mulch' || m.id === 'humus' ? 'Bed fill' : m.recipe === 'dg' && m.id === 'decomposed-granite' ? 'Decomposed granite' : 'Rock') : m.group),
+    shelf: tag.shelf ?? SHELF[m.use] ?? (m.use === 'bed' ? (m.recipe === 'mulch' || m.crumb ? 'Bed fill' : m.recipe === 'dg' && m.id === 'decomposed-granite' ? 'Decomposed granite' : 'Rock') : m.group),
     color,
     sw: m.palette[1] ?? m.palette[0],
     palette: m.palette.slice(0, 4),
   };
+  if (m.fillType) {
+    look.fillType = m.fillType;
+    if (m.depthIn) look.depthIn = m.depthIn;
+    if (m.tonsPerCuYd) look.tonsPerCuYd = m.tonsPerCuYd;
+  }
   const lays = layingsFor(m);
   if (lays.length) {
     look.laying = true;

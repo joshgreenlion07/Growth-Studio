@@ -111,6 +111,23 @@ Messages use `window.postMessage`:
   pixels; the ground's pebble texture fills the gaps and the distance, matched
   to the stones' average color. Draft quality shows the texture alone. The
   sample "Mexican beach pebble sizes" has a 10 x 10 ft bed of each.
+- Soil fills: Black humus (compost mix) (`humus`), Compost (`compost`) and Dirt /
+  topsoil (`topsoil`), shelf `Bed fill`, `crumb` on the look, are drawn as spread
+  soil whose surface is made of soft clods (`builder/humus.ts`,
+  `engine/humus-field.ts`): a finely divided sheet over each bed, raised in the
+  vertex shader by a clod relief (lumps of 1-5 cm touching and overlapping, crumbs,
+  loose heaps, stretches of finer soil; each fill its own colors, clod size and
+  share, and fiber) and by the fill's larger lie (shovel and rake heaps, ridges,
+  a few mounds), wearing the ground's own texture for that fill, which is painted
+  from the same relief (its height rides in the texture's roughness channel). Near
+  tiles are finely divided (2 cm at Balanced; Light uses the coarse 4-5 cm grid
+  everywhere and half the loose pieces), and the relief sinks into
+  the textured ground at 7-10 m. A few loose clods and short shreds of bark lie on
+  top. Draft quality shows the texture alone. The sample "Soil fills: black humus,
+  compost, dirt" has a 10 x 10 ft bed of each and a long humus bed along a lawn.
+- Every bed look in the `ready` list carries `fillType` (`bark`, `humus` for
+  humus, compost and dirt, `rock` for rock, gravel and pebble, `dg`), `depthIn`
+  (the usual spread depth) and, for rock, gravel and DG, `tonsPerCuYd`.
 - MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
   `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
   from MSI's specs (`turf` on the look): a ground texture painted blade by blade

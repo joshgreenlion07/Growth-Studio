@@ -275,6 +275,46 @@ export function samplePebbleSizes(): SitePlan {
   };
 }
 
+/**
+ * The soil fills side by side: black humus (compost mix), compost and dirt / topsoil, a 10 x 10 ft bed of each, steel
+ * edged, with a long curving bed of black humus behind them along a lawn (about 30 m2, for the look across a yard), and a
+ * walk in front.
+ */
+export function sampleHumus(): SitePlan {
+  const S = 'sample' as const;
+  const F = 3.048; // 10 ft
+  const x0 = 0.8, gap = 0.9;
+  // The long bed at the back, a gentle curve along its lawn.
+  const ly0 = 1.0, lw = 3 * F + 2 * gap, n = 14;
+  const front: Vec2[] = Array.from({ length: n + 1 }, (_, i): Vec2 => [x0 + (lw * i) / n, ly0 + 0.4 + 0.4 * Math.sin((i / n) * Math.PI * 2)]);
+  const back: Vec2[] = Array.from({ length: n + 1 }, (_, i): Vec2 => [x0 + lw - (lw * i) / n, ly0 + 3.2 + 0.3 * Math.cos((i / n) * Math.PI * 1.5)]);
+  const long = [...front, ...back];
+  const y0 = ly0 + 4.6;
+  const beds = (['humus', 'compost', 'topsoil'] as const).map((id, i) => {
+    const x = x0 + i * (F + gap);
+    return { id, poly: [[x, y0], [x + F, y0], [x + F, y0 + F], [x, y0 + F]] as Vec2[] };
+  });
+  const W = x0 * 2 + lw, walkY = y0 + F + 0.3;
+  return {
+    schemaVersion: 1,
+    site: { name: 'Soil fills: black humus, compost and dirt, 10 x 10 ft beds', boundary: [[0, 0], [W, 0], [W, walkY + 2.2], [0, walkY + 2.2]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: [[0.3, 0.3], [W - 0.3, 0.3], [W - 0.3, ly0 + 4.1], [0.3, ly0 + 4.1]] },
+      { id: 'humus-long', source: S, kind: 'bed', catalogId: 'humus', polygon: long, note: 'Black humus (compost mix), long bed along the lawn' },
+      ...beds.map((b) => ({ id: `fill-${b.id}`, source: S, kind: 'bed' as const, catalogId: b.id, polygon: b.poly, note: `${b.id === 'humus' ? 'Black humus (compost mix)' : b.id === 'compost' ? 'Compost' : 'Dirt / topsoil'}, 10 x 10 ft` })),
+      { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[0.4, walkY], [W - 0.4, walkY], [W - 0.4, walkY + 1.2], [0.4, walkY + 1.2]] },
+    ],
+    lines: [
+      ...beds.map((b) => ({ id: `edge-${b.id}`, source: S, kind: 'edging' as const, catalogId: 'steel-edging', points: [...b.poly, b.poly[0]], height: 0.05 })),
+      { id: 'edge-long', source: S, kind: 'edging', catalogId: 'steel-edging', points: [...long, long[0]], height: 0.05 },
+    ],
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
 /** A small backyard with every kind of buried run, for the build stages. */
 export function sampleUtilities(): SitePlan {
   const S = 'sample' as const;
@@ -326,5 +366,6 @@ export const SAMPLES = [
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
+  { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
 ];
