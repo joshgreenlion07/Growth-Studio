@@ -441,7 +441,7 @@ export const MATERIALS: MaterialSpec[] = [
       soil: [{ c: '#5e4a38', share: 0.3 }, { c: '#685340', share: 0.28 }, { c: '#523f30', share: 0.2 }, { c: '#735e4a', share: 0.16 }, { c: '#806a54', share: 0.06 }],
       fiber: ['#5a4636', '#6e5946', '#7f6a55', '#4e3d2f'],
       speck: ['#a89a86', '#8e8270'],
-      mean: '#64503e',
+      mean: '#544436',
       mound: 0.03,
       style: { clods: 0.45, scale: 0.75, fibers: 0.12, lightFibers: 0 },
       loose: { clods: 8, shreds: 1, shredIn: [0.4, 0.8] },

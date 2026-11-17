@@ -4,20 +4,22 @@ import { materialById, type CrumbSpec, type MaterialSpec } from '../siteplan/cat
 import { bounds, rng } from '../siteplan/geometry';
 import type { SitePlan, Vec2, Zone } from '../siteplan/types';
 import { vnoise } from '../engine/noise';
-import { CLOD_MAX, CLOD_TILE, MACRO_GLSL, clodField, macroHeight, type ClodStyle } from '../engine/humus-field';
+import { CLOD_MAX, CLOD_TILE, clodField, macroHeight, type ClodStyle } from '../engine/humus-field';
 import { materialTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import type { GroundModel } from './ground';
 import type { Quality } from '../engine/post';
 
 /**
- * Beds of black humus (a material with spec.crumb), drawn as spread soil whose surface is made of soft clods.
+ * Beds of soil fill (a material with spec.crumb: black humus, compost, dirt), drawn as spread soil whose surface is made
+ * of soft clods.
  *
  * The bed surface: a finely divided sheet over each bed, raised in the vertex shader by the clod relief of
- * humus-field.ts (lumps of 1-5 cm touching and overlapping, crumbs, loose heaps; the very relief the ground's humus
- * texture is painted from) and by the fill's larger lie (shovel and rake heaps, ridges and hollows, a few mounds). It
+ * humus-field.ts (lumps of 1-5 cm touching and overlapping, crumbs, loose heaps; the very relief the ground's texture for
+ * the fill is painted from, read from that texture's roughness channel) and by the fill's larger lie (shovel and rake
+ * heaps, ridges and hollows, a few mounds; baked with the ground height and the bed mask into a small per-bed texture). It
  * wears the ground's own humus texture, so its color and fine shading are the ground's. It is cut into 2 m tiles: near
- * ones divided every 8 mm, the rest every 3 cm; past ~10 m the relief sinks smoothly into the ground (the sheet drops
+ * ones divided every 1 cm, the rest every 3 cm; past ~7 m the relief sinks smoothly into the ground (the sheet drops
  * just below it), where the texture alone carries the bed. At the bed's edge it dips under the ground, so the fill
  * settles against the edging.
  *
@@ -29,7 +31,7 @@ import type { Quality } from '../engine/post';
  */
 
 const SHEET_TILE = 2;
-const NEAR_SEGS = 250;
+const NEAR_SEGS = 200;
 const MID_SEGS = 64;
 /** The sheet sits this far down, so the deepest hollows and the faded-out sheet are just under the ground. */
 const SINK = 0.006;
@@ -41,8 +43,8 @@ const CLUMP_SHAPES = 4;
 const shapeCache = new Map<string, THREE.BufferGeometry>();
 
 /** Distances (meters, balanced quality): the sheet's fine division, and where each kind fades out. */
-const SHEET_NEAR = 2.6;
-const SHEET_FADE: [number, number] = [10, 14];
+const SHEET_NEAR = 2.2;
+const SHEET_FADE: [number, number] = [7, 10];
 const CLOD_NEAR = 2.2;
 const CLOD_FADE: [number, number] = [5, 7];
 const SHRED_FADE: [number, number] = [3, 4];
@@ -102,7 +104,8 @@ function gridShape(segs: number): THREE.BufferGeometry {
 interface SheetUniforms {
   uBase: { value: THREE.DataTexture };
   uBaseBox: { value: THREE.Vector4 };
-  uBaseRes: { value: THREE.Vector2 };
+  uBaseRef: { value: number };
+  uBaseStep: { value: number };
   uFade: { value: THREE.Vector2 };
 }
 
@@ -127,30 +130,21 @@ function sheetMaterial(spec: MaterialSpec, shared: SheetUniforms, lod: number): 
       .replace(
         '#include <common>',
         `#include <common>
-uniform sampler2D uClod; uniform sampler2D uBase; uniform vec4 uBaseBox; uniform vec2 uBaseRes;
+uniform sampler2D uClod; uniform sampler2D uBase; uniform vec4 uBaseBox; uniform float uBaseRef; uniform float uBaseStep;
 uniform float uClodScale; uniform float uClodMax; uniform vec2 uFade; uniform float uLod;
-${MACRO_GLSL}
-vec2 hBase(vec2 xz) {
-  vec2 g = (xz - uBaseBox.xy) / uBaseBox.z - 0.5;
-  vec2 i = floor(g), f = g - i;
-  ivec2 hi = ivec2(uBaseRes) - 1;
-  ivec2 i0 = clamp(ivec2(i), ivec2(0), hi), i1 = clamp(ivec2(i) + 1, ivec2(0), hi);
-  vec2 a = texelFetch(uBase, i0, 0).rg, b = texelFetch(uBase, ivec2(i1.x, i0.y), 0).rg;
-  vec2 c = texelFetch(uBase, ivec2(i0.x, i1.y), 0).rg, d = texelFetch(uBase, i1, 0).rg;
-  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}`,
+// The bed's base texture: r ground height (above uBaseRef), g bed mask, b the fill's larger lie (humus-field macroHeight).
+vec4 hS(vec2 xz) { return textureLod(uBase, (xz - uBaseBox.xy) * uBaseBox.zw, 0.0); }`,
       )
       .replace(
         '#include <beginnormal_vertex>',
         `vec2 hXZ = (modelMatrix * vec4(position, 1.0)).xz;
-vec2 hB = hBase(hXZ);
-float hMask = clamp(hB.y, 0.0, 1.0);
-float hK = hMask * (1.0 - smoothstep(uFade.x, uFade.y, distance(vec3(hXZ.x, hB.x, hXZ.y), cameraPosition)));
-float hY = hB.x - ${SINK.toFixed(4)} + (textureLod(uClod, hXZ * uClodScale, uLod).g * uClodMax + hMacro(hXZ)) * hK - (1.0 - hMask) * 0.03;
-const float hE = 0.05;
-float hDx = hBase(hXZ + vec2(hE, 0.0)).x - hBase(hXZ - vec2(hE, 0.0)).x + (hMacro(hXZ + vec2(hE, 0.0)) - hMacro(hXZ - vec2(hE, 0.0))) * hK;
-float hDz = hBase(hXZ + vec2(0.0, hE)).x - hBase(hXZ - vec2(0.0, hE)).x + (hMacro(hXZ + vec2(0.0, hE)) - hMacro(hXZ - vec2(0.0, hE))) * hK;
-vec3 objectNormal = normalize(vec3(-hDx / (2.0 * hE), 1.0, -hDz / (2.0 * hE)));
+vec4 hB = hS(hXZ), hBx = hS(hXZ + vec2(uBaseStep, 0.0)), hBz = hS(hXZ + vec2(0.0, uBaseStep));
+float hMask = clamp(hB.g, 0.0, 1.0);
+float hBase = hB.r + uBaseRef;
+float hK = hMask * (1.0 - smoothstep(uFade.x, uFade.y, distance(vec3(hXZ.x, hBase, hXZ.y), cameraPosition)));
+float hY = hBase - ${SINK.toFixed(4)} + (textureLod(uClod, hXZ * uClodScale, uLod).g * uClodMax + hB.b) * hK - (1.0 - hMask) * 0.03;
+// The normal follows the ground and the larger lie; the clods' own shading comes from the normal map, as on the ground.
+vec3 objectNormal = normalize(vec3(-(hBx.r - hB.r + (hBx.b - hB.b) * hK), uBaseStep, -(hBz.r - hB.r + (hBz.b - hB.b) * hK)));
 #ifdef USE_MAP
   vMapUv = hXZ * uClodScale;
 #endif
@@ -161,7 +155,7 @@ vec3 objectNormal = normalize(vec3(-hDx / (2.0 * hE), 1.0, -hDz / (2.0 * hE)));
       .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.x, hY - modelMatrix[3][1], position.z);');
   };
   // The near and the far sheet compile to one program; only the clod mip level differs.
-  m.customProgramCacheKey = () => 'humus-sheet-1';
+  m.customProgramCacheKey = () => 'humus-sheet-2';
   return m;
 }
 
@@ -426,29 +420,44 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
     }
     const step = Math.max(BASE_STEP, (bb.maxX - bb.minX) / 1024, (bb.maxY - bb.minY) / 1024);
     const W = Math.ceil((bb.maxX - bb.minX) / step), H = Math.ceil((bb.maxY - bb.minY) / step);
-    const baseData = new Float32Array(W * H * 4);
+    // Ground height, bed mask (softened over a texel at the edge) and the larger lie, per texel; kept in floats here
+    // for placing tiles, sent as half floats (linear filtering everywhere) relative to the lowest point.
+    const inside = new Uint8Array(W * H), hgt = new Float32Array(W * H);
     const p: Vec2 = [0, 0];
-    const e = step * 0.6;
+    let ref = Infinity;
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
-        const x = bb.minX + (i + 0.5) * step, y = bb.minY + (j + 0.5) * step;
-        p[0] = x;
-        p[1] = y;
-        let k = isFill(p) ? 1 : 0;
-        if (k) k = (2 + (isFill([x + e, y]) ? 1 : 0) + (isFill([x - e, y]) ? 1 : 0) + (isFill([x, y + e]) ? 1 : 0) + (isFill([x, y - e]) ? 1 : 0)) / 6;
-        const o = (j * W + i) * 4;
-        baseData[o] = surface(p);
-        baseData[o + 1] = k;
+        p[0] = bb.minX + (i + 0.5) * step;
+        p[1] = bb.minY + (j + 0.5) * step;
+        inside[j * W + i] = isFill(p) ? 1 : 0;
+        hgt[j * W + i] = surface(p);
+        ref = Math.min(ref, hgt[j * W + i]);
       }
     }
-    const baseTex = new THREE.DataTexture(baseData, W, H, THREE.RGBAFormat, THREE.FloatType);
-    baseTex.minFilter = baseTex.magFilter = THREE.NearestFilter;
+    const at = (i: number, j: number) => inside[Math.min(H - 1, Math.max(0, j)) * W + Math.min(W - 1, Math.max(0, i))];
+    const mask = new Float32Array(W * H);
+    const half = new Uint16Array(W * H * 4);
+    const toHalf = THREE.DataUtils.toHalfFloat;
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const k = j * W + i;
+        mask[k] = inside[k] ? (2 + at(i + 1, j) + at(i - 1, j) + at(i, j + 1) + at(i, j - 1)) / 6 : 0;
+        half[k * 4] = toHalf(hgt[k] - ref);
+        half[k * 4 + 1] = toHalf(mask[k]);
+        half[k * 4 + 2] = toHalf(macroHeight(bb.minX + (i + 0.5) * step, bb.minY + (j + 0.5) * step));
+        half[k * 4 + 3] = 0;
+      }
+    }
+    const baseTex = new THREE.DataTexture(half, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
+    baseTex.minFilter = baseTex.magFilter = THREE.LinearFilter;
+    baseTex.wrapS = baseTex.wrapT = THREE.ClampToEdgeWrapping;
     baseTex.needsUpdate = true;
     baseTexes.push(baseTex);
     const shared: SheetUniforms = {
       uBase: { value: baseTex },
-      uBaseBox: { value: new THREE.Vector4(bb.minX, bb.minY, step, 0) },
-      uBaseRes: { value: new THREE.Vector2(W, H) },
+      uBaseBox: { value: new THREE.Vector4(bb.minX, bb.minY, 1 / (W * step), 1 / (H * step)) },
+      uBaseRef: { value: ref },
+      uBaseStep: { value: step },
       uFade: { value: new THREE.Vector2(SHEET_FADE[0] * reach, SHEET_FADE[1] * reach) },
     };
     const sheetNear = sheetMaterial(spec, shared, 0), sheetFar = sheetMaterial(spec, shared, 1.6);
@@ -462,10 +471,10 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
         const i0 = Math.floor((tx - bb.minX) / step), j0 = Math.floor((tz - bb.minY) / step);
         for (let j = j0; j < Math.min(H, j0 + per + 1); j++) {
           for (let i = i0; i < Math.min(W, i0 + per + 1); i++) {
-            const o = (j * W + i) * 4;
-            if (baseData[o + 1] > 0) any = true;
-            lo = Math.min(lo, baseData[o]);
-            hi = Math.max(hi, baseData[o]);
+            const o = j * W + i;
+            if (mask[o] > 0) any = true;
+            lo = Math.min(lo, hgt[o]);
+            hi = Math.max(hi, hgt[o]);
           }
         }
         if (!any) continue;
@@ -483,7 +492,7 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
           return mesh;
         };
         tiles.push({
-          box: new THREE.Box3(new THREE.Vector3(tx, lo - 0.05, tz), new THREE.Vector3(tx + SHEET_TILE, hi + CLOD_MAX + 0.06, tz + SHEET_TILE)),
+          box: new THREE.Box3(new THREE.Vector3(tx, lo - 0.05, tz), new THREE.Vector3(tx + SHEET_TILE, hi + CLOD_MAX + 0.08, tz + SHEET_TILE)),
           slots: [{ near: [make(nearGeo, sheetNear)], far: [make(farGeo, sheetFar)], nearTo: SHEET_NEAR * reach, hideAt: shared.uFade.value.y, state: -1 }],
         });
         counts.sheetTiles++;
@@ -491,7 +500,7 @@ export function buildHumus(plan: SitePlan, gm: GroundModel, surface: (p: Vec2) =
     }
   }
   // The tiles share the two grids (and so one bounding sphere each, set to hold the tallest tile's relief).
-  for (const g of [nearGeo, farGeo]) g.boundingSphere = new THREE.Sphere(new THREE.Vector3(SHEET_TILE / 2, 0, SHEET_TILE / 2), Math.hypot(SHEET_TILE / 2, SHEET_TILE / 2, spreadMax + CLOD_MAX + 0.08));
+  for (const g of [nearGeo, farGeo]) g.boundingSphere = new THREE.Sphere(new THREE.Vector3(SHEET_TILE / 2, 0, SHEET_TILE / 2), Math.hypot(SHEET_TILE / 2, SHEET_TILE / 2, spreadMax + CLOD_MAX + 0.1));
 
   // Loose clods and shreds, instanced in 1.5 m tiles.
   const fadeC = new THREE.Vector2(CLOD_FADE[0] * reach, CLOD_FADE[1] * reach), fadeS = new THREE.Vector2(SHRED_FADE[0] * reach, SHRED_FADE[1] * reach);

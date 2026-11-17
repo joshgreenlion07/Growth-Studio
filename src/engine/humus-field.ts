@@ -8,8 +8,7 @@ import { clamp01, vnoise } from './noise';
  *   and overlapping, smaller crumbs between and on them, and here and there a loose heap a hand across, over fine,
  *   velvety soil.
  * - macroHeight: the larger lie of the spread fill in world meters (shovel and rake heaps, small ridges and hollows, a few
- *   higher mounds), not tiled. The same integer-hash noise is written in GLSL in builder/humus.ts, so the CPU places
- *   pieces exactly on what the GPU draws.
+ *   higher mounds), not tiled. builder/humus.ts bakes it into each bed's base texture, and places loose pieces on it.
  */
 
 export const CLOD_TILE = 1.6;
@@ -36,13 +35,17 @@ function lumps(u: number, v: number, cells: number, seed: number, shape: (id: nu
     for (let i = -1; i <= 1; i++) {
       const cx = ix + i, cy = iy + j;
       const wx = ((cx % cells) + cells) % cells, wy = ((cy % cells) + cells) % cells;
+      // Reach is at most 0.6 cell: most neighbors are out of it, so test the distance before anything else.
+      const px = cx + 0.5 + (cellHash(wx, wy, seed) - 0.5) * 0.9, py = cy + 0.5 + (cellHash(wx, wy, seed + 9) - 0.5) * 0.9;
+      const d2 = (px - x) * (px - x) + (py - y) * (py - y);
+      if (d2 >= 0.36) continue;
       const lid = cellHash(wx, wy, seed + 31);
       const sh = shape(lid);
       if (!sh) continue;
-      const px = cx + 0.5 + (cellHash(wx, wy, seed) - 0.5) * 0.9, py = cy + 0.5 + (cellHash(wx, wy, seed + 9) - 0.5) * 0.9;
-      const d = Math.hypot(px - x, py - y) / sh[0];
-      if (d >= 1) continue;
-      const k = (1 - d * d) ** 1.3 * sh[1];
+      const t = 1 - d2 / (sh[0] * sh[0]);
+      if (t <= 0) continue;
+      // t^1.25: a soft, gently shouldered lump.
+      const k = t * Math.sqrt(Math.sqrt(t)) * sh[1];
       if (k > best) {
         best = k;
         id = lid;
@@ -110,7 +113,7 @@ export function clodField(u: number, v: number, st: ClodStyle = PLAIN): ClodSamp
   return { h, top: clamp01(clods / 0.012 + s1.h / 0.01), id };
 }
 
-/* Integer-hash value noise (the GLSL twin is in builder/humus.ts). */
+/* Integer-hash value noise. */
 function ihash(i: number, j: number, seed: number): number {
   let h = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul(j | 0, 0x165667b1) ^ Math.imul(seed | 0, 0x9e3779b1);
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
@@ -141,26 +144,3 @@ export function macroHeight(x: number, z: number): number {
     sstep(0.6, 0.95, inoise(x * 1.1, z * 1.1, 4)) * 0.022
   );
 }
-
-/** GLSL of macroHeight (WebGL2), exactly the same numbers. */
-export const MACRO_GLSL = /* glsl */ `
-float hIhash(int i, int j, int seed) {
-  uint h = uint(i) * 0x27d4eb2du ^ uint(j) * 0x165667b1u ^ uint(seed) * 0x9e3779b1u;
-  h = (h ^ (h >> 15u)) * 0x85ebca6bu;
-  h = (h ^ (h >> 13u)) * 0xc2b2ae35u;
-  h ^= h >> 16u;
-  return float(h) / 4294967296.0;
-}
-float hInoise(vec2 p, int seed) {
-  vec2 i = floor(p);
-  vec2 f = p - i;
-  f = f * f * (3.0 - 2.0 * f);
-  int ix = int(i.x), iy = int(i.y);
-  float a = hIhash(ix, iy, seed), b = hIhash(ix + 1, iy, seed), c = hIhash(ix, iy + 1, seed), d = hIhash(ix + 1, iy + 1, seed);
-  return a + (b - a) * f.x + (c - a) * f.y + (a - b - c + d) * f.x * f.y;
-}
-float hMacro(vec2 p) {
-  return 0.0165 + (hInoise(p * 3.2, 1) - 0.5) * 0.022 + (hInoise(p * 7.5, 2) - 0.5) * 0.011
-    + smoothstep(0.62, 0.92, hInoise(p * 11.0, 3)) * 0.014 + smoothstep(0.6, 0.95, hInoise(p * 1.1, 4)) * 0.022;
-}
-`;

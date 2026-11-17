@@ -111,16 +111,22 @@ Messages use `window.postMessage`:
   pixels; the ground's pebble texture fills the gaps and the distance, matched
   to the stones' average color. Draft quality shows the texture alone. The
   sample "Mexican beach pebble sizes" has a 10 x 10 ft bed of each.
-- Black humus (compost mix) (`humus`, shelf `Bed fill`, `crumb` on the look) is
-  drawn as loose soil (`builder/humus.ts`): the bed crowns a little and settles
-  against its edging with soft rake lumps; near-black crumbs (most heaped in
-  small aggregates), soft crumb-covered clumps of 1-3.5 cm and strands of
-  shredded bark and fiber (a few lighter) sit on a matching humus texture with
-  rare pale specks. Each kind shrinks away into the texture over the last stretch
-  before it stops drawing (crumbs within about 2 m, fibers 5 m, clumps 8 m), in
-  1.5 m tiles with a dead band, so nothing pops. Draft quality shows the texture
-  alone. The sample "Black humus (compost mix)" has a 10 x 10 ft bed and a long
-  bed along a lawn.
+- Soil fills: Black humus (compost mix) (`humus`), Compost (`compost`) and Dirt /
+  topsoil (`topsoil`), shelf `Bed fill`, `crumb` on the look, are drawn as spread
+  soil whose surface is made of soft clods (`builder/humus.ts`,
+  `engine/humus-field.ts`): a finely divided sheet over each bed, raised in the
+  vertex shader by a clod relief (lumps of 1-5 cm touching and overlapping, crumbs,
+  loose heaps, stretches of finer soil; each fill its own colors, clod size and
+  share, and fiber) and by the fill's larger lie (shovel and rake heaps, ridges,
+  a few mounds), wearing the ground's own texture for that fill, which is painted
+  from the same relief (its height rides in the texture's roughness channel). Near
+  tiles are divided every 1 cm, farther ones every 3 cm, and the relief sinks into
+  the textured ground at 7-10 m. A few loose clods and short shreds of bark lie on
+  top. Draft quality shows the texture alone. The sample "Soil fills: black humus,
+  compost, dirt" has a 10 x 10 ft bed of each and a long humus bed along a lawn.
+- Every bed look in the `ready` list carries `fillType` (`bark`, `humus` for
+  humus, compost and dirt, `rock` for rock, gravel and pebble, `dg`), `depthIn`
+  (the usual spread depth) and, for rock, gravel and DG, `tonsPerCuYd`.
 - MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
   `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
   from MSI's specs (`turf` on the look): a ground texture painted blade by blade
