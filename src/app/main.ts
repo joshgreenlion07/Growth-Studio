@@ -711,6 +711,7 @@ function setYears(y: number) {
 function setStage(stage: BuildStage, tellParent = true) {
   studio?.setStage(stage);
   document.querySelectorAll<HTMLButtonElement>('#stages button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.stage === stage)));
+  $<HTMLSelectElement>('#stage-select').value = stage;
   $('#stage-out').textContent = BUILD_STAGES.find((s) => s.id === stage)?.label ?? '';
   showStageNote();
   if (tellParent && EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'stage', stage }, embedOrigin);
@@ -735,6 +736,14 @@ function stepStage(by: number) {
 function initStages() {
   $('#btn-cutaway').addEventListener('click', () => studio?.setCutaway(!studio.cutawayOn));
   $('#btn-library').addEventListener('click', () => setLibrary(!libraryOpen()));
+  // The same choice over the 3D view, so it is there in full screen too (the dock is hidden then).
+  const pick = $<HTMLSelectElement>('#stage-select');
+  for (const s of BUILD_STAGES) pick.append(h('option', { value: s.id, text: s.label }));
+  pick.value = 'finished';
+  pick.addEventListener('change', () => {
+    setStage(pick.value as BuildStage);
+    pick.blur();
+  });
   const seg = $('#stages');
   for (const s of BUILD_STAGES) {
     const b = h('button', { type: 'button', 'data-stage': s.id, text: s.label, 'aria-pressed': String(s.id === 'finished'), title: `${s.title} ([ and ] step through the stages)` });

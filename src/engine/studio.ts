@@ -942,18 +942,39 @@ export class Studio {
       this.onCutawayChanged(false);
       return;
     }
-    const dir = new THREE.Vector3().subVectors(this.controls.target, this.camera.position);
-    dir.y = 0;
+    // Where the cut goes: the point the orbit view is centered on. In first person that is the ground point
+    // straight ahead (2 to 20 m away), since the view there is not centered on the yard.
+    const cam = this.camera.position;
+    const fwd = new THREE.Vector3();
+    this.camera.getWorldDirection(fwd);
+    const at = this.controls.target.clone();
+    if (this.navMode !== 'orbit') {
+      const d = fwd.y < -0.05 ? (cam.y - this.groundAt(cam.x, cam.z)) / -fwd.y : 6;
+      at.copy(cam).addScaledVector(fwd, Math.min(20, Math.max(2, d)));
+    }
+    const g = this.groundAt(at.x, at.z);
+    at.y = g;
+    const dir = new THREE.Vector3(at.x - cam.x, 0, at.z - cam.z);
     // Looking straight down: cut along the bottom of the screen instead.
     if (dir.lengthSq() < 1e-6) dir.set(0, 1, 0).applyQuaternion(this.camera.quaternion).setY(0);
     if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
     dir.normalize();
-    const plane = new THREE.Plane(dir, -dir.dot(this.controls.target));
+    const plane = new THREE.Plane(dir, -dir.dot(at));
     this.renderer.localClippingEnabled = true;
     this.dropCutawayFace();
     this.cutaway = { plane, face: null };
     this.stageLabels.clip = plane;
     this.refreshCutaway();
+    // Face the cut: step back from it, a little above the ground, looking at the ground just below grade there,
+    // so the slice fills the view instead of the empty space where the near side of the yard was.
+    const height = this.navMode === 'walk' ? EYE_HEIGHT : 1.2;
+    this.jumpTo({
+      id: 'cutaway',
+      label: 'Cut away',
+      eye: new THREE.Vector3(at.x - dir.x * 3.6, g + height, at.z - dir.z * 3.6),
+      target: new THREE.Vector3(at.x, g - 0.35, at.z),
+      fov: this.camera.fov,
+    });
     this.onCutawayChanged(true);
   }
 
