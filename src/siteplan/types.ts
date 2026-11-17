@@ -40,6 +40,11 @@ export interface Zone extends ItemBase {
   elevation?: number;
   /** Beds: a raised planter with walls of this material and height (m). */
   raised?: { wallCatalogId: string; height: number };
+  /**
+   * What goes under the surface, for the build stages (meters): compacted base rock and the bedding
+   * layer (sand under pavers, fines under synthetic grass). Left out, the material's usual depths.
+   */
+  layers?: { base?: number; bedding?: number };
 }
 
 /** steps: a flight of stairs whose top edge is the line, going down away from a raised zone. */
@@ -170,6 +175,60 @@ export interface Ruler {
   label?: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Underground utilities                                                */
+
+/** What a buried run carries. Paint and pipe colors follow it (APWA marking colors for paint). */
+export type UtilityKind = 'electrical' | 'lighting' | 'gas' | 'irrigation' | 'water' | 'drain';
+
+/** One pipe, conduit or cable in a trench. */
+export interface UtilityRun {
+  kind: UtilityKind;
+  /** What it is, for labels, such as "3/4 in PVC conduit". */
+  label: string;
+  /** Outside diameter of the pipe, conduit or cable, meters. */
+  od: number;
+  /** Cover: top of the pipe to finished grade, meters. */
+  cover: number;
+  /** Where the cover comes from, for labels, such as "CEC Table 300.5". */
+  code?: string;
+  /** Plastic gas pipe: an 18 AWG copper tracer wire laid on top of it. */
+  tracer?: boolean;
+}
+
+/** A trench route. One run is a single trench; two or more share a joint trench. */
+export interface UtilityLine extends ItemBase {
+  /** Route, in order. */
+  points: Vec2[];
+  runs: UtilityRun[];
+  /**
+   * Joint trench: clear space kept between runs stacked in it, meters. Runs keep their own cover; the
+   * deeper one is pushed down when it would come closer than this. Left out, 0.15 (6 in).
+   */
+  gap?: number;
+}
+
+export type UtilityPointKind =
+  | 'panel' | 'subpanel' | 'outlet' | 'junction' | 'transformer'
+  | 'gas-meter' | 'gas-stub'
+  | 'water-meter' | 'backflow' | 'controller' | 'valves' | 'hose-bib'
+  | 'stub';
+
+/** Equipment a run starts or ends at: an electrical panel, a gas meter, a valve box. */
+export interface UtilityPoint extends ItemBase {
+  kind: UtilityPointKind;
+  position: Vec2;
+  /** The designer's name for it, such as "Main panel". Left out, the kind's own name. */
+  label?: string;
+  /** Degrees clockwise from facing down the page. */
+  rotationDeg?: number;
+}
+
+export interface Utilities {
+  lines: UtilityLine[];
+  points: UtilityPoint[];
+}
+
 export interface SitePlan {
   schemaVersion: 1;
   site: SiteInfo;
@@ -183,6 +242,8 @@ export interface SitePlan {
   models?: ModelPlacement[];
   /** Dimensions drawn with the ruler. Left out of plans saved before they existed. */
   rulers?: Ruler[];
+  /** Underground utilities: trench routes and the equipment they connect. Left out, none. */
+  utilities?: Utilities;
 }
 
 export const EMPTY_PLAN = (): SitePlan => ({

@@ -6,6 +6,7 @@ import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
+import { buildConstruction, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { buildGround, groundModel, WATER_LEVEL, type GroundModel } from './ground';
@@ -39,6 +40,10 @@ export interface SceneBuild {
   fallMats: THREE.ShaderMaterial[];
   /** Expanded plant placements, including mass-planted beds. */
   plantCount: number;
+  /** The yard as it is built: pits, trenches, pipes, base and bedding layers, marking paint and equipment. */
+  construction: ConstructionBuild;
+  /** Show one build stage. 'finished' (the default) is the finished yard. */
+  setStage(stage: BuildStage): void;
   /**
    * Rebuild only the paving, walls, curbs, fences and steps for a plan that differs from the
    * built one in their looks alone (see hardscapeOnlyChange). The rest of the yard is kept.
@@ -131,6 +136,11 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const ctx = buildContext(plan);
   const pools = poolLayout(plan, WATER_LEVEL);
   const ground = buildGround(plan, gm, quality, pools);
+  const construction = buildConstruction(plan, ground.surface, quality);
+  if (construction.cut) {
+    ground.stage.uCut.value = construction.cut.texture;
+    ground.stage.uCutBox.value.copy(construction.cut.box);
+  }
   let hard = buildHardscape(plan, gm.height, pools);
   const siteC = centroid(plan.site.boundary);
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
@@ -173,7 +183,7 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
   const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
 
-  root.add(ctx.object, ground.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
+  root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
   if (turf.object) {
     // Lawn blades are left out of reflections for speed.
     turf.object.layers.set(WATER_LAYER_SKIP);
@@ -188,6 +198,32 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
 
   const surfaces = [...ground.surfaces, ...hard.surfaces, ...structs.surfaces, ...features.surfaces, ...models.surfaces, ...plants.proxies];
   const glow = [...structs.glass, ...features.glow, ...hard.glow];
+
+  // Build stages: before the yard is finished only plants that were already there (and the neighbors' trees) stand.
+  // They are built the first time a stage asks for them.
+  let stage: BuildStage = 'finished';
+  let years = 3;
+  let standing: PlantLayer | null = null;
+  const applyStage = () => {
+    const fin = stage === 'finished';
+    hard.object.visible = fin;
+    if (turf.object) turf.object.visible = fin;
+    features.object.visible = fin;
+    models.object.visible = fin;
+    plants.object.visible = fin;
+    if (!fin && !standing) {
+      standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel });
+      standing.object.name = 'plants-standing';
+      standing.setYears(years);
+      root.add(standing.object);
+    }
+    if (standing) standing.object.visible = !fin;
+    ground.stage.uSoil.value = fin ? 0 : 1;
+    const open = !construction.cut ? 0 : stage === 'trench' ? 2 : stage === 'excavate' || stage === 'backfill' || stage === 'base' || stage === 'bedding' ? 1 : 0;
+    ground.stage.uCutCh.value.set(open === 1 ? 1 : 0, open === 2 ? 1 : 0);
+    construction.setStage(stage);
+  };
+
   return {
     root,
     gm,
@@ -201,6 +237,11 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
     glow,
     fallMats: [...water.fallMats, ...features.fallMats],
     plantCount: placements.length - ctx.trees.length,
+    construction,
+    setStage(s: BuildStage) {
+      stage = s;
+      applyStage();
+    },
     restyleHardscape(next: SitePlan) {
       const old = hard;
       hard = buildHardscape(next, gm.height, pools);
@@ -214,13 +255,18 @@ export function buildScene(plan: SitePlan, quality: Quality, mirror: PlanarMirro
       swap(surfaces, old.surfaces, hard.surfaces);
       swap(glow, old.glow, hard.glow);
       old.dispose();
+      hard.object.visible = stage === 'finished';
     },
     setYears(y: number) {
+      years = y;
       plants.setYears(y);
+      standing?.setYears(y);
     },
     dispose() {
       ctx.dispose();
       ground.dispose();
+      construction.dispose();
+      standing?.dispose();
       pools.dispose();
       hard.dispose();
       structs.dispose();

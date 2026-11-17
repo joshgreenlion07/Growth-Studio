@@ -1,8 +1,10 @@
 import { FEATURES, LAYING_PATTERNS, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById, type LayingPattern } from './catalog';
 import { area, uid } from './geometry';
 import type {
-  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, Vec2, WaterFeature, Zone,
+  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, UtilityKind, UtilityLine,
+  UtilityPoint, UtilityPointKind, UtilityRun, Vec2, WaterFeature, Zone,
 } from './types';
+import { UTILITY_DEFAULT_COVER, UTILITY_KIND_NAME, UTILITY_POINT_NAME } from './utilities';
 
 export interface CleanResult {
   plan: SitePlan;
@@ -193,6 +195,13 @@ export function cleanPlan(input: unknown): CleanResult {
       if (e > 0.005) z.elevation = e;
     }
     if (LAYING_PATTERNS.includes(it.laying as LayingPattern)) z.laying = it.laying as LayingPattern;
+    const ly = it.layers as Record<string, unknown> | undefined;
+    if (kind !== 'bed' && ly && typeof ly === 'object') {
+      const out: NonNullable<Zone['layers']> = {};
+      if (ly.base !== undefined && ly.base !== null) out.base = num(ly.base, 0.1, 0, 0.6);
+      if (ly.bedding !== undefined && ly.bedding !== null) out.bedding = num(ly.bedding, 0.025, 0, 0.15);
+      if (out.base !== undefined || out.bedding !== undefined) z.layers = out;
+    }
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };
@@ -297,6 +306,55 @@ export function cleanPlan(input: unknown): CleanResult {
     if (rulers.length >= 300) break;
   }
   if (rulers.length) plan.rulers = rulers;
+
+  const u = o.utilities as Record<string, unknown> | undefined;
+  if (u && typeof u === 'object') {
+    const lines: UtilityLine[] = [], points: UtilityPoint[] = [];
+    for (const it of arr(u.lines)) {
+      const points2 = pts(it.points, 2, true);
+      if (!points2) continue;
+      let len = 0;
+      for (let i = 1; i < points2.length; i++) len += Math.hypot(points2[i][0] - points2[i - 1][0], points2[i][1] - points2[i - 1][1]);
+      if (len < 0.05) continue;
+      const runs: UtilityRun[] = [];
+      for (const r of arr(it.runs)) {
+        const kind = typeof r.kind === 'string' && r.kind in UTILITY_DEFAULT_COVER ? (r.kind as UtilityKind) : null;
+        if (!kind) {
+          warnings.push('A utility run of an unknown kind was left out.');
+          continue;
+        }
+        const run: UtilityRun = {
+          kind,
+          label: typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 80) : UTILITY_KIND_NAME[kind],
+          od: num(r.od, 0.027, 0.005, 0.3),
+          cover: num(r.cover, UTILITY_DEFAULT_COVER[kind], 0, 3),
+        };
+        if (typeof r.code === 'string' && r.code.trim()) run.code = r.code.trim().slice(0, 120);
+        if (r.tracer === true) run.tracer = true;
+        runs.push(run);
+        if (runs.length >= 6) break;
+      }
+      if (!runs.length) continue;
+      const line: UtilityLine = { ...base(it, 'utility'), points: points2, runs };
+      if (it.gap !== undefined && it.gap !== null) line.gap = num(it.gap, 0.15, 0, 1);
+      lines.push(line);
+      if (lines.length >= 300) break;
+    }
+    for (const it of arr(u.points)) {
+      const position = vec(it.position);
+      if (!position) continue;
+      if (typeof it.kind !== 'string' || !(it.kind in UTILITY_POINT_NAME)) {
+        warnings.push('A utility point of an unknown kind was left out.');
+        continue;
+      }
+      const pt: UtilityPoint = { ...base(it, 'utility-point'), kind: it.kind as UtilityPointKind, position };
+      if (typeof it.label === 'string' && it.label.trim()) pt.label = it.label.trim().slice(0, 60);
+      if (it.rotationDeg !== undefined && it.rotationDeg !== null) pt.rotationDeg = num(it.rotationDeg, 0, -360, 360);
+      points.push(pt);
+      if (points.length >= 300) break;
+    }
+    if (lines.length || points.length) plan.utilities = { lines, points };
+  }
 
   return { plan, warnings: [...new Set(warnings)] };
 }

@@ -60,6 +60,10 @@ Messages use `window.postMessage`:
 | Studio to parent, once that file is read | `{ source: 'growth-studio', type: 'asset', id, ok: true }` or `{ ..., ok: false, message }` |
 | Parent to studio, to get plant pictures | `{ source: 'area-planner', type: 'plant-thumbs', ids? }` (`ids` are catalog plant ids; leave it out for all) |
 | Studio to parent, one per plant as each is drawn | `{ source: 'growth-studio', type: 'plant-thumb', id, url }` (`url` is a small JPEG data URL of the plant at mature size) |
+| Parent to studio, to show a build stage | `{ source: 'area-planner', type: 'stage', stage }` (`'demo'`, `'excavate'`, `'trench'`, `'backfill'`, `'base'`, `'bedding'` or `'finished'`) |
+| Studio to parent, when the person picks a stage in the dock | `{ source: 'growth-studio', type: 'stage', stage }` |
+| Parent to studio, to cut away the near side of the yard | `{ source: 'area-planner', type: 'cutaway', on }` |
+| Studio to parent, when the cutaway is turned on or off | `{ source: 'growth-studio', type: 'cutaway', on }` |
 
 - `plan` is SitePlan JSON (`src/siteplan/types.ts`), in meters. It is cleaned
   by `cleanPlan` first, so missing fields get defaults. When the cleanup
@@ -160,6 +164,28 @@ Messages use `window.postMessage`:
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
   grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
   looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
+- `plan.utilities` carries underground runs and the equipment they connect:
+  `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
+  `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
+  `od` is the pipe's outside diameter and `cover` the top of the pipe to
+  finished grade, both in meters. A line with two or more runs is a joint
+  trench: runs keep their own cover, stacked shallowest first, and a run that
+  would come closer than `gap` (meters, default 0.15) to the one above it is
+  pushed down. Every trench is shown 1.5 ft wide. Point kinds: `panel`,
+  `subpanel`, `outlet`, `junction`, `transformer`, `gas-meter`, `gas-stub`,
+  `water-meter`, `backflow`, `controller`, `valves`, `hose-bib`, `stub`.
+  Plans without the key load as before.
+- A hardscape or turf zone can carry `layers: { base?, bedding? }` (meters):
+  the compacted base rock and the bedding layer under it for the build stages.
+  Left out: pavers and flagstone 4 in base under 1 in sand, concrete 4 in
+  base, synthetic grass 3 in base under 1 in fines. Other surfaces are not dug.
+- Build stages (the dock's Build stage control, `[` and `]`): Demo (bare
+  ground, white marking paint around each dig, trench routes in APWA colors),
+  Excavate, Trench (open trenches with the pipes at their cover, tracer wire on
+  plastic gas pipe), Backfill, Base rock, Sand and Finished. Labels give
+  depths, covers and amounts. Cut away (button or `C`) clips the yard on the
+  near side of a vertical plane through the point the camera looks at and
+  draws the ground in section there for the current stage.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

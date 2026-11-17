@@ -4,6 +4,7 @@ import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 import { cleanPlan } from '../siteplan/validate';
 import { expandPlants } from '../builder/build';
+import { BUILD_STAGES, type BuildStage } from '../builder/construction';
 import { groundModel } from '../builder/ground';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
@@ -118,8 +119,13 @@ function bootStudio() {
   studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  studio.onCutawayChanged = (on) => {
+    $('#btn-cutaway').setAttribute('aria-pressed', String(on));
+    if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'cutaway', on }, embedOrigin);
+  };
   studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.setPlan(plan);
+  showStageNote();
   $('#loading').hidden = true;
 }
 
@@ -129,6 +135,7 @@ function scheduleRebuild() {
   rebuildTimer = window.setTimeout(() => {
     try {
       studio?.setPlan(plan, true);
+      showStageNote();
     } catch (e) {
       console.error(e);
       toast('Part of the plan could not be built in 3D. Check the last change.', 'warn');
@@ -681,7 +688,60 @@ function setYears(y: number) {
 }
 
 /** The scene controls under the 3D view. Used by the full app and by embed mode. */
+/* ------------------------------------------------------------------ */
+/* Build stages                                                         */
+
+/** Show a build stage, mark it in the dock, and (embedded) tell the parent page unless it asked for it. */
+function setStage(stage: BuildStage, tellParent = true) {
+  studio?.setStage(stage);
+  document.querySelectorAll<HTMLButtonElement>('#stages button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.stage === stage)));
+  $('#stage-out').textContent = BUILD_STAGES.find((s) => s.id === stage)?.label ?? '';
+  showStageNote();
+  if (tellParent && EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'stage', stage }, embedOrigin);
+}
+
+/** The note card over the scene: what the stage shows in this plan. Hidden for the finished yard. */
+function showStageNote() {
+  const stage = studio?.buildStage ?? 'finished';
+  const card = $('#stage-card');
+  card.hidden = stage === 'finished';
+  if (card.hidden) return;
+  $('#stage-title').textContent = BUILD_STAGES.find((s) => s.id === stage)?.title ?? '';
+  $('#stage-note').textContent = studio?.stageNote(stage) ?? '';
+}
+
+function stepStage(by: number) {
+  const ids = BUILD_STAGES.map((s) => s.id);
+  const i = ids.indexOf(studio?.buildStage ?? 'finished');
+  setStage(ids[Math.max(0, Math.min(ids.length - 1, i + by))]);
+}
+
+function initStages() {
+  $('#btn-cutaway').addEventListener('click', () => studio?.setCutaway(!studio.cutawayOn));
+  const seg = $('#stages');
+  for (const s of BUILD_STAGES) {
+    const b = h('button', { type: 'button', 'data-stage': s.id, text: s.label, 'aria-pressed': String(s.id === 'finished'), title: `${s.title} ([ and ] step through the stages)` });
+    b.addEventListener('click', () => setStage(s.id));
+    seg.append(b);
+  }
+  window.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'c' || e.key === 'C') {
+      e.preventDefault();
+      studio?.setCutaway(!studio.cutawayOn);
+    } else if (e.key === '[') {
+      e.preventDefault();
+      stepStage(-1);
+    } else if (e.key === ']') {
+      e.preventDefault();
+      stepStage(1);
+    }
+  });
+}
+
 function initDock() {
+  initStages();
   // Growth.
   const growth = $<HTMLInputElement>('#growth');
   growth.addEventListener('input', () => setYears(+growth.value));
@@ -865,6 +925,13 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
+  if (d.type === 'cutaway') { studio?.setCutaway(!!(d as { on?: unknown }).on); return; }
+  if (d.type === 'stage') {
+    // The parent page picked a build stage (its own stage control or a second screen).
+    const stage = (d as { stage?: unknown }).stage;
+    if (typeof stage === 'string' && BUILD_STAGES.some((s) => s.id === stage)) setStage(stage as BuildStage, false);
+    return;
+  }
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
   // Keep only the newest plan. A refit asked for by any message in the burst still happens.
@@ -892,8 +959,10 @@ function applyEmbedPlan() {
     planName = next.name.trim().slice(0, 80) || plan.site.name;
     embedAsked.clear();
     studio.setPlan(plan, embedBuilt && !next.refit && sameLot);
+    showStageNote();
     embedBuilt = true;
-    embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length + (plan.models?.length ?? 0) ? null : EMBED_EMPTY_NOTE);
+    const utilities = (plan.utilities?.lines.length ?? 0) + (plan.utilities?.points.length ?? 0);
+    embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length + (plan.models?.length ?? 0) + utilities ? null : EMBED_EMPTY_NOTE);
     embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
   } catch (e) {
     console.error(e);

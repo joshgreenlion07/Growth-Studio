@@ -535,6 +535,80 @@ function soilSet(): PBRSet {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Build-stage layers: what a crew digs into and fills with              */
+/* ------------------------------------------------------------------ */
+
+export type BuildLayer = 'cut' | 'backfill' | 'base' | 'sand' | 'fines';
+
+/**
+ * cut: freshly dug native soil (trench and excavation walls and floors), drier and lighter than the topsoil.
+ * backfill: trench spoil put back and compacted, darker and lumpier. base: Class II road base, gray-brown
+ * crushed rock with fines. sand: washed bedding sand under pavers. fines: 1/4 in minus screenings under
+ * synthetic grass.
+ */
+function buildLayerSet(kind: BuildLayer): PBRSet {
+  switch (kind) {
+    case 'cut': {
+      const a: RGB = [0.5, 0.42, 0.31], b: RGB = [0.42, 0.35, 0.26];
+      return paint(512, 1.6, 3, (u, v) => {
+        const n = fbm(u, v, 4, 5, 21);
+        const grain = vnoise(u * 200, v * 200, 200, 22);
+        const clod = voronoi(u, v, 40, 23, 0.9);
+        const lump = smooth(0.35, 0.05, clod.f1) * 0.25;
+        let c = mixRGB(a, b, n);
+        c = mulRGB(c, 0.88 + grain * 0.14 + lump * 0.2);
+        return { h: n * 0.4 + grain * 0.3 + lump, c, r: 0.97 };
+      });
+    }
+    case 'backfill': {
+      const a: RGB = [0.4, 0.33, 0.25], b: RGB = [0.33, 0.28, 0.21];
+      return paint(512, 1.2, 9, (u, v) => {
+        const n = fbm(u, v, 5, 4, 31);
+        const clod = voronoi(u, v, 34, 32, 1);
+        const lump = smooth(0.42, 0.0, clod.f1);
+        let c = mixRGB(a, b, n * 0.8 + clod.id * 0.2);
+        c = mulRGB(c, 0.8 + lump * 0.3);
+        return { h: lump * 0.7 + n * 0.3, c, r: 0.96 };
+      });
+    }
+    case 'base': {
+      const a: RGB = [0.47, 0.45, 0.41], b: RGB = [0.37, 0.35, 0.32];
+      return paint(512, 0.9, 10, (u, v) => {
+        const g = vnoise(u * 300, v * 300, 300, 41);
+        const peb = voronoi(u, v, 90, 42, 1);
+        const stone = smooth(0.42, 0.12, peb.f1) * (peb.id > 0.45 ? 1 : 0);
+        let c = mixRGB(a, b, fbm(u, v, 5, 3, 43) * 0.7);
+        c = mulRGB(c, 0.86 + g * 0.16);
+        c = mixRGB(c, mixRGB([0.66, 0.63, 0.58], [0.36, 0.34, 0.31], hash(peb.id, 44)), stone * 0.85);
+        return { h: g * 0.3 + stone * 0.8, c, r: 0.94 - stone * 0.08 };
+      });
+    }
+    case 'sand': {
+      const a: RGB = [0.6, 0.52, 0.4], b: RGB = [0.53, 0.46, 0.35];
+      return paint(512, 0.8, 3, (u, v) => {
+        const g = vnoise(u * 360, v * 360, 360, 51);
+        const n = fbm(u, v, 6, 3, 52);
+        const c = mulRGB(mixRGB(a, b, n), 0.92 + g * 0.12);
+        return { h: g * 0.6 + n * 0.4, c, r: 0.98 };
+      });
+    }
+    case 'fines': {
+      const a: RGB = [0.52, 0.47, 0.4], b: RGB = [0.43, 0.39, 0.33];
+      return paint(512, 0.9, 5, (u, v) => {
+        const g = vnoise(u * 320, v * 320, 320, 61);
+        const peb = voronoi(u, v, 140, 62, 1);
+        const chip = smooth(0.3, 0.08, peb.f1) * (peb.id > 0.7 ? 1 : 0);
+        let c = mulRGB(mixRGB(a, b, fbm(u, v, 5, 3, 63)), 0.9 + g * 0.14);
+        c = mixRGB(c, [0.42, 0.39, 0.35], chip * 0.6);
+        return { h: g * 0.5 + chip * 0.5, c, r: 0.96 };
+      });
+    }
+  }
+}
+
+export const buildLayerTextures = (kind: BuildLayer) => textureSet(`layer:${kind}`, () => buildLayerSet(kind));
+
 function mulchSet(spec: MaterialSpec): PBRSet {
   const [a, b] = pal(spec);
   return paint(512, 1.4, 14, (u, v) => {
