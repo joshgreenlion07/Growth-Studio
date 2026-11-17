@@ -73,7 +73,9 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
   }
   if (!pts.length) return { object: null, dispose() {} };
   const geo = tuftGeometry();
-  const opts = { bend: 0.035, flutter: 0.004, translucency: 0.35 };
+  // No flutter: a blade is about a pixel wide a few meters out, and fast sub-pixel motion only sparkles.
+  // Blades fade into the ground farther off, where the ground's own lawn texture carries the color.
+  const opts = { bend: 0.035, flutter: 0, translucency: 0.35, fade: true };
   const mat = patchFoliage(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, side: THREE.DoubleSide }), opts);
   const im = new THREE.InstancedMesh(geo, mat, pts.length);
   im.name = 'turf';
@@ -100,6 +102,7 @@ export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blo
       im.dispose();
       geo.dispose();
       mat.dispose();
+      im.customDepthMaterial?.dispose();
     },
   };
 }

@@ -25,6 +25,10 @@ interface Label {
   kind: LabelKind;
   w: number;
   h: number;
+  /** Shown in the last placed frame: kept ahead of new ones, so two labels near the limit do not trade places. */
+  on: boolean;
+  /** Distance to the camera, for this frame's order. */
+  d: number;
 }
 
 // When labels collide the lower number wins: the person's own dimensions, then areas, then walls, runs and structures, then plants.
@@ -45,6 +49,12 @@ export class Measurements {
     ruler: new THREE.LineBasicMaterial({ color: 0xffc94d, transparent: true, opacity: 1, depthTest: false }),
   };
   private v = new THREE.Vector3();
+  private lastPV = new THREE.Matrix4();
+  private pv = new THREE.Matrix4();
+  private lastW = 0;
+  private lastH = 0;
+  private placed: number[] = [];
+  private order: Label[] = [];
   private shown = false;
   private detail = false;
 
@@ -69,6 +79,7 @@ export class Measurements {
   /** Show or hide the overlay; call rebuild() after changing between totals and edges. */
   setMode(mode: MeasureMode) {
     this.shown = mode !== 'off';
+    this.lastPV.elements[0] = NaN;
     this.detail = mode === 'edges';
     this.group.visible = this.shown;
     this.layer.hidden = !this.shown;
@@ -264,38 +275,67 @@ export class Measurements {
       el.append(s);
     }
     this.layer.appendChild(el);
-    this.labels.push({ el, pos, kind, w: 0, h: 0 });
+    el.style.display = 'none';
+    this.labels.push({ el, pos, kind, w: 0, h: 0, on: false, d: 0 });
+    this.lastPV.elements[0] = NaN;
   }
 
-  /** Place labels for this frame. */
+  /** Place labels for this frame (only when the view or the labels changed). */
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
     if (!this.shown) return;
-    const placed: [number, number, number, number][] = [];
+    this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    if (this.pv.equals(this.lastPV) && width === this.lastW && height === this.lastH) return;
+    this.lastPV.copy(this.pv);
+    this.lastW = width;
+    this.lastH = height;
     const cam = camera.position;
-    const order = this.labels
-      .map((l) => ({ l, d: l.pos.distanceTo(cam) }))
-      .sort((a, b) => PRIORITY[a.l.kind] - PRIORITY[b.l.kind] || a.d - b.d);
-    for (const { l, d } of order) {
-      this.v.copy(l.pos).project(camera);
-      const far = l.kind === 'edge' ? 45 : l.kind === 'lot' ? 80 : l.kind === 'ruler' ? 250 : 120;
-      if (this.v.z > 1 || this.v.z < -1 || d > far || Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05) {
-        l.el.style.display = 'none';
-        continue;
-      }
+    // Measure new labels in one pass (all reads, then the writes below), not one forced layout per label.
+    for (const l of this.labels) {
       if (!l.w) {
+        l.el.style.visibility = 'hidden';
         l.el.style.display = '';
+      }
+    }
+    for (const l of this.labels) {
+      if (!l.w) {
         l.w = l.el.offsetWidth;
         l.h = l.el.offsetHeight;
+        l.el.style.visibility = '';
+        l.el.style.display = 'none';
       }
+      l.d = l.pos.distanceTo(cam);
+    }
+    const order = this.order;
+    order.length = 0;
+    for (const l of this.labels) order.push(l);
+    order.sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind] || Number(b.on) - Number(a.on) || a.d - b.d);
+    const placed = this.placed;
+    placed.length = 0;
+    for (const l of order) {
+      this.v.copy(l.pos).project(camera);
+      const far = l.kind === 'edge' ? 45 : l.kind === 'lot' ? 80 : l.kind === 'ruler' ? 250 : 120;
+      let show = !(this.v.z > 1 || this.v.z < -1 || l.d > far || Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05);
       const x = (this.v.x * 0.5 + 0.5) * width - l.w / 2;
       const y = (-this.v.y * 0.5 + 0.5) * height - l.h / 2;
-      const hit = placed.some(([px, py, pw, ph]) => x < px + pw + 4 && x + l.w + 4 > px && y < py + ph + 2 && y + l.h + 2 > py);
-      if (hit) {
-        l.el.style.display = 'none';
+      if (show) {
+        // A label already showing stays until it truly overlaps; a new one needs a little clear space.
+        const mx = l.on ? 0 : 6, my = l.on ? 0 : 4;
+        for (let i = 0; i < placed.length; i += 4) {
+          const px = placed[i], py = placed[i + 1], pw = placed[i + 2], ph = placed[i + 3];
+          if (x < px + pw + mx && x + l.w + mx > px && y < py + ph + my && y + l.h + my > py) {
+            show = false;
+            break;
+          }
+        }
+      }
+      if (!show) {
+        if (l.on) l.el.style.display = 'none';
+        l.on = false;
         continue;
       }
-      placed.push([x, y, l.w, l.h]);
-      l.el.style.display = '';
+      placed.push(x, y, l.w, l.h);
+      if (!l.on) l.el.style.display = '';
+      l.on = true;
       l.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
     }
   }

@@ -27,6 +27,7 @@ export class PlanarMirror {
   private view = new THREE.Vector3();
   private clip = new THREE.Vector4();
   private q = new THREE.Vector4();
+  private vis: boolean[] = [];
 
   constructor(public height: number, scale = 0.5) {
     this.target = new THREE.WebGLRenderTarget(512, 512, { type: THREE.HalfFloatType, samples: 0 });
@@ -82,8 +83,12 @@ export class PlanarMirror {
     pm.elements[10] = this.clip.z + 1.0 - 0.003;
     pm.elements[14] = this.clip.w;
 
-    const vis = hide.map((o) => o.visible);
-    hide.forEach((o) => (o.visible = false));
+    const vis = this.vis;
+    vis.length = hide.length;
+    for (let i = 0; i < hide.length; i++) {
+      vis[i] = hide[i].visible;
+      hide[i].visible = false;
+    }
     const prevTarget = renderer.getRenderTarget();
     const prevXr = renderer.xr.enabled;
     renderer.xr.enabled = false;
@@ -92,7 +97,7 @@ export class PlanarMirror {
     renderer.render(scene, mc);
     renderer.setRenderTarget(prevTarget);
     renderer.xr.enabled = prevXr;
-    hide.forEach((o, i) => (o.visible = vis[i]));
+    for (let i = 0; i < hide.length; i++) hide[i].visible = vis[i];
   }
 
   dispose() {
@@ -225,7 +230,13 @@ void main(){
   vec3 scatter = body * (1.0 - T);
 
   vec3 H = normalize(uSunDir + V);
-  float spec = pow(max(dot(N, H), 0.0), 700.0) * 28.0 + pow(max(dot(N, H), 0.0), 90.0) * 0.5;
+  // Specular anti-aliasing: where the ripple normal changes a lot within a pixel (far off, grazing views) the
+  // highlight widens and dims to the same total light instead of flashing single pixels on and off; it is also
+  // capped so one glint cannot light a whole bloom halo.
+  float nVar = clamp(length(fwidth(N)) * 4.0, 0.0, 1.0);
+  float ex = mix(700.0, 80.0, nVar);
+  float NdH = max(dot(N, H), 0.0);
+  float spec = min(pow(NdH, ex) * 28.0 * (ex / 700.0), 8.0) + pow(NdH, 90.0) * 0.5;
   vec3 sun = uSunColor * spec * sunUp;
 
   float a = (1.0 - F) * (1.0 - T) + F;
