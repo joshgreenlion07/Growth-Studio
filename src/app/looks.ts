@@ -29,12 +29,19 @@ export interface Look {
 
 const IN = 0.0254;
 
+/** Lines that take their maker page and photos from another line. */
+const MEDIA_LINE: Record<string, string> = { 'Dimensions Slabs 24 x 24': 'Dimensions Slabs' };
+/** Sizes Belgard lists on a page where the size picker is empty. */
+const SIZE_TEXT: Record<string, string[]> = { 'Dimensions Slabs 24 x 24': ['24 x 24 x 2 3/8"'] };
+
 export function lookOf(m: MaterialSpec): Look {
   // A "same color" border (border-of-<paver>) takes its line and color from the paver it follows.
   const base = m.id.startsWith('border-of-') ? materialById.get(m.id.slice('border-of-'.length)) : undefined;
   const tag = base ?? m;
   const maker = tag.maker ?? '', line = tag.line ?? '', color = tag.color ?? m.name;
-  const media = maker === 'Belgard' ? BELGARD_MEDIA[line] : undefined;
+  // A line made from part of a Belgard line (the 24 x 24 slab of Dimensions Slabs) shares that line's page and photos.
+  const mediaLine = MEDIA_LINE[line] ?? line;
+  const media = maker === 'Belgard' ? BELGARD_MEDIA[mediaLine] : undefined;
   const sizes = m.pattern?.sizes;
   const border = m.use === 'border';
   // Belgard lists every set of a line together (the main set, a small set, the border stone); keep the listing whose
@@ -56,10 +63,11 @@ export function lookOf(m: MaterialSpec): Look {
   if (isThreePiece(m)) look.laying = true;
   if (sizes?.length) look.sizes = sizes.map(([a, b]) => [a, b]);
   if (sizeText?.length) look.sizeText = sizeText;
+  else if (SIZE_TEXT[line]) look.sizeText = SIZE_TEXT[line];
   if (m.thickness) look.thicknessIn = Math.round((m.thickness / IN) * 8) / 8;
   if (m.pattern?.face) look.face = m.pattern.face;
   else if (m.wall?.face) look.face = m.wall.face;
-  const image = maker === 'Belgard' ? makerImage(line, color) : undefined;
+  const image = maker === 'Belgard' ? makerImage(mediaLine, color) : undefined;
   if (image) look.image = image;
   if (media) look.page = media.page;
   return look;

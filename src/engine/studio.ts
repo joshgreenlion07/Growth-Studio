@@ -110,6 +110,9 @@ export class Studio {
   /** The pointer moved onto another material, or onto nothing (null). */
   onPoint: (hit: PointHit | null) => void = () => {};
   private pointerOn = false;
+  private pointLocked = false;
+  /** The pointer's material was locked or let go (right stick click, L, or setPointLock). */
+  onPointLock: (locked: boolean) => void = () => {};
   private pointKey = '';
   private pointT = 0;
   private reticle: HTMLDivElement | null = null;
@@ -217,6 +220,8 @@ export class Studio {
       toggleMeasure: () => this.setMeasureMode(MEASURE_MODES[(MEASURE_MODES.indexOf(this.measure.mode) + 1) % MEASURE_MODES.length]),
       // P or controller Y: the material pointer.
       togglePointer: () => this.setPointer(!this.pointerOn),
+      // Right stick click or L: hold the pointed material.
+      togglePointLock: () => this.setPointLock(!this.pointLocked),
     });
     this.measure = new Measurements(container);
     this.scene.add(this.measure.group);
@@ -573,6 +578,7 @@ export class Studio {
       this.reticle = r;
     }
     this.reticle.hidden = !on;
+    if (!on && this.pointLocked) this.setPointLock(false);
     this.pointKey = '';
     this.pointT = 0;
     this.onPointer(on);
@@ -580,8 +586,33 @@ export class Studio {
     else this.nav.pulse(60, 0.3);
   }
 
+  get pointLock() {
+    return this.pointLocked;
+  }
+
+  /**
+   * Hold the material the pointer is on: while locked nothing new is reported, so the panel keeps it as the view
+   * moves; letting go reports what the pointer is on right away. Only while the pointer is shown.
+   */
+  setPointLock(locked: boolean) {
+    if (locked && !this.pointerOn) return;
+    if (locked === this.pointLocked) return;
+    this.pointLocked = locked;
+    this.reticle?.classList.toggle('locked', locked);
+    const label = this.reticle?.querySelector('span');
+    if (label) label.dataset.lock = locked ? 'Locked' : '';
+    this.onPointLock(locked);
+    this.nav.pulse(locked ? 90 : 50, locked ? 0.5 : 0.25);
+    if (!locked) {
+      this.pointKey = '';
+      this.pointT = 0;
+      this.updatePointer();
+    }
+  }
+
   /** The surface at the center of the view, at most about eight times a second; reports it when it changes. */
   private updatePointer() {
+    if (this.pointLocked) return;
     const now = performance.now();
     if (now - this.pointT < 120) return;
     this.pointT = now;

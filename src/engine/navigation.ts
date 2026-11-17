@@ -56,6 +56,8 @@ export interface NavHost {
   toggleMeasure(): void;
   /** The material pointer: a mark at the center of the view that reports the material under it. */
   togglePointer(): void;
+  /** Hold the pointer's current material (the panel keeps it while the view moves); again to follow the pointer. */
+  togglePointLock(): void;
 }
 
 export class Navigation {
@@ -91,6 +93,7 @@ export class Navigation {
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === 'm') { this.host.toggleMeasure(); return; }
       if (k === 'p') { this.host.togglePointer(); return; }
+      if (k === 'l') { this.host.togglePointLock(); return; }
       if (!first) return;
       if (k === 'v') { this.host.toggleFly(); return; }
       if (k === 'Home') { this.host.home(); return; }
@@ -174,6 +177,8 @@ export class Navigation {
       if (tapped(BTN.X)) this.host.toggleMeasure();
       // Y turns the material pointer on and off; B goes home.
       if (tapped(BTN.Y)) this.host.togglePointer();
+      // Pressing the right stick in holds the pointed material; again lets it follow the pointer.
+      if (tapped(BTN.RS)) this.host.togglePointLock();
       if (first) {
         if (tapped(BTN.A)) this.host.toggleFly();
         if (tapped(BTN.B)) this.host.home();

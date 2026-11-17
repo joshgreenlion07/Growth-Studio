@@ -1,4 +1,4 @@
-import { FEATURES, LEGACY_IDS, MATERIALS, PLANTS, featureById, materialById, plantById } from './catalog';
+import { FEATURES, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById } from './catalog';
 import { area, uid } from './geometry';
 import type {
   ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, Vec2, WaterFeature, Zone,
@@ -69,7 +69,9 @@ function pickMaterial(raw: unknown, use: string, fallback: string, warnings: str
     const lower = id.toLowerCase();
     const fake = use === 'turf' && /synth|artificial|fake|astro/.test(lower);
     // "grass" is in Synthetic grass's name, but a plain grass id means a natural lawn: only a fake-sounding id may match it.
-    const hit = MATERIALS.find((m) => m.use === use && (fake || m.id !== 'synthetic-turf') && (m.id.includes(lower) || m.name.toLowerCase().includes(lower)));
+    const near = (m: (typeof MATERIALS)[number]) => m.use === use && (fake || m.id !== 'synthetic-turf') && (m.id.includes(lower) || m.name.toLowerCase().includes(lower));
+    // A close name prefers an offered material (OFFERED_LINES); an exact id above is always kept, offered or not.
+    const hit = MATERIALS.find((m) => near(m) && isOffered(m)) ?? MATERIALS.find(near);
     if (hit) return hit.id;
     // Fake grass under another name must not fall back to natural lawn.
     if (fake) {
@@ -264,6 +266,7 @@ export function cleanPlan(input: unknown): CleanResult {
     const id = pickFeature(it.catalogId, warnings);
     if (!id) continue;
     const f: FeaturePlacement = { ...base(it, 'feature'), catalogId: id, position, rotationDeg: num(it.rotationDeg, 0, -360, 360) };
+    if (typeof it.materialId === 'string' && materialById.get(it.materialId)?.use === 'hardscape') f.materialId = it.materialId;
     plan.features.push(f);
   }
 

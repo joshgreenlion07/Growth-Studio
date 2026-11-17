@@ -56,6 +56,10 @@ finished-work photos in `reference/green-lion-style/`.
 - Use only real Green Lion content. Plant sizes and the catalog are starting
   values until Green Lion's own plant and material list replaces them. Never
   invent prices, reviews or project details.
+- Maker paver and wall lines are offered (pickers, embed looks, plan reader)
+  only once mapped in depth from the maker's specs: add the line name to
+  `OFFERED_LINES` in `catalog.ts`, and use `isOffered()` wherever a person picks
+  a material. Never delete a hidden line; saved plans may use it.
 - Embed mode: keep the message contract in the README and the code in step.
   New parent sites go in `EMBED_ALLOWED_PARENT_ORIGINS` (`main.ts`). Plans
   from Area Planner have no house, no street edge, and may be one small shape,

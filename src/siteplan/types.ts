@@ -119,6 +119,8 @@ export interface FeaturePlacement extends ItemBase {
   catalogId: string;
   position: Vec2;
   rotationDeg: number;
+  /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
+  materialId?: string;
 }
 
 /** A door or window the designer marked on a wall. */

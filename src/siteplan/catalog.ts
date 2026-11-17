@@ -172,6 +172,7 @@ export type FeatureKind =
   | 'copperBowl'
   | 'spotLight'
   | 'steppingPad'
+  | 'steppingStone'
   | 'puttingCup'
   | 'cortenScreen'
   | 'cortenPlanter'
@@ -351,34 +352,33 @@ export const MATERIALS: MaterialSpec[] = [
    Catalina Grana: 3-piece large set for the main course, and its 6 x 9 border piece for the edge, both with a smooth face. */
 type Blend = [string, string[]];
 const CATALINA_GRANA: Blend[] = [
-  ['Amaretto', ['#b89f88', '#ac937b', '#a38972', '#997e67']],
-  // Anthracite: darker than its swatch average, which read mid-gray in 3D; installed it is a near-black charcoal.
-  ['Anthracite', ['#46423f', '#3e3a38', '#383432', '#322f2d']],
-  ['Aspen', ['#b8a083', '#b39c7f', '#af987b', '#a89074']],
-  ['Bella', ['#7f6e5e', '#7a695a', '#776657', '#6e6053']],
-  ['Brown Beige Charcoal', ['#92857e', '#877b74', '#80746e', '#786d67']],
-  ['Cream Tan Brown', ['#917c6a', '#897463', '#85705e', '#7f6a59']],
-  ['Gray Charcoal', ['#83827e', '#7b7a76', '#747370', '#6a6966']],
-  ['Gray Charcoal Tan', ['#867f77', '#817870', '#7d746b', '#766e67']],
-  ['Hickory', ['#7d7369', '#7b7066', '#796e64', '#766b62']],
-  ['Linen', ['#9e8e7d', '#998979', '#968676', '#928272']],
-  ['Midnight', ['#4c4b49', '#4a4947', '#484745', '#474644']],
-  ['Montecito', ['#a6906f', '#a18b69', '#9d8766', '#988261']],
-  ['Napoli', ['#ac998c', '#9f8c7e', '#958375', '#857468']],
-  ['Rainier', ['#7b6f63', '#766b60', '#73685d', '#70655b']],
-  ['Rio', ['#7e766c', '#776e65', '#736a61', '#6e655c']],
-  ['Riviera', ['#9c958b', '#938c83', '#8d867c', '#847d74']],
-  ['Scandina Gray', ['#bfbbb6', '#b2aea9', '#aca8a3', '#a3a09a']],
-  ['Sepia', ['#aa977f', '#a6927b', '#a48f78', '#a08b74']],
-  ['Shaded Gray', ['#8b8680', '#88837d', '#86817b', '#827d77']],
-  ['Sierra', ['#74625a', '#705f57', '#6e5d55', '#6a5952']],
-  ['Slate', ['#6d6966', '#676361', '#635f5d', '#5d5957']],
-  ['Sonoran Gray', ['#7a706c', '#716763', '#6d635f', '#675d5a']],
-  ['Tan Brown Charcoal', ['#837264', '#7c6c60', '#78685e', '#73645a']],
-  ['Tan Red Charcoal', ['#8d6d59', '#876754', '#846350', '#80604d']],
-  ['Titanium', ['#b2aea3', '#9d9a91', '#8e8c85', '#807f78']],
-  ['Toscana', ['#89735d', '#826d58', '#7d6954', '#776450']],
-  ['Victorian', ['#887a67', '#857663', '#827462', '#7b6e5d']],
+  ['Amaretto', ['#bda58c', '#b1977f', '#a48a73', '#967c67']],
+  ['Anthracite', ['#64615d', '#5a5754', '#504e4d', '#4a4947']],
+  ['Aspen', ['#bba284', '#b49c7f', '#ab9479', '#a08b72']],
+  ['Bella', ['#846f5c', '#7d6a5a', '#756557', '#685f57']],
+  ['Brown Beige Charcoal', ['#97887f', '#8b7e76', '#81746e', '#746c69']],
+  ['Cream Tan Brown', ['#9a8672', '#907a68', '#887260', '#7d695a']],
+  ['Gray Charcoal', ['#868581', '#7f7e7a', '#757471', '#696866']],
+  ['Gray Charcoal Tan', ['#86817a', '#7d7771', '#857566', '#736d68']],
+  ['Hickory', ['#7f766b', '#7c7267', '#796e62', '#74695f']],
+  ['Linen', ['#a08f7d', '#9a8a78', '#948574', '#8c7e6e']],
+  ['Midnight', ['#4d4c4a', '#4c4b49', '#4a4947', '#484745']],
+  ['Montecito', ['#a99471', '#a28d6a', '#9c8664', '#927f60']],
+  ['Napoli', ['#b6a394', '#a69183', '#958275', '#7e7067']],
+  ['Rainier', ['#7f7163', '#796d60', '#73695e', '#6c645b']],
+  ['Rio', ['#847c6f', '#7b7369', '#736c63', '#6c655e']],
+  ['Riviera', ['#a19b8f', '#969086', '#8c867d', '#817b74']],
+  ['Scandina Gray', ['#cbc4bc', '#b9b3ae', '#aca8a4', '#9d9a96']],
+  ['Sepia', ['#ac9a84', '#a8937c', '#a38e77', '#998671']],
+  ['Shaded Gray', ['#8e8982', '#89847e', '#86807a', '#7f7a74']],
+  ['Sierra', ['#776359', '#725f57', '#6c5c55', '#665852']],
+  ['Slate', ['#706e6a', '#696763', '#63615e', '#5b5957']],
+  ['Sonoran Gray', ['#7e7570', '#746b67', '#6d6360', '#645b58']],
+  ['Tan Brown Charcoal', ['#8c745f', '#816e60', '#786a60', '#6f655e']],
+  ['Tan Red Charcoal', ['#8f705a', '#8d6754', '#846451', '#7c6050']],
+  ['Titanium', ['#c0b8a8', '#aaa59b', '#95928c', '#80807b']],
+  ['Toscana', ['#90765d', '#867059', '#7d6956', '#736353']],
+  ['Victorian', ['#83796b', '#8f765b', '#83705a', '#776e61']],
 ];
 const AB_CLASSIC: Blend[] = [
   ['Brown Beige Charcoal', ['#8f7f74', '#807166', '#75675c', '#66594f']],
@@ -446,6 +446,15 @@ const BELGARD: MaterialSpec[] = [
 ];
 MATERIALS.push(...BELGARD);
 
+/*
+ * Belgard Dimensions Slabs 24 x 24 x 2 3/8 in, used one at a time as stepping stones (the slab line's other sizes stay
+ * hidden until that line is mapped). Smooth face, the Dimensions Slabs colors. A stepping stone placement names one of
+ * these as its materialId; laid as a field they read as a 24 x 24 grid.
+ */
+export const SLAB_24_PREFIX = 'dimensions-slab-24-';
+const SLABS = BELGARD_LINES.find((l) => l.slug === 'dimensions-slabs');
+MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ id: `${SLAB_24_PREFIX}${slugOf(n)}`, name: `Dimensions Slab 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [[24, 24]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Dimensions Slabs', maker: 'Belgard', line: 'Dimensions Slabs 24 x 24', shelf: 'Pavers', color: n })));
+
 /* ------------------------------------------------------------------ */
 /* Features                                                             */
 /* ------------------------------------------------------------------ */
@@ -475,6 +484,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
+  // A single Belgard Dimensions Slab 24 x 24 set as a stepping stone; its placement's materialId picks the color.
+  F({ id: 'stepping-stone-24', name: 'Stepping stone, 24 x 24 slab', group: 'Accents', kind: 'steppingStone', footprint: [0.6096, 0.6096] }),
   F({ id: 'putting-cup', name: 'Putting cup', group: 'Accents', kind: 'puttingCup', footprint: [0.15, 0.15] }),
   F({ id: 'path-light', name: 'Path light, brass mushroom', group: 'Lighting', kind: 'pathLight', footprint: [0.25, 0.25] }),
   F({ id: 'spot-light', name: 'Uplight, bronze', group: 'Lighting', kind: 'spotLight', footprint: [0.12, 0.12] }),
@@ -505,8 +516,34 @@ export const LEGACY_IDS: Record<string, string> = {
   'bbq-island': 'kitchen-straight',
 };
 
-export function materialsFor(use: MaterialUse): MaterialSpec[] {
-  return MATERIALS.filter((m) => m.use === use);
+/**
+ * Maker paver and wall lines a person can pick. A maker line is offered once it is mapped in depth from the maker's
+ * specs: sizes, faces, colors, patterns. Every other maker paver or wall line stays in the catalog, so saved plans that
+ * use it still load and render, but it is not listed in any picker, in the looks sent to Area Planner, or to the plan
+ * reader. To offer a line once it is mapped, add its `line` name here. Generic looks (no maker), curbs and edging,
+ * concrete, fences and everything else are always offered.
+ */
+export const OFFERED_LINES = new Set<string>([
+  'Dimensions Slabs 24 x 24',
+  'Catalina Grana',
+  'Avalon Slate',
+  'Melville Tandem Wall',
+  'Highland Stone',
+]);
+
+/** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */
+export function isOffered(m: MaterialSpec): boolean {
+  if (m.id.startsWith('border-of-')) {
+    const base = materialById.get(m.id.slice('border-of-'.length));
+    return base ? isOffered(base) : true;
+  }
+  if (!m.maker || (m.shelf !== 'Pavers' && m.shelf !== 'Retaining walls' && m.shelf !== 'Garden walls')) return true;
+  return !!m.line && OFFERED_LINES.has(m.line);
+}
+
+/** Offered materials for a use; `keep` (the current value) is listed too even when hidden, so it never silently changes. */
+export function materialsFor(use: MaterialUse, keep?: string): MaterialSpec[] {
+  return MATERIALS.filter((m) => m.use === use && (isOffered(m) || m.id === keep));
 }
 
 /* ------------------------------------------------------------------ */

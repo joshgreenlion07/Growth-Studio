@@ -1,4 +1,4 @@
-import { FEATURES, LAYING_NAMES, MATERIALS, PLANTS, featureById, isThreePiece, materialById, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, LAYING_NAMES, MATERIALS, PLANTS, featureById, isOffered, isThreePiece, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -115,7 +115,7 @@ function bootStudio() {
   studio.onViewsChanged = renderViews;
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
-  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, B goes home.');
+  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
@@ -217,7 +217,8 @@ function selectEl(id: string, options: { value: string; label: string; group?: s
   return sel;
 }
 
-const matOptions = (use: MaterialUse) => MATERIALS.filter((m) => m.use === use).map((m) => ({ value: m.id, label: m.name, group: m.group }));
+// Only offered materials (see OFFERED_LINES in the catalog), plus the current value so a hidden one never silently changes.
+const matOptions = (use: MaterialUse, current?: string) => materialsFor(use, current).map((m) => ({ value: m.id, label: m.name, group: m.group }));
 const featureOptions = () => FEATURES.map((f) => ({ value: f.id, label: f.name, group: f.group as FeatureGroup }));
 
 function renderToolOptions() {
@@ -231,7 +232,7 @@ function renderToolOptions() {
         renderToolOptions();
         refresh();
       }, 'Area type'),
-      selectEl('opt-zone-mat', matOptions(pick.zone === 'turf' ? 'turf' : pick.zone === 'bed' ? 'bed' : 'hardscape'), pick.zoneMat[pick.zone], (v) => {
+      selectEl('opt-zone-mat', matOptions(pick.zone === 'turf' ? 'turf' : pick.zone === 'bed' ? 'bed' : 'hardscape', pick.zoneMat[pick.zone]), pick.zoneMat[pick.zone], (v) => {
         pick.zoneMat[pick.zone] = v;
         refresh();
       }, 'Material'),
@@ -243,7 +244,7 @@ function renderToolOptions() {
         renderToolOptions();
         refresh();
       }, 'Line type'),
-      selectEl('opt-line-mat', matOptions(pick.line), pick.lineMat[pick.line], (v) => {
+      selectEl('opt-line-mat', matOptions(pick.line, pick.lineMat[pick.line]), pick.lineMat[pick.line], (v) => {
         pick.lineMat[pick.line] = v;
         refresh();
       }, 'Style'),
@@ -354,7 +355,7 @@ function renderInspector() {
     const z = plan.zones.find((x) => x.id === sel.id)!;
     const use: MaterialUse = z.kind === 'turf' ? 'turf' : z.kind === 'bed' ? 'bed' : 'hardscape';
     box.append(h('h3', { text: z.kind === 'turf' ? 'Lawn or turf' : z.kind === 'bed' ? 'Planting bed' : 'Patio or path' }), confirmAI(z) ?? '');
-    box.append(field('Material', selectEl('z-mat', matOptions(use), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
+    box.append(field('Material', selectEl('z-mat', matOptions(use, z.catalogId), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
     if (z.kind === 'hardscape') {
       if (isThreePiece(materialById.get(z.catalogId))) {
         box.append(field('Laying pattern', selectEl('z-laying', (['a', 'b', 'random'] as LayingPattern[]).map((k) => ({ value: k, label: LAYING_NAMES[k] })), z.laying ?? 'a', (v) => {
@@ -363,7 +364,7 @@ function renderInspector() {
           changed();
         }, 'Laying pattern'), 'Belgard 3-piece patterns for the 6 x 12, 9 x 12 and 12 x 12 set.'));
       }
-      box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border')], z.border?.catalogId ?? '', (v) => {
+      box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border', z.border?.catalogId)], z.border?.catalogId ?? '', (v) => {
         snapshot();
         z.border = v ? { catalogId: v, width: z.border?.width ?? 0.2 } : undefined;
         if (!v) z.borderLights = false;
@@ -390,7 +391,7 @@ function renderInspector() {
       }));
       if (z.raised) {
         box.append(
-          field('Planter wall', selectEl('z-rw', matOptions('wall'), z.raised.wallCatalogId, (v) => { snapshot(); z.raised!.wallCatalogId = v; changed(); }, 'Planter wall')),
+          field('Planter wall', selectEl('z-rw', matOptions('wall', z.raised.wallCatalogId), z.raised.wallCatalogId, (v) => { snapshot(); z.raised!.wallCatalogId = v; changed(); }, 'Planter wall')),
           field('Height', numInput('z-rh', ft(z.raised.height), 0.25, 0.75, 4, (v) => { snapshot(); z.raised!.height = toM(v); changed(); })),
         );
       }
@@ -402,7 +403,7 @@ function renderInspector() {
   if (sel.list === 'lines') {
     const l = plan.lines.find((x) => x.id === sel.id)!;
     box.append(h('h3', { text: l.kind === 'fence' ? 'Fence' : l.kind === 'wall' ? 'Wall' : l.kind === 'steps' ? 'Steps' : 'Curb or edging' }), confirmAI(l) ?? '');
-    box.append(field('Style', selectEl('l-mat', matOptions(l.kind === 'steps' ? 'hardscape' : l.kind), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
+    box.append(field('Style', selectEl('l-mat', matOptions(l.kind === 'steps' ? 'hardscape' : l.kind, l.catalogId), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
     if (l.kind !== 'edging') box.append(field('Height', numInput('l-h', ft(l.height), 0.25, 0.5, l.kind === 'wall' ? 21 : 10, (v) => { snapshot(); l.height = toM(v); changed(); })));
     box.append(h('p', { class: 'muted', text: `${Math.round(ft(polylineLength(l.points)))} linear ft` }), del);
     return;
@@ -850,6 +851,7 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
+  if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
@@ -905,7 +907,8 @@ function initEmbed() {
     embedBooted = true;
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
-    const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb'))).map(lookOf);
+    // Only offered looks: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES in the catalog).
+    const looks = MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb'))).map(lookOf);
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
@@ -916,6 +919,7 @@ function initEmbed() {
     // The material pointer (controller Y or P): tell the parent what it is on, with the material's details.
     if (studio) {
       studio.onPointer = (on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'pointer', on }, embedOrigin); };
+      studio.onPointLock = (locked) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'point-lock', locked }, embedOrigin); };
       studio.onPoint = (hit) => {
         if (!embedOrigin) return;
         const spec = hit ? materialById.get(hit.catalogId) : undefined;
