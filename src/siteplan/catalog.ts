@@ -607,6 +607,8 @@ export const OFFERED_LINES = new Set<string>([
   'Lamina Tandem',
   'Brisa',
   'Papyrus Artforms',
+  'Castlemanor Grana',
+  'Castlemanor Rustic',
 ]);
 
 /** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */
