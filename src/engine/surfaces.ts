@@ -39,7 +39,7 @@ function pal(spec: MaterialSpec): RGB[] {
  * average albedo renders back to the swatch photo's average, taken around all four sides of a wall in the default
  * afternoon light (the sunny side reads brighter, the shady side darker): measured, rendered linear = WALL_GAIN * albedo.
  */
-const WALL_GAIN: RGB = [1.72, 1.72, 1.84];
+const WALL_GAIN: RGB = [1.68, 1.77, 2.0];
 /** The swatch photo's average color, in linear light (the mean of the palette's tones). */
 function photoMean(spec: MaterialSpec): RGB {
   const s: RGB = [0, 0, 0];
@@ -56,6 +56,15 @@ function wallFaceMean(spec: MaterialSpec): RGB {
 /** Linear average albedo for a maker stone seen from above (a wall cap), by the paving calibration. */
 function topMean(spec: MaterialSpec): RGB {
   return photoMean(spec).map((v, i) => Math.max(0.002, (v - PHOTO_OFFSET[i]) / PHOTO_GAIN[i])) as RGB;
+}
+/**
+ * A maker wall's tones as photographed. In a swatch photo of a wall the darkest of the four tones is mostly joint shadow,
+ * so the stones take the lighter tones and the joints the darkest; used as the stone colors it made whole units and
+ * blotches far darker than the photo shows. (The face's overall color is then set by wallFaceMean.)
+ */
+function wallTones(spec: MaterialSpec): { stone: RGB[]; joint: RGB } {
+  const t = spec.palette.map(hexRGB);
+  return { stone: t.length >= 4 ? t.slice(0, -1) : t, joint: t[t.length - 1] };
 }
 
 function pick(p: RGB[], r: number): RGB {
@@ -689,19 +698,19 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
     });
   }
   if ((face === 'smoothUnit' || face === 'roughHewn') && spec.wall?.unit) return unitWallSet(spec, face, spec.wall.unit);
-  // Block walls. A maker's block takes its stone-to-stone variation from the swatch tones as photographed and its
-  // overall color from the photo (wallFaceMean), like the unit walls below.
+  // Block walls. A maker's block takes its stone-to-stone variation from the swatch tones as photographed (wallTones)
+  // and its overall color from the photo (wallFaceMean), like the unit walls below.
   const smoothFace = face === 'smoothBlock';
   const lay = smoothFace ? cobbleLayout([[18, 6], [12, 6], [24, 6]], spec.id) : runningLayout(16, 6, 0.5, false, 8, 3, spec.id);
   const T = lay.tile;
-  const tones = spec.maker ? spec.palette.map(hexRGB) : colors;
+  const { stone: tones, joint } = spec.maker ? wallTones(spec) : { stone: colors, joint: colors[colors.length - 1] };
   return paint(1024, T, smoothFace ? 6 : 13, (u, v) => {
     const hit = lay.at(u * T, v * T);
     const mortar = hit.edge < 0.004;
     const split = smoothFace ? vnoise(u * 300, v * 300, 300, 3) * 0.3 : fbm(u, v, 24, 4, 3 + (hit.id % 20));
     let c = pick(tones, hash(hit.id, 1));
     c = mulRGB(c, smoothFace ? 0.94 + split * 0.15 : 0.8 + split * 0.35);
-    if (mortar) c = mulRGB(tones[tones.length - 1], 0.7);
+    if (mortar) c = mulRGB(joint, 0.7);
     return { h: mortar ? 0 : 0.4 + smooth(0.004, 0.012, hit.edge) * 0.4 + split * (smoothFace ? 0.1 : 0.6), c, r: smoothFace ? 0.8 : 0.92 };
   }, spec.maker ? wallFaceMean(spec) : undefined);
 }
@@ -714,9 +723,9 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
  * one unit reads as two stones.
  */
 function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn', unit: WallUnit): PBRSet {
-  // The swatch tones as photographed set the stone-to-stone variation; the face's overall color is then matched to the
-  // photo (wallFaceMean), so a palette with a very dark or light tone no longer pulls the whole wall off.
-  const colors = spec.maker ? spec.palette.map(hexRGB) : pal(spec);
+  // The swatch tones as photographed set the stone-to-stone variation (wallTones); the face's overall color is then
+  // matched to the photo (wallFaceMean), so a palette with a very dark or light tone no longer pulls the whole wall off.
+  const { stone: colors, joint } = spec.maker ? wallTones(spec) : (() => { const p = pal(spec); return { stone: p, joint: p[p.length - 1] }; })();
   const r = rng(`${spec.id}:units`);
   const rough = face === 'roughHewn';
   const bond = unit.bond ?? 'random';
@@ -766,7 +775,7 @@ function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn', unit:
     if (rough) edge -= (vnoise(u * 160, v * 160, 160, 7) - 0.5) * 0.0025; // slightly uneven arrises
     if (edge < J) {
       const g = vnoise(u * 400, v * 400, 400, 2);
-      return { h: 0, c: mulRGB(colors[colors.length - 1], 0.55 + g * 0.12), r: 1 };
+      return { h: 0, c: mulRGB(joint, 0.55 + g * 0.12), r: 1 };
     }
     let c = pick(colors, hash(id, 1));
     c = mixRGB(c, pick(colors, hash(id, 5)), 0.35 * fbm(u + hash(id, 2) * 3, v + hash(id, 3) * 3, Math.round(T * 3), 3, id % 40));
@@ -829,12 +838,13 @@ function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], 
 export function wallCapTextures(spec: MaterialSpec): PBRSet {
   return textureSet(`cap:${spec.id}`, () => {
     // Seen from above, so its average follows the paving calibration (a touch deeper than the face's photo).
-    const colors = spec.maker ? spec.palette.map(hexRGB) : pal(spec).map((c) => mulRGB(c, 0.92));
+    const generic = pal(spec).map((c) => mulRGB(c, 0.92));
+    const { stone: colors, joint } = spec.maker ? wallTones(spec) : { stone: generic, joint: generic[generic.length - 1] };
     const T = 72 * IN, L = 18 * IN, J = 0.12 * IN;
     return paint(1024, T, 15, (u, v) => {
       const x = u * T, k = Math.floor(x / L);
       const edge = Math.min(x - k * L, (k + 1) * L - x);
-      if (edge < J) return { h: 0.05, c: mulRGB(colors[colors.length - 1], 0.5), r: 1 };
+      if (edge < J) return { h: 0.05, c: mulRGB(joint, 0.5), r: 1 };
       return roughStone(u, v, T, 500 + k, colors, edge + 0.02, J, 1);
     }, spec.maker ? (topMean(spec).map((v) => v * 0.92) as RGB) : undefined);
   });
