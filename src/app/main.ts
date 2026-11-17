@@ -801,10 +801,10 @@ function initFullscreen() {
 const EMBED_ALLOWED_PARENT_ORIGINS: RegExp[] = [
   /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/, // local development, any port
   /^https:\/\/area-planner-beta\.vercel\.app$/, // Area Planner (also when the studio is served from it at /studio/)
-  // Area Planner preview deployments of the joshua-jackson Vercel team only: per branch
-  // (area-planner-git-<branch>-joshua-jackson) and per deployment (area-planner-<hash>-joshua-jackson).
+  // Area Planner on the joshua-jackson Vercel team only: the production alias (area-planner-joshua-jackson),
+  // per branch (area-planner-git-<branch>-joshua-jackson) and per deployment (area-planner-<hash>-joshua-jackson).
   // The team suffix cannot be taken by another Vercel account, unlike a bare "area-planner" prefix.
-  /^https:\/\/area-planner-(git-[a-z0-9-]+|[a-z0-9]+)-joshua-jackson\.vercel\.app$/,
+  /^https:\/\/area-planner(-(git-[a-z0-9-]+|[a-z0-9]+))?-joshua-jackson\.vercel\.app$/,
   /^https:\/\/(www\.)?greenlionlandscape\.com$/, // Green Lion's own site
 ];
 
@@ -904,11 +904,13 @@ function applyEmbedPlan() {
     // The parent can name its coordinate frame; while it is unchanged the coordinates have not
     // moved, so the camera stays even when the lot outline grows.
     const sameFrame = !!next.frame && next.frame === embedLastFrame;
-    studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
+    const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
     embedLastFrame = next.frame;
     embedBuilt = true;
     embedNote(plan.zones.length + plan.lines.length + plan.water.length + plan.plants.length + plan.structures.length + (plan.models?.length ?? 0) ? null : EMBED_EMPTY_NOTE);
-    embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
+    // `built` goes once the new yard is on screen (its shaders are warmed first), not when building starts.
+    const extra = res.warnings.length ? { warnings: res.warnings } : {};
+    shown.then(() => embedReply(true, extra), (e) => embedReply(false, { message: `The plan could not be shown in 3D (${String(e instanceof Error ? e.message : e).slice(0, 160)}).` }));
   } catch (e) {
     console.error(e);
     embedNote('This plan could not be shown in 3D.');

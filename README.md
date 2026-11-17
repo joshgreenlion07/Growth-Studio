@@ -172,9 +172,8 @@ Messages use `window.postMessage`:
   to the origin that sent the plan.
 - Messages that arrive within 150 ms of each other are applied as one
   rebuild, using the newest plan. Each rebuild gets one `built` reply.
-  The new yard's shaders are compiled while the old yard stays on screen, so
-  it can appear a few frames after `built`; a cover picture asked for in that
-  time waits for it.
+  The new yard's shaders are compiled while the old yard stays on screen;
+  `built` is sent once the new yard is showing.
 - Wait for `ready` before sending. It is sent to any parent (`'*'`) and holds
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
@@ -182,8 +181,9 @@ Messages use `window.postMessage`:
 - Plans are accepted only from the iframe's parent, and only from the origins
   listed in `EMBED_ALLOWED_PARENT_ORIGINS` in `src/app/main.ts`: local
   development (`http://localhost:*`, `http://127.0.0.1:*`),
-  `https://area-planner-beta.vercel.app`, the Area Planner preview deployments
-  of the `joshua-jackson` Vercel team (`https://area-planner-git-<branch>-joshua-jackson.vercel.app`,
+  `https://area-planner-beta.vercel.app`, Area Planner on the `joshua-jackson`
+  Vercel team (`https://area-planner-joshua-jackson.vercel.app`,
+  `https://area-planner-git-<branch>-joshua-jackson.vercel.app`,
   `https://area-planner-<hash>-joshua-jackson.vercel.app`), and
   `https://greenlionlandscape.com` (and `www.`). Anything else is ignored silently.
 - The build uses relative asset paths, so the studio also works under a

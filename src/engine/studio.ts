@@ -104,6 +104,10 @@ export class Studio {
   /** Autofocus targets: solid surfaces only, not the invisible plant spheres. */
   private focusSurfaces: THREE.Object3D[] = [];
   private lastTs = -1;
+  /** Height of the tallest thing in the yard (m). */
+  private yardTop = 0;
+  /** The view moved since the material pointer last reported: keep drawing until it has. */
+  private pointDue = false;
   private raf = 0;
   private frame = 0;
   private focusTarget = 10;
@@ -396,8 +400,13 @@ export class Studio {
 
   /* -------------------------------------------------------------- */
 
-  setPlan(plan: SitePlan, keepCamera = false) {
+  /**
+   * Show a plan. Building happens now (a plan that cannot be built throws here); the returned promise resolves
+   * once the new yard is on screen, after its shaders are warmed (or at once for a paving-only restyle).
+   */
+  setPlan(plan: SitePlan, keepCamera = false): Promise<void> {
     this.applyPlan(plan, keepCamera, true);
+    return this.built();
   }
 
   /** `restyle` false always rebuilds the whole yard (a new quality or uploaded file). */
@@ -427,7 +436,6 @@ export class Studio {
       this.pending = null;
     }
     const token = ++this.buildToken;
-    this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
     const next = buildScene(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets);
     // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
     next.root.traverse((o) => {
@@ -443,10 +451,17 @@ export class Studio {
       this.swapIn(next, plan, copy, keepCamera);
     };
     let warm: Promise<unknown> | null = null;
+    // Programs are compiled for the current render target's color space: the yard is drawn into the post
+    // pipeline's linear HDR target (and the mirror's), not the canvas, so warm that variant.
+    const r = this.renderer;
+    const prevTarget = r.getRenderTarget();
     try {
-      warm = this.renderer.compileAsync(next.root, this.camera, this.scene);
+      r.setRenderTarget(this.post.sceneRT);
+      warm = r.compileAsync(next.root, this.camera, this.scene);
     } catch {
       warm = null;
+    } finally {
+      r.setRenderTarget(prevTarget);
     }
     if (warm) warm.then(swap, swap);
     else swap();
@@ -457,6 +472,15 @@ export class Studio {
     if (old) {
       this.scene.remove(old.root);
       this.retired.push(old);
+    }
+    // Uploaded files the new plan no longer uses go only now: the old yard showed them until this swap.
+    this.assets.prune(new Set((plan.models ?? []).map((m) => m.asset)));
+    // The top of everything built (mature plant sizes, structures, the neighborhood), for the near plane.
+    try {
+      const box = new THREE.Box3().setFromObject(next.root);
+      this.yardTop = box.isEmpty() ? 0 : box.max.y;
+    } catch {
+      this.yardTop = 20;
     }
     this.build = next;
     this.builtPlan = copy;
@@ -867,9 +891,14 @@ export class Studio {
 
   /** The surface at the center of the view, at most about eight times a second; reports it when it changes. */
   private updatePointer() {
-    if (this.pointLocked) return;
+    if (this.pointLocked) {
+      this.pointDue = false;
+      return;
+    }
     const now = performance.now();
     if (now - this.pointT < 120) return;
+    // This report sees the view as it is now; drawing may pause after it (see tick).
+    this.pointDue = this.camMoved;
     this.pointT = now;
     const hit = this.pointAtCenter();
     const key = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '';
@@ -988,7 +1017,8 @@ export class Studio {
     if (this.state.motion) GLOBAL.uTime.value += dt;
     this.moveCamera(dt, now);
     const focusing = Math.abs(1 / Math.max(0.3, this.focusTarget) - this.focusInv) > this.focusInv * 0.002;
-    if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending) this.stillFrames = 0;
+    if (this.camMoved && this.pointerOn) this.pointDue = true;
+    if (this.camMoved || this.dirty || animate || this.tween || focusing || this.shadowDirty || this.pending || (this.pointerOn && this.pointDue)) this.stillFrames = 0;
     else this.stillFrames++;
     if (this.stillFrames > SETTLE_FRAMES) {
       this.frameStats(dt, false);
@@ -1033,7 +1063,10 @@ export class Studio {
     const g = this.build ? Math.max(0, this.build.gm.height([cam.position.x, cam.position.z])) : 0;
     const h = Math.max(0, cam.position.y - g);
     const d = cam.position.distanceTo(target);
-    const near = THREE.MathUtils.clamp(Math.min(h, d) * 0.08, 0.05, 2);
+    // Flying above the yard, the nearest thing can be a tree top or roof well above the ground under the
+    // camera: below the tallest thing allow no more than 6 m of clear space, above it the height over it.
+    const clear = Math.max(cam.position.y - this.yardTop, 6);
+    const near = THREE.MathUtils.clamp(Math.min(h, d, clear) * 0.08, 0.05, 2);
     const far = 900;
     if (Math.abs(near - cam.near) > cam.near * 0.02 || cam.far !== far) {
       cam.near = near;
