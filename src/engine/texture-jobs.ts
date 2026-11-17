@@ -346,6 +346,15 @@ function setDemand(owner: object, sources: Set<THREE.Source<unknown>> | null) {
 }
 
 function queueApply(job: Job, frame: Frame | null, final: boolean, phase: Phase) {
+  // The full set supersedes a quick copy of it not shown yet.
+  if (final) {
+    for (let i = applying.length - 1; i >= 0; i--) {
+      const a = applying[i];
+      if (a.job !== job || a.final) continue;
+      a.maps?.forEach((m) => m.tex.dispose());
+      applying.splice(i, 1);
+    }
+  }
   applying.push({ job, frame, final, phase, maps: null });
   if (!raf) raf = requestAnimationFrame(tick);
 }
@@ -362,8 +371,12 @@ function tick() {
   let swapped = false;
   // Sets a yard draws with first, newest first.
   applying.sort((a, b) => cmp(a.job, b.job));
+  // A set's frames are shown in order: one waiting on its upload holds back the later ones.
+  const held = new Set<Job>();
   for (let i = 0; i < applying.length && performance.now() - start < UPLOAD_BUDGET_MS; i++) {
     const a = applying[i];
+    if (held.has(a.job)) continue;
+    held.add(a.job);
     if (!a.frame) {
       if (swapped) continue;
       stats.fallback++;

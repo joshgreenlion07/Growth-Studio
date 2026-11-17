@@ -519,7 +519,10 @@ export class Studio {
     }
     const token = ++this.buildToken;
     // Built a slice at a time (see buildSceneAsync): the yard on screen keeps drawing meanwhile. A newer plan stops it.
-    buildSceneAsync(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets, { stale: () => token !== this.buildToken || this.disposed, stage: this.stage }).then(
+    // With no yard on screen yet (or an empty one) there is little to draw, so the slices are longer and the first
+    // yard comes sooner.
+    const budgetMs = this.build && (this.build.plantCount > 0 || this.build.surfaces.length > 2) ? 8 : 32;
+    buildSceneAsync(plan, this.state.quality, this.mirror, this.sky.uniforms, this.assets, { stale: () => token !== this.buildToken || this.disposed, stage: this.stage, budgetMs }).then(
       (next) => {
         if (!next) return;
         if (token !== this.buildToken || this.disposed) return next.dispose();

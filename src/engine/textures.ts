@@ -99,6 +99,8 @@ export class PendingTexture extends THREE.Texture {
   group: Set<THREE.Texture> | null = null;
   clone(): this {
     const c = super.clone();
+    // Painted maps hold raw pixels (see texture-jobs.ts): a clone made after they arrived uploads them the same way.
+    (c as { isDataTexture?: boolean }).isDataTexture = (this as { isDataTexture?: boolean }).isDataTexture;
     if (this.group) {
       (c as PendingTexture).group = this.group;
       this.group.add(c);
