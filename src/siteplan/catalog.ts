@@ -99,7 +99,19 @@ export function isThreePiece(spec: MaterialSpec | undefined): boolean {
 }
 
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
-export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone';
+export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn';
+
+/**
+ * A maker's wall unit: course height and unit face lengths (inches), an optional virtual joint inside each unit (inches
+ * from its left end, one picked per unit), and the cap's thickness and overhang (inches).
+ */
+export interface WallUnit {
+  course: number;
+  lengths: number[];
+  split?: number[];
+  capIn?: number;
+  capOver?: number;
+}
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 
 export interface MaterialSpec {
@@ -128,7 +140,7 @@ export interface MaterialSpec {
   pattern?: PaverPattern;
   finish?: ConcreteFinish;
   fence?: FenceStyle;
-  wall?: { face: WallFace; cap: string };
+  wall?: { face: WallFace; cap: string; unit?: WallUnit };
   /** Hardscape thickness above grade, meters. */
   thickness?: number;
   /** Manufacturer line this look is modeled on, if any. */
@@ -429,7 +441,7 @@ const BELGARD: MaterialSpec[] = [
       ];
     }
     if (L.shelf === 'Curb') return [M({ id, name: `${L.name}, ${n}`, use: 'edging', group: 'Edging', recipe: 'curb', palette: palette.slice(1, 3), ...tags })];
-    return [M({ id, name: `${L.name}, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, ...tags })];
+    return [M({ id, name: `${L.name}, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: L.wall?.face ?? 'splitFace', cap: palette[1], ...(L.wall ? { unit: L.wall.unit } : {}) }, ...tags })];
   })),
 ];
 MATERIALS.push(...BELGARD);
