@@ -51,6 +51,9 @@ import { build as mexicanLime } from './trees/mexican-lime';
 import { build as photiniaStandard } from './trees/photinia-standard';
 import { build as redMapleAutumnBlaze } from './trees/red-maple-autumn-blaze';
 import { build as japaneseMapleCoralBark } from './trees/japanese-maple-coral-bark';
+import { build as gardeniaVeitchii } from './shrubs/gardenia-veitchii';
+import { build as camelliaYuletide } from './shrubs/camellia-yuletide';
+import { build as xylosma } from './shrubs/xylosma';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -93,6 +96,9 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'gaura': gaura,
   'liriope': liriope,
   'purple-coneflower': purpleConeflower,
+  'gardenia-veitchii': gardeniaVeitchii,
+  'camellia-yuletide': camelliaYuletide,
+  'xylosma': xylosma,
   'annual-color': annualColor,
   'foxtail-fern': foxtailFern,
   'variegated-yucca': variegatedYucca,
