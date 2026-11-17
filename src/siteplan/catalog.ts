@@ -141,6 +141,28 @@ export interface WallUnit {
 }
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 
+/**
+ * A synthetic turf product as its maker lists it. Colors are sRGB as photographed (turned into albedo like any maker
+ * color). `yarn` is the two blade colors (field green, olive green), `thatch` the curled fibers near the backing. `mean`
+ * is the lawn's average color in the maker's outdoor photos: the texture is matched to it on screen.
+ */
+export interface TurfSpec {
+  /** Pile height, millimeters. */
+  pileMm: number;
+  /** Face weight, oz per square yard: how dense the blades are. */
+  faceOz: number;
+  yarn: [string, string];
+  /** Blade tips, lighter where the sun catches them. */
+  tip: string;
+  thatch: [string, string];
+  /** How much thatch shows from above, 0 to 1. */
+  thatchShow: number;
+  /** Blade cross-section: C, diamond and omega (mixed), D, or W. */
+  blade: 'mixed' | 'D' | 'W';
+  /** The lawn's average color in the maker's outdoor photos of it installed (sRGB): what the texture's tone is matched to. */
+  mean: string;
+}
+
 export interface MaterialSpec {
   id: string;
   name: string;
@@ -175,7 +197,9 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge';
+  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf';
+  /** Synthetic turf made to a maker's spec (pile, yarn and thatch colors, blade shape), drawn blade by blade. */
+  turf?: TurfSpec;
   /** The color name alone, without the line name. */
   color?: string;
   /** A border made to go with a main-course color; not listed on its own. */
@@ -304,6 +328,18 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'artificial-turf', name: 'Artificial turf', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#567a30', '#355322'] }),
   // Area Planner's synthetic grass: one even, bright green blade, no patches or thatch, so it reads as artificial.
   M({ id: 'synthetic-turf', name: 'Synthetic grass', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#76a63e', '#5c8f30'] }),
+  // MSI Evergrass, the turf Green Lion installs most (msisurfaces.com, read 2026-11-17). Colors from MSI's swatch and
+  // pile-height photos; the overall tone (`mean`) is read from MSI's outdoor photos of each, installed: Summer Gold is a deep two-tone green, Viridian a brighter
+  // olive yellow-green. All three are 3/8 in gauge with field green + olive green yarn.
+  M({ id: 'msi-summer-gold-96', name: 'MSI Evergrass Summer Gold 96', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#4f7a33', '#445d31', '#2f4a24', '#203518'],
+    turf: { pileMm: 45, faceOz: 70, yarn: ['#4c7a30', '#5f7434'], tip: '#8fae55', thatch: ['#a18f73', '#5b6a3a'], thatchShow: 0.12, blade: 'mixed', mean: '#2c3d1c' },
+    matches: 'MSI Evergrass Summer Gold 96', maker: 'MSI', line: 'Evergrass', shelf: 'Synthetic turf', color: 'Summer Gold 96' }),
+  M({ id: 'msi-viridian-91', name: 'MSI Evergrass Viridian 91', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#869146', '#74823c', '#55672c', '#314116'],
+    turf: { pileMm: 45, faceOz: 65, yarn: ['#5d7a30', '#7d8a40'], tip: '#a7aa5f', thatch: ['#bfae7c', '#7b8048'], thatchShow: 0.2, blade: 'W', mean: '#6a7d38' },
+    matches: 'MSI Evergrass Viridian Turf 91', maker: 'MSI', line: 'Evergrass', shelf: 'Synthetic turf', color: 'Viridian 91' }),
+  M({ id: 'msi-viridian-pet-96', name: 'MSI Evergrass Viridian Pet 96', use: 'turf', group: 'Turf', recipe: 'turfArtificial', palette: ['#7d8c45', '#697035', '#5d6735', '#4b5225'],
+    turf: { pileMm: 30, faceOz: 70, yarn: ['#5d7a30', '#7d8a40'], tip: '#a7aa5f', thatch: ['#bfae7c', '#7b8048'], thatchShow: 0.24, blade: 'D', mean: '#646f36' },
+    matches: 'MSI Evergrass Viridian Pet Turf 96', maker: 'MSI', line: 'Evergrass', shelf: 'Synthetic turf', color: 'Viridian Pet 96' }),
   // Mulch and rock
   M({ id: 'black-mulch', name: 'Black mulch', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#3a342f', '#221e1b'] }),
   M({ id: 'brown-mulch', name: 'Red-brown bark', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#6e4a2f', '#4a3121'] }),

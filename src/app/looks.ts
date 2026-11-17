@@ -31,6 +31,13 @@ export interface Look {
 
 const IN = 0.0254;
 
+/** MSI Evergrass turf product pages (no photos are loaded for turf). */
+const TURF_PAGE: Record<string, string> = {
+  'msi-summer-gold-96': 'https://www.msisurfaces.com/evergrass-turf/summer-gold-96/',
+  'msi-viridian-91': 'https://www.msisurfaces.com/evergrass-turf/viridian-turf-91oz/',
+  'msi-viridian-pet-96': 'https://www.msisurfaces.com/evergrass-turf/viridian-turf-96oz/',
+};
+
 /** Lines that take their maker page and photos from another line. */
 const MEDIA_LINE: Record<string, string> = { 'Dimensions Slabs 24 x 24': 'Dimensions Slabs' };
 /** Sizes Belgard lists on a page where the size picker is empty. */
@@ -78,5 +85,11 @@ export function lookOf(m: MaterialSpec): Look {
   const image = maker === 'Belgard' ? makerImage(mediaLine, color) : undefined;
   if (image) look.image = image;
   if (media) look.page = media.page;
+  // Synthetic turf: its pile and weight as the maker lists them, and the product page.
+  if (m.turf) {
+    const blade = m.turf.blade === 'mixed' ? 'C, diamond and omega' : m.turf.blade;
+    look.sizeText = [`${m.turf.pileMm} mm (${(m.turf.pileMm / 25.4).toFixed(2)} in) pile, ${m.turf.faceOz} oz face weight, ${blade} blade`];
+    if (TURF_PAGE[m.id]) look.page = TURF_PAGE[m.id];
+  }
   return look;
 }
