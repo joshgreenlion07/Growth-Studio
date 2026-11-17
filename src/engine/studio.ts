@@ -1513,7 +1513,7 @@ export class Studio {
       const b = this.budget;
       const every = !live || this.frameDirty ? 1 : b.moving ? (b.scale < 0.9 ? 2 : 1) : this.camMoved ? 1 : 3;
       this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces, live ? b.scale : 1, live ? devicePx : 0, live ? this.frameDt : 0, every, b.moving);
-    }
+    } else this.mirror.status = 'off';
     post.render(this.scene, cam, t, target);
   }
 
