@@ -542,6 +542,9 @@ interface LodSet {
   reflect: Band[];
   /** Which instances show in reflections. */
   reflects: Uint8Array;
+  /** Each instance's last level in view and in reflections (255: not yet chosen), for the switching dead band. */
+  level: Uint8Array;
+  rlevel: Uint8Array;
   /** Shadow-map meshes: every instance, never rewritten. */
   staticMeshes: THREE.InstancedMesh[];
   /** Radius around the base that holds the mature plant at scale 1. */
@@ -632,6 +635,21 @@ export const PLANT_LAYERS = {
  */
 export const LOD_PIXELS = 100;
 export const LOD2_PIXELS = 32;
+/**
+ * A plant switches detail only once its size is this share past a threshold (either way), so a plant
+ * sitting near one while the camera glides does not flip back and forth between levels.
+ */
+const LOD_HYSTERESIS = 0.15;
+
+/** The detail level for a plant `px` tall on screen, kept at `prev` while inside the dead band around a threshold. */
+function lodLevel(px: number, prev: number, minLevel: number): number {
+  const lo = 1 - LOD_HYSTERESIS, hi = 1 + LOD_HYSTERESIS;
+  // Thresholds move away from the current level: harder to leave it than to enter it.
+  const t1 = prev === 255 ? LOD_PIXELS : prev === 0 ? LOD_PIXELS * lo : LOD_PIXELS * hi;
+  const t2 = prev === 255 ? LOD2_PIXELS : prev === 2 ? LOD2_PIXELS * hi : LOD2_PIXELS * lo;
+  const l = px >= t1 ? 0 : px >= t2 ? 1 : 2;
+  return Math.max(minLevel, l);
+}
 
 /** Detail levels: share of leaf cards kept (each grown to keep the crown full), share of larger pieces kept, share of twigs kept, smallest limb kept (share of the largest). */
 const LEVELS = {
@@ -810,6 +828,8 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           view: [band(n), band(n), band(n)],
           reflect: [band(n), band(n)],
           reflects: new Uint8Array(n),
+          level: new Uint8Array(n).fill(255),
+          rlevel: new Uint8Array(n).fill(255),
           staticMeshes: [],
           radius0: 0,
         }
@@ -940,6 +960,20 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
   }
 
   // Per-frame selection of near, far and out-of-view plants.
+  const putBand = (b: Band, base: Float32Array, i: number) => (b.attr.array as Float32Array).set(base.subarray(i * 16, i * 16 + 16), 16 * b.count++);
+  const flushBands = (bands: Band[]) => {
+    for (const b of bands) {
+      for (const im of b.meshes) {
+        im.count = b.count;
+        im.visible = b.count > 0;
+      }
+      if (b.count) {
+        b.attr.clearUpdateRanges();
+        b.attr.addUpdateRange(0, b.count * 16);
+        b.attr.needsUpdate = true;
+      }
+    }
+  };
   const frustum = new THREE.Frustum(), pv = new THREE.Matrix4(), sphere = new THREE.Sphere(), last = new THREE.Matrix4();
   let lastPx = 0, sizeVersion = 0, lastSizeVersion = -1;
 
@@ -983,7 +1017,6 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         const size = Math.max(spec.matureHeight * growth.uSize.value.y, spec.matureSpread * growth.uSize.value.x);
         for (const b of set.view) b.count = 0;
         for (const b of set.reflect) b.count = 0;
-        const put = (b: Band, i: number) => (b.attr.array as Float32Array).set(set.base.subarray(i * 16, i * 16 + 16), 16 * b.count++);
         for (let i = 0; i < set.n; i++) {
           const k = set.scale[i];
           // A sphere around the plant's base that holds it at any size up to mature, plus wind sway.
@@ -991,22 +1024,20 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           const d = Math.max(0.1, Math.hypot(cam.x - sphere.center.x, cam.y - sphere.center.y - size * k * 0.5, cam.z - sphere.center.z));
           const px = (size * k * pxPerM) / d;
           // A reflection is about as large on screen as the plant, wherever the plant itself is.
-          if (set.reflects[i]) put(set.reflect[px >= LOD2_PIXELS ? 0 : 1], i);
+          if (set.reflects[i]) {
+            // Reflections use the fewer and fewest levels only (0 and 1 here are levels 1 and 2).
+            const rl = lodLevel(px, set.rlevel[i], 1);
+            set.rlevel[i] = rl;
+            putBand(set.reflect[rl - 1], set.base, i);
+          }
           sphere.radius = set.radius0 * k * grow + 0.4;
           if (!frustum.intersectsSphere(sphere)) continue;
-          put(set.view[px >= LOD_PIXELS ? 0 : px >= LOD2_PIXELS ? 1 : 2], i);
+          const vl = lodLevel(px, set.level[i], 0);
+          set.level[i] = vl;
+          putBand(set.view[vl], set.base, i);
         }
-        for (const b of [...set.view, ...set.reflect]) {
-          for (const im of b.meshes) {
-            im.count = b.count;
-            im.visible = b.count > 0;
-          }
-          if (b.count) {
-            b.attr.clearUpdateRanges();
-            b.attr.addUpdateRange(0, b.count * 16);
-            b.attr.needsUpdate = true;
-          }
-        }
+        flushBands(set.view);
+        flushBands(set.reflect);
       }
     },
     dispose() {
