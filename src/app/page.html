@@ -144,7 +144,7 @@ section.scene-pane { position: relative; min-width: 0; min-height: 0; background
 #updating { position: absolute; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
 #loading, #scene-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); padding: 24px; text-align: center; }
 #scene-error { background: var(--paper); }
-.dock { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: flex-end; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
+.dock { max-height: 45vh; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: flex-end; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
 .dock-group { display: grid; gap: 5px; min-width: 0; }
 .dock-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-2); display: flex; justify-content: space-between; gap: 10px; }
 .dock-label output { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; color: var(--ink); }
@@ -207,7 +207,13 @@ html.library-open section.scene-pane { display: grid !important; height: auto; }
 }
 
 /* Full screen: the scene alone, with a height meter on the right edge. */
-.scene-tools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; gap: 4px; }
+.scene-tools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: calc(50% - 16px); }
+section.scene-pane.fs .scene-tools { max-width: calc(100% - 20px); }
+html.embed #btn-second { display: none; }
+/* Second screen, when no window can be opened: the panel floats over the right of the 3D view. */
+.ss-float { position: absolute; z-index: 5; right: 10px; bottom: 10px; top: 96px; width: min(360px, calc(100% - 20px)); overflow-y: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+.ss-float-head { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .ss-float { top: auto; height: 55%; } }
 .scene-tools button { border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .scene-tools button:hover, .scene-tools button[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
 #nav-modes { display: none; gap: 1px; }
@@ -248,7 +254,7 @@ section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label.ml-ruler span { font-family: var(--font-mono); font-weight: 400; }
 section.scene-pane.fs { position: fixed; inset: 0; z-index: 30; display: grid !important; height: auto !important; min-height: 0 !important; grid-template-rows: minmax(0, 1fr); }
 section.scene-pane.fs .dock { display: none; }
-#views { right: 330px; }
+#views { right: calc(50% + 6px); }
 section.scene-pane.fs #views { display: none; }
 #height-meter { position: absolute; right: 14px; top: 50px; bottom: 50px; width: 74px; display: none; pointer-events: none; color: #f4f3ef; font-family: var(--font-mono); font-size: 11px; }
 section.scene-pane.fs #height-meter { display: block; }
@@ -375,6 +381,9 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
           <div id="library" class="library" hidden aria-label="Library"></div>
           <div class="scene-tools">
             <button id="btn-library" type="button" aria-pressed="false" title="Product library: every plant, material and feature in 3D">Library</button>
+            <button id="btn-second" type="button" aria-pressed="false" title="Second screen: a window (best on a second display) showing what the pointer is on">Second screen</button>
+            <button id="btn-focus" type="button" aria-pressed="true" title="Focus blur on or off">Focus</button>
+            <button id="btn-wind" type="button" aria-pressed="true" title="Wind on or off">Wind</button>
             <div id="nav-modes" role="group" aria-label="Movement">
               <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
               <button type="button" data-mode="fly" aria-pressed="false" title="Fly freely (V or controller A)">Fly</button>

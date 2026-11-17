@@ -11,6 +11,7 @@ import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
 import { swatchFor, swatchNow } from './swatches';
 import { closeLibrary, libraryOpen, openLibrary } from './library';
+import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
 import { Studio } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
@@ -133,6 +134,8 @@ function bootStudio() {
   studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.setPlan(plan).then(showStageNote, () => {});
   $('#loading').hidden = true;
+  // Area Planner has its own second screen; the studio on its own gets this one.
+  if (!EMBED) initSecondScreen({ studio, plan: () => plan, title: () => planName || plan.site.name, button: $<HTMLButtonElement>('#btn-second'), floatHost: $('#scene'), toast: (t) => toast(t, 'warn') });
 }
 
 function scheduleRebuild() {
@@ -766,9 +769,30 @@ function initDock() {
 
   // Camera and quality.
   $<HTMLSelectElement>('#quality').addEventListener('change', (e) => studio?.setQuality((e.target as HTMLSelectElement).value as Quality));
-  $<HTMLInputElement>('#dof').addEventListener('change', (e) => studio?.setLens({ dof: (e.target as HTMLInputElement).checked }));
+  $<HTMLInputElement>('#dof').addEventListener('change', (e) => {
+    const on = (e.target as HTMLInputElement).checked;
+    studio?.setLens({ dof: on });
+    $('#btn-focus').setAttribute('aria-pressed', String(on));
+  });
+  // Quick buttons over the 3D view (always in reach, also in full screen and on small screens): focus blur and wind.
+  $('#btn-focus').addEventListener('click', () => {
+    const box = $<HTMLInputElement>('#dof');
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+  });
+  let windWas = 0.55;
+  $('#btn-wind').addEventListener('click', () => {
+    const r = $<HTMLInputElement>('#wind');
+    if (+r.value > 0) windWas = +r.value;
+    r.value = String(+r.value > 0 ? 0 : windWas || 0.55);
+    r.dispatchEvent(new Event('input'));
+  });
   $<HTMLInputElement>('#fstop').addEventListener('input', (e) => studio?.setLens({ fStop: +(e.target as HTMLInputElement).value }));
-  $<HTMLInputElement>('#wind').addEventListener('input', (e) => studio?.setWind(+(e.target as HTMLInputElement).value));
+  $<HTMLInputElement>('#wind').addEventListener('input', (e) => {
+    const v = +(e.target as HTMLInputElement).value;
+    studio?.setWind(v);
+    $('#btn-wind').setAttribute('aria-pressed', String(v > 0));
+  });
   $<HTMLInputElement>('#motion').addEventListener('change', (e) => studio?.setMotion((e.target as HTMLInputElement).checked));
 
   $('#btn-image').addEventListener('click', exportImage);
