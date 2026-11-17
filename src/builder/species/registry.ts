@@ -47,6 +47,7 @@ import { build as gaura } from './perennials/gaura';
 import { build as liriope } from './grasses/liriope';
 import { build as purpleConeflower } from './perennials/purple-coneflower';
 import { build as redMapleAutumnBlaze } from './trees/red-maple-autumn-blaze';
+import { build as japaneseMapleCoralBark } from './trees/japanese-maple-coral-bark';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -64,6 +65,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'blue-juniper-column': blueJuniperColumn,
   'blue-spruce': blueSpruce,
   'red-maple-autumn-blaze': redMapleAutumnBlaze,
+  'japanese-maple-coral-bark': japaneseMapleCoralBark,
   'boxwood': boxwood,
   'westringia': westringia,
   'euonymus-variegated': euonymusVariegated,
