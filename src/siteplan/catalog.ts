@@ -379,14 +379,15 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
   M({ id: 'black-pebble', name: 'Black beach pebble', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble', palette: ['#4a4a48', '#2a2a29', '#151515'] }),
   M({ id: 'lava-rock', name: 'Black lava rock', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a3836', '#252322'] }),
-  // Mexican beach pebble, the black (charcoal and slate) grade Green Lion buys, unpolished: smooth flattened ovals, fine
-  // pitted surface, a few lighter gray and rust-stained stones. Sold by size; drawn stone by stone (builder/pebbles.ts).
+  // Mexican beach pebble, the "black" grade Green Lion buys, unpolished: dry it is a cool blue-green gray to charcoal
+  // (colors from photos of the dry stone), smooth flattened ovals with fine light flecks, a few warm gray and rust-stained
+  // stones. Sold by size; drawn stone by stone (builder/pebbles.ts).
   ...([[0.5, 1, 'half-1', '1/2-1 in'], [1, 2, '1-2', '1-2 in'], [2, 3, '2-3', '2-3 in']] as const).map(([lo, hi, key, label]) => M({
     id: `mexican-beach-pebble-${key}`, name: `Mexican beach pebble, ${label}`, use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
-    palette: ['#4a5051', '#3c4143', '#303436', '#25282a'],
+    palette: ['#6c7578', '#5d6669', '#4f585b', '#424a4d'],
     pebble: { minIn: lo, maxIn: hi, wide: [0.62, 0.86], thick: [0.34, 0.52], colors: [
-      { c: '#25282a', share: 0.24 }, { c: '#303436', share: 0.26 }, { c: '#3c4143', share: 0.2 }, { c: '#4a5051', share: 0.13 },
-      { c: '#555a54', share: 0.09 }, { c: '#767a77', share: 0.06 }, { c: '#6b5c4c', share: 0.02 },
+      { c: '#7d8586', share: 0.1 }, { c: '#6b7374', share: 0.18 }, { c: '#5d6566', share: 0.22 }, { c: '#4f5759', share: 0.2 },
+      { c: '#424a4d', share: 0.14 }, { c: '#33393c', share: 0.1 }, { c: '#6e6a62', share: 0.04 }, { c: '#7a6b58', share: 0.02 },
     ] },
     matches: `Mexican beach pebble, black, ${label}`, maker: 'Natural stone', line: 'Mexican beach pebble', shelf: 'Rock', color: label,
   })),

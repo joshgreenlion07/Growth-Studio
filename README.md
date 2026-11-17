@@ -104,7 +104,8 @@ Messages use `window.postMessage`:
 - Mexican beach pebble, black, in the three sizes Green Lion buys
   (`mexican-beach-pebble-half-1`, `-1-2`, `-2-3`: 1/2-1, 1-2 and 2-3 in;
   shelf `Rock`, `pebble` on the look) is drawn as individual stones
-  (`builder/pebbles.ts`): smooth, flattened, slightly lopsided ovals at the sold
+  (`builder/pebbles.ts`): hard, smooth, flat-topped ovals with a full rim, in cool
+  gray to charcoal (the dry stone), at the sold
   size range, piled and tipped, in 1.5 m tiles that show detailed stones up
   close, plainer ones farther off and none past where a stone is a couple of
   pixels; the ground's pebble texture fills the gaps and the distance, matched
