@@ -46,6 +46,9 @@ import { build as yewPineColumn } from './trees/yew-pine-column';
 import { build as gaura } from './perennials/gaura';
 import { build as liriope } from './grasses/liriope';
 import { build as purpleConeflower } from './perennials/purple-coneflower';
+import { build as bougainvillea } from './shrubs/bougainvillea';
+import { build as maidenGrassMorningLight } from './grasses/maiden-grass-morning-light';
+import { build as roseFlowerCarpetRed } from './shrubs/rose-flower-carpet-red';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -98,4 +101,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'spreading-juniper': spreadingJuniper,
   'verbena': verbena,
   'groundcover': groundcover,
+  'bougainvillea': bougainvillea,
+  'maiden-grass-morning-light': maidenGrassMorningLight,
+  'rose-flower-carpet-red': roseFlowerCarpetRed,
 };
