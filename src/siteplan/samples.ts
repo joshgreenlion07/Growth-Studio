@@ -228,9 +228,32 @@ export function samplePaverCompare(): SitePlan {
   };
 }
 
+/**
+ * Two 5 ft sections of Belgard wall, both in Rio, to compare a smooth and a rough face: Melville Tandem Wall (left,
+ * three 7 in courses with its 2 in cap) and Highland Stone (right, four 6 in courses with its 3 in cap).
+ */
+export function sampleWallCompare(): SitePlan {
+  const S = 'sample' as const;
+  const L = 1.524; // 5 ft
+  return {
+    schemaVersion: 1,
+    site: { name: 'Wall comparison: Melville Tandem Wall and Highland Stone, Rio', boundary: [[0, 0], [8, 0], [8, 6], [0, 6]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [{ id: 'lawn', source: S, kind: 'turf', catalogId: 'artificial-turf', polygon: [[0, 0], [8, 0], [8, 6], [0, 6]] }],
+    lines: [
+      { id: 'melville', source: S, kind: 'wall', catalogId: 'melville-tandem-wall-rio', points: [[1.6, 3], [1.6 + L, 3]], height: 0.5334, note: 'Melville Tandem Wall, Rio: 3 courses (21 in) + 2 in cap' },
+      { id: 'highland', source: S, kind: 'wall', catalogId: 'highland-stone-rio', points: [[4.9, 3], [4.9 + L, 3]], height: 0.6096, note: 'Highland Stone, Rio: 4 courses (24 in) + 3 in cap' },
+    ],
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
 export const SAMPLES = [
   { id: 'backyard', name: 'Modern backyard', make: sampleBackyard },
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
+  { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
 ];

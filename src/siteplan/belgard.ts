@@ -14,6 +14,8 @@ export interface MakerLine {
   joint?: number;
   /** The line sells a matching 6 x 9 border stone, offered in every color. */
   border?: boolean;
+  /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
+  wall?: { face: 'smoothUnit' | 'roughHewn'; unit: { course: number; lengths: number[]; split?: number[]; capIn?: number; capOver?: number } };
   colors: [string, string[]][];
 }
 
@@ -284,7 +286,9 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Harvest Blend", ['#977e69', '#8d7561', '#846e5c', '#766251']],
     ["Pewter Blend", ['#9a968c', '#918d84', '#89857e', '#797771']],
   ] },
-  { slug: 'highland-stone', name: "Highland Stone", shelf: 'Garden walls', colors: [
+  // Highland Stone: a rough-hewn split face, 6 in courses of 18 in units, each with a virtual joint so it reads as two
+  // stones (6 + 12 or 12 + 6); 3 x 18 x 13 in cap. Belgard: "rough-hewn, rustic split stone ... deep shadow lines".
+  { slug: 'highland-stone', name: "Highland Stone", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [18], split: [6, 12], capIn: 3, capOver: 1 } }, colors: [
     ["Ashwood", ['#80766b', '#736a60', '#6c6359', '#62594f']],
     ["Bella", ['#8a7665', '#7f6c5b', '#766455', '#635245']],
     ["Brittany Beige", ['#706458', '#6b6157', '#685e55', '#645b51']],
@@ -313,7 +317,9 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Scandina Gray", ['#c6c4cb', '#b6b5bd', '#a7a6b0', '#8a8993']],
     ["Sienna", ['#867360', '#726254', '#5f5145', '#392d23']],
   ] },
-  { slug: 'melville-tandem-wall', name: "Melville Tandem Wall", shelf: 'Garden walls', colors: [
+  // Melville Tandem Wall: smooth, linear faces 7 in tall in three lengths (13 3/16, 15 13/16, 18 7/16 in) laid at
+  // random, tight joints; capped with the Melville cap (2 x 20 x 13 in). Belgard: "smooth face and linear design".
+  { slug: 'melville-tandem-wall', name: "Melville Tandem Wall", shelf: 'Garden walls', wall: { face: 'smoothUnit', unit: { course: 7, lengths: [13.1875, 15.8125, 18.4375], capIn: 2, capOver: 0.75 } }, colors: [
     ["Anthracite", ['#514d4a', '#4d4946', '#484541', '#413d3a']],
     ["Midnight", ['#5c5754', '#57524f', '#55504c', '#4a4541']],
     ["Newport Gray", ['#7a766f', '#706d66', '#65635e', '#5a5955']],

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isThreePiece, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace } from '../siteplan/catalog';
+import { isThreePiece, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from './textures';
@@ -542,6 +542,7 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
       return { h: gap ? 0 : 0.5 + depth * 0.6 + split * 0.35, c, r: 0.9 };
     });
   }
+  if ((face === 'smoothUnit' || face === 'roughHewn') && spec.wall?.unit) return unitWallSet(spec, face, spec.wall.unit);
   // Block walls.
   const smoothFace = face === 'smoothBlock';
   const lay = smoothFace ? cobbleLayout([[18, 6], [12, 6], [24, 6]], spec.id) : runningLayout(16, 6, 0.5, false, 8, 3, spec.id);
@@ -554,6 +555,122 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
     c = mulRGB(c, smoothFace ? 0.94 + split * 0.15 : 0.8 + split * 0.35);
     if (mortar) c = mulRGB(colors[colors.length - 1], 0.7);
     return { h: mortar ? 0 : 0.4 + smooth(0.004, 0.012, hit.edge) * 0.4 + split * (smoothFace ? 0.1 : 0.6), c, r: smoothFace ? 0.8 : 0.92 };
+  });
+}
+
+/**
+ * A maker's wall in its real units: courses of `unit.course` inches, each laid with the unit's face lengths at random
+ * (running joints), course lines level with the ground. 'smoothUnit' is a smooth, crisp face with tight joints and a
+ * small chamfer; 'roughHewn' is a deeply split stone face, pitched at its edges, with a shallower virtual joint
+ * inside each unit so one unit reads as two stones.
+ */
+function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn', unit: WallUnit): PBRSet {
+  const colors = pal(spec);
+  const r = rng(`${spec.id}:units`);
+  const rough = face === 'roughHewn';
+  const H = unit.course * IN;
+  const rows = Math.max(6, Math.round(72 / unit.course));
+  const T = rows * H; // square tile, a whole number of courses tall
+  const V0 = 0.08; // wall faces map v = height above grade + 0.08 m
+  const courses = Array.from({ length: rows }, () => {
+    const cuts = [0];
+    const splits: number[] = [];
+    let x = 0;
+    while (x < T - 1e-6) {
+      let l = unit.lengths[Math.floor(r() * unit.lengths.length)] * IN;
+      if (T - x - l < unit.lengths[0] * IN * 0.5) l = T - x; // the last unit in the tile closes the row
+      splits.push(unit.split ? unit.split[Math.floor(r() * unit.split.length)] * IN : -1);
+      x = Math.min(T, x + l);
+      cuts.push(x);
+    }
+    return { cuts, splits, shift: r() * T };
+  });
+  const J = (rough ? 0.18 : 0.1) * IN; // half joint
+  return paint(1024, T, rough ? 18 : 6, (u, v) => {
+    const yy = ((((v * T - V0) % T) + T) % T);
+    const ri = Math.min(rows - 1, Math.floor(yy / H));
+    const row = courses[ri];
+    const xs = ((((u * T - row.shift) % T) + T) % T);
+    let k = 0;
+    while (k < row.cuts.length - 2 && xs >= row.cuts[k + 1]) k++;
+    const a = row.cuts[k], b = row.cuts[k + 1], ly = yy - ri * H;
+    const id = ri * 97 + k;
+    let edge = Math.min(xs - a, b - xs, ly, H - ly);
+    const sp = row.splits[k];
+    const vj = sp > 0 && sp < b - a - 0.02 ? Math.abs(xs - a - sp) : 1;
+    if (rough) edge -= (vnoise(u * 160, v * 160, 160, 7) - 0.5) * 0.0025; // slightly uneven arrises
+    if (edge < J) {
+      const g = vnoise(u * 400, v * 400, 400, 2);
+      return { h: 0, c: mulRGB(colors[colors.length - 1], 0.55 + g * 0.12), r: 1 };
+    }
+    let c = pick(colors, hash(id, 1));
+    c = mixRGB(c, pick(colors, hash(id, 5)), 0.35 * fbm(u + hash(id, 2) * 3, v + hash(id, 3) * 3, Math.round(T * 3), 3, id % 40));
+    if (!rough) {
+      // Smooth, sharp face: a small chamfer at each edge, fine sand texture, a faint trowel cloud.
+      const g = vnoise(u * 500, v * 500, 500, 11);
+      const cloud = fbm(u + hash(id, 4), v, Math.round(T * 5), 3, 17);
+      const bev = smooth(J, J + 0.004, edge);
+      c = mulRGB(c, 0.93 + cloud * 0.08 + g * 0.04);
+      return { h: bev * (0.94 + g * 0.04), c, r: 0.72 + cloud * 0.08 };
+    }
+    return roughStone(u, v, T, id, colors, edge, J, vj);
+  });
+}
+
+/**
+ * Rough-hewn concrete stone (Highland Stone), as in Belgard's photos: a lumpy split face with a few broad planes,
+ * pitched and chipped at the arrises, full of small pits, flecked with light and dark aggregate, and colored in soft
+ * blotches of the blend's tones inside each stone. `edge` is the distance to the stone's edge (m), `vj` the distance
+ * to its virtual joint (the shallower groove that makes one unit read as two stones).
+ */
+function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], edge: number, J: number, vj: number) {
+  const n = colors.length;
+  const light = colors[0], dark = colors[n - 1];
+  // The virtual joint reads like a narrower real joint, each side pitched like its own stone.
+  if (vj < J * 0.7) return { h: 0.04, c: mulRGB(dark, 0.6), r: 1 };
+  const e = Math.min(edge, vj + J * 0.3);
+  const big = fbm(u + hash(id, 6) * 5, v + hash(id, 7) * 5, Math.max(2, Math.round(T * 3)), 4, 30 + (id % 25));
+  const plane = 1 - Math.abs(big - 0.5) * 2;
+  const mid = fbm(u + hash(id, 8), v, Math.max(4, Math.round(T * 12)), 3, 60 + (id % 13));
+  const grit = vnoise(u * 900, v * 900, 900, 19);
+  const chip = (vnoise(u * 90, v * 90, 90, 23) - 0.5) * 0.006;
+  const pitch = smooth(J, J + 0.014 + big * 0.014, e + chip);
+  // Pores: a scatter of small pits, and a finer one.
+  const p1 = voronoi(u, v, Math.round(T * 120), 41);
+  const r1 = 0.14 + hash(p1.id, 9) * 0.2;
+  const pit = hash(p1.id, 4) < 0.5 ? 1 - smooth(r1 * 0.55, r1, p1.f1) : 0;
+  const p2 = voronoi(u, v, Math.round(T * 300), 43);
+  const pit2 = hash(p2.id, 5) < 0.45 ? 1 - smooth(0.12, 0.24, p2.f1) : 0;
+  // Aggregate flecks, light and dark.
+  const s1 = voronoi(u, v, Math.round(T * 200), 47);
+  const fleck = s1.f1 < 0.2 ? (hash(s1.id, 6) < 0.55 ? 1 : -1) : 0;
+  // Soft blotches of the blend's tones, a charcoal and a warm tan beyond the swatch's own range.
+  const b1 = fbm(u + hash(id, 2) * 7, v + hash(id, 3) * 7, Math.max(3, Math.round(T * 4)), 4, 70 + (id % 31));
+  const b2 = fbm(u + hash(id, 10) * 7, v + hash(id, 11) * 7, Math.max(3, Math.round(T * 6)), 4, 90 + (id % 29));
+  let c = mixRGB(light, dark, smooth(0.3, 0.72, b1));
+  c = mixRGB(c, mulRGB(dark, 0.78), smooth(0.58, 0.74, b2) * 0.55);
+  c = mixRGB(c, [light[0] * 1.07, light[1] * 1.0, light[2] * 0.9], smooth(0.4, 0.26, b2) * 0.55);
+  // The edge rolls off to a rounded arris rather than dropping to the joint, so it catches light instead of a dark rim.
+  const h = Math.max(0, 0.22 + pitch * (0.16 + plane * 0.28 + mid * 0.22 + grit * 0.1) - pit * 0.3 - pit2 * 0.13);
+  // Pitched edges fall into shade from their own shape, so only a light darkening here; the whole face a touch deeper.
+  c = mulRGB(c, 0.76 + h * 0.26 + grit * 0.08);
+  c = mulRGB(c, (1 - pit * 0.42) * (1 - pit2 * 0.22));
+  if (fleck > 0) c = mixRGB(c, [0.86, 0.84, 0.8], 0.45);
+  else if (fleck < 0) c = mulRGB(c, 0.62);
+  return { h, c, r: 0.95 + pit * 0.05 };
+}
+
+/** The cap of a rough-hewn wall: the same porous, flecked stone, 18 in pieces along the wall, with no courses. */
+export function wallCapTextures(spec: MaterialSpec): PBRSet {
+  return textureSet(`cap:${spec.id}`, () => {
+    const colors = pal(spec).map((c) => mulRGB(c, 0.92));
+    const T = 72 * IN, L = 18 * IN, J = 0.12 * IN;
+    return paint(1024, T, 15, (u, v) => {
+      const x = u * T, k = Math.floor(x / L);
+      const edge = Math.min(x - k * L, (k + 1) * L - x);
+      if (edge < J) return { h: 0.05, c: mulRGB(colors[colors.length - 1], 0.5), r: 1 };
+      return roughStone(u, v, T, 500 + k, colors, edge + 0.02, J, 1);
+    });
   });
 }
 

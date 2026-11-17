@@ -3,9 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { materialById, type FenceStyle } from '../siteplan/catalog';
 import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
-import { latticeAlpha, materialTextures } from '../engine/surfaces';
+import { latticeAlpha, materialTextures, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
-import { catalogMaterial, plainMaterial, segmentBox } from './materials';
+import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
 
@@ -298,6 +298,8 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
   const spec = materialById.get(wallId);
   const cap = choice === 'midnight' ? MIDNIGHT : choice === 'same' ? (spec?.palette[1] ?? spec?.palette[0] ?? '#8f8c87') : (spec?.wall?.cap ?? '#8f8c87');
   if (spec?.wall?.face === 'plaster') return catalogMaterial(wallId);
+  // A rough-hewn wall's own cap: the same porous stone, unless a Midnight cap was chosen.
+  if (spec?.wall?.face === 'roughHewn' && choice !== 'midnight') return pbrMaterial(`cap:${wallId}`, wallCapTextures(spec));
   return plainMaterial(`cap-${cap}`, { color: cap, roughness: 0.55 });
 }
 
@@ -480,12 +482,14 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     const half = path.thick / 2;
     if (l.kind === 'wall') {
       const face = spec?.wall?.face ?? 'splitFace';
-      const over = face === 'plaster' ? 0.02 : 0.035;
+      const unit = spec?.wall?.unit;
+      // A maker's cap has its own thickness and overhang; otherwise the usual 2.4 in cap with a 1.4 in overhang.
+      const over = face === 'plaster' ? 0.02 : unit?.capOver !== undefined ? unit.capOver * 0.0254 : 0.035;
       put('wall', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map(() => l.height)));
       // The cap overhangs both faces of a centered wall, and the wall's open ends; as the wall
       // moves off the line its overhang shifts to the far side, so the near edge stays flush.
       const f = (d: number) => Math.max(-1, Math.min(1, path.move ? d / path.move : 0));
-      const capTop = l.height + (face === 'plaster' ? 0.05 : 0.06);
+      const capTop = l.height + (face === 'plaster' ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : 0.06);
       const cap = bandGeometry(extendPath(path, over), (d) => d - half - over * (1 - f(d)), (d) => d + half + over * (1 + f(d)), path.pts.map(() => l.height), path.pts.map(() => capTop));
       put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else {
