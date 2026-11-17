@@ -852,6 +852,16 @@ function onEmbedMessage(e: MessageEvent) {
   }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
+  if (d.type === 'cover') {
+    // A cover picture of the yard for the parent's second screen, from the Overview view.
+    const origin = e.origin;
+    if (!studio || !embedBuilt) return window.parent.postMessage({ source: 'growth-studio', type: 'cover', ok: false, message: 'The 3D view is not ready yet.' }, origin);
+    studio.coverImage(1600).then(
+      (data) => window.parent.postMessage({ source: 'growth-studio', type: 'cover', ok: true, data }, origin),
+      (err) => window.parent.postMessage({ source: 'growth-studio', type: 'cover', ok: false, message: err instanceof Error ? err.message : String(err) }, origin),
+    );
+    return;
+  }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
