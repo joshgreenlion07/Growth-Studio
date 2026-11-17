@@ -21,8 +21,7 @@ export interface MakerLine {
 
 export const BELGARD_LINES: MakerLine[] = [
   // Avalon Slate: 3-piece set, 2 3/8 in thick, "natural slate texture with a unique rippled face" (belgard.com). Colors with a
-  // swatch on Belgard's product page. Rainier and Victorian are listed there without a swatch, so they use Catalina
-  // Grana's Rainier and Victorian (same Belgard color names) until a swatch is available.
+  // swatch on Belgard's product page (Rainier and Victorian read from the swatch photos the color picker loads).
   { slug: 'avalon-slate', name: "Avalon Slate", shelf: 'Pavers', sizes: [[6, 12], [9, 12], [12, 12]], face: 'slate', joint: 0.12, border: true, colors: [
     ["Autumn", ['#7e6d5c', '#706156', '#675a51', '#584d46']],
     ["Bella", ['#8a7865', '#81705f', '#7a6b5b', '#6e6153']],
@@ -31,8 +30,8 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Sierra", ['#7e6d61', '#756559', '#6e5f53', '#605349']],
     ["Sonoran Gray", ['#817b76', '#76706b', '#6e6763', '#5f5854']],
     ["Toscana", ['#837160', '#796959', '#726355', '#665a4e']],
-    ["Rainier", ['#7b6f63', '#766b60', '#73685d', '#70655b']],
-    ["Victorian", ['#887a67', '#857663', '#827462', '#7b6e5d']],
+    ["Rainier", ['#726354', '#6c6052', '#665c51', '#60574f']],
+    ["Victorian", ['#867e72', '#7e7466', '#776d60', '#696055']],
   ] },
   // Antiqued Flat Top keeps the textured face (fine aggregate and pores), a close starting point for its look.
   { slug: 'antiqued-flat-top', name: "Antiqued Flat Top", shelf: 'Pavers', sizes: [[6, 9], [9, 9], [9, 12]], face: 'textured', colors: [

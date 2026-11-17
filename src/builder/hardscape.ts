@@ -227,6 +227,8 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const bm = new THREE.Mesh(bg, mat(catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide })));
         bm.receiveShadow = true;
         bm.userData.itemId = z.id;
+        bm.userData.part = 'border';
+        bm.userData.catalogId = z.border.catalogId;
         group.add(bm);
         surfaces.push(bm);
         if (z.borderLights) {
@@ -256,11 +258,16 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
           geos.push(fg);
           const fm = new THREE.Mesh(fg, catalogMaterial(z.catalogId, { side: THREE.DoubleSide }, z.laying));
           fm.receiveShadow = true;
+          fm.userData.itemId = z.id;
+          fm.userData.part = 'main';
+          fm.userData.catalogId = z.catalogId;
           group.add(fm);
         }
       }
       mesh.name = `zone-${z.id}`;
       mesh.userData.itemId = z.id;
+      mesh.userData.part = 'main';
+      mesh.userData.catalogId = z.catalogId;
       group.add(mesh);
       surfaces.push(mesh);
     } else if (z.raised && materialById.has(z.raised.wallCatalogId)) {
@@ -316,6 +323,8 @@ function raisedPlanter(z: Zone, geos: THREE.BufferGeometry[]): THREE.Object3D {
   wm.castShadow = true;
   wm.receiveShadow = true;
   wm.userData.itemId = z.id;
+  wm.userData.part = 'wall';
+  wm.userData.catalogId = r.wallCatalogId;
   g.add(wm);
   const capOuter = insetPolygon(z.polygon, -0.035);
   const capInner = insetPolygon(z.polygon, 0.235);
@@ -456,6 +465,8 @@ function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geo
     m.castShadow = true;
     m.receiveShadow = true;
     m.userData.itemId = l.id;
+    m.userData.part = 'steps';
+    m.userData.catalogId = l.catalogId;
     g.add(m);
   }
   return g;
@@ -503,7 +514,7 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }
   }
-  for (const [, b] of buckets) {
+  for (const [key, b] of buckets) {
     const merged = mergeGeometries(b.parts, false);
     b.parts.forEach((x) => x.dispose());
     if (!merged) continue;
@@ -512,6 +523,9 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     m.castShadow = b.shadow;
     m.receiveShadow = true;
     m.userData.itemId = l.id;
+    // What the material pointer reports: the wall face or its cap, a curb, or a fence.
+    m.userData.part = l.kind === 'wall' ? (key === 'cap' ? 'cap' : 'wall') : l.kind === 'fence' ? 'fence' : 'curb';
+    m.userData.catalogId = l.catalogId;
     g.add(m);
   }
   return g;

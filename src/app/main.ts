@@ -7,6 +7,7 @@ import { expandPlants } from '../builder/build';
 import { groundModel } from '../builder/ground';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
+import { lookOf } from './looks';
 import { Studio } from '../engine/studio';
 import type { MeasureMode } from '../engine/measure';
 import { MOODS, type Mood } from '../engine/sky';
@@ -114,7 +115,7 @@ function bootStudio() {
   studio.onViewsChanged = renderViews;
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
-  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements.');
+  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, B goes home.');
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
@@ -756,13 +757,21 @@ function initFullscreen() {
     if (on) tick();
     window.dispatchEvent(new Event('resize'));
   };
+  let viaParent = false;
   const toggle = () => {
     if (!on) {
       set(true);
-      // The real Fullscreen API where the browser allows it; the fixed layout above works without it.
-      pane.requestFullscreen?.().catch(() => {});
+      // Inside Area Planner, the parent page goes full screen with its own material panel; without an answer
+      // within 300 ms, the studio uses the real Fullscreen API itself. The fixed layout above works without either.
+      if (EMBED && embedOrigin) {
+        const t = window.setTimeout(() => { parentFullscreen = null; pane.requestFullscreen?.().catch(() => {}); }, 300);
+        parentFullscreen = (pon) => { window.clearTimeout(t); viaParent = pon; parentFullscreen = (later) => { if (!later && on) { viaParent = false; set(false); } }; };
+        window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-request' }, embedOrigin);
+      } else pane.requestFullscreen?.().catch(() => {});
     } else {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (viaParent && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-exit' }, embedOrigin);
+      viaParent = false;
       set(false);
     }
   };
@@ -811,6 +820,9 @@ function embedNote(text: string | null) {
   $('p', box).textContent = text ?? '';
 }
 
+/** Set while the studio waits for (or runs inside) the parent page's full screen; called with its state. */
+let parentFullscreen: ((on: boolean) => void) | null = null;
+
 function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] } = {}) {
   if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'built', ok, ...extra }, embedOrigin);
 }
@@ -837,6 +849,8 @@ function onEmbedMessage(e: MessageEvent) {
     for (const id of ids) wantThumb(id, (url) => window.parent.postMessage({ source: 'growth-studio', type: 'plant-thumb', id, url }, origin));
     return;
   }
+  if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
+  if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
   // Keep only the newest plan. A refit asked for by any message in the burst still happens.
@@ -891,8 +905,7 @@ function initEmbed() {
     embedBooted = true;
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
-    const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb')))
-      .map((m) => ({ id: m.id, name: m.name, use: m.use, maker: m.maker ?? '', line: m.line ?? '', shelf: m.shelf ?? (m.use === 'wall' ? 'Retaining walls' : m.use === 'edging' ? 'Curb' : m.use === 'fence' ? 'Fences' : 'Pavers'), color: m.color ?? m.name, sw: m.palette[1] ?? m.palette[0] , ...(isThreePiece(m) ? { laying: true } : {}) }));
+    const looks = MATERIALS.filter((m) => !m.auto && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb'))).map(lookOf);
     window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: looks }, '*');
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
@@ -900,6 +913,15 @@ function initEmbed() {
       window.parent.postMessage({ source: 'growth-studio', type: 'need-asset', id }, embedOrigin);
     };
     if (studio) studio.onPick = (id) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'select', id }, embedOrigin); };
+    // The material pointer (controller Y or P): tell the parent what it is on, with the material's details.
+    if (studio) {
+      studio.onPointer = (on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'pointer', on }, embedOrigin); };
+      studio.onPoint = (hit) => {
+        if (!embedOrigin) return;
+        const spec = hit ? materialById.get(hit.catalogId) : undefined;
+        window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, material: spec ? lookOf(spec) : null }, embedOrigin);
+      };
+    }
     applyEmbedPlan();
   };
   // The timer covers a frame that is not being painted yet (a hidden tab or panel).
