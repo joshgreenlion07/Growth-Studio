@@ -549,6 +549,12 @@ interface LodSet {
   staticMeshes: THREE.InstancedMesh[];
   /** Radius around the base that holds the mature plant at scale 1. */
   radius0: number;
+  /** Triangles in one instance at full detail and at fewer leaves (every part), for the switch sizes below. */
+  tris0: number;
+  tris1: number;
+  /** This plant's switch sizes in CSS pixels: full to fewer leaves, fewer to fewest (see lodSizes). */
+  t1: number;
+  t2: number;
 }
 
 export interface PlantLayer {
@@ -635,26 +641,48 @@ export const PLANT_LAYERS = {
  */
 export const LOD_PIXELS = 100;
 export const LOD2_PIXELS = 32;
+/** Triangles in one plant at which the switch sizes start to grow (see lodSizes). */
+const LOD_TRIS = 9000;
+const LOD2_TRIS = 4000;
+
+/**
+ * Switch sizes for one plant. A dense plant (a Japanese maple or a yew pine has 40 to 60 thousand triangles at full
+ * detail, a perennial a few thousand) goes to fewer leaves while still larger on screen: up to 2.2 times LOD_PIXELS
+ * and 2 times LOD2_PIXELS. At those sizes each kept leaf card is still several pixels across, so the crown reads
+ * the same, and most of the yard's triangles are in these few plants.
+ */
+function lodSizes(tris0: number, tris1: number): [number, number] {
+  return [LOD_PIXELS * THREE.MathUtils.clamp(Math.sqrt(tris0 / LOD_TRIS), 1, 2.2), LOD2_PIXELS * THREE.MathUtils.clamp(Math.sqrt(tris1 / LOD2_TRIS), 1, 2)];
+}
 /**
  * A plant switches detail only once its size is this share past a threshold (either way), so a plant
  * sitting near one while the camera glides does not flip back and forth between levels.
  */
 const LOD_HYSTERESIS = 0.15;
 
-/** The detail level for a plant `px` tall on screen, kept at `prev` while inside the dead band around a threshold. */
-function lodLevel(px: number, prev: number, minLevel: number): number {
+/**
+ * The detail level for a plant `px` tall on screen, kept at `prev` while inside the dead band around a threshold.
+ * `s1` and `s2` are the plant's switch sizes (lodSizes).
+ */
+function lodLevel(px: number, prev: number, minLevel: number, s1 = LOD_PIXELS, s2 = LOD2_PIXELS): number {
   const lo = 1 - LOD_HYSTERESIS, hi = 1 + LOD_HYSTERESIS;
   // Thresholds move away from the current level: harder to leave it than to enter it.
-  const t1 = prev === 255 ? LOD_PIXELS : prev === 0 ? LOD_PIXELS * lo : LOD_PIXELS * hi;
-  const t2 = prev === 255 ? LOD2_PIXELS : prev === 2 ? LOD2_PIXELS * hi : LOD2_PIXELS * lo;
+  const t1 = prev === 255 ? s1 : prev === 0 ? s1 * lo : s1 * hi;
+  const t2 = prev === 255 ? s2 : prev === 2 ? s2 * hi : s2 * lo;
   const l = px >= t1 ? 0 : px >= t2 ? 1 : 2;
   return Math.max(minLevel, l);
 }
 
-/** Detail levels: share of leaf cards kept (each grown to keep the crown full), share of larger pieces kept, share of twigs kept, smallest limb kept (share of the largest). */
+/**
+ * Detail levels: share of leaf cards kept (each grown to keep the crown about as full: the kept cards cover about
+ * the same area at level 1, and about 60% of it at level 2, where a plant is a few dozen pixels tall), share of
+ * larger pieces kept, share of twigs kept; for wood, the size (share of the largest piece) from which a limb counts
+ * as large, the share of large limbs kept and of smaller ones. The trunk (80% of the largest piece or more) is
+ * always kept. Wood is mostly hidden inside the crown, so far copies keep little of it.
+ */
 const LEVELS = {
-  1: { keep: 0.4, grow: 1 / Math.sqrt(0.4), keepBig: 1, twigs: 0.25, limb: 0.2, limbKeep: 0.5 },
-  2: { keep: 0.14, grow: 2.1, keepBig: 0.5, twigs: 0, limb: 0.35, limbKeep: 0.15 },
+  1: { keep: 0.34, grow: 1 / Math.sqrt(0.34), keepBig: 1, twigs: 0.12, limb: 0.2, limbBig: 1, limbKeep: 0.3 },
+  2: { keep: 0.11, grow: Math.sqrt(0.62 / 0.11), keepBig: 0.5, twigs: 0, limb: 0.4, limbBig: 0.5, limbKeep: 0.05 },
 };
 
 const lodCache = new WeakMap<THREE.BufferGeometry, Map<number, THREE.BufferGeometry>>();
@@ -726,7 +754,8 @@ export function lodGeometry(geo: THREE.BufferGeometry, part: 'leaf' | 'wood' | '
     const nv = verts.get(k)!;
     const roll = r();
     if (part === 'wood') {
-      if (nv <= CARD ? roll < L.twigs : extent(c) >= maxExtent * L.limb || roll < L.limbKeep) keep.set(k, 1);
+      const e = extent(c) / maxExtent;
+      if (nv <= CARD ? roll < L.twigs : e >= 0.8 || (e >= L.limb && roll < L.limbBig) || roll < L.limbKeep) keep.set(k, 1);
     } else if (nv <= CARD) {
       if (roll < L.keep) keep.set(k, L.grow);
     } else if (roll < L.keepBig) keep.set(k, 1);
@@ -832,6 +861,10 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           rlevel: new Uint8Array(n).fill(255),
           staticMeshes: [],
           radius0: 0,
+          tris0: 0,
+          tris1: 0,
+          t1: LOD_PIXELS,
+          t2: LOD2_PIXELS,
         }
       : null;
 
@@ -850,6 +883,10 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         return;
       }
       const lo = lodGeometry(g, part, 1), lo2 = lodGeometry(g, part, 2);
+      const tris = (gg: THREE.BufferGeometry) => (gg.index ? gg.index.count : (gg.getAttribute('position') as THREE.BufferAttribute).count) / 3;
+      set.tris0 += tris(g);
+      set.tris1 += tris(lo);
+      [set.t1, set.t2] = lodSizes(set.tris0, set.tris1);
       g.boundingSphere ?? g.computeBoundingSphere();
       const bs = g.boundingSphere!;
       set.radius0 = Math.max(set.radius0, bs.center.length() + bs.radius);
@@ -870,10 +907,12 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
       banded([g, lo, lo2], set.view, PLANT_LAYERS.view, 'view');
       // In reflections, plants near reflecting water: fewer or fewest leaves.
       banded([lo, lo2], set.reflect, PLANT_LAYERS.reflection, 'reflection');
-      // Every plant into the shadow map; one only a few shadow texels across from the fewest-leaves copy.
+      // Every plant into the shadow map, from a lower-detail copy: wood (mostly inside the crown) and any plant only a
+      // couple of dozen shadow texels across from the fewest-leaves copy; the leaves of larger plants from the
+      // fewer-leaves copy, whose cards cover as much as the full crown, so dappled shade keeps its density.
       if (cast && castShadows) {
-        const tiny = options.shadowTexel !== undefined && Math.max(spec.matureHeight, spec.matureSpread) < options.shadowTexel * 16;
-        const im = new THREE.InstancedMesh(tiny ? lo2 : lo, mat, n);
+        const tiny = options.shadowTexel !== undefined && Math.max(spec.matureHeight, spec.matureSpread) < options.shadowTexel * 24;
+        const im = new THREE.InstancedMesh(tiny || part === 'wood' ? lo2 : lo, mat, n);
         im.name = `${spec.id}-${name}-shadow`;
         im.castShadow = true;
         if (depth) im.customDepthMaterial = depth;
@@ -1026,13 +1065,13 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           // A reflection is about as large on screen as the plant, wherever the plant itself is.
           if (set.reflects[i]) {
             // Reflections use the fewer and fewest levels only (0 and 1 here are levels 1 and 2).
-            const rl = lodLevel(px, set.rlevel[i], 1);
+            const rl = lodLevel(px, set.rlevel[i], 1, set.t1, set.t2);
             set.rlevel[i] = rl;
             putBand(set.reflect[rl - 1], set.base, i);
           }
           sphere.radius = set.radius0 * k * grow + 0.4;
           if (!frustum.intersectsSphere(sphere)) continue;
-          const vl = lodLevel(px, set.level[i], 0);
+          const vl = lodLevel(px, set.level[i], 0, set.t1, set.t2);
           set.level[i] = vl;
           putBand(set.view[vl], set.base, i);
         }

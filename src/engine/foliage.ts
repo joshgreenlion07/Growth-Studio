@@ -21,12 +21,19 @@ export const GLOBAL = {
    * from the view's pixel density, so blades are never drawn thinner than about a pixel (sub-pixel blades twinkle).
    */
   uTurfFade: { value: new THREE.Vector2(14, 26) },
+  /**
+   * Meters per screen pixel at 1 m from the camera (set each frame; 0 turns the cut-off off). Wind motion smaller
+   * than about half a pixel where a plant stands cannot be seen, so its math is skipped there: leaf flutter stops a
+   * few dozen meters out (where it would only sparkle), the sway of the whole plant much farther.
+   */
+  uWindMpp: { value: 0 },
 };
 
 /** No wind: shadows are cast from the plants' still pose, so they never step or crawl while the leaves sway. */
 const STILL_WIND = { value: 0 };
 /** No distance fade (everything but the lawn). */
 const NO_FADE = { value: new THREE.Vector2(0, 0) };
+const NO_CUTOFF = { value: 0 };
 
 export interface GrowthUniforms {
   /** 0 at install, 1 at maturity. */
@@ -61,6 +68,7 @@ uniform vec2 uSize;
 uniform float uBend;
 uniform float uFlutter;
 uniform vec2 uFade;
+uniform float uWindMpp;
 attribute float aBirth;
 attribute vec3 aAnchor;
 attribute float aSway;
@@ -85,22 +93,33 @@ vec4 mvPosition = vec4(transformed, 1.0);
 #endif
 vec4 gsWorld = modelMatrix * mvPosition;
 {
-  vec4 baseW = modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
   #ifdef USE_INSTANCING
-    baseW = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    vec3 baseW = (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz;
+  #else
+    vec3 baseW = modelMatrix[3].xyz;
   #endif
-  float ph = dot(baseW.xz, vec2(0.37, 0.21));
-  float gust = 0.55 + 0.45 * sin(uTime * 0.31 + baseW.x * 0.05 + baseW.z * 0.04);
-  float sway = (sin(uTime * 1.25 + ph) * 0.55 + sin(uTime * 2.6 + ph * 1.7) * 0.22 + 0.35) * gust;
-  float b = aSway * uBend * uWind * sway * uSize.y;
-  gsWorld.xz += uWindDir * b;
-  gsWorld.y -= abs(b) * 0.15 * aSway;
-  float fl = sin(uTime * 7.3 + dot(position, vec3(3.1, 1.7, 2.3)) * 3.0) * uFlutter * uWind * aSway;
-  gsWorld.xyz += vec3(fl, fl * 0.6, -fl * 0.8);
+  float camD = distance(cameraPosition, baseW);
+  // One pixel's size where the plant stands; motion well under it is skipped (faded out, so nothing pops).
+  float pxM = max(camD * uWindMpp, 1e-6);
+  float swayAmp = uBend * uWind * uSize.y;
+  float kSway = uWindMpp > 0.0 ? smoothstep(0.15, 0.5, swayAmp / pxM) : 1.0;
+  float kFl = uWindMpp > 0.0 ? smoothstep(0.3, 0.8, uFlutter * uWind / pxM) : 1.0;
+  if (kSway * aSway > 0.0) {
+    float ph = dot(baseW.xz, vec2(0.37, 0.21));
+    float gust = 0.55 + 0.45 * sin(uTime * 0.31 + baseW.x * 0.05 + baseW.z * 0.04);
+    float sway = (sin(uTime * 1.25 + ph) * 0.55 + sin(uTime * 2.6 + ph * 1.7) * 0.22 + 0.35) * gust;
+    float b = aSway * swayAmp * sway * kSway;
+    gsWorld.xz += uWindDir * b;
+    gsWorld.y -= abs(b) * 0.15 * aSway;
+  }
+  if (kFl * aSway * uFlutter > 0.0) {
+    float fl = sin(uTime * 7.3 + dot(position, vec3(3.1, 1.7, 2.3)) * 3.0) * uFlutter * uWind * aSway * kFl;
+    gsWorld.xyz += vec3(fl, fl * 0.6, -fl * 0.8);
+  }
   if (uFade.y > 0.0) {
     // Collapse onto the base point (nothing left to draw) before the part gets thinner than a pixel.
-    float keep = 1.0 - smoothstep(uFade.x, uFade.y, distance(cameraPosition, baseW.xyz));
-    gsWorld.xyz = mix(baseW.xyz, gsWorld.xyz, keep);
+    float keep = 1.0 - smoothstep(uFade.x, uFade.y, camD);
+    gsWorld.xyz = mix(baseW, gsWorld.xyz, keep);
   }
 }
 mvPosition = viewMatrix * gsWorld;
@@ -112,6 +131,8 @@ function bindCommon(shader: THREE.WebGLProgramParametersWithUniforms, o: Foliage
   shader.uniforms.uTime = GLOBAL.uTime;
   shader.uniforms.uWind = still ? STILL_WIND : GLOBAL.uWind;
   shader.uniforms.uFade = o.fade ? GLOBAL.uTurfFade : NO_FADE;
+  // The shadow pass draws the still pose for the whole yard: no cut-off there.
+  shader.uniforms.uWindMpp = still ? NO_CUTOFF : GLOBAL.uWindMpp;
   shader.uniforms.uWindDir = GLOBAL.uWindDir;
   shader.uniforms.uGrow = g.uGrow;
   shader.uniforms.uSize = g.uSize;
