@@ -13,6 +13,9 @@ import { PendingTexture, setTexturePainter, type PBRSet } from './textures';
  * - Order: the sets of the newest build or restyle first (a color just picked
  *   is painted before anything asked for earlier), then a quick 512 px copy of
  *   every large set before any full-size one.
+ * - Workers: up to three paint any set; one more (where there are cores to
+ *   spare) takes only quick copies and stored sets, so a color just picked is
+ *   on screen in well under a second even while full-size sets are painting.
  * - Stale sets: a yard tells the painter which sets it draws with (see
  *   textureDemand). A set no yard draws with any more (a color previewed and
  *   then replaced) is dropped from the queue; one being painted is stopped
@@ -77,6 +80,8 @@ interface Slot {
   ready: boolean;
   dead: boolean;
   job: Job | null;
+  /** Kept for quick copies (and stored sets): a color just picked never waits behind full-size paints. */
+  quick: boolean;
 }
 
 interface Level {
@@ -157,6 +162,7 @@ const stats = {
   firstMs: 0,
   lastMs: 0,
   workers: 0,
+  quickWorkers: 0,
   /** Longest main-thread slice spent uploading or swapping in one frame. */
   maxFrameMs: 0,
   /** The last swaps: key, phase, ms from request to on screen. */
@@ -176,11 +182,11 @@ function supported(): boolean {
   }
 }
 
-function spawn(): Slot | null {
+function spawn(quick = false): Slot | null {
   try {
     // Written out in full so Vite bundles the worker (and esbuild leaves it alone).
     const w = new Worker(new URL('./textures.worker.ts', import.meta.url), { type: 'module' });
-    const slot: Slot = { w, ready: false, dead: false, job: null };
+    const slot: Slot = { w, ready: false, dead: false, job: null, quick };
     w.onmessage = (e) => onMessage(slot, e.data);
     w.onerror = (e) => {
       e.preventDefault?.();
@@ -195,9 +201,11 @@ function spawn(): Slot | null {
 
 function start(): boolean {
   if (!supported()) return false;
-  const n = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) - 2));
-  for (let i = 0; i < n; i++) {
-    const s = spawn();
+  const cores = navigator.hardwareConcurrency || 4;
+  const n = Math.max(1, Math.min(3, cores - 2));
+  // Plus one for quick copies only, where there are cores to spare.
+  for (let i = 0; i < n + (cores >= 6 ? 1 : 0); i++) {
+    const s = spawn(i >= n);
     if (!s) {
       for (const x of slots) x.w.terminate();
       slots = [];
@@ -206,6 +214,7 @@ function start(): boolean {
     slots.push(s);
   }
   stats.workers = slots.length;
+  stats.quickWorkers = slots.filter((x) => x.quick).length;
   return true;
 }
 
@@ -258,6 +267,8 @@ function workerDied(slot: Slot) {
   slot.w.terminate();
   if (slot.job && slot.job.state === 'running') slot.job.state = 'waiting';
   slot.job = null;
+  // The quick-copy worker takes any set once it is the only one left.
+  if (!slots.some((s) => !s.dead && !s.quick)) for (const s of slots) s.quick = false;
   if (slots.every((s) => s.dead)) {
     // No worker can run here (old browser, blocked script, a build without the worker file):
     // finish what is pending on the main thread and paint everything there from now on.
@@ -274,7 +285,7 @@ function workerDied(slot: Slot) {
 /** Stop a worker painting a set nobody wants any more, so a wanted one can start now. */
 function replace(slot: Slot) {
   const i = slots.indexOf(slot);
-  const fresh = spawn();
+  const fresh = spawn(slot.quick);
   if (i < 0 || !fresh) return;
   slot.dead = true;
   slot.w.terminate();
@@ -286,10 +297,13 @@ function replace(slot: Slot) {
 
 function pump() {
   const waiting = jobs.filter((j) => j.state === 'waiting').sort(cmp);
-  for (const s of slots) {
+  // Workers for any set first, then the one kept for quick copies.
+  for (const s of [...slots.filter((x) => !x.quick), ...slots.filter((x) => x.quick)]) {
     if (!waiting.length) break;
     if (!s.ready || s.dead || s.job) continue;
-    const job = waiting.shift()!;
+    const k = s.quick ? waiting.findIndex((j) => j.phase === 'preview') : 0;
+    if (k < 0) continue;
+    const job = waiting.splice(k, 1)[0];
     job.state = 'running';
     s.job = job;
     s.w.postMessage({ type: 'paint', id: job.id, key: job.key, flat: job.flat, steps: FADE_STEPS, preview: job.phase === 'preview' });
