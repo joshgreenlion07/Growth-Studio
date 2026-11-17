@@ -169,6 +169,24 @@ export interface PebbleSpec {
 }
 
 /**
+ * Soft bed fill spread loose (black humus and compost mix), drawn as 3D crumbs, clumps and compost fibers over a matching
+ * ground texture. Colors are albedo (sRGB hex), freshly spread and slightly damp, set so the bed renders in the default
+ * light at the tones measured from photos of it; `share` is how often each soil tone shows (summing to 1). `mean` is the
+ * bed's average albedo: the far texture is matched to it, so near and far read the same. (The default light is warm with a
+ * blue sky fill, so a dark brown on screen is a slightly greener albedo.)
+ */
+export interface CrumbSpec {
+  soil: { c: string; share: number }[];
+  /** Shredded bark, wood and plant fibers from the compost: a few lighter brown strands. */
+  fiber: string[];
+  /** Tiny pale specks (perlite, sand). */
+  speck: string[];
+  mean: string;
+  /** How high the spread fill crowns above grade toward the middle of a bed, meters. */
+  mound: number;
+}
+
+/**
  * A synthetic turf product as its maker lists it. Colors are sRGB as photographed (turned into albedo like any maker
  * color). `yarn` is the two blade colors (field green, olive green), `thatch` the curled fibers near the backing. `mean`
  * is the lawn's average color in the maker's outdoor photos: the texture is matched to it on screen.
@@ -227,6 +245,8 @@ export interface MaterialSpec {
   shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock';
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
   pebble?: PebbleSpec;
+  /** Soft fill drawn crumb by crumb (black humus): its soil, fiber and speck colors and how it mounds. */
+  crumb?: CrumbSpec;
   /** Synthetic turf made to a maker's spec (pile, yarn and thatch colors, blade shape), drawn blade by blade. */
   turf?: TurfSpec;
   /** The color name alone, without the line name. */
@@ -372,10 +392,20 @@ export const MATERIALS: MaterialSpec[] = [
   // Mulch and rock
   M({ id: 'black-mulch', name: 'Black mulch', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#3a342f', '#221e1b'] }),
   M({ id: 'brown-mulch', name: 'Red-brown bark', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#6e4a2f', '#4a3121'] }),
-  // Natural fir bark (the plain brown bark most beds get) and humus: dark, fine composted organic matter, drawn with the
-  // DG recipe's fine grain in soil browns. Palettes are typical bagged and bulk colors, not a maker's.
+  // Natural fir bark (the plain brown bark most beds get). Palettes are typical bagged and bulk colors, not a maker's.
   M({ id: 'fir-bark', name: 'Fir bark mulch, natural brown', use: 'bed', group: 'Mulch and rock', recipe: 'mulch', palette: ['#8a5c3a', '#5e3d27'] }),
-  M({ id: 'humus', name: 'Humus (compost)', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#4b3828', '#2c2017'] }),
+  // Black humus, the compost mix Green Lion spreads in beds: near-black, fine and crumbly when freshly spread and a little
+  // damp, with soft clumps, shredded bark and wood fibers, a few lighter strands and pale specks (perlite, sand). Colors
+  // from photos of bulk black humus and humus/compost mix spread in beds. Drawn crumb by crumb (builder/humus.ts); the id
+  // stays `humus` so saved plans keep it.
+  M({ id: 'humus', name: 'Black humus (compost mix)', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a302a', '#211b18'],
+    crumb: {
+      soil: [{ c: '#352f28', share: 0.3 }, { c: '#3f372e', share: 0.28 }, { c: '#2c261d', share: 0.2 }, { c: '#483f34', share: 0.16 }, { c: '#53493b', share: 0.06 }],
+      fiber: ['#4f3f2d', '#65523d', '#7f6a4f', '#3c3024'],
+      speck: ['#bdb8aa', '#9c9482'],
+      mean: '#3b342b',
+      mound: 0.05,
+    } }),
   M({ id: 'decomposed-granite', name: 'Decomposed granite', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#b39a78', '#8f7a5d'] }),
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
   M({ id: 'black-pebble', name: 'Black beach pebble', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble', palette: ['#4a4a48', '#2a2a29', '#151515'] }),

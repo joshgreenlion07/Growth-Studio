@@ -108,8 +108,16 @@ export function groundModel(plan: SitePlan): GroundModel {
         else {
           // The mound levels off 1.2 m in, so edges farther than that need not be found.
           const d = Math.min(1.2, bedIdx.get(top)!.dist(p[0], p[1], 1.2));
-          const k = materialById.get(top.catalogId)?.recipe === 'mulch' ? 0.07 : 0.025;
-          h = Math.max(h, k * (d / 1.2));
+          const spec = materialById.get(top.catalogId);
+          if (spec?.crumb) {
+            // Spread humus: crowned a little, rising quickly off the edging where it settles, then soft rake lumps.
+            const t = Math.min(1, d / 0.55);
+            const lump = (vnoise(p[0] * 2.6, p[1] * 2.6, 1e6, 41) - 0.5) * 0.014 + (vnoise(p[0] * 6.5, p[1] * 6.5, 1e6, 42) - 0.5) * 0.006;
+            h = Math.max(h, spec.crumb.mound * (t * (2 - t)) * (0.75 + 0.25 * Math.min(1, d / 1.2)) + lump * t);
+          } else {
+            const k = spec?.recipe === 'mulch' ? 0.07 : 0.025;
+            h = Math.max(h, k * (d / 1.2));
+          }
         }
       }
     }
@@ -372,6 +380,8 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     const spec = materialById.get(id)!, r = spec.recipe;
     // Loose stone drawn stone by stone (spec.pebble): its ground is the bed seen from afar, satin like the stones.
     if (spec.pebble) return 0.92;
+    // Black humus: soft, damp-dark soil, the most matte surface in the yard.
+    if (spec.crumb) return 0.99;
     return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
   })];
   const n = sets.length;

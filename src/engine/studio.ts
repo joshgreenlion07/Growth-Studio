@@ -1333,6 +1333,7 @@ export class Studio {
     // brought up to date only when it is drawn.
     this.build?.plants.update?.(cam, lodPx);
     this.build?.pebbles.update(cam);
+    this.build?.humus.update(cam);
     this.fitTurfFade(cam, devicePx);
     // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
     // plants' size changed, never on a timer while leaves sway.

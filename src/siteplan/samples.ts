@@ -275,6 +275,41 @@ export function samplePebbleSizes(): SitePlan {
   };
 }
 
+/**
+ * Black humus (compost mix) as Green Lion spreads it: a 10 x 10 ft bed, steel-edged, beside a long curving bed along a
+ * lawn (about 30 m2, for the look across a yard), with a walk in front.
+ */
+export function sampleHumus(): SitePlan {
+  const S = 'sample' as const;
+  const F = 3.048; // 10 ft
+  const x0 = 0.8, y0 = 1.2;
+  const sq: Vec2[] = [[x0, y0], [x0 + F, y0], [x0 + F, y0 + F], [x0, y0 + F]];
+  // The long bed: a gentle curve along its lawn side.
+  const bx = x0 + F + 1.2, bw = 9, n = 14;
+  const front: Vec2[] = Array.from({ length: n + 1 }, (_, i): Vec2 => [bx + (bw * i) / n, y0 + 0.5 * Math.sin((i / n) * Math.PI * 2)]);
+  const back: Vec2[] = Array.from({ length: n + 1 }, (_, i): Vec2 => [bx + bw - (bw * i) / n, y0 + F + 0.4 + 0.35 * Math.cos((i / n) * Math.PI * 1.5)]);
+  const long = [...front, ...back];
+  const W = bx + bw + 0.8, walkY = y0 + F + 1.4;
+  return {
+    schemaVersion: 1,
+    site: { name: 'Black humus (compost mix): 10 x 10 ft bed and a long bed', boundary: [[0, 0], [W, 0], [W, walkY + 2.2], [0, walkY + 2.2]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: [[bx - 0.6, 0.2], [W - 0.2, 0.2], [W - 0.2, walkY - 0.1], [bx - 0.6, walkY - 0.1]] },
+      { id: 'humus-10x10', source: S, kind: 'bed', catalogId: 'humus', polygon: sq, note: 'Black humus (compost mix), 10 x 10 ft, 2-3 in deep' },
+      { id: 'humus-long', source: S, kind: 'bed', catalogId: 'humus', polygon: long, note: 'Black humus (compost mix), long bed along the lawn' },
+      { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[0.4, walkY], [W - 0.4, walkY], [W - 0.4, walkY + 1.2], [0.4, walkY + 1.2]] },
+    ],
+    lines: [
+      { id: 'edge-10x10', source: S, kind: 'edging', catalogId: 'steel-edging', points: [...sq, sq[0]], height: 0.05 },
+      { id: 'edge-long', source: S, kind: 'edging', catalogId: 'steel-edging', points: [...long, long[0]], height: 0.05 },
+    ],
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
 /** A small backyard with every kind of buried run, for the build stages. */
 export function sampleUtilities(): SitePlan {
   const S = 'sample' as const;
@@ -326,5 +361,6 @@ export const SAMPLES = [
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
+  { id: 'humus', name: 'Black humus (compost mix)', make: sampleHumus },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
 ];

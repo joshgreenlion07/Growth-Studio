@@ -111,6 +111,16 @@ Messages use `window.postMessage`:
   pixels; the ground's pebble texture fills the gaps and the distance, matched
   to the stones' average color. Draft quality shows the texture alone. The
   sample "Mexican beach pebble sizes" has a 10 x 10 ft bed of each.
+- Black humus (compost mix) (`humus`, shelf `Bed fill`, `crumb` on the look) is
+  drawn as loose soil (`builder/humus.ts`): the bed crowns a little and settles
+  against its edging with soft rake lumps; near-black crumbs (most heaped in
+  small aggregates), soft crumb-covered clumps of 1-3.5 cm and strands of
+  shredded bark and fiber (a few lighter) sit on a matching humus texture with
+  rare pale specks. Each kind shrinks away into the texture over the last stretch
+  before it stops drawing (crumbs within about 2 m, fibers 5 m, clumps 8 m), in
+  1.5 m tiles with a dead band, so nothing pops. Draft quality shows the texture
+  alone. The sample "Black humus (compost mix)" has a 10 x 10 ft bed and a long
+  bed along a lawn.
 - MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
   `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
   from MSI's specs (`turf` on the look): a ground texture painted blade by blade

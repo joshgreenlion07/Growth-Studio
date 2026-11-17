@@ -835,6 +835,75 @@ function dgSet(spec: MaterialSpec): PBRSet {
   });
 }
 
+/**
+ * The ground under black humus (spec.crumb): the same fill seen from farther off and in the gaps between the 3D crumbs.
+ * Fine dark soil with damp, darker hollows; crumbs and soft clumps raised in it, lit on top; shredded bark and fiber
+ * strands, a few lighter; rare pale specks. Matched to the photos' average color (`mean`), so the bed reads the same where
+ * its 3D crumbs give way to this texture.
+ */
+function humusGroundSet(spec: MaterialSpec): PBRSet {
+  const C = spec.crumb!;
+  const soil = C.soil.map((x) => hexRGB(x.c));
+  const cum: number[] = [];
+  C.soil.reduce((t, x) => (cum.push(t + x.share), t + x.share), 0);
+  const pickSoil = (h: number) => soil[Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v))];
+  const fiber = C.fiber.map(hexRGB);
+  const speck = C.speck.map(hexRGB);
+  const m = hexRGB(C.mean);
+  const mean: RGB = [toLin(m[0]), toLin(m[1]), toLin(m[2])];
+  return paint(1024, 0.8, 2.6, (u, v) => {
+    // Damp, darker hollows and drier tops: faint here (the tile repeats every 0.8 m); the bed's own lumps and the 3D
+    // pieces carry the larger changes.
+    const damp = fbm(u, v, 4, 3, 21);
+    const fine = vnoise(u * 700, v * 700, 700, 22), fine2 = vnoise(u * 340, v * 340, 340, 23);
+    let c = mulRGB(mixRGB(soil[2], soil[1], 0.3 + fine2 * 0.5), 0.86 + fine * 0.12);
+    let h = fine * 0.1 + fine2 * 0.12;
+    let r = 0.97;
+    // Crumbs, 2 to 6 mm: rounded, a little lighter on top, dark where they meet, edges broken by the grain.
+    const cr = voronoi(u + (fine - 0.5) * 0.003, v + (fine2 - 0.5) * 0.003, 190, 24, 1);
+    const crumb = smooth(0.55, 0.1, cr.f1 / (0.7 + cr.id * 0.5));
+    if (cr.id > 0.25) {
+      const t = crumb * (0.6 + 0.4 * fine);
+      c = mixRGB(mulRGB(c, 0.9), mulRGB(pickSoil(hash(cr.id, 3)), 0.86 + 0.16 * crumb), t * 0.8);
+      h += t * 0.45;
+    }
+    // Soft clumps, 1 to 3 cm, a few: lumpy outlines, granular tops, a dark rim where they sit in the fines.
+    const cl = voronoi(u + (fine2 - 0.5) * 0.012, v + (fine - 0.5) * 0.012, 46, 25, 0.95);
+    if (cl.id > 0.8) {
+      const d = cl.f1 / (0.62 + cl.id * 0.3);
+      const lump = smooth(0.5, 0.25, d), rim = smooth(0.42, 0.5, d) * smooth(0.6, 0.5, d);
+      c = mulRGB(c, 1 - rim * 0.35);
+      if (lump > 0) {
+        const t = lump * (0.55 + 0.45 * fine2);
+        c = mixRGB(c, mulRGB(pickSoil(hash(cl.id, 5)), 0.75 + 0.25 * fine), t);
+        h += t * 0.45;
+      }
+    }
+    // Shredded bark and fibers: thin strands at random turns, mostly dark, a few lighter brown.
+    const fc = voronoi(u, v, 26, 26, 1);
+    const ang = fc.id * Math.PI * 2, ca = Math.cos(ang), sa = Math.sin(ang);
+    const along = (fc.dx * ca + fc.dy * sa) / 0.4, across = (-fc.dx * sa + fc.dy * ca) * 45;
+    if (Math.abs(along) < 1 && fc.id > 0.45) {
+      const strand = smooth(1, 0.3, Math.abs(across + Math.sin(along * 3 + fc.id * 9) * 0.8)) * smooth(1, 0.6, Math.abs(along));
+      if (strand > 0) {
+        const fcol = fc.id > 0.85 ? fiber[1 + Math.floor(hash(fc.id, 7) * 2)] : fiber[hash(fc.id, 8) > 0.5 ? 3 : 0];
+        c = mixRGB(c, mulRGB(fcol, 0.85 + 0.25 * fine), strand * 0.85);
+        h += strand * 0.35;
+        r = 0.92;
+      }
+    }
+    // Pale specks: perlite and sand, rare.
+    const sp = voronoi(u, v, 260, 27, 1);
+    if (sp.id > 0.992) {
+      const t = smooth(0.22, 0.08, sp.f1);
+      c = mixRGB(c, speck[sp.id > 0.995 ? 0 : 1], t);
+      h += t * 0.3;
+    }
+    c = mulRGB(c, 0.93 + damp * 0.14);
+    return { h, c, r };
+  }, mean);
+}
+
 /** Rounded stones packed together: river rock, black pebble, cobble. */
 /**
  * The ground under a bed of loose stones (spec.pebble): the same stones packed tight, at their size, in their colors and
@@ -1203,7 +1272,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'lawn': return lawnSet(spec);
       case 'turfArtificial': return turfSet(spec);
       case 'mulch': return mulchSet(spec);
-      case 'dg': return dgSet(spec);
+      case 'dg': return spec.crumb ? humusGroundSet(spec) : dgSet(spec);
       case 'riverRock': return stonesSet(spec, 13, 1.0, 0.3);
       case 'blackPebble': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 22, 1.0, 0.65);
       case 'cobble': return stonesSet(spec, 7, 1.2, 0.25);
