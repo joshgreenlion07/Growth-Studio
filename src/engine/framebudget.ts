@@ -13,10 +13,15 @@ import * as THREE from 'three';
  *   still view is always drawn at full resolution; it never changes while the view is still.
  */
 
-/** GPU time per frame the moving scale aims for, and the band around it (milliseconds). */
-const GPU_TARGET = 11;
-const GPU_HIGH = 13;
-const GPU_LOW = 8;
+/**
+ * GPU time per frame the moving scale aims for, and the band around it (milliseconds): above GPU_HIGH it steps
+ * down toward GPU_TARGET; below GPU_LOW it tries one step up (a step adds about a millisecond at most), and goes
+ * back, and stops trying for a while, if that was too much. Part of a frame does not shrink with the scale (the
+ * plants' and ground's vertices), so the band is narrow and stepping up is tried, not predicted.
+ */
+const GPU_TARGET = 9.5;
+const GPU_HIGH = 11.5;
+const GPU_LOW = 9.2;
 /** Without the GPU timer: frame intervals (milliseconds) that count as too slow and as smooth. */
 const FRAME_SLOW = 21;
 const FRAME_SMOOTH = 17.6;
@@ -204,6 +209,7 @@ export class FrameBudget {
         const ideal = this.moveScale * Math.sqrt(GPU_TARGET / this.gpuMs);
         this.setMove(Math.max(this.moveScale - 0.15, Math.min(this.moveScale - 0.05, ideal)), `GPU ${this.gpuMs.toFixed(1)} ms`, now);
       } else if (this.samples >= 30 && this.gpuMs < GPU_LOW && this.moveScale < 1 && now > this.upBlockedUntil) {
+        // Thirty frames (half a second of motion) at this scale with room to spare.
         this.setMove(this.moveScale + 0.05, `GPU ${this.gpuMs.toFixed(1)} ms`, now);
       }
     }

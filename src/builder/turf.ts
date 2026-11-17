@@ -151,8 +151,8 @@ function tiledBlades(
 export function buildTurf(plan: SitePlan, gm: GroundModel, quality: Quality, blocked: (p: Vec2) => boolean): TurfBuild {
   const turf = plan.zones.filter((z) => z.kind === 'turf');
   if (!turf.length) return { object: null, dispose() {} };
-  // Balanced: blades at a 12.5 cm gauge (each tuft is about 11 cm across, so the lawn still reads as full).
-  const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.125 : 0.085;
+  // Balanced: blades at a 12 cm gauge (each tuft is about 11 cm across, so the lawn still reads as full).
+  const step = quality === 'draft' ? 0.17 : quality === 'light' ? 0.14 : quality === 'balanced' ? 0.12 : 0.085;
   const r = rng('turf');
   const pts: { p: Vec2; c: THREE.Color; k: number; even: boolean }[] = [];
   // A maker's turf (spec.turf) gets its own blades, one instanced mesh per product.

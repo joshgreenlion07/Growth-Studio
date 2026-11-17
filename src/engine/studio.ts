@@ -199,6 +199,7 @@ export class Studio {
   /** Render scale and depth of field while the camera moves (see framebudget.ts). */
   readonly budget: FrameBudget;
   private frameDt = 0;
+  private frameDirty = true;
   /** The lawn's tile culling (turf.ts), looked up once per yard. */
   private turfCull: { build: SceneBuild | null; fn: ((cam: THREE.Vector3, dist: number) => void) | null } = { build: null, fn: null };
 
@@ -1331,8 +1332,8 @@ export class Studio {
    */
   private fitTurfFade(cam: THREE.PerspectiveCamera, viewPx: number) {
     const pxPerM = viewPx / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2));
-    // Max keeps blades down to a third of a pixel; the other settings stop at about half a pixel.
-    const minPx = this.state.quality === 'max' ? 0.35 : 0.45;
+    // Max keeps blades down to a third of a pixel; the other settings stop a little sooner.
+    const minPx = this.state.quality === 'max' ? 0.35 : 0.4;
     const end = THREE.MathUtils.clamp((0.013 * pxPerM) / minPx, 18, 90);
     GLOBAL.uTurfFade.value.set(end * 0.6, end);
     // Wind motion under about half a pixel is skipped (foliage.ts).
@@ -1342,6 +1343,10 @@ export class Studio {
   /** Draw a frame of the live view. */
   private draw(dt: number) {
     if (this.contextLost) return;
+    // Something other than the camera and the wind changed (a restyle, the time of day, a new yard): the focus blur
+    // and the reflection are redrawn this frame, never reused from the frame before (see drawScene).
+    this.frameDirty = this.dirty;
+    this.post.dofHalfRate = !this.dirty;
     this.dirty = false;
     this.sky.uniforms.uTime.value = GLOBAL.uTime.value;
     this.sky.mesh.position.copy(this.camera.position);
@@ -1402,10 +1407,13 @@ export class Studio {
     if (this.shadowDirty) this.renderShadows();
     if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
       // The live view's reflection is drawn only while the water is in view and large enough, over the part of the
-      // screen it covers, at the view's render scale; on a frame in two while moving at a reduced scale.
+      // screen it covers, at the view's render scale: on a frame in two while moving at a reduced scale, and on a
+      // frame in three while the camera is at rest (only swaying plants change in it then; the ripples are the
+      // water's own and move every frame).
       const live = target === null;
       const b = this.budget;
-      this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces, live ? b.scale : 1, live ? devicePx : 0, live ? this.frameDt : 0, live && b.moving && b.scale < 0.9);
+      const every = !live || this.frameDirty ? 1 : b.moving ? (b.scale < 0.9 ? 2 : 1) : this.camMoved ? 1 : 3;
+      this.mirror.render(this.renderer, this.scene, cam, this.build.water.surfaces, live ? b.scale : 1, live ? devicePx : 0, live ? this.frameDt : 0, every, b.moving);
     }
     post.render(this.scene, cam, t, target);
   }

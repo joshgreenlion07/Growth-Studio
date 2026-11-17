@@ -34,7 +34,7 @@ export class PlanarMirror {
    */
   readonly mix = { value: 1 };
   /** What the last call did, for the diagnostics readout. */
-  status: 'drawn' | 'skipped (out of view)' | 'skipped (small)' | 'skipped (alternate frame)' | 'skipped (below the water)' | 'off' = 'off';
+  status: 'drawn' | 'skipped (out of view)' | 'skipped (small)' | 'skipped (reduced rate)' | 'skipped (below the water)' | 'off' = 'off';
   private frustum = new THREE.Frustum();
   private pv = new THREE.Matrix4();
   private box = new THREE.Box3();
@@ -43,6 +43,7 @@ export class PlanarMirror {
   private rect = new THREE.Vector4(0, 0, 1, 1);
   private rectNow = new THREE.Vector4();
   private drawnScale = 1;
+  /** Frames since the reflection was last drawn (-1: it must be drawn next). */
   private lastDraw = -1;
 
   constructor(public height: number, scale = 0.5) {
@@ -97,9 +98,11 @@ export class PlanarMirror {
   /**
    * Render the reflection for `cam`, if the water is in view. `surfaces` are the water meshes (hidden during the
    * pass). `scale` is the live view's render scale (the mirror draws into that share of its target), `viewPx` the
-   * view's height in device pixels, `dt` the frame time; with `alternate`, a frame in two keeps the last reflection.
+   * view's height in device pixels, `dt` the frame time. The reflection is drawn on one frame in `every`; the frames
+   * between keep the last one (its texture and its projection stay together, so it is never out of step), with
+   * `moving` widening the drawn area for the camera's motion in between.
    */
-  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, cam: THREE.PerspectiveCamera, hide: THREE.Object3D[], scale = 1, viewPx = 0, dt = 0, alternate = false) {
+  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, cam: THREE.PerspectiveCamera, hide: THREE.Object3D[], scale = 1, viewPx = 0, dt = 0, every = 1, moving = false) {
     if (!this.enabled) {
       this.status = 'off';
       return;
@@ -123,9 +126,9 @@ export class PlanarMirror {
         this.lastDraw = -1;
         return;
       }
-      if (alternate && this.lastDraw === 0) {
-        this.lastDraw = 1;
-        this.status = 'skipped (alternate frame)';
+      if (every > 1 && this.lastDraw >= 0 && this.lastDraw < every - 1) {
+        this.lastDraw++;
+        this.status = 'skipped (reduced rate)';
         return;
       }
       this.lastDraw = 0;
@@ -194,7 +197,7 @@ export class PlanarMirror {
     renderer.xr.enabled = false;
     // Only the part of the screen the water covers (plus a margin for ripple bending and, when a frame in two is
     // skipped, for the camera's motion in between) is drawn.
-    const m = alternate ? 0.08 : 0.03;
+    const m = every > 1 && moving ? 0.08 : 0.03;
     const r = this.rect;
     const x0 = Math.floor(Math.max(0, r.x - m) * W), y0 = Math.floor(Math.max(0, r.y - m) * H);
     const x1 = Math.ceil(Math.min(1, r.z + m) * W), y1 = Math.ceil(Math.min(1, r.w + m) * H);

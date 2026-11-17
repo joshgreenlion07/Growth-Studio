@@ -308,7 +308,7 @@ Messages use `window.postMessage`:
   when the sky changes.
 - Shadows are cast from the plants' still pose and redrawn only when the yard,
   sun or growth changes. Lawn blades fade into the ground only where they
-  would be thinner than about half a pixel (a third at Max), and lawn tiles
+  would be thinner than about 0.4 pixel (a third at Max), and lawn tiles
   past that distance or out of view are skipped.
 - GPU budget while moving (`engine/framebudget.ts`): while the camera moves,
   depth of field fades out and the scene is drawn at a lower resolution
@@ -320,8 +320,11 @@ Messages use `window.postMessage`:
   mirror did.
 - The water mirror is drawn only while mirroring water is in view and more
   than a few pixels tall, only over the part of the screen it covers, at 40%
-  of the view's size at Balanced, and on every other frame while moving at a
-  reduced scale.
+  of the view's size at Balanced, on every other frame while moving at a
+  reduced scale, and on every third while the camera is at rest (only swaying
+  plants change in it then). Likewise the focus blur is gathered on every
+  other frame while the camera and focus hold still; anything else changing
+  (a restyle, the sun) redraws both at once.
 - Plants with many triangles (maples, yew pines, shade trees) switch to
   fewer leaves at a larger size on screen; far copies keep little wood; wind
   motion under about half a pixel (leaf flutter a few dozen meters out) is

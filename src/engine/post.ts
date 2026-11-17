@@ -199,6 +199,13 @@ export class PostPipeline {
   scale = 1;
   /** How much depth of field shows, 0 to 1 (Studio fades it out while the camera moves). At 0 its pass is skipped. */
   dofAmount = 1;
+  /**
+   * While the camera and the focus hold perfectly still (only leaves and water move), the blur is gathered on every
+   * other frame and the frame between reuses it: it is out of focus, so a one-frame-old blur of a swaying leaf cannot
+   * be told apart. The sharp image and the focus mask are always current.
+   */
+  dofHalfRate = false;
+  private lastDof = { view: new THREE.Matrix4(), proj: new THREE.Matrix4(), key: '', reused: true };
 
   constructor(private renderer: THREE.WebGLRenderer) {
     this.sceneRT = this.makeSceneRT(4);
@@ -299,6 +306,7 @@ export class PostPipeline {
     if (w === this.w && h === this.h) return;
     this.w = w;
     this.h = h;
+    this.lastDof.reused = true;
     this.sceneRT.setSize(w, h);
     this.rtA.setSize(w, h);
     this.rtHalf.setSize(Math.max(1, Math.ceil(w / 2)), Math.max(1, Math.ceil(h / 2)));
@@ -361,8 +369,20 @@ export class PostPipeline {
       const aperture = focal / L.fStop;
       u.uBlur.value = (aperture * focal) / 0.024 * 0.5;
       u.uMaxCoc.value = (this.quality === 'max' ? 22 : 15) * (sh / 1080);
-      r.setRenderTarget(this.rtHalf);
-      this.dofQuad.render(r);
+      const last = this.lastDof;
+      const key = `${scale}|${u.uFocus.value}|${u.uBlur.value}|${u.uNear.value}|${u.uFar.value}|${u.uMaxCoc.value}|${this.quality}`;
+      const still = !toTarget && this.dofHalfRate && !last.reused && key === last.key && camera.matrixWorld.equals(last.view) && camera.projectionMatrix.equals(last.proj);
+      if (still) last.reused = true;
+      else {
+        r.setRenderTarget(this.rtHalf);
+        this.dofQuad.render(r);
+        if (!toTarget) {
+          last.view.copy(camera.matrixWorld);
+          last.proj.copy(camera.projectionMatrix);
+          last.key = key;
+          last.reused = false;
+        }
+      }
       c.tBlur.value = this.rtHalf.texture;
       c.uNear.value = u.uNear.value;
       c.uFar.value = u.uFar.value;
@@ -370,6 +390,8 @@ export class PostPipeline {
       c.uBlur.value = u.uBlur.value;
       c.uDof.value = dofAmount;
     }
+    // A frame without the gather leaves nothing to reuse next time.
+    if (!useDof && !toTarget) this.lastDof.reused = true;
     if (useDof || useBloom || scale < 1) {
       // Into a plain full-size buffer: the focus blend, or only a copy out of the multisampled target for bloom.
       r.setRenderTarget(this.rtA);
