@@ -171,7 +171,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb';
+  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge';
   /** The color name alone, without the line name. */
   color?: string;
   /** A border made to go with a main-course color; not listed on its own. */
@@ -477,6 +477,32 @@ MATERIALS.push(...BELGARD);
 export const SLAB_24_PREFIX = 'dimensions-slab-24-';
 const SLABS = BELGARD_LINES.find((l) => l.slug === 'dimensions-slabs');
 MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ id: `${SLAB_24_PREFIX}${slugOf(n)}`, name: `Dimensions Slab 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [[24, 24]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Dimensions Slabs', maker: 'Belgard', line: 'Dimensions Slabs 24 x 24', shelf: 'Pavers', color: n })));
+
+/*
+ * Paver edging: a single row of 6 x 9 pavers laid along a drawn line (a soldier course, or a sailor course), in any color
+ * Belgard sells as a 6 x 9 unit where Green Lion orders (Belgard's Pacific Stockton region, read from belgard.com):
+ * Dimensions Single Unit 6 x 9 x 2 3/8 in, and Antiqued Flat Top (its 6 x 9 border stone). Catalina Grana's border and
+ * Avalon Slate's 6 x 9 are listed for other regions only, so they are not offered here. Belgard's pages list colors per
+ * region, not per size, so a color here is one the region carries for that line.
+ */
+export const PAVER_EDGE_PREFIX = 'paver-edge-';
+const PAVER_EDGE_6X9: { slug: string; colors: string[] }[] = [
+  { slug: 'dimensions-single-units', colors: ['Anthracite', 'Aspen', 'Bella', 'Bourbon', 'Brown Beige Charcoal', 'Cream Tan Brown', 'Fog', 'Graphite', 'Gray Charcoal', 'Gray Charcoal Tan', 'Hickory', 'Iron Bay', 'Midnight', 'Pearl', 'Riviera', 'Rosewood', 'Scandina Gray', 'Sepia', 'Shaded Gray', 'Tan Brown Charcoal', 'Tan Red Charcoal', 'Toscana', 'Victorian'] },
+  { slug: 'antiqued-flat-top', colors: ['Cream Tan Brown', 'Gray Charcoal Tan', 'Gray Charcoal', 'Midnight', 'Shaded Gray', 'Tan Brown Charcoal'] },
+];
+/** The paver edging look used when none is picked: Dimensions Single Unit 6 x 9 in Anthracite. */
+export const PAVER_EDGE_DEFAULT = `${PAVER_EDGE_PREFIX}dimensions-single-units-anthracite`;
+for (const E of PAVER_EDGE_6X9) {
+  const L = BELGARD_LINES.find((l) => l.slug === E.slug);
+  if (!L) continue;
+  const name = L.slug === 'dimensions-single-units' ? 'Dimensions Single Unit' : L.name;
+  for (const c of E.colors) {
+    // Color names are matched without punctuation ("Gray/Charcoal" on one page is "Gray Charcoal" on another).
+    const hit = L.colors.find(([n]) => slugOf(n) === slugOf(c));
+    if (!hit) continue;
+    MATERIALS.push(M({ id: `${PAVER_EDGE_PREFIX}${L.slug}-${slugOf(c)}`, name: `${name} 6 x 9, ${c}`, use: 'border', group: 'Pavers', recipe: 'paver', palette: hit[1], pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured' }, thickness: 0.06, matches: `Belgard ${name} 6 x 9`, maker: 'Belgard', line: L.name, shelf: 'Paver edge', color: c }));
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Features                                                             */

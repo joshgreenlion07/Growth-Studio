@@ -215,7 +215,8 @@ export function cleanPlan(input: unknown): CleanResult {
     const fallback = kind === 'fence' ? 'fence-board-on-board' : kind === 'edging' ? 'curb-charcoal' : kind === 'steps' ? 'concrete-broom' : 'wall-gray-block';
     const l: LineItem = {
       ...base(it, kind), kind, points,
-      catalogId: pickMaterial(it.catalogId, use, fallback, warnings, 'Line material'),
+      // Paver edging names a paver border look (use 'border'); every other line a material of its own kind.
+      catalogId: kind === 'edging' && materialById.get(legacy(it.catalogId) as string)?.use === 'border' ? (legacy(it.catalogId) as string) : pickMaterial(it.catalogId, use, fallback, warnings, 'Line material'),
       // Retaining walls run up to 20 ft (6.1 m); fences and curbs stay under 3.5 m.
       height: num(it.height, kind === 'fence' ? 1.8 : kind === 'edging' ? 0.05 : 0.5, 0.02, kind === 'wall' ? 6.5 : kind === 'steps' ? 3 : 3.5),
     };
@@ -225,6 +226,9 @@ export function cleanPlan(input: unknown): CleanResult {
     }
     if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
     if (kind === 'fence' && (it.topper === 'lattice' || it.topper === 'cap')) l.topper = it.topper;
+    // Curbs: how much stands above grade (0 to the unit's full 6 1/2 in). Paver edging: soldier or sailor course.
+    if (kind === 'edging' && it.reveal !== undefined) l.reveal = num(it.reveal, 0.0762, 0, 0.1651);
+    if (kind === 'edging' && (it.course === 'soldier' || it.course === 'sailor')) l.course = it.course;
     plan.lines.push(l);
   }
 

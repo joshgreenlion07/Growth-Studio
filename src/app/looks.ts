@@ -70,6 +70,8 @@ export function lookOf(m: MaterialSpec): Look {
   if (sizes?.length) look.sizes = sizes.map(([a, b]) => [a, b]);
   if (sizeText?.length) look.sizeText = sizeText;
   else if (SIZE_TEXT[line]) look.sizeText = SIZE_TEXT[line];
+  // A curb has no paver sizes: show the unit as Belgard lists it (Melville Curb: 4 x 24 x 6 1/2 in).
+  else if (m.recipe === 'curb' && media?.sizes.length) look.sizeText = media.sizes.slice();
   if (m.thickness) look.thicknessIn = Math.round((m.thickness / IN) * 8) / 8;
   if (m.pattern?.face) look.face = m.pattern.face;
   else if (m.wall?.face) look.face = m.wall.face;

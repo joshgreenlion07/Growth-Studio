@@ -81,7 +81,7 @@ Messages use `window.postMessage`:
 - `materials` lists the paver, border and wall looks the parent can offer:
   `{ id, name, use, maker, line, shelf, color, sw }[]`: who makes it, its
   product line, the catalogue shelf it sits on (Pavers, Retaining walls,
-  Garden walls, Curb), the color name alone and one swatch color. Generic
+  Garden walls, Curb, Paver edge), the color name alone and one swatch color. Generic
   looks have an empty `maker`. Each maker paver color also has a matching
   border, `border-of-<id>`, which is not listed. Only offered lines are
   listed: a maker paver or wall line is offered once it is mapped in depth from
@@ -136,7 +136,7 @@ Messages use `window.postMessage`:
   embed mode the studio sends `{ source: 'growth-studio', type: 'pointer', on }`
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
   id, part, material }` when what it is on changes: `part` is `main`, `border`,
-  `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
+  `edge` (paver edging), `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
   null. The parent can send `{ source: 'area-planner', type: 'pointer', on }`.
 - Pressing the right stick (or L) locks the pointed material: the studio sends
   `{ source: 'growth-studio', type: 'point-lock', locked }` and no `point`
@@ -171,6 +171,16 @@ Messages use `window.postMessage`:
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
+- Curbs (`kind: 'edging'` with a curb look) are Belgard Melville Curb units:
+  4 in thick, 24 in long with a joint between units, 6 1/2 in tall. `reveal`
+  is how much stands above grade in meters (0 to 0.1651); left out, 3 in.
+- Paver edging is a `kind: 'edging'` line whose `catalogId` is a look on the
+  `Paver edge` shelf (`paver-edge-<line>-<color>`, use `border`): one row of
+  6 x 9 pavers centered on the line, laid paver by paver with mitres at
+  corners. `course: 'sailor'` turns the pavers long side along the run; left
+  out, a soldier course. The shelf holds every color Belgard sells as a 6 x 9
+  unit in its Pacific Stockton region (Dimensions Single Unit and Antiqued Flat
+  Top); `PAVER_EDGE_DEFAULT` is Dimensions Single Unit Anthracite.
 - Plans are accepted only from the iframe's parent, and only from the origins
   listed in `EMBED_ALLOWED_PARENT_ORIGINS` in `src/app/main.ts`: local
   development (`http://localhost:*`, `http://127.0.0.1:*`),
