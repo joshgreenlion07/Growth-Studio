@@ -1,9 +1,12 @@
 /**
  * Belgard lines, generated from the color lists on belgard.com.
  * Color names are Belgard's. The four colors per entry are averages read from Belgard's swatch
- * thumbnails (lightest to darkest): close, not exact. No Belgard image ships with the app.
+ * thumbnails (lightest to darkest): close, not exact; the mapped walls are re-read from the full-size swatch photos (4-means
+ * in linear light, 120 px, 12 px inset). No Belgard image ships with the app.
  * `shelf` is where the line sits in the catalogue; `sizes` are the paver sizes in inches.
  */
+import type { WallUnit } from './catalog';
+
 export interface MakerLine {
   slug: string;
   name: string;
@@ -17,7 +20,7 @@ export interface MakerLine {
   /** The line sells a matching 6 x 9 border stone, offered in every color. */
   border?: boolean;
   /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
-  wall?: { face: 'smoothUnit' | 'roughHewn'; unit: { course: number; lengths: number[]; split?: number[]; capIn?: number; capOver?: number } };
+  wall?: { face: 'smoothUnit' | 'roughHewn'; unit: WallUnit };
   colors: [string, string[]][];
 }
 
@@ -231,11 +234,37 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Suede", ['#615046', '#5f4f42', '#5f4e44', '#5d4c42']],
     ["Victorian", ['#9a9285', '#a28c6e', '#877e71', '#6b645c']],
   ] },
-  { slug: 'artforms', name: "Artforms", shelf: 'Garden walls', colors: [
-    ["Anthracite", ['#625f5c', '#5a5655', '#565251', '#514e4c']],
-    ["Hickory", ['#877b6e', '#82766a', '#807367', '#7c7064']],
-    ["Rockland Black", ['#575757', '#565656', '#545454', '#525252']],
-    ["Scandina Gray", ['#b2aca1', '#ada69c', '#a9a398', '#a49d92']],
+  // AB Classic (Allan Block, sold by Belgard): 8 x 18 x 12 in split-face blocks with beveled edges in 8 in courses, laid
+  // in half bond; AB Capstone 4 x 18 x 12 in. Real walls step back 6 degrees per course; drawn plumb here.
+  { slug: 'ab-classic', name: "AB Classic", shelf: 'Retaining walls', wall: { face: 'roughHewn', unit: { course: 8, lengths: [18], bond: 'half', capIn: 4, capOver: 0.5 } }, colors: [
+    ["Brown Beige Charcoal", ['#a89483', '#917d6e', '#7b6b60', '#625851']],
+    ["Buff", ['#93836d', '#877762', '#7d6e5a', '#6e6250']],
+    ["Charcoal", ['#8b8070', '#706960', '#615a52', '#4f4943']],
+    ["Dakota Blend", ['#b99b88', '#a88875', '#927566', '#705a50']],
+    ["Danville Blend", ['#baa38c', '#a88d75', '#937a66', '#766355']],
+    ["Driftwood", ['#887d70', '#7b7166', '#6f675d', '#5f5850']],
+    ["Granite Gray", ['#878078', '#6e6863', '#57534f', '#393634']],
+    ["Gray", ['#a5a9ac', '#999b9b', '#8d8e8d', '#767776']],
+    ["Gray Charcoal Tan", ['#9c907d', '#887c6c', '#756b5e', '#5a554d']],
+    ["Grey", ['#9a9996', '#8a8a87', '#7c7d7a', '#6e6f6d']],
+    ["Mocha", ['#a7937f', '#95826f', '#867464', '#726354']],
+    ["Pewter Blend", ['#bebab0', '#a9a59b', '#8e8b84', '#6e6c68']],
+    ["Rocky Mountain", ['#a8917c', '#887464', '#6a594d', '#473b33']],
+    ["Sable", ['#a8a195', '#8f8980', '#75706a', '#56524d']],
+    ["Sable Blend", ['#a9a294', '#908a80', '#75706a', '#56534f']],
+    ["Silverado", ['#908f8c', '#7f7f7e', '#727373', '#616364']],
+    ["Tan", ['#b2997e', '#9d846c', '#89735d', '#715e4c']],
+    ["Tan Brown Charcoal", ['#a58e78', '#8f7a67', '#79695c', '#5c544d']],
+    ["Thunderhead", ['#ada397', '#988f84', '#867e75', '#706a63']],
+    ["Toccoa", ['#99856d', '#8a7964', '#7a6f62', '#67625c']],
+  ] },
+  // Artforms: smooth 18 x 36 x 3 in panels bolted together, set horizontal with the joints in line (stack bond), up to
+  // 42 in; optional coping of the 6 x 36 x 3 in panel laid flat. (Panels set upright, 36 x 18, are not drawn yet.)
+  { slug: 'artforms', name: "Artforms", shelf: 'Garden walls', wall: { face: 'smoothUnit', unit: { course: 18, lengths: [36], bond: 'stack', capIn: 3, capOver: 0.5 } }, colors: [
+    ["Anthracite", ['#64625e', '#5d5a57', '#575451', '#514e4c']],
+    ["Hickory", ['#897e72', '#84786c', '#807467', '#7c6f63']],
+    ["Rockland Black", ['#585858', '#565756', '#555554', '#535352']],
+    ["Scandina Gray", ['#b5aea4', '#aea89e', '#a9a399', '#a39c92']],
   ] },
   { slug: 'ashlar-tandem-wall', name: "Ashlar Tandem Wall", shelf: 'Garden walls', colors: [
     ["Avondale", ['#c2a991', '#a8917d', '#8d7a6b', '#645040']],
@@ -251,21 +280,25 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#bca189', '#a8917d', '#98816d', '#755e4a']],
     ["Victorian", ['#c2b09b', '#b6a48f', '#a99681', '#7c6b56']],
   ] },
-  { slug: 'belair-wall', name: "Belair Wall", shelf: 'Garden walls', colors: [
-    ["Ashwood", ['#9e927f', '#8d8372', '#807768', '#6d675b']],
-    ["Hickory", ['#806f61', '#79685a', '#726253', '#655647']],
-    ["Iron Bay", ['#7f7870', '#7c756d', '#79726a', '#756e67']],
-    ["Newport Gray", ['#908c83', '#7f7b74', '#74716a', '#65625c']],
-    ["Shaded Gray", ['#84837f', '#747371', '#6b6a69', '#5f5f5e']],
+  // Belair Wall: hand-chiseled 6 in courses of 8 and 16 in units mixed about 1:1; trapezoid cap 3 x 13 1/2 in deep,
+  // about 1 1/4 in over. (Half the 16s carry a micro joint about 6 in from one end; not drawn.)
+  { slug: 'belair-wall', name: "Belair Wall", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [8, 16], capIn: 3, capOver: 1.25 } }, colors: [
+    ["Ashwood", ['#a99c85', '#948a77', '#82796a', '#6a655c']],
+    ["Hickory", ['#827161', '#796859', '#6d5e4f', '#594c3f']],
+    ["Iron Bay", ['#817a71', '#7d766e', '#79736b', '#756e67']],
+    ["Newport Gray", ['#9e988f', '#89857d', '#79766f', '#65625c']],
+    ["Shaded Gray", ['#8d8b86', '#7c7b77', '#6e6d6b', '#5e5f5e']],
   ] },
-  { slug: 'belair-wall-2-0', name: "Belair Wall 2.0", shelf: 'Garden walls', colors: [
-    ["Midnight", ['#575450', '#55524e', '#54504d', '#534f4c']],
-    ["Napoli", ['#c0b09e', '#a89989', '#98897b', '#7c7164']],
-    ["Rio", ['#90897e', '#888176', '#817a6f', '#787165']],
-    ["Shaded Gray", ['#837c72', '#746d64', '#6a635b', '#5c564f']],
-    ["Slate", ['#8e8e89', '#80807c', '#767673', '#696967']],
-    ["Toscana", ['#84735f', '#7e6d5b', '#796957', '#6f6151']],
-    ["Victorian", ['#918371', '#7f7465', '#756b5c', '#6a6052']],
+  // Belair Wall 2.0: the chiseled face in 6 in courses of 6, 10 and 16 in units, sold 2 x 16 + 10 + 6, mixed in those
+  // proportions here (Belgard's 3-course, 48 in pattern is not drawn yet); the Belair cap.
+  { slug: 'belair-wall-2-0', name: "Belair Wall 2.0", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [16, 16, 10, 6], capIn: 3, capOver: 1.25 } }, colors: [
+    ["Midnight", ['#595552', '#56534f', '#55514d', '#534f4c']],
+    ["Napoli", ['#cdbba7', '#b4a493', '#9a8b7d', '#776c62']],
+    ["Rio", ['#928b80', '#888277', '#7e786c', '#6f6a5f']],
+    ["Shaded Gray", ['#91897c', '#7d766b', '#6d665f', '#5a5550']],
+    ["Slate", ['#989791', '#878682', '#777774', '#656564']],
+    ["Toscana", ['#88745f', '#7f6e5b', '#766757', '#695d4f']],
+    ["Victorian", ['#a3927b', '#8d7f6d', '#7c7263', '#6a6155']],
   ] },
   { slug: 'brisa', name: "Brisa", shelf: 'Garden walls', colors: [
     ["Heritage", ['#847a70', '#7e7569', '#7a7065', '#72685d']],
@@ -291,10 +324,30 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Potomac", ['#8a7a6b', '#7c6e60', '#746558', '#635548']],
     ["Slate", ['#b2b3b2', '#9fa1a3', '#8d9195', '#777a7f']],
   ] },
-  { slug: 'coventry-wall-iii', name: "Coventry Wall III", shelf: 'Garden walls', colors: [
-    ["Dakota Blend", ['#8a7c6b', '#827565', '#796f63', '#6d665d']],
-    ["Harvest Blend", ['#977e69', '#8d7561', '#846e5c', '#766251']],
-    ["Pewter Blend", ['#9a968c', '#918d84', '#89857e', '#797771']],
+  // Coventry Wall III: quarried split face, white-flecked two-tone blends, 6 in courses of 8, 10 and 16 in units;
+  // its own 3 x 12 x 16 in cap, about 1 in over.
+  { slug: 'coventry-wall-iii', name: "Coventry Wall III", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [8, 10, 16], capIn: 3, capOver: 1 } }, colors: [
+    ["Dakota Blend", ['#938473', '#877767', '#786e64', '#66615b']],
+    ["Harvest Blend", ['#a1866f', '#927963', '#826d5c', '#6e5d50']],
+    ["Pewter Blend", ['#a29c91', '#938f86', '#84817b', '#6d6c67']],
+  ] },
+  // Easton Stone: smooth, eased-edge units, 4 in courses of 8, 12 and 16 in faces in equal counts; capped with its
+  // 4 x 12 x 8 in block laid across the wall. (Midnight, Rainier and Victorian come tumbled in one region.)
+  { slug: 'easton-stone', name: "Easton Stone", shelf: 'Garden walls', wall: { face: 'smoothUnit', unit: { course: 4, lengths: [8, 12, 16], capIn: 4, capOver: 1 } }, colors: [
+    ["Amaretto", ['#d7bda3', '#cbae95', '#b99c85', '#a0856f']],
+    ["Anthracite", ['#615e5a', '#5a5754', '#53504d', '#3c3a38']],
+    ["Bella", ['#9a816d', '#897664', '#766b62', '#625b57']],
+    ["Danville Beige", ['#a89687', '#a08d7d', '#968373', '#847264']],
+    ["Hickory", ['#83786c', '#796d61', '#6f6358', '#4d453d']],
+    ["Lueders Gray", ['#979085', '#8d867d', '#837d74', '#746e67']],
+    ["Midnight", ['#827b75', '#6e6964', '#5f5b58', '#54504e']],
+    ["Napoli", ['#b7a99b', '#9f9286', '#918377', '#7a7068']],
+    ["Rainier", ['#8d8070', '#7e7366', '#73695e', '#52483d']],
+    ["Rio", ['#94948b', '#898982', '#7d7d77', '#676661']],
+    ["Shaded Gray", ['#837d75', '#7a746c', '#716b64', '#504d48']],
+    ["Sierra", ['#917b6a', '#877364', '#806d5f', '#715f54']],
+    ["Slate", ['#aca69c', '#9a9690', '#8c8884', '#7d7a76']],
+    ["Victorian", ['#9d8f7a', '#928470', '#827665', '#574e42']],
   ] },
   // Highland Stone: a rough-hewn split face, 6 in courses of 18 in units, each with a virtual joint so it reads as two
   // stones (6 + 12 or 12 + 6); 3 x 18 x 13 in cap. Belgard: "rough-hewn, rustic split stone ... deep shadow lines".
@@ -339,24 +392,26 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#b09882', '#9f8977', '#8b7869', '#594b41']],
     ["Victorian", ['#bfac96', '#ab9f90', '#93897e', '#575048']],
   ] },
-  { slug: 'melville-wall', name: "Melville Wall", shelf: 'Garden walls', colors: [
-    ["Amber Beige", ['#c6b091', '#c1ab8c', '#bda788', '#a48e71']],
-    ["Anthracite", ['#625e5d', '#575452', '#534f4d', '#4c4947']],
-    ["Bella", ['#877164', '#76655b', '#6d5d55', '#5e524c']],
-    ["Cliffside", ['#c2b29b', '#bcac95', '#b6a68e', '#9d8e77']],
-    ["Hatteras", ['#b5ab9c', '#a79b8b', '#9e9181', '#8e806f']],
-    ["Hickory", ['#74675d', '#6f6257', '#6e6056', '#675950']],
-    ["Linen", ['#c4bcab', '#b9b1a0', '#b1a797', '#9f9686']],
-    ["Lueders Gray", ['#948d83', '#8c857b', '#857f76', '#7c756c']],
-    ["Midnight", ['#525252', '#4f4f4f', '#4d4d4d', '#424242']],
-    ["Napoli", ['#bdb4a8', '#a69b90', '#9b9085', '#897e73']],
-    ["Rio", ['#9f9d98', '#8c8b88', '#84827f', '#716f6c']],
-    ["Riviera", ['#9e9a92', '#8e8b84', '#827f78', '#726e68']],
-    ["Scandina Gray", ['#d3cdc4', '#c9c3bb', '#c1bbb4', '#afa9a0']],
-    ["Shaded Gray", ['#8a8780', '#86827b', '#827e78', '#716d67']],
-    ["Slate", ['#82827d', '#767772', '#6d6e69', '#61625d']],
-    ["Sonoran Gray", ['#867d78', '#7b736f', '#756d69', '#665e5a']],
-    ["Victorian", ['#928979', '#898171', '#837b6d', '#756d60']],
+  // Melville Wall: smooth 4 x 20 x 10 in double-sided blocks in half bond (each course shifted 10 in); Melville
+  // cap 2 x 20 x 13 in, about 1 1/2 in over.
+  { slug: 'melville-wall', name: "Melville Wall", shelf: 'Garden walls', wall: { face: 'smoothUnit', unit: { course: 4, lengths: [20], bond: 'half', capIn: 2, capOver: 1.5 } }, colors: [
+    ["Amber Beige", ['#c5b091', '#bba485', '#96836a', '#373025']],
+    ["Anthracite", ['#73716e', '#605e5b', '#54514f', '#494644']],
+    ["Bella", ['#897264', '#76645a', '#645a56', '#483a33']],
+    ["Cliffside", ['#c3b39c', '#baa991', '#ae9c85', '#695f52']],
+    ["Hatteras", ['#b8b1a3', '#a99d8d', '#9b8b78', '#6a6055']],
+    ["Hickory", ['#8a7b6f', '#726559', '#6d5f54', '#453c36']],
+    ["Linen", ['#c8c0b0', '#bbb2a1', '#aea494', '#7a7162']],
+    ["Lueders Gray", ['#969085', '#8d867c', '#837c74', '#756f67']],
+    ["Midnight", ['#545454', '#4f4f4f', '#4b4a4b', '#2c2c2c']],
+    ["Napoli", ['#c7bfb3', '#afa59a', '#9b8f85', '#7a7067']],
+    ["Rio", ['#a19e9a', '#8c8b88', '#7f7d7a', '#5d5a58']],
+    ["Riviera", ['#a39f96', '#928e87', '#7f7c77', '#5c5953']],
+    ["Scandina Gray", ['#d4cec5', '#c6c0b9', '#b4aea6', '#8b847c']],
+    ["Shaded Gray", ['#8f8b84', '#86827c', '#7e7a74', '#4e4c48']],
+    ["Slate", ['#868680', '#7a7a75', '#6c6d68', '#494844']],
+    ["Sonoran Gray", ['#8d8580', '#7d7571', '#726a66', '#433c38']],
+    ["Victorian", ['#958c7b', '#8a8172', '#7e7769', '#4f473b']],
   ] },
   { slug: 'papyrus-artforms', name: "Papyrus Artforms", shelf: 'Garden walls', colors: [
     ["Hickory", ['#9f978a', '#8a8173', '#847b6e', '#746c60']],

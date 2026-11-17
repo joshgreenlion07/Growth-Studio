@@ -90,6 +90,31 @@ function texFromCanvas(c: HTMLCanvasElement, srgb: boolean): THREE.Texture {
   return t;
 }
 
+/* sRGB <-> linear lookups for whole-texture color work (4096 steps; plenty for 8-bit output). */
+const LUT_N = 4096;
+const TO_LIN = new Float32Array(LUT_N + 1).map((_, i) => {
+  const v = i / LUT_N;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+});
+const TO_SRGB = new Float32Array(LUT_N + 1).map((_, i) => {
+  const v = i / LUT_N;
+  return v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+});
+const lutLin = (v: number) => TO_LIN[Math.round(clamp01(v) * LUT_N)];
+const lutSrgb = (v: number) => TO_SRGB[Math.round(clamp01(v) * LUT_N)];
+
+/**
+ * Rescale painted sRGB colors (in place) so their average, taken in linear light, is `mean` (linear RGB). The pattern,
+ * joints and stone-to-stone variation keep their proportions; only the overall color moves.
+ */
+function matchMean(C: Float32Array, mean: RGB) {
+  const n = C.length / 3;
+  const s = [0, 0, 0];
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) s[k] += lutLin(C[i * 3 + k]);
+  const g = s.map((v, k) => (v > 1e-6 ? (mean[k] * n) / v : 1));
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) C[i * 3 + k] = lutSrgb(lutLin(C[i * 3 + k]) * g[k]);
+}
+
 /** The three maps of a painted set as RGBA bytes, rows top first (as a canvas holds them). */
 export interface PaintedPixels {
   size: number;
@@ -98,8 +123,11 @@ export interface PaintedPixels {
   rough: Uint8ClampedArray;
 }
 
-/** Run a recipe over every texel and turn its height into a normal map. Pure: no DOM, runs in a worker too. */
-export function paintPixels(size: number, normalStrength: number, fn: (u: number, v: number) => Sample): PaintedPixels {
+/**
+ * Run a recipe over every texel and turn its height into a normal map. Pure: no DOM, runs in a worker too. With `mean`
+ * (linear RGB) the colors are then rescaled so the texture's average color is exactly that (see matchMean).
+ */
+export function paintPixels(size: number, normalStrength: number, fn: (u: number, v: number) => Sample, mean?: RGB): PaintedPixels {
   const n = size * size;
   const H = new Float32Array(n);
   const C = new Float32Array(n * 3);
@@ -115,6 +143,7 @@ export function paintPixels(size: number, normalStrength: number, fn: (u: number
       R[i] = s.r;
     }
   }
+  if (mean) matchMean(C, mean);
   const da = new Uint8ClampedArray(n * 4), dn = new Uint8ClampedArray(n * 4), dr = new Uint8ClampedArray(n * 4);
   // Height is in "pixels of relief" scaled by normalStrength.
   const k = normalStrength;
@@ -170,10 +199,13 @@ function pixelSet(px: PaintedPixels, tileMeters: number): PBRSet {
 /** Set while textureSet() runs a recipe only to learn its average color (see previewSet). */
 let previewing = false;
 
-/** Paint a seamless PBR set from a per-pixel function of (u, v) in [0,1). */
-export function paint(size: number, tileMeters: number, normalStrength: number, fn: (u: number, v: number) => Sample): PBRSet {
-  if (previewing) return previewSet(tileMeters, fn);
-  const px = paintPixels(size, normalStrength, fn);
+/**
+ * Paint a seamless PBR set from a per-pixel function of (u, v) in [0,1). With `mean` (linear RGB), the painted colors
+ * are rescaled so the texture's average color is exactly that (see matchMean); the preview stand-in shows it too.
+ */
+export function paint(size: number, tileMeters: number, normalStrength: number, fn: (u: number, v: number) => Sample, mean?: RGB): PBRSet {
+  if (previewing) return previewSet(tileMeters, fn, mean);
+  const px = paintPixels(size, normalStrength, fn, mean);
   return IN_WORKER ? pixelSet(px, tileMeters) : canvasSet(px, tileMeters);
 }
 
@@ -185,7 +217,7 @@ const PREVIEW_SAMPLES = 32;
  * a flat normal and its average roughness, as tiny textures that are swapped
  * for the painted ones in place (see texture-jobs.ts).
  */
-function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample): PBRSet {
+function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample, mean?: RGB): PBRSet {
   const N = PREVIEW_SAMPLES;
   let r = 0, g = 0, b = 0, ro = 0;
   for (let y = 0; y < N; y++) {
@@ -199,6 +231,7 @@ function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample): P
   }
   const k = 255 / (N * N);
   const avg: [number, number, number, number] = [Math.round(r * k), Math.round(g * k), Math.round(b * k), Math.round(ro * k)];
+  if (mean) for (let i = 0; i < 3; i++) avg[i] = Math.round(lutSrgb(mean[i]) * 255);
   return {
     map: pendingTexture([avg[0], avg[1], avg[2]], true),
     normalMap: pendingTexture([128, 128, 255], false),

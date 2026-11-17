@@ -127,6 +127,9 @@ export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 
 /**
  * A maker's wall unit: course height and unit face lengths (inches), an optional virtual joint inside each unit (inches
  * from its left end, one picked per unit), and the cap's thickness and overhang (inches).
+ * `bond` is how courses sit on each other: 'random' (default: lengths mixed at random, each course starting anywhere),
+ * 'half' (one length, each course shifted half a unit, as Melville Wall and AB Classic are laid) or 'stack' (one length,
+ * joints in line, as Artforms panels are set).
  */
 export interface WallUnit {
   course: number;
@@ -134,6 +137,7 @@ export interface WallUnit {
   split?: number[];
   capIn?: number;
   capOver?: number;
+  bond?: 'random' | 'half' | 'stack';
 }
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 
@@ -403,44 +407,6 @@ const CATALINA_GRANA: Blend[] = [
   ['Toscana', ['#90765d', '#867059', '#7d6956', '#736353']],
   ['Victorian', ['#83796b', '#8f765b', '#83705a', '#776e61']],
 ];
-const AB_CLASSIC: Blend[] = [
-  ['Brown Beige Charcoal', ['#8f7f74', '#807166', '#75675c', '#66594f']],
-  ['Buff', ['#8b7b67', '#847560', '#7f705b', '#776854']],
-  ['Charcoal', ['#6f675f', '#655d55', '#5e574e', '#544d45']],
-  ['Dakota Blend', ['#b29482', '#a48674', '#987b6a', '#856a5c']],
-  ['Danville Blend', ['#b09882', '#a28871', '#967d67', '#826c5a']],
-  ['Driftwood', ['#7f756a', '#776e63', '#72695e', '#675f55']],
-  ['Granite Gray', ['#74706b', '#64605b', '#595551', '#433f3b']],
-  ['Gray', ['#a1a2a3', '#989998', '#919393', '#85888a']],
-  ['Gray Charcoal Tan', ['#8f8473', '#7f7466', '#746a5d', '#635b50']],
-  ['Grey', ['#8d8d8b', '#838481', '#7d7d7a', '#727370']],
-  ['Mocha', ['#988774', '#8f7d6a', '#887664', '#7a6959']],
-  ['Pewter Blend', ['#b5b3a8', '#a19e95', '#8d8a83', '#74726c']],
-  ['Rocky Mountain', ['#89786a', '#6f5e53', '#5f4f44', '#47392f']],
-  ['Sable', ['#979289', '#827d75', '#716d66', '#58544d']],
-  ['Sable Blend', ['#979289', '#817c75', '#716c66', '#58544d']],
-  ['Silverado', ['#838382', '#797979', '#727273', '#68696a']],
-  ['Tan', ['#a28b74', '#947d65', '#89735d', '#7a654f']],
-  ['Tan Brown Charcoal', ['#948271', '#837363', '#77695a', '#66584c']],
-  ['Thunderhead', ['#9c9488', '#8d857b', '#837b72', '#746d64']],
-  ['Toccoa', ['#8e7e69', '#837562', '#786d60', '#6b6359']],
-];
-const EASTON_STONE: Blend[] = [
-  ['Amaretto', ['#d7bba1', '#ccaf96', '#bea38b', '#aa8d76']],
-  ['Anthracite', ['#605c58', '#5b5754', '#575350', '#4f4b48']],
-  ['Bella', ['#97816d', '#887665', '#7a6c60', '#675d56']],
-  ['Danville Beige', ['#a69485', '#a08d7e', '#9a8777', '#8e7b6d']],
-  ['Hickory', ['#80756a', '#786c61', '#72665c', '#695d52']],
-  ['Lueders Gray', ['#958e84', '#8c867d', '#868077', '#7e786f']],
-  ['Midnight', ['#6b6864', '#5f5b58', '#5a5653', '#54504d']],
-  ['Napoli', ['#a6978a', '#97897d', '#8e8175', '#7e736a']],
-  ['Rainier', ['#82776a', '#7b7063', '#766c60', '#6d6256']],
-  ['Rio', ['#92918a', '#888881', '#81817b', '#75756f']],
-  ['Shaded Gray', ['#807b74', '#7a746d', '#766f69', '#6c665f']],
-  ['Sierra', ['#8f7a6a', '#867264', '#816e60', '#796659']],
-  ['Slate', ['#a39f96', '#928e89', '#898580', '#7e7a77']],
-  ['Victorian', ['#9a8d78', '#928571', '#8d806d', '#786c5a']],
-];
 const slugOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const CATALINA_SIZES: [number, number][] = [[6, 12], [9, 12], [12, 12]];
 const BELGARD: MaterialSpec[] = [
@@ -448,8 +414,6 @@ const BELGARD: MaterialSpec[] = [
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `border-of-catalina-grana-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, auto: true })),
   // Every Catalina Grana color as its own 6 x 9 border, offered on its own (not only as "same as the main course").
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
-  ...AB_CLASSIC.map(([n, palette]) => M({ id: `ab-classic-${slugOf(n)}`, name: `AB Classic, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard AB Classic', maker: 'Belgard', line: 'AB Classic', shelf: 'Retaining walls', color: n })),
-  ...EASTON_STONE.map(([n, palette]) => M({ id: `easton-stone-${slugOf(n)}`, name: `Easton Stone, ${n}`, use: 'wall', group: 'Walls', recipe: 'wall', palette, wall: { face: 'splitFace', cap: palette[1] }, matches: 'Belgard Easton Stone', maker: 'Belgard', line: 'Easton Stone', shelf: 'Garden walls', color: n })),
   // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
   ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette]): MaterialSpec[] => {
     const id = `${L.slug}-${slugOf(n)}`;
@@ -579,6 +543,13 @@ export const OFFERED_LINES = new Set<string>([
   'Melville Tandem Wall',
   'Highland Stone',
   'Antiqued Flat Top',
+  'Melville Wall',
+  'Easton Stone',
+  'Belair Wall',
+  'Belair Wall 2.0',
+  'Coventry Wall III',
+  'Artforms',
+  'AB Classic',
 ]);
 
 /** True when a person can pick this material (see OFFERED_LINES). A `border-of-<paver>` follows its paver. */
