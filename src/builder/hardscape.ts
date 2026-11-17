@@ -5,6 +5,7 @@ import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { latticeAlpha, materialTextures, photoAlbedo, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
+import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
@@ -544,8 +545,8 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
   const spec = materialById.get(wallId);
   const cap = choice === 'midnight' ? MIDNIGHT : choice === 'same' ? (spec?.palette[1] ?? spec?.palette[0] ?? '#8f8c87') : (spec?.wall?.cap ?? '#8f8c87');
   if (spec?.wall?.face === 'plaster') return catalogMaterial(wallId);
-  // A rough-hewn wall's own cap: the same porous stone, unless a Midnight cap was chosen.
-  if (spec?.wall?.face === 'roughHewn' && choice !== 'midnight') return pbrMaterial(`cap:${wallId}`, wallCapTextures(spec));
+  // A rough-hewn (or chiseled, tumbled) wall's own cap: textured stone, unless a Midnight cap was chosen.
+  if (spec?.wall && hasRoughCap(spec.wall.face) && choice !== 'midnight') return pbrMaterial(`cap:${wallId}`, wallCapTextures(spec));
   // A maker's cap color comes from its swatch photo, like its wall: render it at that color.
   const capColor = spec?.maker && choice !== 'midnight' ? photoAlbedo(cap) : cap;
   return plainMaterial(`cap-${capColor}`, { color: capColor, roughness: 0.55 });

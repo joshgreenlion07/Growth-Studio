@@ -5,7 +5,7 @@
  * in linear light, 120 px, 12 px inset). No Belgard image ships with the app.
  * `shelf` is where the line sits in the catalogue; `sizes` are the paver sizes in inches.
  */
-import type { WallUnit } from './catalog';
+import type { UnitFace, WallUnit } from './catalog';
 
 export interface MakerLine {
   slug: string;
@@ -20,7 +20,7 @@ export interface MakerLine {
   /** The line sells a matching 6 x 9 border stone, offered in every color. */
   border?: boolean;
   /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
-  wall?: { face: 'smoothUnit' | 'roughHewn'; unit: WallUnit };
+  wall?: { face: 'smoothUnit' | 'roughHewn' | UnitFace; unit: WallUnit };
   colors: [string, string[]][];
 }
 
@@ -266,19 +266,21 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Rockland Black", ['#585858', '#565756', '#555554', '#535352']],
     ["Scandina Gray", ['#b5aea4', '#aea89e', '#a9a399', '#a39c92']],
   ] },
-  { slug: 'ashlar-tandem-wall', name: "Ashlar Tandem Wall", shelf: 'Garden walls', colors: [
-    ["Avondale", ['#c2a991', '#a8917d', '#8d7a6b', '#645040']],
-    ["Cheswick", ['#9d998f', '#8f8b81', '#848077', '#767269']],
-    ["Newport Gray", ['#7b7871', '#6a6761', '#5f5c56', '#53514a']],
-    ["Pewter", ['#6f6e6e', '#5d5b5b', '#4d4c4c', '#343332']],
-    ["Rainier", ['#857b6f', '#766c61', '#6b6258', '#4e453b']],
-    ["Rio", ['#838079', '#75726b', '#696660', '#4b4842']],
-    ["Riviera", ['#c0bdb8', '#b3b0ac', '#a7a3a0', '#736f6b']],
-    ["Scandina Gray", ['#847c70', '#7d756a', '#787065', '#726a5e']],
-    ["Shelby", ['#bfaea0', '#ab9a8c', '#958578', '#6c5c50']],
-    ["Sierra", ['#a68a7b', '#9b8071', '#927869', '#654e41']],
-    ["Toscana", ['#bca189', '#a8917d', '#98816d', '#755e4a']],
-    ["Victorian", ['#c2b09b', '#b6a48f', '#a99681', '#7c6b56']],
+  // Ashlar Tandem Wall: 7 in Tandem faces (13 3/16, 15 13/16, 18 7/16 in) at random, each scored across and up into
+  // several chiseled ashlar stones; Tandem cap 3 1/4 x 24 x 15 in, chiseled front edge, about 1 1/2 in over.
+  { slug: 'ashlar-tandem-wall', name: "Ashlar Tandem Wall", shelf: 'Garden walls', wall: { face: 'ashlar', unit: { course: 7, lengths: [13.1875, 15.8125, 18.4375], capIn: 3.25, capOver: 1.5 } }, colors: [
+    ["Avondale", ['#ccb093', '#ad957f', '#8a7667', '#3c3028']],
+    ["Cheswick", ['#aba599', '#989288', '#837e76', '#65615b']],
+    ["Newport Gray", ['#8f897f', '#78746e', '#64625d', '#4d4c48']],
+    ["Pewter", ['#7d7b7a', '#696767', '#555354', '#313030']],
+    ["Rainier", ['#958779', '#7d7165', '#675e55', '#37322e']],
+    ["Rio", ['#948f87', '#7b7771', '#66635e', '#373633']],
+    ["Riviera", ['#c4c1bc', '#b3b0ac', '#9e9b98', '#4c4b48']],
+    ["Scandina Gray", ['#8b8172', '#82796b', '#776f64', '#676056']],
+    ["Shelby", ['#c5b2a4', '#ae9b8c', '#938275', '#49413b']],
+    ["Sierra", ['#a98c7c', '#9a7f6f', '#896d5e', '#30231d']],
+    ["Toscana", ['#c4a489', '#ac937c', '#967e6a', '#493e35']],
+    ["Victorian", ['#c5b19a', '#b7a28b', '#a08e78', '#544b40']],
   ] },
   // Belair Wall: hand-chiseled 6 in courses of 8 and 16 in units mixed about 1:1; trapezoid cap 3 x 13 1/2 in deep,
   // about 1 1/4 in over. (Half the 16s carry a micro joint about 6 in from one end; not drawn.)
@@ -289,9 +291,9 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Newport Gray", ['#9e988f', '#89857d', '#79766f', '#65625c']],
     ["Shaded Gray", ['#8d8b86', '#7c7b77', '#6e6d6b', '#5e5f5e']],
   ] },
-  // Belair Wall 2.0: the chiseled face in 6 in courses of 6, 10 and 16 in units, sold 2 x 16 + 10 + 6, mixed in those
-  // proportions here (Belgard's 3-course, 48 in pattern is not drawn yet); the Belair cap.
-  { slug: 'belair-wall-2-0', name: "Belair Wall 2.0", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [16, 16, 10, 6], capIn: 3, capOver: 1.25 } }, colors: [
+  // Belair Wall 2.0: the chiseled face in 6 in courses of 6, 10 and 16 in units (sold 2 x 16 + 10 + 6), laid in
+  // Belgard's 48 in three-course pattern; the Belair cap.
+  { slug: 'belair-wall-2-0', name: "Belair Wall 2.0", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [16, 10, 6], pattern: [{ start: 10, lengths: [16, 6, 16, 10] }, { start: 6, lengths: [6, 16, 10, 16] }, { start: 0, lengths: [16, 10, 16, 6] }], capIn: 3, capOver: 1.25 } }, colors: [
     ["Midnight", ['#595552', '#56534f', '#55514d', '#534f4c']],
     ["Napoli", ['#cdbba7', '#b4a493', '#9a8b7d', '#776c62']],
     ["Rio", ['#928b80', '#888277', '#7e786c', '#6f6a5f']],
@@ -300,29 +302,36 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#88745f', '#7f6e5b', '#766757', '#695d4f']],
     ["Victorian", ['#a3927b', '#8d7f6d', '#7c7263', '#6a6155']],
   ] },
-  { slug: 'brisa', name: "Brisa", shelf: 'Garden walls', colors: [
-    ["Heritage", ['#847a70', '#7e7569', '#7a7065', '#72685d']],
-    ["Moonlight", ['#c6b398', '#c0ad93', '#baa78d', '#af9c82']],
-    ["Newport Gray", ['#78766f', '#6c6b65', '#66655f', '#5d5c57']],
+  // Brisa: crisp units with broad, shallow chisel scoops, 6 in courses of 6, 10 and 16 in laid in Belgard's 48 in
+  // three-course pattern (shared with Belair Wall 2.0); the Belair cap.
+  { slug: 'brisa', name: "Brisa", shelf: 'Garden walls', wall: { face: 'chiseled', unit: { course: 6, lengths: [16, 10, 6], pattern: [{ start: 10, lengths: [16, 6, 16, 10] }, { start: 6, lengths: [6, 16, 10, 16] }, { start: 0, lengths: [16, 10, 16, 6] }], capIn: 3, capOver: 1.25 } }, colors: [
+    ["Heritage", ['#857c71', '#7e756a', '#786e63', '#6b6258']],
+    ["Moonlight", ['#c8b498', '#bfac92', '#b5a38a', '#a29179']],
+    ["Newport Gray", ['#888175', '#74726b', '#686762', '#5c5c58']],
   ] },
+  // Castlemanor Grana: tumbled units, smooth faces with rounded, chipped edges, 6 in courses of 6, 12 and 16 in faces at
+  // random; tumbled cap 3 x 10 x 12 in, about 1 in over. Not offered until its 'tumbled' face is drawn; the units will be
+  // { face: 'tumbled', unit: { course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1 } }.
   { slug: 'castlemanor-grana', name: "Castlemanor Grana", shelf: 'Garden walls', colors: [
-    ["Avondale", ['#beac97', '#b8a691', '#b2a08c', '#9c8c7a']],
-    ["Colonial", ['#ab9d8f', '#a09081', '#99897c', '#83796f']],
-    ["Midnight", ['#73706e', '#6b6866', '#666361', '#5c5a58']],
-    ["Misty Mountain", ['#9e968d', '#928980', '#8b837a', '#7b736a']],
-    ["Napoli", ['#d4c7c1', '#ccb7aa', '#c6ab99', '#ab8f7c']],
-    ["Oxford", ['#8c867d', '#817c75', '#79756f', '#6c6660']],
-    ["Potomac", ['#938376', '#86786d', '#7f7167', '#6e6157']],
-    ["Savannah", ['#b5a99b', '#ab9d8f', '#a59585', '#897c6f']],
-    ["Slate", ['#8f8c85', '#84817a', '#7b7873', '#6f6c68']],
-    ["Teak", ['#665e59', '#605753', '#5b534f', '#574e4c']],
+    ["Avondale", ['#c1af9b', '#b6a48f', '#a39481', '#73695c']],
+    ["Colonial", ['#b1a295', '#a29081', '#8e847b', '#6a635b']],
+    ["Midnight", ['#7d7a76', '#6d6c69', '#62615f', '#43413e']],
+    ["Misty Mountain", ['#a79f96', '#968e85', '#888077', '#625c56']],
+    ["Napoli", ['#d5cbc7', '#c8b7ac', '#c6a28a', '#624c42']],
+    ["Oxford", ['#969088', '#857f77', '#75706b', '#524d48']],
+    ["Potomac", ['#9b8a7b', '#897b6f', '#7b6e65', '#4d453e']],
+    ["Savannah", ['#b9ac9f', '#ac9e8f', '#9f8f80', '#635c53']],
+    ["Slate", ['#96928b', '#85817b', '#76736f', '#52514e']],
+    ["Teak", ['#6c645d', '#625a56', '#5c5351', '#564e4c']],
   ] },
+  // Castlemanor Rustic: the same units with a rough, pitted, tumbled face; tumbled cap about 1 1/2 in over. Not offered
+  // until its 'tumbledRough' face is drawn ({ course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1.5 }).
   { slug: 'castlemanor-rustic', name: "Castlemanor Rustic", shelf: 'Garden walls', colors: [
-    ["Colonial", ['#857464', '#786959', '#706253', '#615345']],
-    ["Misty Mountain", ['#9f968d', '#928a81', '#8b837a', '#7c736b']],
-    ["Napoli", ['#c8bfb6', '#bab2a8', '#aea69c', '#958d83']],
-    ["Potomac", ['#8a7a6b', '#7c6e60', '#746558', '#635548']],
-    ["Slate", ['#b2b3b2', '#9fa1a3', '#8d9195', '#777a7f']],
+    ["Colonial", ['#907f6e', '#7d6d5c', '#6c5e50', '#52483e']],
+    ["Misty Mountain", ['#a69e95', '#958d84', '#878077', '#615b55']],
+    ["Napoli", ['#cdc5bb', '#b9b1a7', '#a29990', '#6f6760']],
+    ["Potomac", ['#958474', '#807163', '#6d5f53', '#41372f']],
+    ["Slate", ['#b7b7b6', '#a0a2a4', '#858a8f', '#404042']],
   ] },
   // Coventry Wall III: quarried split face, white-flecked two-tone blends, 6 in courses of 8, 10 and 16 in units;
   // its own 3 x 12 x 16 in cap, about 1 in over.
@@ -375,10 +384,13 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#93755b', '#7d736a', '#72655c', '#62554c']],
     ["Victorian", ['#bfb3a0', '#a19584', '#7e7569', '#454039']],
   ] },
-  { slug: 'lamina-tandem', name: "Lamina Tandem", shelf: 'Garden walls', colors: [
-    ["Pewter", ['#726e68', '#605d58', '#4c4944', '#2f2b27']],
-    ["Scandina Gray", ['#c6c4cb', '#b6b5bd', '#a7a6b0', '#8a8993']],
-    ["Sienna", ['#867360', '#726254', '#5f5145', '#392d23']],
+  // Lamina Tandem: Z-shaped Tandem faces, two 3 1/2 in halves offset 2 5/8 in, each one stone or two thin strips with
+  // deep joints; the Tandem cap. Scandina Gray's swatch on belgard.com shows another product, so it takes Melville
+  // Tandem's Scandina Gray (the same Tandem color).
+  { slug: 'lamina-tandem', name: "Lamina Tandem", shelf: 'Garden walls', wall: { face: 'lamina', unit: { course: 7, lengths: [13.1875, 15.8125, 18.4375], halfShift: 2.625, capIn: 3.25, capOver: 1.5 } }, colors: [
+    ["Pewter", ['#857e75', '#6c6761', '#58544f', '#262522']],
+    ["Scandina Gray", ['#aea89c', '#a19b90', '#958f85', '#54504a']],
+    ["Sienna", ['#8f7965', '#7a6858', '#645649', '#2c251f']],
   ] },
   // Melville Tandem Wall: smooth, linear faces 7 in tall in three lengths (13 3/16, 15 13/16, 18 7/16 in) laid at
   // random, tight joints; capped with the Melville cap (2 x 20 x 13 in). Belgard: "smooth face and linear design".
@@ -413,9 +425,12 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Sonoran Gray", ['#8d8580', '#7d7571', '#726a66', '#433c38']],
     ["Victorian", ['#958c7b', '#8a8172', '#7e7769', '#4f473b']],
   ] },
-  { slug: 'papyrus-artforms', name: "Papyrus Artforms", shelf: 'Garden walls', colors: [
-    ["Hickory", ['#9f978a', '#8a8173', '#847b6e', '#746c60']],
-    ["Scandina Gray", ['#a4a7a5', '#8e908f', '#858887', '#747676']],
+  // Papyrus Artforms: Artforms panels set upright (18 wide, 36 in tall, joints in line) with a shallow cut crosshatch
+  // of mostly vertical strokes; plain coping. Colors read from the panel face of Belgard's renders (Scandina Gray
+  // looks warmer and lighter in the cut sheet photo).
+  { slug: 'papyrus-artforms', name: "Papyrus Artforms", shelf: 'Garden walls', wall: { face: 'papyrus', unit: { course: 36, lengths: [18], bond: 'stack', capIn: 3, capOver: 0.5 } }, colors: [
+    ["Hickory", ['#918878', '#8b8273', '#857b6d', '#7b7266']],
+    ["Scandina Gray", ['#999b99', '#8f918f', '#868887', '#797c7d']],
   ] },
   // Melville Curb: 4 in thick, 24 in long, 6 1/2 in tall (belgard.com). Colors re-read from each swatch photo as four
   // clustered tones (4-means in linear light, 120 px, 12 px inset).

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { layingOf, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type WallFace, type WallUnit } from '../siteplan/catalog';
+import { layingOf, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { WALL_FACES } from './wallfaces';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -896,7 +897,7 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
       return { h: gap ? 0 : 0.5 + depth * 0.6 + split * 0.35, c, r: 0.9 };
     });
   }
-  if ((face === 'smoothUnit' || face === 'roughHewn') && spec.wall?.unit) return unitWallSet(spec, face, spec.wall.unit);
+  if ((face === 'smoothUnit' || face === 'roughHewn' || face in WALL_FACES) && spec.wall?.unit) return unitWallSet(spec, face as 'smoothUnit' | 'roughHewn' | UnitFace, spec.wall.unit);
   // Block walls. A maker's block takes its stone-to-stone variation from the swatch tones as photographed (wallTones)
   // and its overall color from the photo (wallFaceMean), like the unit walls below.
   const smoothFace = face === 'smoothBlock';
@@ -916,60 +917,86 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
 
 /**
  * A maker's wall in its real units: courses of `unit.course` inches, course lines level with the ground, laid by
- * `unit.bond`: the face lengths mixed at random (running joints), one length shifted half a unit each course, or one
- * length stacked with its joints in line. 'smoothUnit' is a smooth, crisp face with tight joints and a small chamfer;
- * 'roughHewn' is a deeply split stone face, pitched at its edges, with a shallower virtual joint inside each unit so
- * one unit reads as two stones.
+ * `unit.pattern` (the maker's repeating courses) or else `unit.bond`: the face lengths mixed at random (running joints),
+ * one length shifted half a unit each course, or one length stacked with its joints in line. Units with
+ * `unit.halfShift` are two half-height faces, the upper one offset along the wall (Lamina). 'smoothUnit' is a smooth,
+ * crisp face with tight joints and a small chamfer; 'roughHewn' is a deeply split stone face, pitched at its edges,
+ * with a shallower virtual joint inside each unit so one unit reads as two stones; the other faces have their own
+ * recipes in ./wallfaces.
  */
-function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn', unit: WallUnit): PBRSet {
+function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn' | UnitFace, unit: WallUnit): PBRSet {
   // The swatch tones as photographed set the stone-to-stone variation (wallTones); the face's overall color is then
   // matched to the photo (wallFaceMean), so a palette with a very dark or light tone no longer pulls the whole wall off.
   const { stone: colors, joint } = spec.maker ? wallTones(spec) : (() => { const p = pal(spec); return { stone: p, joint: p[p.length - 1] }; })();
   const r = rng(`${spec.id}:units`);
+  const recipe = face === 'smoothUnit' || face === 'roughHewn' ? null : WALL_FACES[face];
   const rough = face === 'roughHewn';
-  const bond = unit.bond ?? 'random';
+  const pattern = unit.pattern?.length ? unit.pattern : null;
+  const bond = pattern ? 'pattern' : unit.bond ?? 'random';
+  const period = pattern ? pattern[0].lengths.reduce((a, b) => a + b, 0) : unit.lengths[0];
   const H = unit.course * IN;
-  // A square tile, a whole number of courses tall (about 6 ft). Half and stack bonds repeat seamlessly only when the tile
-  // holds whole units across, and a half bond an even number of courses, so those take the next size that does.
-  let rows = Math.max(6, Math.round(72 / unit.course));
+  // A square tile, a whole number of courses tall (about 6 ft, at least two courses: an 18 in tile of 36 in panels would
+  // spread 1,024 texels over 18 ft and blur fine detail). Half and stack bonds and patterns repeat seamlessly
+  // only when the tile holds whole units (or whole pattern repeats) across, a half bond an even number of courses and a
+  // pattern a whole number of its courses, so those take the next size that does.
+  let rows = Math.max(2, Math.round(72 / unit.course));
   if (bond !== 'random') {
     for (let n = rows; n <= rows * 3; n++) {
-      const across = (n * unit.course) / unit.lengths[0];
-      if (Math.abs(across - Math.round(across)) < 1e-6 && (bond === 'stack' || n % 2 === 0)) {
+      const across = (n * unit.course) / period;
+      const fits = bond === 'pattern' ? n % pattern!.length === 0 : bond === 'stack' || n % 2 === 0;
+      if (Math.abs(across - Math.round(across)) < 1e-6 && fits) {
         rows = n;
         break;
       }
     }
   }
   const T = rows * H;
-  const V0 = 0.08; // wall faces map v = height above grade + 0.08 m
+  // Wall faces map v = height above grade + 0.08 m, and the painted texture is flipped on upload (row 0 at the top), so a
+  // texel's height above grade is (1 - v) * T - 0.08: courses then start at grade and a recipe's y runs up the wall.
+  const V0 = 0.08;
   const start = r() * unit.lengths[0] * IN; // where the bonded courses' joints fall along the wall
-  const courses = Array.from({ length: rows }, (_, ri) => {
+  const course = (ri: number) => {
     const cuts = [0];
     const splits: number[] = [];
-    let x = 0;
+    const seq = pattern ? pattern[ri % pattern.length].lengths : null;
+    let x = 0, i = 0;
     while (x < T - 1e-6) {
-      let l = unit.lengths[bond === 'random' ? Math.floor(r() * unit.lengths.length) : 0] * IN;
-      if (T - x - l < unit.lengths[0] * IN * 0.5) l = T - x; // the last unit in the tile closes the row
+      let l = (seq ? seq[i++ % seq.length] : unit.lengths[bond === 'random' ? Math.floor(r() * unit.lengths.length) : 0]) * IN;
+      if (!seq && T - x - l < unit.lengths[0] * IN * 0.5) l = T - x; // the last unit in the tile closes the row
       splits.push(unit.split ? unit.split[Math.floor(r() * unit.split.length)] * IN : -1);
       x = Math.min(T, x + l);
       cuts.push(x);
     }
-    const shift = bond === 'random' ? r() * T : start + (bond === 'half' && ri % 2 ? unit.lengths[0] * IN * 0.5 : 0);
+    const shift = pattern ? pattern[ri % pattern.length].start * IN
+      : bond === 'random' ? r() * T : start + (bond === 'half' && ri % 2 ? unit.lengths[0] * IN * 0.5 : 0);
     return { cuts, splits, shift };
-  });
+  };
+  // With two offset halves each course is laid twice, the upper half's joints `halfShift` along from the lower's.
+  const halves = unit.halfShift !== undefined;
+  const courses = Array.from({ length: rows }, (_, ri) => course(ri));
   const J = (rough ? 0.18 : 0.1) * IN; // half joint
-  return paint(1024, T, rough ? 18 : 6, (u, v) => {
-    const yy = ((((v * T - V0) % T) + T) % T);
+  return paint(1024, T, recipe ? recipe.normal : rough ? 18 : 6, (u, v) => {
+    const yy = (((((1 - v) * T - V0) % T) + T) % T);
     const ri = Math.min(rows - 1, Math.floor(yy / H));
     const row = courses[ri];
-    const xs = ((((u * T - row.shift) % T) + T) % T);
+    let ly = yy - ri * H;
+    let hh = H, half = -1, off = 0;
+    if (halves) {
+      half = ly >= H / 2 ? 1 : 0;
+      hh = H / 2;
+      ly -= half * hh;
+      off = half * unit.halfShift! * IN;
+    }
+    const xs = ((((u * T - row.shift - off) % T) + T) % T);
     let k = 0;
     while (k < row.cuts.length - 2 && xs >= row.cuts[k + 1]) k++;
-    const a = row.cuts[k], b = row.cuts[k + 1], ly = yy - ri * H;
-    const id = ri * 97 + k;
-    let edge = Math.min(xs - a, b - xs, ly, H - ly);
+    const a = row.cuts[k], b = row.cuts[k + 1];
+    const id = ri * 97 + k + (half > 0 ? 50 : 0);
+    let edge = Math.min(xs - a, b - xs, ly, hh - ly);
     const sp = row.splits[k];
+    if (recipe) {
+      return recipe.texel({ u, v, T, id, x: xs - a, y: ly, w: b - a, h: hh, edge, split: sp > 0 && sp < b - a - 0.02 ? sp : -1, half, stone: colors, joint });
+    }
     const vj = sp > 0 && sp < b - a - 0.02 ? Math.abs(xs - a - sp) : 1;
     if (rough) edge -= (vnoise(u * 160, v * 160, 160, 7) - 0.5) * 0.0025; // slightly uneven arrises
     if (edge < J) {
@@ -987,7 +1014,7 @@ function unitWallSet(spec: MaterialSpec, face: 'smoothUnit' | 'roughHewn', unit:
       return { h: bev * (0.94 + g * 0.04), c, r: 0.72 + cloud * 0.08 };
     }
     return roughStone(u, v, T, id, colors, edge, J, vj);
-  }, spec.maker ? wallFaceMean(spec) : undefined);
+  }, spec.maker ? (wallFaceMean(spec).map((m) => m * (recipe?.lift ?? 1)) as RGB) : undefined);
 }
 
 /**
