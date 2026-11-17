@@ -185,6 +185,8 @@ section.scene-pane.fs #nav-hint { display: block; }
 .point-reticle.on i { border-color: #ffd24a; }
 .point-reticle span { position: absolute; left: 18px; top: -10px; white-space: nowrap; font: 600 12px/1.2 var(--font-ui); color: #1e2621; background: rgba(251, 250, 247, 0.92); padding: 2px 7px; border-radius: 2px; }
 .point-reticle span:empty { display: none; }
+.point-reticle.locked i { border-color: #ffd24a; border-width: 3px; background: rgba(255, 210, 74, 0.25); }
+.point-reticle.locked span::before { content: attr(data-lock) ' · '; color: #8a5a00; }
 .measure-label.ml-ruler { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; background: rgba(255, 233, 168, 0.96); border-left: 3px solid #b8821a; }
 .measure-label.ml-ruler span { font-family: var(--font-mono); font-weight: 400; }
 section.scene-pane.fs { position: fixed; inset: 0; z-index: 30; display: grid !important; height: auto !important; min-height: 0 !important; grid-template-rows: minmax(0, 1fr); }
@@ -325,7 +327,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
             </div>
             <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F)">Full screen</button>
           </div>
-          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>P</kbd> material pointer · <kbd>Esc</kbd> exit</div>
+          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>Esc</kbd> exit</div>
           <div id="height-meter" aria-hidden="true">
             <div class="hm-scale" id="hm-scale"><div class="hm-mark" id="hm-mark"></div></div>
             <div class="hm-read" role="status" aria-live="off"><span>Height</span><b id="hm-value">0 ft</b></div>

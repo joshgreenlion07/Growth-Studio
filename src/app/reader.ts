@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, isOffered } from '../siteplan/catalog';
 import { cleanPlan, type CleanResult } from '../siteplan/validate';
 
 /**
@@ -19,7 +19,8 @@ export interface ReadRequest {
 
 function catalogText(): string {
   const plants = PLANTS.map((p) => `${p.id} (${p.name}, ${p.group.toLowerCase()})`).join('; ');
-  const mats = MATERIALS.map((m) => `${m.id} [${m.use}] ${m.name}`).join('; ');
+  // Only offered materials: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES).
+  const mats = MATERIALS.filter(isOffered).map((m) => `${m.id} [${m.use}] ${m.name}`).join('; ');
   const feats = FEATURES.map((f) => `${f.id} (${f.name}, ${f.footprint[0]}x${f.footprint[1]} m)`).join('; ');
   return `PLANTS: ${plants}\n\nMATERIALS: ${mats}\n\nFEATURES: ${feats}`;
 }

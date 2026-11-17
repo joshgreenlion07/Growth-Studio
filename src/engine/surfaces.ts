@@ -12,8 +12,25 @@ import { hash, hexRGB, mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB 
 const IN = 0.0254;
 const JOINT_SAND: RGB = [0.5, 0.47, 0.42];
 
+/*
+ * A maker's colors come from its swatch photos, which show the stone as it looks lit. In the default afternoon light
+ * this renderer shows a horizontal surface about twice as bright as its albedo and bluer (sky fill): measured on
+ * Belgard pavers, rendered linear = gain * albedo + offset per channel. So a maker color is turned into the albedo that
+ * renders back to the swatch's own color. Hand-picked generic colors were chosen in this light and stay as they are.
+ */
+const PHOTO_GAIN: RGB = [1.99, 2.25, 2.9];
+const PHOTO_OFFSET: RGB = [0.019, 0.018, 0.029];
+const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+const toSrgb = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+/** The albedo (hex) that renders as this photographed color in the default light. */
+export function photoAlbedo(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(toSrgb(Math.max(0.002, (toLin(v / 255) - PHOTO_OFFSET[i]) / PHOTO_GAIN[i])) * 255));
+  return '#' + ch.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+
 function pal(spec: MaterialSpec): RGB[] {
-  return spec.palette.map(hexRGB);
+  return spec.palette.map((h) => hexRGB(spec.maker ? photoAlbedo(h) : h));
 }
 
 function pick(p: RGB[], r: number): RGB {
@@ -327,7 +344,7 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
       const tn = fbm(u + r3 * 2.3, v + r1 * 1.7, Math.max(2, Math.round(T * 2.5)), 3, 23) * 3;
       const step = (Math.floor(tn) + smooth(0.82, 1, tn - Math.floor(tn))) / 3;
       const g = vnoise(u * 600, v * 600, 600, 13);
-      c = mulRGB(c, 0.92 + rip * 0.04 + step * 0.06 + g * 0.05);
+      c = mulRGB(c, 1.05 + rip * 0.04 + step * 0.06 + g * 0.05); // lifted so the rippled face, shaded by its own relief, renders at its swatch color
       h = bev * (0.5 + rip * 0.3 + step * 0.16 + g * 0.04);
       rough = 0.84 - rip * 0.12;
     } else {

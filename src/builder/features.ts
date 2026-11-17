@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { featureById, type FeatureKind } from '../siteplan/catalog';
+import { SLAB_24_PREFIX, featureById, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL } from '../engine/foliage';
@@ -73,6 +73,11 @@ function flameMaterial(): THREE.ShaderMaterial {
         gl_FragColor = vec4(c * f * 5.0 * uOn, 1.0);
       }`,
   });
+}
+
+/** A stepping stone's slab: its own color when it names one, else the default Dimensions Slab 24 x 24 color. */
+function stoneMaterial(f: FeaturePlacement): string {
+  return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
 export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number): FeatureBuild {
@@ -402,6 +407,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(catalogMaterial('concrete-smooth'), box(W, 0.06, D, 0, 0, 0));
         break;
       }
+      case 'steppingStone': {
+        // A 2 3/8 in slab set into the ground with its top about half an inch proud.
+        add(catalogMaterial(stoneMaterial(f)), box(W, 0.06, D, 0, -0.047, 0));
+        break;
+      }
       case 'puttingCup': {
         add(mat.whiteMetal, cyl(0.055, 0.055, 0.01, 0, 0.005, 0, 16));
         add(plainMaterial('cup-hole', { color: '#0c0c0c', roughness: 1 }), cyl(0.05, 0.05, 0.012, 0, 0.006, 0, 16));
@@ -471,6 +481,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     o.position.set(f.position[0], y0, f.position[1]);
     o.rotation.y = (-f.rotationDeg * Math.PI) / 180;
     o.userData.itemId = f.id;
+    if (spec.kind === 'steppingStone') {
+      // What the material pointer reports for a stepping stone: the slab and its color.
+      o.userData.part = 'stone';
+      o.userData.catalogId = stoneMaterial(f);
+    }
     o.name = `feature-${f.id}`;
     group.add(o);
   }

@@ -83,8 +83,15 @@ Messages use `window.postMessage`:
   product line, the catalogue shelf it sits on (Pavers, Retaining walls,
   Garden walls, Curb), the color name alone and one swatch color. Generic
   looks have an empty `maker`. Each maker paver color also has a matching
-  border, `border-of-<id>`, which is not listed. `select` carries the id of the
-  plan item that was clicked, or `null` for bare ground.
+  border, `border-of-<id>`, which is not listed. Only offered lines are
+  listed: a maker paver or wall line is offered once it is mapped in depth from
+  the maker's specs (sizes, faces, colors, patterns), by adding its line name to
+  `OFFERED_LINES` in `src/siteplan/catalog.ts` (today Catalina Grana, Avalon
+  Slate, Melville Tandem Wall and Highland Stone). Generic looks, curbs and
+  fences are always listed. Hidden lines stay in the catalog, so a plan that
+  already uses one still loads and renders, and `point` still describes it.
+  `select` carries the id of the plan item that was clicked, or `null` for bare
+  ground.
 - A turf zone with `catalogId: 'synthetic-turf'` is synthetic grass: an even,
   bright artificial turf, labeled "Synthetic grass". `lawn` is natural grass.
   An unknown turf id that names synthetic, artificial, fake or astro turf falls
@@ -125,6 +132,10 @@ Messages use `window.postMessage`:
   id, part, material }` when what it is on changes: `part` is `main`, `border`,
   `wall`, `cap`, `curb`, `fence` or `steps`; `material` is the look (below), or
   null. The parent can send `{ source: 'area-planner', type: 'pointer', on }`.
+- Pressing the right stick (or L) locks the pointed material: the studio sends
+  `{ source: 'growth-studio', type: 'point-lock', locked }` and no `point`
+  messages while locked; letting go sends what the pointer is on at once. The
+  parent can send `{ source: 'area-planner', type: 'point-lock', locked }`.
 - Looks (in `ready` and `point`) are `{ id, name, use, maker, line, shelf,
   color, sw, palette, sizes?, sizeText?, thicknessIn?, face?, image?, page?,
   laying? }`: `image` is the maker's swatch photo and `page` its product page,
@@ -135,6 +146,10 @@ Messages use `window.postMessage`:
   `{ ..., on: false }` when it leaves full screen, and gets `{ type:
   'fullscreen-exit' }` when the person leaves it from inside 3D. Without an
   answer the studio goes full screen by itself.
+- Stepping stones are `features` with `catalogId: 'stepping-stone-24'` (a Belgard
+  Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
+  grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
+  looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary
