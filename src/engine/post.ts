@@ -33,6 +33,23 @@ export const DEFAULT_LENS: LensSettings = {
 };
 
 /**
+ * Cleans a color read from the HDR scene buffer. One overflowed speck there (an Inf or NaN from a single sliver of
+ * geometry, one or two pixels for one frame) is enough to black out most of the screen: every blur that reads it
+ * spreads it (the focus gather, then the bloom's five cascaded levels, about 1150 pixels of reach each way), and what
+ * it touches tone-maps to black. A guard after the blurs is too late, so every pass cleans the scene color where it
+ * reads it: a pixel with an Inf or NaN in it becomes black (one dark pixel instead of a black square), and the rest
+ * is capped so sums inside the blurs cannot overflow the half-float buffers either.
+ * Written with plain comparisons: any comparison with NaN is false, and unlike isnan() or min/max a compiler does
+ * not drop them.
+ */
+const HDR_CLEAN = /* glsl */ `
+vec3 hdr(vec3 c){
+  vec3 a = abs(c);
+  bool ok = a.r < 6.0e4 && a.g < 6.0e4 && a.b < 6.0e4;
+  return ok ? clamp(c, vec3(0.0), vec3(1000.0)) : vec3(0.0);
+}`;
+
+/**
  * Depth of field, gathered at half resolution (a quarter of the pixels, the costliest pass by far). Sizes are in
  * full-resolution pixels. Alpha carries how much of the result is blur spilled over from out-of-focus things in
  * front, so the full-resolution composite can keep sharp pixels sharp and still show that spill.
@@ -55,6 +72,7 @@ varying vec2 vUv;
 #endif
 float linDepth(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
 vec2 suv(vec2 uv){ return min(uv * uUvScale, uUvMax); }
+${HDR_CLEAN}
 vec2 cocAt(vec2 uv){
   float z = linDepth(texture2D(tDepth, suv(uv)).x);
   float c = uBlur * abs(1.0 / uFocus - 1.0 / z) * uRes.y;
@@ -63,7 +81,7 @@ vec2 cocAt(vec2 uv){
 void main(){
   vec2 cz = cocAt(vUv);
   float c0 = cz.x;
-  vec3 sum = texture2D(tColor, suv(vUv)).rgb;
+  vec3 sum = hdr(texture2D(tColor, suv(vUv)).rgb);
   float wsum = 1.0;
   float wFront = 0.0;
   if (uMaxCoc > 0.0) {
@@ -78,7 +96,7 @@ void main(){
       // blurred samples in front spill over us.
       float cs = s.y > cz.y ? min(s.x, c0) : s.x;
       float w = smoothstep(r - 1.0, r + 1.0, cs);
-      sum += texture2D(tColor, suv(uv)).rgb * w;
+      sum += hdr(texture2D(tColor, suv(uv)).rgb) * w;
       wsum += w;
       if (s.y < cz.y) wFront += w * smoothstep(1.0, 3.0, s.x);
     }
@@ -105,14 +123,15 @@ uniform vec2 uTexel;
 uniform float uSharpen;
 varying vec2 vUv;
 float linDepth(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
+${HDR_CLEAN}
 void main(){
   // The scene may be drawn into only part of its buffer (a lower render scale while the camera moves): this pass
   // scales it up to the full size, with a light sharpen so the picture does not go soft.
   vec2 uv = min(vUv * uUvScale, uUvMax);
-  vec3 sharp = texture2D(tColor, uv).rgb;
+  vec3 sharp = hdr(texture2D(tColor, uv).rgb);
   if (uSharpen > 0.0) {
-    vec3 n = texture2D(tColor, min(uv + vec2(uTexel.x, 0.0), uUvMax)).rgb + texture2D(tColor, max(uv - vec2(uTexel.x, 0.0), vec2(0.0))).rgb
-      + texture2D(tColor, min(uv + vec2(0.0, uTexel.y), uUvMax)).rgb + texture2D(tColor, max(uv - vec2(0.0, uTexel.y), vec2(0.0))).rgb;
+    vec3 n = hdr(texture2D(tColor, min(uv + vec2(uTexel.x, 0.0), uUvMax)).rgb) + hdr(texture2D(tColor, max(uv - vec2(uTexel.x, 0.0), vec2(0.0))).rgb)
+      + hdr(texture2D(tColor, min(uv + vec2(0.0, uTexel.y), uUvMax)).rgb) + hdr(texture2D(tColor, max(uv - vec2(0.0, uTexel.y), vec2(0.0))).rgb);
     // Limited so a bright edge (a sun glint) does not ring.
     sharp = max(sharp + (sharp - n * 0.25) * uSharpen, sharp * 0.5);
   }
@@ -148,10 +167,12 @@ vec3 aces(vec3 color){
 }
 vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+${HDR_CLEAN}
 void main(){
-  vec3 c = texture2D(tColor, min(vUv * uUvScale, uUvMax)).rgb * uExposure / 0.6;
-  // A NaN or Inf from the HDR buffer would turn the pixel black: show it as nothing instead. Tested before the clamp
-  // (clamp of NaN is undefined), and also as c != c, which a compiler that drops isnan still keeps.
+  // Cleaned here too: at Draft quality this pass reads the scene buffer directly (see HDR_CLEAN).
+  vec3 c = hdr(texture2D(tColor, min(vUv * uUvScale, uUvMax)).rgb) * uExposure / 0.6;
+  // A last check on the finished color (after the bloom was added). Tested before the clamp (clamp of NaN is
+  // undefined), and also as c != c, which a compiler that drops isnan still keeps.
   if (any(isnan(c)) || any(isinf(c)) || any(notEqual(c, c))) c = vec3(0.0);
   c = clamp(c, vec3(0.0), vec3(6.0e4));
   // Warmth before tone mapping, like a white-balance shift.
