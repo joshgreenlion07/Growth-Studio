@@ -21,6 +21,8 @@ export interface NightLight {
   intensity: number;
   distance: number;
   flicker: boolean;
+  /** A shade structure's light (pergola, gazebo): ranked after fire, water, porch and path lights for the light pool. */
+  shade?: boolean;
 }
 
 export interface FeatureBuild {
@@ -156,8 +158,9 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       const a = (-f.rotationDeg * Math.PI) / 180;
       return new THREE.Vector3(f.position[0] + x * Math.cos(a) + z * Math.sin(a), y0 + y, f.position[1] - x * Math.sin(a) + z * Math.cos(a));
     };
+    const shade = spec.group === 'Shade';
     const light = (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker = false) =>
-      lights.push({ position: local(x, y, z), color, intensity, distance, flicker });
+      lights.push({ position: local(x, y, z), color, intensity, distance, flicker, ...(shade ? { shade: true } : {}) });
     const flame = (w: number, h: number, x: number, y: number, z: number, ry = 0) => {
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0), flameMat);
       fl.position.set(x, y, z);
@@ -522,7 +525,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
  * band (about 6 1/2 in) that runs round the top; the long beams are made in two lengths with a joint at mid-span.
  * The louvers (about 6 in at a 5.9 in pitch) span the short way between the long beams on pivots just under the beam
  * top, tilted partly open; every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
- * each long beam. Two warm lights under the roof light the space at night.
+ * each long beam. One warm light under the roof lights the space at night.
  */
 function stratusPergola(
   W: number,
@@ -579,9 +582,9 @@ function stratusPergola(
     // End caps and pivot brackets on the gutter rails.
     for (const sz of [-1, 1]) add(frame, box(0.05, 0.045, 0.03, x, yPivot - 0.035, sz * (span / 2 + 0.015)));
   }
-  // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between them.
-  light(-W / 4, H - 1.0, 0, '#ffc98f', 1.8, 5);
-  light(W / 4, H - 1.0, 0, '#ffc98f', 1.8, 5);
+  // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between
+  // them. One light per pergola: the scene's light pool is small (see build.ts), the strips themselves glow regardless.
+  light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
 }
 
 export function setFlames(fb: FeatureBuild, on: number) {

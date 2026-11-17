@@ -25,5 +25,5 @@ export const BASALITE_MEDIA: Record<string, MakerMedia> = {
 /** The swatch photo URL for a Basalite line and color, if Basalite has one. */
 export function basaliteImage(line: string, color: string): string | undefined {
   const p = BASALITE_MEDIA[line]?.images[color];
-  return p ? (/^https?:/.test(p) ? p : BASALITE_IMAGE_BASE + p) : undefined;
+  return p ? (/^https:/.test(p) ? p : BASALITE_IMAGE_BASE + p) : undefined;
 }

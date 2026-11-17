@@ -380,7 +380,7 @@ function cloudTone(colors: RGB[], lx: number, ly: number, id: number, r1: number
   const nf = (a: number, b: number, k: number) => vnoise(a, b, 1e6, s + k) * 0.55 + vnoise(a * 2.1, b * 2.1, 1e6, s + k + 1) * 0.3 + vnoise(a * 4.3, b * 4.3, 1e6, s + k + 2) * 0.15;
   const warp = (nf(su * 1.6, sv * 1.6, 0) - 0.5) * 0.9;
   // The tones meet in a fine, powdery speckle rather than a clean line: a few millimeters of grain on every threshold.
-  const grain = (vnoise(lx * 260, ly * 260, 1e6, s + 40) - 0.5) * 0.09 + (vnoise(lx * 90, ly * 90, 1e6, s + 41) - 0.5) * 0.05;
+  const grain = (vnoise(lx * 120, ly * 120, 1e6, s + 40) - 0.5) * 0.09 + (vnoise(lx * 90, ly * 90, 1e6, s + 41) - 0.5) * 0.05;
   // Drifts about 30 to 60 cm long and 6 to 20 cm wide.
   const n1 = nf(su * 1.5, sv * 3.6 + warp, 10) + grain;
   const n2 = nf(su * 1.6 + 3.1, sv * 6 + warp * 1.3, 20) + grain;
@@ -396,6 +396,8 @@ function cloudTone(colors: RGB[], lx: number, ly: number, id: number, r1: number
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
   const colors = pal(spec);
+  // A line's own joint sand (Premier Slab's light, gritty joints), turned to albedo like any maker color.
+  const sand: RGB | null = p.jointSand ? hexRGB(photoAlbedo(p.jointSand)) : null;
   const lay = layoutFor(p, spec.id, laying);
   const T = lay.tile;
   const J = (p.joint * IN) / 2;
@@ -429,14 +431,20 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
     const joint = (antiqued ? rim : edge) < J;
     if (joint) {
       const g = vnoise(u * 500, v * 500, 500, 2);
+      if (sand) {
+        // Light sand with dark grains.
+        const speck = vnoise(u * 1400, v * 1400, 1400, 3) > 0.8 ? 0.5 : 1;
+        return { h: 0, c: mulRGB(sand, (0.88 + g * 0.2) * speck), r: 1 };
+      }
       return { h: 0, c: mulRGB(JOINT_SAND, 0.75 + g * 0.3), r: 1 };
     }
     const bev = antiqued ? 0.12 + 0.88 * smooth(J, J + bevel, edge) : smooth(J, J + bevel, edge);
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
-    const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
-    c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
-    if (p.blend === 'cloud') {
+    if (p.blend !== 'cloud') {
+      const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
+      c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
+    } else {
       const S = p.sizes[0][0] * IN;
       c = cloudTone(colors, x - Math.floor(x / S) * S, y - Math.floor(y / S) * S, id, r1, r2);
     }

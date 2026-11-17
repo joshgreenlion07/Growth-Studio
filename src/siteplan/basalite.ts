@@ -19,13 +19,15 @@ export interface BasaliteLine {
   /** Piece face size and joint, inches: the 594 mm slab with its spacer joint (about 4 mm). */
   size: [number, number];
   joint: number;
+  /** Joint sand as Basalite's swatch photos show it: light gray with dark grains. */
+  jointSand: string;
   /** Thickness, meters. */
   thickness: number;
   colors: [string, string[]][];
 }
 
 export const BASALITE_LINES: BasaliteLine[] = [
-  { slug: 'premier-slab', name: 'Premier Slab', size: [23.5, 23.5], joint: 0.16, thickness: 0.06, colors: [
+  { slug: 'premier-slab', name: 'Premier Slab', size: [23.5, 23.5], joint: 0.16, jointSand: '#cdc9c1', thickness: 0.06, colors: [
     ['Midnight Terrace', ['#bdb9b0', '#a49888', '#979691', '#8c857b']],
     ['Bodega Dunes', ['#c8c9cc', '#c1bbb5', '#a6aab2', '#a3a5a9']],
     ['Oceanside', ['#dddede', '#d3d2d1', '#ced1d4', '#c9cacb']],

@@ -91,6 +91,8 @@ export interface PaverPattern {
    * tones drift through every piece in broad, soft streaks (Basalite Premier Slab colors such as Midnight Terrace).
    */
   blend?: 'cloud';
+  /** The line's own joint sand as photographed (sRGB hex), when it differs from the usual sand (Premier Slab). */
+  jointSand?: string;
 }
 
 /**
@@ -631,7 +633,7 @@ MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ 
  */
 for (const L of BASALITE_LINES) {
   for (const [n, palette] of L.colors) {
-    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud' }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud', jointSand: L.jointSand }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
   }
 }
 
@@ -673,7 +675,7 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'pergola-louvered', name: 'Louvered pergola, aluminum', group: 'Shade', kind: 'pergolaLouvered', footprint: [4.3, 3.7] }),
   // SunVilla Stratus 10 x 13 ft motorized pergola (sunvilla.com): overall 157.3 in L x 118.7 in W x 98.6 in H, aluminum
   // frame in a matte charcoal finish, battery-driven louvered roof, an integrated gutter and LED lighting in the roof.
-  F({ id: 'sunvilla-stratus-10x13', name: 'SunVilla Stratus 10 \u00d7 13 ft louvered pergola', group: 'Shade', kind: 'pergolaLouvered', model: 'stratus', footprint: [157.3 * 0.0254, 118.7 * 0.0254],
+  F({ id: 'sunvilla-stratus-10x13', name: 'SunVilla Stratus 10 x 13 ft louvered pergola', group: 'Shade', kind: 'pergolaLouvered', model: 'stratus', footprint: [157.3 * 0.0254, 118.7 * 0.0254],
     maker: 'SunVilla', page: 'https://sunvilla.com/products/sunvilla-stratus-10-x-13-motorized-pergola',
     about: 'SunVilla Stratus: a freestanding aluminum pergola with a motorized louvered roof that turns from open sky to full cover, an integrated gutter, and LED lighting built into the roof.',
     facts: ['Overall 157.3 in L x 118.7 in W x 98.6 in H (about 13 x 10 ft, 8 ft 2 in tall)', 'Aluminum frame, charcoal finish; square posts on base plates', 'Louvers driven by a 20 V battery motor (two batteries and charger included)', 'Integrated gutter; LED lighting in the roof'] }),
