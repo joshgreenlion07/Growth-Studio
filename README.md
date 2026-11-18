@@ -249,6 +249,34 @@ Messages use `window.postMessage`:
   near side of a vertical plane through the point the camera looks at (in
   walk or fly, the ground ahead), draws the ground in section there for the
   current stage, and moves the camera to face the cut.
+- Controller (any "standard" pad, e.g. Xbox) and keys, in every camera mode:
+  left stick move, right stick look, LT / RT zoom, LB / RB sink / rise, hold LS
+  faster; X measurements (Off, Totals, Every edge; `M`); B plant labels (`N`, or
+  the Plants button next to Measure); Y material pointer (`P`); right stick click
+  locks its material (`L`); A walk / fly in first person (`V`); Menu (Start)
+  goes home (`Home` in first person).
+- Plant labels (each hand-placed plant's name, height and spread at the growth
+  year shown) are their own switch, apart from the measurements: Measure Off,
+  Totals and Every edge show only areas, edges, walls, runs, structures,
+  features and `plan.rulers`; Plants shows or hides the plant labels in any of
+  them. The switch is remembered on the device.
+- Quick tools (D-pad): left / right pick the tool (`,` and `.`), up / down use it
+  (`=` and `-`; holding down or `-` about a second is a long press; the keys, and
+  `N`, act only while the 3D view has the keyboard, not a button or the plan pane). A chip at the
+  bottom of the 3D view names the tool and what up and down do, and fades. The
+  last tool is remembered. The tools are one table in `src/app/quicktools.ts`:
+  - Dig layers: up digs one build stage deeper (Finished, Sand, Base rock,
+    Backfill, Trench, Excavate, Demo), down goes back toward Finished. Picking
+    it builds the stage views ahead, while the view is idle.
+  - Mark: up throws a dirt clod from the camera to the center of the view,
+    where it lands as a dirt pile with an orange flag and ring (flags grow with
+    distance so they stay visible); down removes the last one, a long press
+    clears them all. Marks are kept for the session (not in the plan).
+  - Tape measure: up drops point A at the center of the view, up again drops B
+    and shows the straight distance (feet and inches; level run and rise on a
+    slope); down clears.
+  - Light: Afternoon, Golden hour, Blue hour, Night. Growth: Install, 1, 3, 5,
+    10 years. Views: the saved camera views (formerly D-pad left / right).
 - **Library and approvals.** The Library button (top right of the 3D view) opens a panel listing every product:
   plants, trees, turf, bark/mulch/rock, maker paver, wall and curb lines, concrete, and the features
   (pergolas, gazebo, kitchens, fire, water, spa, accents) with the attached roof and California room. Each
@@ -278,6 +306,14 @@ Messages use `window.postMessage`:
 - `{ source: 'area-planner', type: 'pause' }` stops drawing the 3D view (for a
   hidden tab; plant pictures still render); `{ ..., type: 'resume' }` starts it
   again on the next frame.
+- Marks thrown with the Mark quick tool: after each one lands, is removed or
+  all are cleared, the studio sends `{ source: 'growth-studio', type: 'marks',
+  marks: [{ x, z, y }] }` (every mark, oldest first, in 3D world meters: x and
+  z on the plan, y the height) to the origin that sent the plan. The parent may
+  keep them; the studio does not take marks back yet. After a rebuild each mark
+  is set back on the surface under it and the updated list is sent again.
+- Plant labels (B, `N`, the Plants button) are the studio's own switch; the
+  measurement levels and `plan.rulers` are unaffected.
 - The `i` key pressed inside the 3D view (no modifier keys, not in a text
   field) is passed on as `{ source: 'growth-studio', type: 'key', key: 'i' }`
   to the origin that sent the plan.
