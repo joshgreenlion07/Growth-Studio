@@ -195,14 +195,29 @@ export class QuickTools {
     return TOOLS[this.index].id;
   }
 
+  /** Tools left out of the D-pad cycle (view-only embed: the Mark tool). The tool in hand moves on if it is one. */
+  private skip = new Set<string>();
+  setSkip(ids: string[]) {
+    this.skip = new Set(ids.filter((id) => TOOLS.some((t) => t.id === id)));
+    if (this.skip.size >= TOOLS.length) this.skip.clear();
+    if (this.skip.has(TOOLS[this.index].id)) this.index = this.step(this.index, 1);
+  }
+  private step(from: number, by: 1 | -1) {
+    let i = from;
+    do i = (i + by + TOOLS.length) % TOOLS.length;
+    while (this.skip.has(TOOLS[i].id) && i !== from);
+    return i;
+  }
+
   /** A D-pad press (from the controller, or the keys below). */
   press(dir: QuickDir, held = false) {
     const s = this.host.studio();
     if (!s || !this.host.enabled()) return;
     this.used = true;
+    if (this.skip.has(TOOLS[this.index].id)) this.index = this.step(this.index, 1);
     const t = TOOLS[this.index];
     if (dir === 'left' || dir === 'right') {
-      this.index = (this.index + (dir === 'right' ? 1 : -1) + TOOLS.length) % TOOLS.length;
+      this.index = this.step(this.index, dir === 'right' ? 1 : -1);
       const n = TOOLS[this.index];
       try {
         localStorage.setItem(STORE_KEY, n.id);

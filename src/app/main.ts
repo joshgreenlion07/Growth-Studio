@@ -61,6 +61,23 @@ const claude = (window as unknown as { claude?: Claude }).claude;
 const EMBED = new URLSearchParams(location.search).get('embed') === '1';
 if (EMBED) document.documentElement.classList.add('embed');
 
+/**
+ * View-only embed: the parent page shows the 3D view to someone who may look but not change the saved plan (Area
+ * Planner's assistant accounts). Set by `?viewer=1` on the embed address and by the parent's
+ * `{ type: 'mode', viewer }` message. While on, the studio hides the Library and sends nothing back that would change
+ * the plan or the team's settings: no approvals, no feature actions (a door or light used by hand still moves here,
+ * as a preview), no dirt marks (the Mark tool is left out of the D-pad). Looking around, build stages, growth, light,
+ * measurements, plant labels, the material pointer and Save image all stay. Off by default: today's behavior.
+ */
+let embedViewer = EMBED && new URLSearchParams(location.search).get('viewer') === '1';
+function setViewer(on: boolean) {
+  embedViewer = EMBED && on;
+  document.documentElement.classList.toggle('viewer', embedViewer);
+  if (embedViewer && libraryOpen()) closeLibrary();
+  quick?.setSkip(embedViewer ? ['mark'] : []);
+}
+if (embedViewer) document.documentElement.classList.add('viewer');
+
 /** Embed mode starts with a bare lot, so no sample yard flashes before the parent's plan arrives. */
 const emptyYard = () => cleanPlan({ site: { name: 'Yard', boundary: [[0, 0], [18, 0], [18, 14], [0, 14]] } }).plan;
 
@@ -158,13 +175,15 @@ let quick: QuickTools | null = null;
 
 function initQuickTools(s: Studio) {
   quick = new QuickTools({ studio: () => studio, setStage: (st) => setStage(st), setMood, setYears, enabled: () => !libraryOpen() }, $('#scene'));
+  if (embedViewer) quick.setSkip(['mark']);
   s.onQuick = (dir, held) => quick?.press(dir, held);
   s.onUse = () => quick?.use();
   // Used by hand in the 3D view: a sauna's door or lights are its placement options, so the plan keeps them (here,
   // and in Area Planner through the `action` message, which names the option).
   s.onAction = (a) => {
     if (EMBED) {
-      if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'action', id: a.itemId, key: a.key, on: a.on, ...(a.option ? { option: a.option } : {}) }, embedOrigin);
+      // View-only: the door or light moves here as a preview; the parent is not told, so its plan keeps its options.
+      if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'action', id: a.itemId, key: a.key, on: a.on, ...(a.option ? { option: a.option } : {}) }, embedOrigin);
       return;
     }
     const f = a.option ? plan.features.find((x) => x.id === a.itemId) : null;
@@ -193,7 +212,7 @@ function initQuickTools(s: Studio) {
   // Marks thrown with the Mark tool: the parent may keep them (3D world points, meters).
   s.onMarksChanged = (marks) => {
     quick?.marksChanged();
-    if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'marks', marks: marks.map((m) => ({ x: +m.x.toFixed(3), z: +m.z.toFixed(3), y: +m.y.toFixed(3) })) }, embedOrigin);
+    if (EMBED && embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'marks', marks: marks.map((m) => ({ x: +m.x.toFixed(3), z: +m.z.toFixed(3), y: +m.y.toFixed(3) })) }, embedOrigin);
   };
 }
 
@@ -1051,6 +1070,7 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open); return; }
+  if (d.type === 'mode') { setViewer((d as { viewer?: unknown }).viewer === true); return; }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'cover') {
@@ -1164,14 +1184,15 @@ let libraryReturn: { pose: ReturnType<Studio['savePose']>; years: number } | nul
 /** Open or close the Library over the 3D view; closing shows the plan again where the camera was. */
 function setLibrary(open: boolean) {
   if (!studio || open === libraryOpen()) return;
+  if (open && embedViewer) return;   // view-only: no Library
   if (!open) return closeLibrary();
   const s = studio;
   libraryReturn = { pose: s.savePose(), years: s.state.years };
   s.setPointer(false);
   openLibrary({
     studio: s,
-    canApprove: () => EMBED && !!embedOrigin,
-    approve: (key, on) => { if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'approve', key, on }, embedOrigin); },
+    canApprove: () => EMBED && !!embedOrigin && !embedViewer,
+    approve: (key, on) => { if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'approve', key, on }, embedOrigin); },
     onToggle: (isOpen) => {
       $('#btn-library').setAttribute('aria-pressed', String(isOpen));
       if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'library', open: isOpen }, embedOrigin);
