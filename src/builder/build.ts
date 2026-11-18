@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { beginMaterialBuild } from './materials';
 import { featureById, plantById } from '../siteplan/catalog';
 import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
@@ -272,6 +273,7 @@ function frameClock() {
 /** The build, step by step: each `yield` is a place it may pause. */
 function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | null, sky: SkyUniforms, assets: ModelAssets | null, openStage: BuildStage = 'finished', meta: { gen: number } = { gen: 0 }): Generator<string, SceneBuild, void> {
   // Sets this yard asks for are painted before any asked for earlier.
+  beginMaterialBuild();
   meta.gen = newTextureGeneration();
   const root = new THREE.Group();
   root.name = 'yard';

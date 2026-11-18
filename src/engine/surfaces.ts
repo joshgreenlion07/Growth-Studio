@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { layingOf, type ConcreteFinish, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
+import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
@@ -538,9 +538,134 @@ function curbSet(spec: MaterialSpec): PBRSet {
   });
 }
 
+/*
+ * Stamped concrete, made as a stamp mat leaves it: a stone, cobble or plank pattern pressed 3/8 in deep into the
+ * colored slab, with the joints and low spots darkened by the antiquing release (spec.antique) when there is one.
+ * Every pattern repeats over 96 in (stones, fans and planks vary inside that), painted at about 2.4 mm a pixel.
+ */
+const STAMP_TILE = 96;
+
+/** A stone, cobble or plank at a point: its id, distance to its nearest joint in inches, and its position along its length (0..1, planks). */
+interface StampHit { id: number; edge: number; along: number; across: number; rot: boolean; }
+interface StampLayout { at(xIn: number, yIn: number): StampHit; }
+
+/** Random rectangular stone, 12 to 36 in, on a 6 in grid that wraps over the 96 in tile. */
+function ashlarStamp(seed: string): StampLayout {
+  const lay = packedLayout([[12, 12], [12, 18], [18, 18], [18, 24], [24, 24], [12, 24], [12, 36]], 6, 16, seed);
+  return { at(x, y) { const h = lay.at(x * IN, y * IN); return { id: h.id, edge: h.edge / IN, along: h.along, across: 0.5, rot: h.rotated }; } };
+}
+
+/**
+ * European fan: fans 24 in wide in a staggered lattice (a lower fan overlaps the one above), each of three rings of
+ * 4 in stones about 5 to 6 in long, the stones of each ring starting at its own angle so joints never line up.
+ */
+function fanStamp(): StampLayout {
+  const r = 12, R = r * 1.04, ringH = 4;
+  return {
+    at(X, Y) {
+      const j0 = Math.floor(Y / r);
+      for (let jj = j0 + 2; jj >= j0 - 2; jj--) {
+        const par = jj & 1;
+        const i0 = Math.round((X / r - par) / 2);
+        let best = -1, bd = 1e9, bcx = 0;
+        for (let ii = i0 - 1; ii <= i0 + 1; ii++) {
+          const cx = (2 * ii + par) * r, cy = jj * r;
+          const d = Math.hypot(X - cx, Y - cy);
+          if (d <= R && d < bd) { bd = d; best = ii; bcx = cx; }
+        }
+        if (best < 0) continue;
+        const dx = X - bcx, dy = Y - jj * r;
+        const k = Math.min(2, Math.floor(bd / ringH));
+        const n = Math.max(5, Math.round((Math.PI * 2 * (k + 0.5) * ringH) / 5.6));
+        const fanId = (((best % 4) + 4) % 4) * 8 + (((jj % 8) + 8) % 8);
+        const t = (Math.atan2(dy, dx) / (Math.PI * 2) + 1 + hash(fanId, k) ) * n;
+        const f = t - Math.floor(t);
+        const sector = ((Math.floor(t) % n) + n) % n;
+        const radial = Math.min(bd - k * ringH, (k + 1) * ringH - bd);
+        const ang = Math.min(f, 1 - f) * ((Math.PI * 2) / n) * bd;
+        const edge = Math.min(k === 2 ? Math.min(radial, R - bd) : radial, ang);
+        return { id: (fanId * 4 + k) * 64 + sector, edge, along: f, across: (bd - k * ringH) / ringH, rot: false };
+      }
+      return { id: 0, edge: 0, along: 0, across: 0, rot: false };
+    },
+  };
+}
+
+/** Boards 6 to 8 in wide, in two lengths per row (36 to 60 in) that butt at random, 14 rows over the 96 in tile. */
+function plankStamp(seed: string): StampLayout {
+  const widths = [6, 7, 8, 6, 7, 6, 8, 7, 6, 8, 7, 6, 8, 6];
+  const r = rng(seed);
+  const rows = widths.map((w, i) => {
+    const first = 36 + Math.floor(r() * 25), off = r() * STAMP_TILE;
+    return { w, y0: widths.slice(0, i).reduce((a, b) => a + b, 0), first, off };
+  });
+  return {
+    at(X, Y) {
+      let row = rows[0];
+      for (const q of rows) if (Y >= q.y0) row = q;
+      const ri = rows.indexOf(row);
+      const x = (((X - row.off) % STAMP_TILE) + STAMP_TILE) % STAMP_TILE;
+      const second = x >= row.first;
+      const a = second ? row.first : 0, b = second ? STAMP_TILE : row.first;
+      const ly = Y - row.y0;
+      return { id: ri * 2 + (second ? 1 : 0), edge: Math.min(ly, row.w - ly, x - a, b - x), along: (x - a) / (b - a), across: ly / row.w, rot: false };
+    },
+  };
+}
+
+function stampedSet(spec: MaterialSpec, stamp: StampPattern): PBRSet {
+  const a = hexRGB(spec.palette[0]), b = hexRGB(spec.palette[1] ?? spec.palette[0]);
+  const rel = spec.antique ? hexRGB(spec.antique) : null;
+  const lay = stamp === 'ashlar' ? ashlarStamp(spec.id.replace(/-antiqued$/, '')) : stamp === 'cobble' ? fanStamp() : plankStamp('plank');
+  const TM = STAMP_TILE * IN;
+  const joint = stamp === 'cobble' ? 0.5 : stamp === 'plank' ? 0.32 : 0.6; // joint width, in
+  const lip = stamp === 'cobble' ? 0.7 : 0.55; // how wide the rounded shoulder into the joint is, in
+  return paint(1024, TM, 7, (u, v) => {
+    const X = u * STAMP_TILE, Y = v * STAMP_TILE;
+    const hit = lay.at(X, Y);
+    // The joint wanders a little, as a hand-set mat leaves it.
+    const wob = (vnoise(u * 48, v * 48, 48, 21) - 0.5) * 0.3;
+    const e = Math.max(0, hit.edge + wob);
+    const top = smooth(joint * 0.5, joint * 0.5 + lip, e); // 0 in the joint, 1 on the stone or board
+    const sel = hash(hit.id, 5);
+    // Texture of the stone face: a split slate cleft for stone and cobble, long grain for planks.
+    let face: number, low: number;
+    if (stamp === 'plank') {
+      const off = Math.floor(hash(hit.id, 9) * 8);
+      const warp = vnoise(u * 8 + off, v * 32, 8, 3);
+      const rings = 0.5 + 0.5 * Math.sin((hit.across * 9 + warp * 5 + hash(hit.id, 2) * 6) * Math.PI);
+      const fiber = vnoise(u * 16, v * 512, 16, 4);
+      face = rings * 0.55 + fiber * 0.45;
+      low = 1 - face;
+    } else {
+      const cleft = sel < 0.5 ? vnoise(u * 24, v * 96, 24, 3) : vnoise(u * 96, v * 24, 24, 3);
+      const grain = vnoise(u * 256, v * 256, 256, 4);
+      face = cleft * 0.6 + grain * 0.4;
+      low = 1 - face;
+    }
+    // Color: the slab's integral color varies stone to stone, then mottles and shades by the face.
+    const mott = fbm(u, v, 6, 4, 8);
+    let c = mixRGB(a, b, hash(hit.id, 1) * 0.6 + mott * 0.4);
+    c = mulRGB(c, 0.93 + hash(hit.id, 3) * 0.12 + (face - 0.5) * (stamp === 'plank' ? 0.2 : 0.16));
+    if (rel) {
+      // Antiquing release lies in the joints and settles in the low spots of the face (heavier on cobble).
+      const settle = smooth(0.45, 0.9, low) * (stamp === 'cobble' ? 0.32 : 0.24) + smooth(0.6, 0, e / lip) * 0.35;
+      c = mixRGB(c, rel, Math.min(0.95, settle * top + (1 - top) * 0.85));
+    } else {
+      c = mulRGB(c, 0.5 + top * 0.5); // joint shadow in the same color, a plain mat's release being the slab itself
+    }
+    const dome = stamp === 'cobble' ? Math.sqrt(Math.max(0, Math.min(1, e / 2.2))) : 1;
+    const relief = stamp === 'plank' ? 0.07 : 0.13;
+    const h = top * (0.78 + (hash(hit.id, 7) - 0.5) * 0.07 + face * relief * 1.4) * (0.85 + 0.15 * dome);
+    return { h, c, r: top > 0.5 ? 0.58 + low * 0.2 : 0.92 };
+  });
+}
+
 function concreteSet(spec: MaterialSpec, finish: ConcreteFinish): PBRSet {
-  const [a, b] = pal(spec);
+  // Concrete colors are hand-picked in the render light (not a maker's photo), so they are used as they are.
+  const [a, b] = spec.palette.map(hexRGB);
   const T = 3.05; // 10 ft, saw cuts every 5 ft
+  if (finish === 'stamped' && spec.stamp) return stampedSet(spec, spec.stamp);
   if (finish === 'stamped') {
     const lay = packedLayout([[12, 12], [12, 24], [24, 24], [24, 36]], 12, 10, spec.id);
     const TT = lay.tile;

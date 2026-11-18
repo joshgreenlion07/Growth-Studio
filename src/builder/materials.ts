@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { layingOf, materialById, type LayingPattern } from '../siteplan/catalog';
-import { paint, textureSet, type PBRSet } from '../engine/textures';
+import { forgetTextureSet, paint, textureSet, type PBRSet } from '../engine/textures';
 import { fbm, vnoise } from '../engine/noise';
 
 /** Standard materials whose textures are scaled in meters (UVs in meters). */
@@ -29,10 +29,42 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
   return m;
 }
 
+/**
+ * Every stamped concrete color is its own 1024 px PBR set, and switching colors on a zone adds one each time. So only
+ * the most recently used few are kept: older ones have their GPU textures and cached set released (painted again if
+ * asked for later).
+ */
+const STAMP_KEEP = 10;
+/** Looks used in the last two builds (the scene on show and the one being made) are never released, whatever the count. */
+const stampUse = new Map<string, number>();
+let buildEpoch = 0;
+export function beginMaterialBuild() {
+  buildEpoch++;
+}
+function touchStamp(id: string) {
+  stampUse.delete(id);
+  stampUse.set(id, buildEpoch);
+  for (const [old, epoch] of stampUse) {
+    if (stampUse.size <= STAMP_KEEP) break;
+    if (epoch >= buildEpoch - 1) continue;
+    stampUse.delete(old);
+    for (const [k, m] of cache) {
+      if (!k.startsWith(`cat:${old}:`)) continue;
+      m.map?.dispose();
+      m.normalMap?.dispose();
+      m.roughnessMap?.dispose();
+      m.dispose();
+      cache.delete(k);
+    }
+    forgetTextureSet(`mat:${old}`);
+  }
+}
+
 /** A catalog material. `laying` is a zone's laying pattern, used by pavers that offer patterns (see layingsFor). */
 export function catalogMaterial(id: string, extra: THREE.MeshStandardMaterialParameters = {}, laying?: LayingPattern): THREE.MeshStandardMaterial {
   const spec = materialById.get(id) ?? materialById.get('concrete-broom')!;
   const lay = layingOf(spec, laying) ?? '';
+  if (spec.stamp) touchStamp(spec.id);
   return pbrMaterial(`cat:${spec.id}:${lay}:${JSON.stringify(extra)}`, materialTextures(spec, laying), extra);
 }
 
