@@ -86,6 +86,20 @@ export interface RockShape {
   lean: number;
 }
 
+/** The ground height (relative to the feature's own spot) at a point in the feature's local x, z. */
+export type GroundAt = (x: number, z: number) => number;
+
+/**
+ * How far to sink a stone so no gap shows on the downhill side: the drop from the feature's spot to the lowest ground
+ * under its foot (eight points about a box `length` x `depth`), at most `max`.
+ */
+export function footSink(ground: GroundAt | undefined, length: number, depth: number, max: number): number {
+  if (!ground) return 0;
+  let low = 0;
+  for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) low = Math.min(low, ground(sx * length * 0.42, sz * depth * 0.42));
+  return Math.min(-low, max);
+}
+
 export interface RockSpec {
   shape: RockShape;
   look: RockLook;
@@ -111,7 +125,7 @@ export function rockSegments(longest: number): number {
   return Math.round(Math.min(22, Math.max(12, 9 + longest * 9)));
 }
 
-let sphereCache = new Map<number, { pos: Float32Array; index: ArrayLike<number> }>();
+const sphereCache = new Map<number, { pos: Float32Array; index: ArrayLike<number> }>();
 
 /** The welded cube-sphere's unit directions and triangles (shared by every rock of that many segments). */
 function unitSphere(n: number) {
@@ -133,10 +147,6 @@ function unitSphere(n: number) {
   box.dispose();
   w.dispose();
   return s;
-}
-
-export function disposeRockCache() {
-  sphereCache = new Map();
 }
 
 /**
@@ -259,12 +269,44 @@ function mossMask(geo: THREE.BufferGeometry, height: number, amount: number, see
   return out;
 }
 
+
+/**
+ * How concave each vertex is against its neighbors, as a share of the spacing between them: positive in a crease or
+ * pocket (the neighbors sit above it), negative on a ridge or corner. Used to darken creases and lighten worn edges.
+ */
+function concavity(geo: THREE.BufferGeometry): Float32Array {
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
+  const idx = geo.index!.array;
+  const sum = new Float32Array(pos.count * 3), cnt = new Float32Array(pos.count);
+  let edge = 0, edges = 0;
+  const add = (a: number, b: number) => {
+    sum[a * 3] += pos.getX(b); sum[a * 3 + 1] += pos.getY(b); sum[a * 3 + 2] += pos.getZ(b);
+    cnt[a]++;
+  };
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+    add(a, b); add(a, c); add(b, a); add(b, c); add(c, a); add(c, b);
+    edge += Math.hypot(pos.getX(a) - pos.getX(b), pos.getY(a) - pos.getY(b), pos.getZ(a) - pos.getZ(b));
+    edges++;
+  }
+  const spacing = edge / Math.max(1, edges);
+  const out = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    if (!cnt[i]) continue;
+    const dx = sum[i * 3] / cnt[i] - pos.getX(i), dy = sum[i * 3 + 1] / cnt[i] - pos.getY(i), dz = sum[i * 3 + 2] / cnt[i] - pos.getZ(i);
+    out[i] = (dx * nrm.getX(i) + dy * nrm.getY(i) + dz * nrm.getZ(i)) / spacing;
+  }
+  return out;
+}
+
 function paintRock(geo: THREE.BufferGeometry, look: RockLook, moss: boolean, mask: Float32Array, pocket: Float32Array, seed: number) {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
   const stone = look.stone.map(col), streak = col(look.streak), soil = col(look.soil);
   const lichen = col(look.lichen), rust = col(look.rust), m0 = col(look.moss[0]), m1 = col(look.moss[1]);
   const colors = new Float32Array(pos.count * 3);
+  const cav = concavity(geo);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
@@ -293,8 +335,9 @@ function paintRock(geo: THREE.BufferGeometry, look: RockLook, moss: boolean, mas
     // Soil splashed up the foot, and the dark of the earth below the ground line.
     lerpC(c, soil, (1 - smooth(0.0, 0.07, y)) * 0.6);
     // Pockets and the shade of a deep cut read darker still.
-    // Faces turned from the sky read darker.
-    c.multiplyScalar((0.72 + 0.28 * (up * 0.5 + 0.5)) * (1 - pocket[i] * 0.12));
+    // Creases and pockets read darker, worn edges and corners lighter; faces turned from the sky read darker.
+    const shade = cav[i] > 0 ? 1 - Math.min(0.42, cav[i] * 0.9) : 1 + Math.min(0.16, -cav[i] * 0.5);
+    c.multiplyScalar((0.72 + 0.28 * (up * 0.5 + 0.5)) * (1 - pocket[i] * 0.12) * shade);
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;

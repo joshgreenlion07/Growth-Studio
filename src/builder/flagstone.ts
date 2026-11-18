@@ -3,7 +3,7 @@ import { rng } from '../siteplan/geometry';
 import type { FeatureSpec } from '../siteplan/catalog';
 import { featureSize } from '../siteplan/decor';
 import type { FeaturePlacement } from '../siteplan/types';
-import { fbm3 } from './stonegeo';
+import { fbm3, footSink, type GroundAt } from './stonegeo';
 
 /*
  * Flagstone pieces for water features (siteplan/waterrocks.ts): a spillway lip stone, a ledge of stacked slabs and an
@@ -150,13 +150,16 @@ export interface FlagContext {
   material: THREE.Material;
   /** The top of paving the piece is set on (0 on turf, beds and bare ground). */
   lift?: number;
+  /** The ground around the piece, for setting it into a slope (see footSink). */
+  ground?: GroundAt;
 }
 
 /** Spillway lip stone, ledge of stacked slabs, or edge piece, at the feature's spot. */
 export function buildFlagstone(c: FlagContext) {
   const [L, D, T] = featureSize(c.spec, c.f.size, 0.05);
   const r = rng(`flagplace:${c.f.id}`);
-  const lift = c.lift ?? 0;
+  // On paving it sits on the paving's top; on the ground it is sunk to the lowest point of its foot.
+  const lift = c.lift ? c.lift : -footSink(c.ground, L, D, 0.04);
   if (c.spec.kind === 'flagLedge') {
     // Slabs stacked to the height asked, each a little back from the one below and a little off square.
     const parts: THREE.BufferGeometry[] = [];
