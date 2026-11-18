@@ -491,8 +491,8 @@ const LARGE_ASHLAR: [number, number][] = [[12, 12], [12, 18], [18, 24], [12, 24]
  */
 export const CONCRETE_COLORS: { id: string; name: string; palette: [string, string]; release: string }[] = [
   { id: 'natural-gray', name: 'Natural gray', palette: ['#c7c3ba', '#b5b1a8'], release: '#5b5953' },
-  { id: 'sandstone', name: 'Sandstone', palette: ['#d0bf9e', '#bba783'], release: '#6a563d' },
-  { id: 'desert-tan', name: 'Desert tan', palette: ['#c6a67e', '#ae8c64'], release: '#5e432b' },
+  { id: 'sandstone', name: 'Sandstone', palette: ['#b9a684', '#a6916b'], release: '#6a563d' },
+  { id: 'desert-tan', name: 'Desert tan', palette: ['#a98a62', '#94764f'], release: '#5e432b' },
   { id: 'terracotta', name: 'Terracotta', palette: ['#b2654f', '#9a5442'], release: '#4f2a20' },
   { id: 'charcoal', name: 'Charcoal', palette: ['#6a6866', '#575553'], release: '#201f1e' },
   { id: 'walnut', name: 'Walnut brown', palette: ['#85634b', '#6e5039'], release: '#2d1e14' },
