@@ -1,3 +1,4 @@
+import { cleanFixtureSetting } from './truscapes';
 import { FEATURES, LAYING_PATTERNS, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById, type LayingPattern } from './catalog';
 import { area, uid } from './geometry';
 import type {
@@ -113,6 +114,20 @@ function pickPlant(raw: unknown, warnings: string[]): string {
     warnings.push(`Plant "${id}" isn't in the catalog, so it shows as boxwood. Check it.`);
   }
   return 'boxwood';
+}
+
+/** Feature ids that became a choice on another feature (2026-11-18): the water feature's bowls, the bowl planter's plant. */
+const RETIRED_FEATURES: Record<string, { id: string; options?: Record<string, boolean>; planted?: false }> = {
+  'three-pillar-water-feature-no-bowls': { id: 'three-pillar-water-feature', options: { bowls: false } },
+  'patina-bowl-planter-empty': { id: 'patina-bowl-planter', planted: false },
+};
+
+/** A placement of a retired feature id as the feature it became, with that variant's choice (a copy; others as they are). */
+function unretire(it: Record<string, unknown>): Record<string, unknown> {
+  const r = typeof it.catalogId === 'string' ? RETIRED_FEATURES[it.catalogId] : undefined;
+  if (!r) return it;
+  const options = { ...r.options, ...(it.options && typeof it.options === 'object' ? (it.options as Record<string, unknown>) : {}) };
+  return { ...it, catalogId: r.id, options, ...(r.planted === false ? { planted: false } : {}) };
 }
 
 function pickFeature(raw: unknown, warnings: string[]): string | null {
@@ -293,7 +308,7 @@ export function cleanPlan(input: unknown): CleanResult {
     plan.plants.push(p);
   }
 
-  for (const it of arr(o.features)) {
+  for (const it of arr(o.features).map(unretire)) {
     const position = vec(it.position);
     if (!position) continue;
     const id = pickFeature(it.catalogId, warnings);
@@ -310,6 +325,11 @@ export function cleanPlan(input: unknown): CleanResult {
     if (it.planted === false) f.planted = false;
     if (it.cover === 'open' || it.cover === 'closed' || it.cover === 'off') f.cover = it.cover;
     if (typeof it.steps === 'boolean') f.steps = it.steps;
+    const fx = featureById.get(id)?.fixture;
+    if (fx && it.fixture && typeof it.fixture === 'object') {
+      const setting = cleanFixtureSetting(fx, it.fixture as Record<string, unknown>);
+      if (setting) f.fixture = setting;
+    }
     plan.features.push(f);
   }
 

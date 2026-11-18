@@ -44,7 +44,7 @@ export function samplePillarFountain(): SitePlan {
     features: [
       { id: 'water-feature', source: S, catalogId: 'three-pillar-water-feature', position: [fx, fy], rotationDeg: 0 },
       { id: 'bowl-planted', source: S, catalogId: 'patina-bowl-planter', position: [fx + 3.2, front + 1.6], rotationDeg: 0 },
-      { id: 'bowl-empty', source: S, catalogId: 'patina-bowl-planter-empty', position: [fx + 4.2, front + 1.6], rotationDeg: 0 },
+      { id: 'bowl-empty', source: S, catalogId: 'patina-bowl-planter', position: [fx + 4.2, front + 1.6], rotationDeg: 0, planted: false },
     ],
   };
 }

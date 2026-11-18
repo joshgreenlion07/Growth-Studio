@@ -8,6 +8,8 @@ import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
+import type { LandLight } from '../engine/landlights';
+import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelights';
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
@@ -38,6 +40,8 @@ export interface FeatureBuild {
   object: THREE.Group;
   surfaces: THREE.Mesh[];
   lights: NightLight[];
+  /** Landscape lighting fixtures' aimed beams (engine/landlights.ts), in world space. */
+  landLights: LandLight[];
   /** Emissive parts that glow at night. */
   glow: THREE.MeshStandardMaterial[];
   flames: THREE.Mesh[];
@@ -98,11 +102,14 @@ function stoneMaterial(f: FeaturePlacement): string {
   return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number): FeatureBuild {
+/** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
   const lights: NightLight[] = [];
+  const landLights: LandLight[] = [];
+  const fixtureMats = new FixtureMaterials();
   const flames: THREE.Mesh[] = [];
   const fallMats: THREE.ShaderMaterial[] = [];
   const geos: THREE.BufferGeometry[] = [];
@@ -166,9 +173,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const falls = fallMaterial();
   fallMats.push(falls);
 
-  for (const f of features) {
+  for (let f of features) {
     const spec = featureById.get(f.catalogId);
     if (!spec) continue;
+    if (spec.fixture && site) f = site.place(f, spec.fixture);
     const o = new THREE.Group();
     const parts: Parts = new Map();
     const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
@@ -598,11 +606,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'pillarFountain': {
-        pillarFountain(sink, f.id, spec.bowls !== false);
+        pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
         break;
       }
       case 'patinaBowl': {
-        patinaBowl(sink, f.id, 0, 0, 0, spec.planted !== false);
+        patinaBowl(sink, f.id, 0, 0, 0, f.planted !== false);
         break;
       }
       case 'trellisCable': {
@@ -650,6 +658,17 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.bronze, new THREE.CylinderGeometry(0.035, 0.035, 0.14, 10).rotateX(-0.5).translate(0, 0.12, 0).toNonIndexed());
         add(mat.bronze, cyl(0.01, 0.01, 0.1, 0, 0, 0, 6));
         light(0, 0.4, -0.15, '#ffd29a', 3, 4);
+        break;
+      }
+      case 'landscapeLight': {
+        // A maker's lighting fixture (builder/landscapelights.ts): its body in the picked finish, a lens that glows
+        // at night, and its beam(s), turned and placed with the feature.
+        const fx = buildFixture(spec, f, fixtureMats, y0, site ? site.surface(f.position) : y0);
+        for (const [m, g] of fx.parts) add(m, g);
+        const a = (-f.rotationDeg * Math.PI) / 180;
+        for (const l of fx.lights) {
+          landLights.push({ ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a) });
+        }
         break;
       }
       case 'bench': {
@@ -713,7 +732,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow],
+    landLights,
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow, ...fixtureMats.glow],
     flames,
     fallMats,
     pebbleBeds,
@@ -722,6 +742,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of owned) m.dispose();
+      fixtureMats.dispose();
       for (const m of fallMats) m.dispose();
     },
   };
