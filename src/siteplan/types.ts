@@ -68,6 +68,11 @@ export interface DeckLayout {
   seamOffset?: number;
   /** Fascia boards on the sides. Left out, true. */
   fascia?: boolean;
+  /**
+   * A hot tub on the deck, in its framed opening: 'level' (default) stands it on a pad at the deck's height, its whole
+   * cabinet above the boards; 'sunk' sets it down on the ground, so the deck covers the lower part of its cabinet.
+   */
+  tub?: 'level' | 'sunk';
   /** Openings through the deck (a tree, an access hatch), framed like the edge. A hot tub placed on a deck is set into its own opening without being listed. */
   holes?: Vec2[][];
 }
