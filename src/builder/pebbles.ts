@@ -291,7 +291,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.6;
   for (const { area, catalogId } of areas) {
     const spec = materialById.get(catalogId)!;
-    const stones = clearOfSteppingStones(placeStones(area, spec), plan.features);
+    const stones = clearOfSteppingStones(placeStones(area, spec), plan.features, gm.height);
     const P = spec.pebble!;
     const form: Form = P.form ?? 'pebble';
     const mat = matOf(form);
@@ -430,31 +430,42 @@ export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   return out;
 }
 
-/** Margin kept clear around each stepping stone's slab, meters. */
-const STONE_MARGIN = 0.01;
+/** Slab tops above the ground at the stone's center (features.ts: a stepping stone's 0.06 m slab sunk 0.047 m; a pad is 0.06 m). */
+const SLAB_TOP = { steppingStone: 0.013, steppingPad: 0.06 } as const;
+/** How far in from the slab's edge a piece must reach to count as over its face (a pebble tucked under the edge stays). */
+const FACE_INSET = 0.004;
+
+/** Highest point of a piece: its center plus its half-thickness, and the rise of its long side when tipped. */
+function pieceTop(st: Stone): number {
+  const tilt = Math.min(1.3, Math.hypot(st.tipX, st.tipZ));
+  return st.y + st.thick * 0.3 * Math.cos(tilt) + st.len * 0.5 * Math.sin(tilt);
+}
 
 /**
- * Drops the pieces that would show above a stepping stone: any whose footprint (a circle of its own reach around its
- * center, so it holds at any turn or tip) touches a stepping stone's slab or the margin around it. Stones set in a bed
- * (alone or as a path) sit with their tops a little above the bed's loose stone, so a piece under or against one would
- * poke through its face. Done after placing, so every other piece keeps exactly its place, size and color.
+ * Drops only the pieces that would show through a stepping stone's top: those whose footprint (a circle of the piece's
+ * own reach, so it holds at any turn) overlaps the slab's face, inset a few mm, AND whose top rises above the slab top.
+ * Pieces lower than the slab that butt against or tuck under its edge stay, as do pieces centered outside the slab
+ * that do not rise over its face. Done after placing, so every kept piece has exactly its place, size and color.
  */
-export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacement[]): Stone[] {
+export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacement[], height: (p: Vec2) => number): Stone[] {
   const slabs = features.flatMap((f) => {
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'steppingStone' && spec?.kind !== 'steppingPad') return [];
     const a = (-f.rotationDeg * Math.PI) / 180;
-    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), hw: spec.footprint[0] / 2, hd: spec.footprint[1] / 2 }];
+    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), hw: spec.footprint[0] / 2 - FACE_INSET, hd: spec.footprint[1] / 2 - FACE_INSET, top: height(f.position) + SLAB_TOP[spec.kind] }];
   });
   if (!slabs.length) return stones;
   return stones.filter((st) => {
-    const reach = Math.max(st.len, st.wid) * 0.55 + STONE_MARGIN;
+    const reach = Math.max(st.len, st.wid) * 0.5;
+    let top: number | undefined;
     for (const k of slabs) {
       const dx = st.x - k.at[0], dy = st.z - k.at[1];
+      if (Math.abs(dx) > 0.5 + reach || Math.abs(dy) > 0.5 + reach) continue;
       // Into the slab's own frame (the inverse of features.ts's local -> plan turn).
       const lx = dx * k.c - dy * k.s, lz = dx * k.s + dy * k.c;
       const ox = Math.max(Math.abs(lx) - k.hw, 0), oz = Math.max(Math.abs(lz) - k.hd, 0);
-      if (ox * ox + oz * oz < reach * reach) return false;
+      if (ox * ox + oz * oz >= reach * reach) continue;
+      if ((top ??= pieceTop(st)) > k.top) return false;
     }
     return true;
   });
