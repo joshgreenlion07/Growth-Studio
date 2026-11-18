@@ -35,13 +35,19 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
  * asked for later).
  */
 const STAMP_KEEP = 10;
-const stampUse: string[] = [];
+/** Looks used in the last two builds (the scene on show and the one being made) are never released, whatever the count. */
+const stampUse = new Map<string, number>();
+let buildEpoch = 0;
+export function beginMaterialBuild() {
+  buildEpoch++;
+}
 function touchStamp(id: string) {
-  const i = stampUse.indexOf(id);
-  if (i >= 0) stampUse.splice(i, 1);
-  stampUse.push(id);
-  while (stampUse.length > STAMP_KEEP) {
-    const old = stampUse.shift()!;
+  stampUse.delete(id);
+  stampUse.set(id, buildEpoch);
+  for (const [old, epoch] of stampUse) {
+    if (stampUse.size <= STAMP_KEEP) break;
+    if (epoch >= buildEpoch - 1) continue;
+    stampUse.delete(old);
     for (const [k, m] of cache) {
       if (!k.startsWith(`cat:${old}:`)) continue;
       m.map?.dispose();
