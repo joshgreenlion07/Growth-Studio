@@ -61,10 +61,20 @@ import { build as spanishLavenderOttoQuast } from './perennials/spanish-lavender
 import { build as bougainvillea } from './shrubs/bougainvillea';
 import { build as maidenGrassMorningLight } from './grasses/maiden-grass-morning-light';
 import { build as roseFlowerCarpetRed } from './shrubs/rose-flower-carpet-red';
+import { build as cyclamenRed } from './perennials/cyclamen-red';
+import { build as lantanaNewGold } from './groundcover/lantana-new-gold';
 import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro';
 import { build as daylilyRed } from './perennials/daylily-red';
 import { build as fortnightLily } from './perennials/fortnight-lily';
 import { build as cannaTropicanna } from './tropicals/canna-tropicanna';
+import { build as skyrocketJuniper } from './trees/skyrocket-juniper';
+import { build as navelOrange } from './trees/navel-orange';
+import { build as eurekaLemon } from './trees/eureka-lemon';
+import { build as cherryLaurelCompacta } from './shrubs/cherry-laurel-compacta';
+import { build as hopseedBushPurpurea } from './shrubs/hopseed-bush-purpurea';
+import { build as glossyAbeliaKaleidoscope } from './shrubs/glossy-abelia-kaleidoscope';
+import { build as lomandraPlatinumBeauty } from './grasses/lomandra-platinum-beauty';
+import { build as liriopeSilverySunproof } from './grasses/liriope-silvery-sunproof';
 import { build as redYucca } from './succulents/red-yucca';
 import { build as echeveria } from './succulents/echeveria';
 import { build as primroseRed } from './perennials/primrose-red';
@@ -139,6 +149,16 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'bougainvillea': bougainvillea,
   'maiden-grass-morning-light': maidenGrassMorningLight,
   'rose-flower-carpet-red': roseFlowerCarpetRed,
+  'skyrocket-juniper': skyrocketJuniper,
+  'navel-orange': navelOrange,
+  'eureka-lemon': eurekaLemon,
+  'cyclamen-red': cyclamenRed,
+  'lantana-new-gold': lantanaNewGold,
+  'cherry-laurel-compacta': cherryLaurelCompacta,
+  'hopseed-bush-purpurea': hopseedBushPurpurea,
+  'glossy-abelia-kaleidoscope': glossyAbeliaKaleidoscope,
+  'lomandra-platinum-beauty': lomandraPlatinumBeauty,
+  'liriope-silvery-sunproof': liriopeSilverySunproof,
   'red-yucca': redYucca,
   'echeveria': echeveria,
   'primrose-red': primroseRed,
