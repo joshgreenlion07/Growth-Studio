@@ -41,6 +41,229 @@ function surfaceRank(zones: Zone[], p: Vec2): number {
   return paving || (top ? (top.kind === 'turf' ? 2 : 1) : 0);
 }
 
+/** The zone whose surface shows at a point: the highest paving there, else the last zone drawn over it; -1 for none. */
+function visibleZone(zones: Zone[], p: Vec2): number {
+  let pave = -1, top = -1;
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    if (!pointInPolygon(p, z.polygon)) continue;
+    if (z.kind === 'hardscape' && (pave < 0 || (z.elevation ?? 0) >= (zones[pave].elevation ?? 0))) pave = i;
+    top = i;
+  }
+  return pave >= 0 ? pave : top;
+}
+
+/** How far a drawn curb may be off the edge it follows and still be built on it: 1 ft. */
+export const SEAM_SNAP = 0.3;
+
+/**
+ * A curb's drawn line moved onto the seams it follows. A curb separates two surfaces (lawn from
+ * pavers, pebble from lawn), and it is drawn by hand a few inches off their seam, or across a
+ * corner. Wherever the line runs within SEAM_SNAP of a zone's outline where that outline is a real
+ * seam (the zone shows on one side of it and something else on the other), the stretch is replaced
+ * by the outline itself, corners included, so the body later moved off it (linePath) lies with one
+ * face on the seam: flush with a patio's soldier course, never over it, never off it. A higher seam
+ * (paving over lawn over beds) wins over a slightly nearer lower one. The parts of the line that
+ * follow no seam stay as drawn.
+ */
+export function snapToSeams(points: Vec2[], zones: Zone[]): Vec2[] {
+  const src: Vec2[] = [];
+  for (const p of points) {
+    const q = src[src.length - 1];
+    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4) src.push([p[0], p[1]]);
+  }
+  if (src.length < 2 || !zones.length) return points;
+  const closed = src.length > 3 && Math.hypot(src[0][0] - src[src.length - 1][0], src[0][1] - src[src.length - 1][1]) < 0.01;
+  if (closed) src[src.length - 1] = [src[0][0], src[0][1]];
+
+  // Zone outlines near the line, with the perimeter distance at each corner.
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of src) (x0 = Math.min(x0, p[0])), (y0 = Math.min(y0, p[1])), (x1 = Math.max(x1, p[0])), (y1 = Math.max(y1, p[1]));
+  type Outline = { zi: number; v: Vec2[]; T: number[]; P: number; rank: number };
+  const outs: Outline[] = [];
+  zones.forEach((z, zi) => {
+    const v = z.polygon.filter((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 1e-4);
+    if (v.length > 2 && Math.hypot(v[0][0] - v[v.length - 1][0], v[0][1] - v[v.length - 1][1]) < 1e-4) v.pop();
+    if (v.length < 3) return;
+    if (!v.some((p) => p[0] > x0 - SEAM_SNAP && p[0] < x1 + SEAM_SNAP && p[1] > y0 - SEAM_SNAP && p[1] < y1 + SEAM_SNAP)) {
+      // A big zone can pass near the line between far corners; keep it if any side's box meets the line's.
+      const hit = v.some((a, i) => {
+        const b = v[(i + 1) % v.length];
+        return Math.max(a[0], b[0]) > x0 - SEAM_SNAP && Math.min(a[0], b[0]) < x1 + SEAM_SNAP && Math.max(a[1], b[1]) > y0 - SEAM_SNAP && Math.min(a[1], b[1]) < y1 + SEAM_SNAP;
+      });
+      if (!hit) return;
+    }
+    const T = [0];
+    for (let i = 0; i < v.length; i++) {
+      const a = v[i], b = v[(i + 1) % v.length];
+      T.push(T[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+    }
+    outs.push({ zi, v, T, P: T[v.length], rank: z.kind === 'hardscape' ? 3 : z.kind === 'turf' ? 2 : 1 });
+  });
+  if (!outs.length) return points;
+
+  // The line every 5 cm (and at every drawn point).
+  const STEP = 0.05;
+  type Sample = { p: Vec2; s: number; orig: boolean };
+  const smp: Sample[] = [{ p: src[0], s: 0, orig: true }];
+  let run = 0;
+  for (let i = 0; i + 1 < src.length; i++) {
+    const a = src[i], b = src[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const k = Math.max(1, Math.ceil(len / STEP));
+    for (let j = 1; j <= k; j++) smp.push({ p: j === k ? b : [a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k], s: run + (len * j) / k, orig: j === k });
+    run += len;
+  }
+  const N = smp.length;
+
+  // For each sample, the nearest point on each outline and whether the outline is a seam there.
+  type Hit = { q: Vec2; t: number; d: number; seam: boolean; high: number };
+  const rk = (zi: number) => (zi < 0 ? 0 : zones[zi].kind === 'hardscape' ? 3 : zones[zi].kind === 'turf' ? 2 : 1);
+  const near = (o: Outline, p: Vec2): Hit | null => {
+    let bi = -1, bf = 0, bd = SEAM_SNAP;
+    for (let i = 0; i < o.v.length; i++) {
+      const a = o.v[i], b = o.v[(i + 1) % o.v.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      if (Math.min(a[0], b[0]) > p[0] + bd || Math.max(a[0], b[0]) < p[0] - bd || Math.min(a[1], b[1]) > p[1] + bd || Math.max(a[1], b[1]) < p[1] - bd) continue;
+      const f = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)));
+      const d = Math.hypot(p[0] - a[0] - dx * f, p[1] - a[1] - dy * f);
+      if (d <= bd) (bi = i), (bf = f), (bd = d);
+    }
+    if (bi < 0) return null;
+    const a = o.v[bi], b = o.v[(bi + 1) % o.v.length], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+    // Seam test a little to either side, a little in from a corner so it reads this side only.
+    const g = Math.max(Math.min(bf, 1 - 0.03 / len), Math.min(0.03 / len, 0.5));
+    const c: Vec2 = [a[0] + dx * g, a[1] + dy * g], nx = -dy / len, ny = dx / len;
+    const one = visibleZone(zones, [c[0] + nx * 0.03, c[1] + ny * 0.03]), two = visibleZone(zones, [c[0] - nx * 0.03, c[1] - ny * 0.03]);
+    return { q: [a[0] + dx * bf, a[1] + dy * bf], t: o.T[bi] + len * bf, d: bd, seam: one !== two && (one === o.zi || two === o.zi), high: Math.max(rk(one), rk(two)) };
+  };
+  const hits: Map<number, Hit>[] = smp.map((m) => {
+    const h = new Map<number, Hit>();
+    for (let k = 0; k < outs.length; k++) {
+      const r = near(outs[k], m.p);
+      if (r) h.set(k, r);
+    }
+    return h;
+  });
+  const pick = hits.map((h) => {
+    let best = -1, score = Infinity;
+    for (const [k, r] of h) {
+      if (!r.seam) continue;
+      const sc = r.d - 0.1 * r.high;
+      if (sc < score) (score = sc), (best = k);
+    }
+    return best;
+  });
+
+  // Runs of one outline. A short run between two runs of the same outline joins them when that
+  // outline is in reach there too (a corner where a neighbor's edge happens to be nearer).
+  type Run = { k: number; a: number; b: number };
+  const runsOf = (): Run[] => {
+    const r: Run[] = [];
+    for (let i = 0; i < N; i++) {
+      const last = r[r.length - 1];
+      if (last && last.k === pick[i]) last.b = i;
+      else r.push({ k: pick[i], a: i, b: i });
+    }
+    return r;
+  };
+  const lenOf = (r: Run) => smp[r.b].s - smp[r.a].s;
+  let runs = runsOf();
+  for (let i = 1; i + 1 < runs.length; i++) {
+    const r = runs[i], k = runs[i - 1].k;
+    if (k >= 0 && k === runs[i + 1].k && lenOf(r) < 0.6) {
+      let ok = true;
+      for (let j = r.a; j <= r.b && ok; j++) ok = hits[j].has(k);
+      if (ok) for (let j = r.a; j <= r.b; j++) pick[j] = k;
+    }
+  }
+  runs = runsOf();
+  // A closed line whose both ends follow the same outline is one run through its start.
+  const wrap = closed && runs.length > 1 && runs[0].k >= 0 && runs[0].k === runs[runs.length - 1].k;
+
+  // Unwrapped perimeter distance along a run, and where the run really follows the outline: its
+  // ends trimmed where the line leaves (the nearest point stops moving along the outline).
+  const unwrap = (k: number, idx: number[]): number[] => {
+    const o = outs[k], u = [hits[idx[0]].get(k)!.t];
+    for (let j = 1; j < idx.length; j++) {
+      let dt = hits[idx[j]].get(k)!.t - hits[idx[j - 1]].get(k)!.t;
+      dt -= Math.round(dt / o.P) * o.P;
+      u.push(u[j - 1] + dt);
+    }
+    return u;
+  };
+  type Snap = { idx: number[]; k: number; u: number[] };
+  const snaps: Snap[] = [];
+  const order: number[] = [];
+  if (wrap) {
+    const last = runs[runs.length - 1];
+    for (let i = last.a; i < N - 1; i++) order.push(i);
+    for (let i = 0; i < N - 1; i++) if (i < last.a) order.push(i);
+    order.push(order[0]);
+    // Rotate so the walk starts at the wrapped run.
+    runs = [];
+    for (let j = 0; j < order.length; j++) {
+      const k = pick[order[j]], lastR = runs[runs.length - 1];
+      if (lastR && lastR.k === k) lastR.b = j;
+      else runs.push({ k, a: j, b: j });
+    }
+  } else for (let i = 0; i < N; i++) order.push(i);
+  // Arc length along the walk (on a closed line it may start mid-line).
+  const walkS = [0];
+  for (let j = 1; j < order.length; j++) walkS.push(walkS[j - 1] + Math.hypot(smp[order[j]].p[0] - smp[order[j - 1]].p[0], smp[order[j]].p[1] - smp[order[j - 1]].p[1]));
+  const sAt = (j: number) => walkS[j];
+  const isAll = closed && runs.length === 1 && runs[0].k >= 0;
+  for (const r of runs) {
+    if (r.k < 0) continue;
+    const idx = order.slice(r.a, r.b + 1);
+    const u = unwrap(r.k, idx);
+    let a = 0, b = idx.length - 1;
+    if (!isAll) {
+      while (b > a && Math.abs(u[b] - u[b - 1]) < STEP * 0.2) b--;
+      while (a < b && Math.abs(u[a + 1] - u[a]) < STEP * 0.2) a++;
+    }
+    const len = sAt(r.a + b) - sAt(r.a + a);
+    if (b - a < 2 || len < 0.3 || Math.abs(u[b] - u[a]) < 0.5 * len) continue;
+    snaps.push({ idx: order.slice(r.a + a, r.a + b + 1).map((_, j) => r.a + a + j), k: r.k, u: u.slice(a, b + 1) });
+  }
+  if (!snaps.length) return points;
+
+  // The walk: outline stretches where snapped, the drawn points elsewhere. Next to a stretch the
+  // drawn line is picked up again only 0.4 m on, so the step back to it is a gentle slant.
+  const out: Vec2[] = [];
+  const push = (p: Vec2) => {
+    const q = out[out.length - 1];
+    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4) out.push([p[0], p[1]]);
+  };
+  const W = order.length;
+  const snapAt = new Map<number, Snap>();
+  for (const sn of snaps) snapAt.set(sn.idx[0], sn);
+  const ends = snaps.map((sn) => [sAt(sn.idx[0]), sAt(sn.idx[sn.idx.length - 1])]);
+  const nearSnap = (s: number) => ends.some(([a, b]) => (s > a - 0.4 && s < a) || (s > b && s < b + 0.4));
+  for (let j = 0; j < W; j++) {
+    const sn = snapAt.get(j);
+    if (sn) {
+      const o = outs[sn.k], ua = sn.u[0], ub = sn.u[sn.u.length - 1];
+      push(hits[order[j]].get(sn.k)!.q);
+      // The outline's corners passed on the way, in the order the line passes them.
+      const lo = Math.min(ua, ub), hi = Math.max(ua, ub), cs: { t: number; i: number }[] = [];
+      for (let i = 0; i < o.v.length; i++) for (let m = Math.floor((lo - o.T[i]) / o.P); o.T[i] + m * o.P < hi; m++) {
+        const t = o.T[i] + m * o.P;
+        if (t > lo + 1e-4 && t < hi - 1e-4) cs.push({ t, i });
+      }
+      cs.sort((x, y) => (ub >= ua ? x.t - y.t : y.t - x.t));
+      for (const c of cs) push(o.v[c.i]);
+      push(hits[order[sn.idx[sn.idx.length - 1]]].get(sn.k)!.q);
+      j = sn.idx[sn.idx.length - 1];
+      continue;
+    }
+    const m = smp[order[j]], s = sAt(j);
+    if (j === 0 || j === W - 1 || (m.orig && !nearSnap(s)) || (!nearSnap(s) && (nearSnap(s - STEP * 1.01) || nearSnap(s + STEP * 1.01)))) push(m.p);
+  }
+  if (closed && out.length > 2 && Math.hypot(out[0][0] - out[out.length - 1][0], out[0][1] - out[out.length - 1][1]) > 1e-4) out.push([out[0][0], out[0][1]]);
+  if (closed && out.length > 2) out[out.length - 1] = [out[0][0], out[0][1]];
+  return out.length >= 2 ? out : points;
+}
+
 /**
  * A line ready to build: its points (the drawn points plus a few added where the body eases from
  * one side to the other) and, at each point, how far the body's center sits off the drawn line
@@ -74,7 +297,9 @@ export function linePath(l: LineItem, zones: Zone[]): LinePath {
   const thick = lineThickness(l);
   const move = thick ? thick / 2 + 0.004 : 0;
   const pts: Vec2[] = [];
-  for (const p of l.points) {
+  // A curb is drawn by hand along the edge it separates; it is built on that edge exactly.
+  const drawn = l.kind === 'edging' && thick ? snapToSeams(l.points, zones) : l.points;
+  for (const p of drawn) {
     const q = pts[pts.length - 1];
     if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4) pts.push([p[0], p[1]]);
   }
