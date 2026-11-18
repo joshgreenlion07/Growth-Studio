@@ -72,7 +72,17 @@ Messages use `window.postMessage`:
 | Studio to parent, when the person picks a stage in the dock | `{ source: 'growth-studio', type: 'stage', stage }` |
 | Parent to studio, to cut away the near side of the yard | `{ source: 'area-planner', type: 'cutaway', on }` |
 | Studio to parent, when the cutaway is turned on or off | `{ source: 'growth-studio', type: 'cutaway', on }` |
+| Parent to studio, to make the view read-only or not | `{ source: 'area-planner', type: 'mode', viewer }` (also `viewer=1` on the embed address) |
 
+- **View-only mode** (`viewer: true`, or `?embed=1&viewer=1`): for a parent
+  page showing the 3D view to someone who may look but not change the plan.
+  The Library button is hidden and the Library will not open; nothing that
+  would change the saved plan or the team's settings is sent back (no
+  `approve`, no `action`, no `marks`); the Mark quick tool is left out of the
+  D-pad. A feature's door or light used by hand still moves in the view, as a
+  preview. Looking around, walk and fly, build stages, growth, light,
+  measurements, plant labels, the material pointer (`point`), `select` and
+  Save image all work. Without the flag the studio behaves as before.
 - `plan` is SitePlan JSON (`src/siteplan/types.ts`), in meters. It is cleaned
   by `cleanPlan` first, so missing fields get defaults. When the cleanup
   changed or dropped something, the `built` reply also carries
