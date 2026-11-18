@@ -133,6 +133,10 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
   /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
   materialId?: string;
+  /** A maker's hot tub: its cover folded up on the lifter ('open', the default), on the spa ('closed'), or none ('off'). */
+  cover?: 'open' | 'closed' | 'off';
+  /** A maker's hot tub: its steps. Left out, they are shown. */
+  steps?: boolean;
 }
 
 /** A door or window the designer marked on a wall. */
