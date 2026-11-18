@@ -6,7 +6,7 @@
 import type { Studio } from '../engine/studio';
 import type { SitePlan } from '../siteplan/types';
 import { lookOfPoint, type Look } from './looks';
-import { swatchFor } from './swatches';
+import { pictureFor } from './swatches';
 
 /** The window's own page: the studio's colors (light and dark) and type. */
 const PAGE_CSS = `
@@ -105,7 +105,7 @@ export function initSecondScreen(host: SecondScreenHost) {
     const now = (pointNow = hit ? `${hit.id}|${hit.catalogId}` : '');
     paint();
     if (look && hit) {
-      void swatchFor(hit.catalogId).then((url) => {
+      void pictureFor(hit.catalogId).then((url) => {
         if (url && on && pointNow === now && current) {
           current = { ...current, swatch: url };
           paint();

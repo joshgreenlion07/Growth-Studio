@@ -9,7 +9,7 @@ import { materialTextures } from '../engine/surfaces';
 import { onTexturesChanged, wantForSwatch } from '../engine/texture-jobs';
 import type * as THREE from 'three';
 import { poolTile, type PBRSet } from '../engine/textures';
-import { wantThumb } from './plantthumbs';
+import { wantPicture, wantThumb } from './plantthumbs';
 
 const SIZE = 256;
 const cache = new Map<string, string>();
@@ -49,14 +49,14 @@ function make(catalogId: string, laying?: LayingPattern): Promise<string | null>
 }
 
 /** The set's albedo once painted (the worker swaps it in place; a stand-in carries `userData.flat` until then). */
-function fromSet(set: PBRSet): Promise<string | null> {
+function fromSet(set: PBRSet, size = SIZE): Promise<string | null> {
   return new Promise((res) => {
     let off: (() => void) | null = null;
     const timer = window.setTimeout(() => done(), 20000);
     const done = () => {
       off?.();
       clearTimeout(timer);
-      idle(() => res(draw(set.map)));
+      idle(() => res(draw(set.map, size)));
     };
     const ready = () => !set.map.userData.flat;
     if (ready()) return done();
@@ -77,7 +77,7 @@ function idle(fn: () => void) {
  * bytes, rows bottom first, see texture-jobs.ts): the level nearest SIZE is drawn, a few hundred kilobytes at most.
  * Maps painted here are canvases.
  */
-function draw(tex: THREE.Texture): string | null {
+function draw(tex: THREE.Texture, SIZE: number): string | null {
   const img = tex.image as unknown;
   if (!img) return null;
   const c = document.createElement('canvas');
@@ -115,4 +115,58 @@ function draw(tex: THREE.Texture): string | null {
   if (!w || w < 16) return null;
   g.drawImage(src, 0, 0, w, w, 0, 0, SIZE, SIZE);
   return c.toDataURL('image/jpeg', 0.86);
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel pictures                                                       */
+/* ------------------------------------------------------------------ */
+/*
+ * The material panel's (and the second screen's) large picture, 4:3 and sharp at panel size: a plant drawn large, a bulk
+ * bed fill (bark, mulch, soil, gravel, rock) as about two yards of it just poured on a driveway (pile-render.ts), any
+ * other material as a large crop of its painted map. Small swatches (swatchFor) stay as they are for lists and cards.
+ */
+const BIG = 768;
+const pictures = new Map<string, string>();
+const picturePending = new Map<string, Promise<string | null>>();
+let pileQueue: Promise<unknown> = Promise.resolve();
+
+/** The panel picture if it is made already. */
+export const pictureNow = (catalogId: string, laying?: LayingPattern) => pictures.get(key(catalogId, laying));
+
+/** The large panel picture for what the pointer is on, or null when there is none to make. */
+export function pictureFor(catalogId: string, laying?: LayingPattern): Promise<string | null> {
+  const k = key(catalogId, laying);
+  const have = pictures.get(k);
+  if (have) return Promise.resolve(have);
+  let p = picturePending.get(k);
+  if (p) return p;
+  p = makePicture(catalogId, laying).then((url) => {
+    picturePending.delete(k);
+    if (url) pictures.set(k, url);
+    return url;
+  }, () => {
+    picturePending.delete(k);
+    return null;
+  });
+  picturePending.set(k, p);
+  return p;
+}
+
+function makePicture(catalogId: string, laying?: LayingPattern): Promise<string | null> {
+  const [kind, id] = pointKind(catalogId);
+  if (kind === 'plant') return new Promise((res) => wantPicture(id, res, () => res(null)));
+  if (kind === 'water' && id === 'pool') return fromSet(poolTile(), BIG);
+  if (kind !== 'material') return Promise.resolve(null);
+  const spec = materialById.get(id);
+  if (!spec) return Promise.resolve(null);
+  if (spec.use === 'bed') {
+    // One pile at a time: each draws with its own short-lived WebGL context.
+    const run = pileQueue.then(() => import('./pile-render').then((m) => m.renderPile(spec)));
+    pileQueue = run.catch(() => null);
+    return run.catch((err) => {
+      console.warn('Pile picture failed for', id, err);
+      return fromSet(materialTextures(spec, laying), BIG);
+    });
+  }
+  return fromSet(materialTextures(spec, laying), BIG);
 }

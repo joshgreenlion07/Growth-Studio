@@ -243,6 +243,8 @@ export interface PebbleBed {
   y: number;
   /** Scale on the stones' colors, linear RGB (stone kept wet is darker). */
   tint?: [number, number, number];
+  /** The surface's height at a point, when it is not flat at `y` (a poured pile). */
+  heightAt?: (p: Vec2) => number;
 }
 
 /** Where one bed's stones go: inside test, surface height and extent. */
@@ -271,7 +273,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
     })),
     ...beds.filter((b) => materialById.get(b.catalogId)?.pebble).map((b) => ({
       catalogId: b.catalogId,
-      area: { key: b.id, inside: (p: Vec2) => pointInPolygon(p, b.polygon) && !b.holes.some((h) => pointInPolygon(p, h)), height: () => b.y, polygon: b.polygon, tint: b.tint ?? ([1, 1, 1] as [number, number, number]) },
+      area: { key: b.id, inside: (p: Vec2) => pointInPolygon(p, b.polygon) && !b.holes.some((h) => pointInPolygon(p, h)), height: b.heightAt ?? (() => b.y), polygon: b.polygon, tint: b.tint ?? ([1, 1, 1] as [number, number, number]) },
     })),
   ];
   if (!areas.length) return { object: null, update() {}, dispose() {} };

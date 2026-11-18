@@ -10,7 +10,7 @@ import { builtLine } from '../builder/linepath';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
-import { swatchFor, swatchNow } from './swatches';
+import { pictureFor, pictureNow, swatchNow } from './swatches';
 import { closeLibrary, libraryOpen, openLibrary } from './library';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
@@ -1040,7 +1040,7 @@ function onEmbedMessage(e: MessageEvent) {
     // the pointer sends, as { type: 'swatch', id, url } (url null when there is none).
     const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 120) : '';
     if (!id || !materialById.has(id)) return;
-    void swatchFor(id).then((url) => window.parent.postMessage({ source: 'growth-studio', type: 'swatch', id, url }, origin));
+    void pictureFor(id).then((url) => window.parent.postMessage({ source: 'growth-studio', type: 'swatch', id, url }, origin));
     return;
   }
   if (d.type === 'approvals') {
@@ -1242,10 +1242,12 @@ function initEmbed() {
         const send = (material: Look | null) => window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, material }, origin);
         const now = (pointNow = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '');
         if (!look || !hit) return send(look);
-        const ready = swatchNow(hit.catalogId, laying);
-        if (ready) return send({ ...look, swatch: ready });
-        send(look);
-        void swatchFor(hit.catalogId, laying).then((url) => { if (url && pointNow === now && embedOrigin === origin) send({ ...look, swatch: url }); });
+        // The panel's large picture when it is made; meanwhile the small swatch if that is, and the large one follows.
+        const big = pictureNow(hit.catalogId, laying);
+        if (big) return send({ ...look, swatch: big });
+        const small = swatchNow(hit.catalogId, laying);
+        send(small ? { ...look, swatch: small } : look);
+        void pictureFor(hit.catalogId, laying).then((url) => { if (url && pointNow === now && embedOrigin === origin) send({ ...look, swatch: url }); });
       };
     }
     applyEmbedPlan();
