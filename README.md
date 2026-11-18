@@ -75,6 +75,7 @@ Messages use `window.postMessage`:
 | Parent to studio, to ask for the look of a plant or feature it offers as a switch | `{ source: 'area-planner', type: 'look', id, item? }` (`id` is `plant:<catalog id>` or `feature:<catalog id>`; `item` is the placed item it would replace) |
 | Studio to parent, in answer | `{ source: 'growth-studio', type: 'look', id, item?, material }` (`item` echoes the request's) (`material` is the same Look the pointer sends) |
 | Parent to studio, to make the view read-only or not | `{ source: 'area-planner', type: 'mode', viewer }` (also `viewer=1` on the embed address) |
+| Parent to studio, to turn touch mode (on-screen joystick, Orbit / Walk / Fly, Home, Use; fingers only) on or off | `{ source: 'area-planner', type: 'touch', on }` (also `touch=1` on the embed address) |
 
 - **View-only mode** (`viewer: true`, or `?embed=1&viewer=1`): for a parent
   page showing the 3D view to someone who may look but not change the plan.

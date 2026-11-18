@@ -383,17 +383,7 @@ export class Studio {
         this.manualFocus = null;
       },
       stepView: (d) => this.stepView(d),
-      home: () => {
-        if (this.navMode === 'orbit') {
-          if (!this.views.length) return;
-          this.viewIndex = 0;
-          this.goTo(this.views[0].id);
-        } else {
-          this.placeWalker();
-          this.setNavMode('walk');
-        }
-        this.nav.pulse();
-      },
+      home: () => this.goHome(),
       toggleFly: () => {
         if (this.navMode === 'orbit') return;
         this.setNavMode(this.navMode === 'walk' ? 'fly' : 'walk');
@@ -422,8 +412,11 @@ export class Studio {
 
     // Tap to focus.
     let down: { x: number; y: number } | null = null;
+    let downAt = 0;
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
-      down = { x: e.clientX, y: e.clientY };
+      downAt = performance.now();
+      // A second finger makes it a pinch or pan, never a tap.
+      down = e.isPrimary ? { x: e.clientX, y: e.clientY } : null;
       this.invalidate();
     });
     this.renderer.domElement.addEventListener('wheel', () => this.invalidate(), { passive: true });
@@ -435,7 +428,8 @@ export class Studio {
     });
     window.addEventListener('keydown', this.onKey);
     this.renderer.domElement.addEventListener('pointerup', (e) => {
-      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
+      // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
+      if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400)) {
         this.focusAt(e.clientX, e.clientY);
         // With the Hand picked, a click on a door, lid, fire, water or light uses it.
         if (this.handActive && this.useAction(0, { x: e.clientX, y: e.clientY })) {
@@ -1085,6 +1079,19 @@ export class Studio {
       this.camera.updateProjectionMatrix();
     }
     this.onNavModeChanged(m);
+  }
+
+  /** Menu, Home or the touch Home button: the first saved view, or back to the start point in first person. */
+  goHome() {
+    if (this.navMode === 'orbit') {
+      if (!this.views.length) return;
+      this.viewIndex = 0;
+      this.goTo(this.views[0].id);
+    } else {
+      this.placeWalker();
+      this.setNavMode('walk');
+    }
+    this.nav.pulse();
   }
 
   /** Stand at ground level at the edge of the yard, looking across it. */
@@ -1983,6 +1990,7 @@ export class Studio {
   pause() {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.nav.releaseTouch();
     this.audio.setPaused(true);
   }
 

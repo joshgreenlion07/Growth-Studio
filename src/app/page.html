@@ -219,6 +219,34 @@ html.viewer #btn-library { display: none; }
 @media (max-width: 760px) { .ss-float { top: auto; height: 55%; } }
 .scene-tools button { border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .scene-tools button:hover, .scene-tools button[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
+/* Touch mode (iPad, no keyboard; `html.touch-ui` from ?touch=1, the parent's touch message, a coarse pointer or the Touch
+   button; see app/touchcontrols.ts). Off, none of this applies. */
+.tc-root { display: none; }
+html.touch-ui .tc-root { display: block; position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+html.library-open .tc-root { display: none !important; }
+html.touch-ui, html.touch-ui body { touch-action: manipulation; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+html.touch-ui #scene canvas { touch-action: none; }
+html.touch-ui #nav-hint, html.touch-ui #nav-modes { display: none !important; }
+html.touch-ui #stage-card, html.touch-ui section.scene-pane.fs #stage-card { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); max-width: calc(100% - 24px); }
+html.touch-ui.tc-first #stage-card { display: none; }
+html.touch-ui .quick-hud { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); }
+html.touch-ui .scene-tools button, html.touch-ui #views button { min-height: 44px; padding: 0 14px; font-size: 14px; }
+.tc-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; pointer-events: auto; max-width: calc(100% - 24px); }
+.tc-seg { display: flex; gap: 1px; }
+.tc-btn { min-width: 44px; min-height: 44px; padding: 0 16px; border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font: 600 15px/1 var(--font-ui); cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.tc-seg .tc-btn:first-child { border-radius: 22px 0 0 22px; }
+.tc-seg .tc-btn:last-child { border-radius: 0 22px 22px 0; }
+.tc-solo, .tc-hold { border-radius: 22px; }
+.tc-btn[aria-pressed="true"], .tc-hold.on { background: #f4f3ef; color: #1e2621; }
+.tc-stick { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); width: 132px; height: 132px; border-radius: 50%; background: rgba(20, 24, 22, 0.42); border: 2px solid rgba(244, 243, 239, 0.55); pointer-events: auto; touch-action: none; display: none; }
+.tc-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: rgba(244, 243, 239, 0.8); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); pointer-events: none; }
+.tc-rise { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); display: none; flex-direction: column; gap: 10px; pointer-events: auto; }
+.tc-hold { width: 64px; min-height: 64px; padding: 0; font-size: 22px; touch-action: none; border-radius: 50%; }
+.tc-root:not([data-mode="orbit"]) .tc-stick { display: block; }
+.tc-root[data-mode="fly"] .tc-rise { display: flex; }
+section.scene-pane.fs .tc-rise { right: calc(max(18px, env(safe-area-inset-right, 0px)) + 84px); }
+@media (max-width: 380px) { .tc-bar { gap: 4px; } .tc-btn { padding: 0 10px; font-size: 14px; } }
+html.embed #btn-touch { display: none; }
 #nav-modes { display: none; gap: 1px; }
 #measure-modes { display: flex; gap: 1px; align-items: stretch; }
 #measure-modes span { background: rgba(20, 24, 22, 0.72); color: #c9cec8; font-size: 11px; padding: 4px 7px; border-radius: 3px 0 0 3px; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; }
@@ -415,6 +443,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
           <div class="scene-tools">
             <button id="btn-library" type="button" aria-pressed="false" title="Product library: every plant, material and feature in 3D">Library</button>
             <button id="btn-second" type="button" aria-pressed="false" title="Second screen: a window (best on a second display) showing what the pointer is on">Second screen</button>
+            <button id="btn-touch" type="button" aria-pressed="false" title="Touch mode: on-screen controls for a tablet (fingers only, no keyboard): joystick, look by dragging, pinch to zoom">Touch</button>
             <button id="btn-focus" type="button" aria-pressed="true" title="Focus blur on or off">Focus</button>
             <button id="btn-wind" type="button" aria-pressed="true" title="Wind on or off">Wind</button>
             <button id="btn-sound" type="button" aria-pressed="true" title="Sound on or off: ambience for the time of day, water, fire and spa. Sound effects generated with ElevenLabs.">Sound</button>
