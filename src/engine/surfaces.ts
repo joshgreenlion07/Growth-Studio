@@ -1287,6 +1287,16 @@ function fenceSet(spec: MaterialSpec, style: FenceStyle): PBRSet {
       return { h: edge ? 0.2 : wire ? 1 : 0.6, c, r: wire ? 0.4 : 0.7 };
     });
   }
+  if (style === 'metalPicket') {
+    // Library tile: dark pickets and two rails on a light background (the fence itself is built from geometry).
+    const metal = colors[0] ?? [0.1, 0.1, 0.11];
+    return paint(256, 0.4, 1, (u, v) => {
+      const px = (u * 4) % 1, picket = px > 0.3 && px < 0.55 && v > 0.04 && v < 0.96;
+      const rail = (v > 0.2 && v < 0.29) || (v > 0.74 && v < 0.83);
+      const on = picket || rail;
+      return { h: on ? 1 : 0, c: on ? metal : [0.86, 0.85, 0.82], r: on ? 0.6 : 0.9 };
+    });
+  }
   const painted = style === 'grayLattice' || style === 'grayBoardLattice' || style === 'vinyl';
   const horizontal = style === 'horizontal';
   const bw = style === 'horizontal' ? 0.14 : style === 'vinyl' ? 0.15 : 0.14;

@@ -272,7 +272,7 @@ const pick = {
 function currentTool(): Tool {
   switch (toolKey) {
     case 'area': return { kind: 'area', zone: pick.zone, catalogId: pick.zoneMat[pick.zone] };
-    case 'line': return { kind: 'line', line: pick.line, catalogId: pick.lineMat[pick.line], height: pick.line === 'fence' ? 1.83 : pick.line === 'wall' ? 0.6 : 0.1 };
+    case 'line': return { kind: 'line', line: pick.line, catalogId: pick.lineMat[pick.line], height: pick.line === 'fence' ? (materialById.get(pick.lineMat.fence)?.fenceHeight ?? 1.83) : pick.line === 'wall' ? 0.6 : 0.1 };
     case 'water': return { kind: 'water', water: pick.water };
     case 'plant': return { kind: 'plant', catalogId: pick.plant };
     case 'feature': return { kind: 'feature', catalogId: pick.feature };
