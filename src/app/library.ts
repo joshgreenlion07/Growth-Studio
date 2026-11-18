@@ -168,6 +168,8 @@ function facts(p: Product, v: Variant): [string, string][] {
   if (m.wall?.unit) out.push(['Course height', inches(m.wall.unit.course)]);
   if (m.turf) out.push(['Pile height', `${m.turf.pileMm} mm`], ['Face weight', `${m.turf.faceOz} oz`]);
   if (m.finish) out.push(['Finish', m.finish[0].toUpperCase() + m.finish.slice(1)]);
+  if (m.stamp) out.push(['Stamp pattern', { ashlar: 'Ashlar slate', cobble: 'European fan cobblestone', plank: 'Wood plank' }[m.stamp]]);
+  if (m.antique) out.push(['Release', 'Antiqued (darker joints)']);
   const lays = layingsFor(m);
   if (lays.length) out.push(['Laying patterns', lays.map((k) => layingName(m, k)).join(', ')]);
   return out;

@@ -1158,7 +1158,7 @@ function applyEmbedPlan() {
 
 /** The looks the parent can offer: approved pavers, borders, walls, fences, curbs, maker turf and bed fills. */
 function embedLooks(): Look[] {
-  return MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
+  return MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain' || m.group === 'Concrete')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
 }
 
 /**

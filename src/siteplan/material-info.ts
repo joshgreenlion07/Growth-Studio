@@ -18,6 +18,11 @@ export interface MaterialInfo {
   spec: string[];
 }
 
+const STAMP: Record<string, string> = {
+  ashlar: 'an ashlar slate stamp: random rectangular stones 12 to 36 in, pressed about 3/8 in deep',
+  cobble: 'a European fan cobblestone stamp: 24 in fans of small stones, pressed about 3/8 in deep',
+  plank: 'a wood plank stamp: boards 6 to 8 in wide with grain, pressed about 1/4 in deep',
+};
 const FINISH: Record<ConcreteFinish, string> = {
   broom: 'broom finish (a light brushed texture for grip)',
   smooth: 'smooth steel-trowel finish',
@@ -121,7 +126,7 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
       const t = m.thickness ?? 0.1;
       return {
         group: 'Concrete',
-        about: `Poured concrete with a ${FINISH[m.finish ?? 'broom']}.${m.id === 'concrete-tan' || m.id === 'concrete-red' ? ' Integral color is mixed into the concrete, so it goes all the way through.' : ''}`,
+        about: `Poured concrete with ${m.stamp ? STAMP[m.stamp] : `a ${FINISH[m.finish ?? 'broom']}`}.${m.line ? ' Integral color is mixed into the concrete, so it goes all the way through.' : ''}${m.antique ? ' Antiquing release is left darker in the joints and low spots for an aged look.' : ''}`,
         spec: [`${Math.round(t / IN)} in slab`, '4 in compacted base rock', '#3 rebar at 18 in on center each way', 'Control joints about every 8 to 10 ft'],
       };
     }

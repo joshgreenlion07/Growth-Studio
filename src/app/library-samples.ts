@@ -73,6 +73,7 @@ function material(id: string): MaterialSpec {
 export function scenesFor(item: LibraryItem): SampleScene[] {
   if (item.kind !== 'material') return [];
   const m = material(item.id);
+  if (m.use === 'hardscape' && m.group === 'Concrete') return [{ id: 'slab', label: '10 ft slab' }, { id: 'walk', label: 'Walk through lawn' }];
   if (m.use === 'hardscape' && borderFor(m)) return [{ id: 'border', label: 'With its border' }, { id: 'plain', label: 'On its own' }];
   if (isCurbLike(m)) return [{ id: 'turfBed', label: 'With turf and bed' }, { id: 'alone', label: 'On its own' }];
   // A Paver edge look is laid either as a patio's border or as an edging row along a drawn line (README "Paver edging").
@@ -111,6 +112,11 @@ function materialSample(item: { kind: 'material'; id: string }, opts: SampleOpti
     }
     // Patios sit on lawn; turf, bed fills and concrete are shown on bare ground.
     const onLawn = m.use === 'hardscape' && m.group !== 'Concrete';
+    if (m.group === 'Concrete' && scene === 'walk') {
+      zone.polygon = box(c - 0.9, 0.4, c + 0.9, L - 0.4);
+      plan.zones = [lawn(L), zone];
+      return { plan, target: [c, 0, c], dist: 5.2 };
+    }
     plan.zones = onLawn ? [lawn(L), zone] : [zone];
     return { plan, target: [c, 0, c], dist: 4.4 };
   }

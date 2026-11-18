@@ -165,6 +165,8 @@ export interface WallUnit {
   halfShift?: number;
 }
 export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
+/** A stamp mat's pattern: random rectangular stone, European fan cobblestone, or wood plank. */
+export type StampPattern = 'ashlar' | 'cobble' | 'plank';
 
 /**
  * Loose stone sold by size (1/2-1 in, 1-2 in, ...), drawn as individual 3D stones over a matching ground texture. Sizes
@@ -261,6 +263,10 @@ export interface MaterialSpec {
   palette: string[];
   pattern?: PaverPattern;
   finish?: ConcreteFinish;
+  /** Stamped concrete made with a stamp mat (finish 'stamped'): its pattern. Without it, the older generic stamped look. */
+  stamp?: StampPattern;
+  /** Antiquing release (sRGB): the darker powder tossed on before stamping, which stays in the joints and low spots. */
+  antique?: string;
   fence?: FenceStyle;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
   /** Hardscape thickness above grade, meters. */
@@ -270,7 +276,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
@@ -476,6 +482,57 @@ const M = (s: Omit<MaterialSpec, 'placeholder'>): MaterialSpec => ({ ...s, place
 const ASHLAR: [number, number][] = [[6, 9], [9, 9], [9, 12], [12, 12], [6, 12]];
 const LARGE_ASHLAR: [number, number][] = [[12, 12], [12, 18], [18, 24], [12, 24]];
 
+
+/*
+ * Green Lion concrete: six finishes, each in six integral colors (mixed through the slab). The three stamped patterns
+ * also come antiqued: a darker release powder left in the joints and low spots, as stamped concrete is usually finished.
+ * Looks are made here, one per line and color; the older concrete ids are kept as members of the lines (or hidden
+ * aliases) so saved plans still load.
+ */
+export const CONCRETE_COLORS: { id: string; name: string; palette: [string, string]; release: string }[] = [
+  { id: 'natural-gray', name: 'Natural gray', palette: ['#c7c3ba', '#b5b1a8'], release: '#5b5953' },
+  { id: 'sandstone', name: 'Sandstone', palette: ['#d0bf9e', '#bba783'], release: '#6a563d' },
+  { id: 'desert-tan', name: 'Desert tan', palette: ['#c6a67e', '#ae8c64'], release: '#5e432b' },
+  { id: 'terracotta', name: 'Terracotta', palette: ['#b2654f', '#9a5442'], release: '#4f2a20' },
+  { id: 'charcoal', name: 'Charcoal', palette: ['#6a6866', '#575553'], release: '#201f1e' },
+  { id: 'walnut', name: 'Walnut brown', palette: ['#85634b', '#6e5039'], release: '#2d1e14' },
+];
+const CONCRETE_LINES: { id: string; line: string; finish: ConcreteFinish; stamp?: StampPattern }[] = [
+  { id: 'smooth', line: 'Smooth concrete', finish: 'smooth' },
+  { id: 'broom', line: 'Broom concrete', finish: 'broom' },
+  { id: 'exposed', line: 'Exposed aggregate', finish: 'exposed' },
+  { id: 'stamped-ashlar', line: 'Stamped ashlar slate', finish: 'stamped', stamp: 'ashlar' },
+  { id: 'stamped-cobble', line: 'Stamped European fan cobblestone', finish: 'stamped', stamp: 'cobble' },
+  { id: 'stamped-plank', line: 'Stamped wood plank', finish: 'stamped', stamp: 'plank' },
+];
+/** Ids that existed before the concrete lines; each now stands in for its line's look in that color. */
+const CONCRETE_OLD: Record<string, string> = { 'smooth:natural-gray': 'concrete-smooth', 'broom:natural-gray': 'concrete-broom', 'broom:desert-tan': 'concrete-tan' };
+function concreteLooks(): MaterialSpec[] {
+  const out: MaterialSpec[] = [];
+  for (const L of CONCRETE_LINES) {
+    for (const c of CONCRETE_COLORS) {
+      for (const antiqued of L.stamp ? [false, true] : [false]) {
+        const color = antiqued ? `${c.name}, antiqued` : c.name;
+        const base = `${L.line}, ${c.name.toLowerCase()}${antiqued ? ', antiqued' : ''}`;
+        const id = CONCRETE_OLD[`${L.id}:${c.id}`] ?? `concrete-${L.id}-${c.id}${antiqued ? '-antiqued' : ''}`;
+        out.push(M({
+          id, name: base[0].toUpperCase() + base.slice(1), use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: c.palette.slice(), finish: L.finish,
+          ...(L.stamp ? { stamp: L.stamp } : {}), ...(antiqued ? { antique: c.release } : {}),
+          thickness: 0.1, maker: 'Green Lion', line: L.line, shelf: 'Concrete', color,
+        }));
+      }
+    }
+  }
+  // Older looks with no place in the lines: kept for saved plans, hidden from the Library and the pickers.
+  const old = (id: string, name: string, palette: string[], finish: ConcreteFinish) => out.push(M({ id, name, use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette, finish, thickness: 0.1, auto: true }));
+  old('concrete-stamped-light', 'Stamped concrete, light slate', ['#d6d1c6', '#c4beb2'], 'stamped');
+  old('concrete-stamped-tan', 'Stamped concrete, tan tile', ['#d3bf9c', '#bba783'], 'stamped');
+  old('concrete-stamped', 'Stamped concrete, slate', ['#a99a86', '#8a7c6b'], 'stamped');
+  old('concrete-exposed', 'Exposed aggregate', ['#a59a8c', '#857a6d'], 'exposed');
+  old('concrete-red', 'Colored concrete, terracotta', ['#a5604f', '#8f5244'], 'smooth');
+  return out;
+}
+
 export const MATERIALS: MaterialSpec[] = [
   // Turf
   M({ id: 'lawn', name: 'Natural lawn', use: 'turf', group: 'Turf', recipe: 'lawn', palette: ['#5f8a38', '#3f6328'] }),
@@ -597,15 +654,8 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'porcelain-plank-gray', name: 'Porcelain plank, mixed gray', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#d9d6cf', '#bfbbb3', '#a6a29b', '#8d8a85'], pattern: { kind: 'plank', sizes: [[48, 8]], joint: 0.08, face: 'woodgrain' }, thickness: 0.05 }),
   M({ id: 'porcelain-plank-light', name: 'Porcelain plank, light', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#e2ddd2', '#d4cdbf', '#c6beaf'], pattern: { kind: 'plank', sizes: [[48, 12]], joint: 0.08, face: 'woodgrain' }, thickness: 0.05 }),
   M({ id: 'porcelain-24-light', name: 'Porcelain 24x48, light stone', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#e4e1da', '#d9d5cc'], pattern: { kind: 'grid', sizes: [[48, 24]], joint: 0.08, face: 'smooth' }, thickness: 0.05 }),
-  // Concrete
-  M({ id: 'concrete-broom', name: 'Broom-finish concrete', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#c7c3ba', '#b5b1a8'], finish: 'broom', thickness: 0.1 }),
-  M({ id: 'concrete-smooth', name: 'Smooth-trowel concrete', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#bebbb4', '#aaa79f'], finish: 'smooth', thickness: 0.1 }),
-  M({ id: 'concrete-stamped-light', name: 'Stamped concrete, light slate', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#d6d1c6', '#c4beb2'], finish: 'stamped', thickness: 0.1 }),
-  M({ id: 'concrete-stamped-tan', name: 'Stamped concrete, tan tile', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#d3bf9c', '#bba783'], finish: 'stamped', thickness: 0.1 }),
-  M({ id: 'concrete-stamped', name: 'Stamped concrete, slate', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#a99a86', '#8a7c6b'], finish: 'stamped', thickness: 0.1 }),
-  M({ id: 'concrete-exposed', name: 'Exposed aggregate', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#a59a8c', '#857a6d'], finish: 'exposed', thickness: 0.1 }),
-  M({ id: 'concrete-tan', name: 'Colored concrete, tan', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#c9b89c', '#b6a487'], finish: 'broom', thickness: 0.1 }),
-  M({ id: 'concrete-red', name: 'Colored concrete, terracotta', use: 'hardscape', group: 'Concrete', recipe: 'concrete', palette: ['#a5604f', '#8f5244'], finish: 'smooth', thickness: 0.1 }),
+  // Concrete: Green Lion's own lines (CONCRETE_LINES below), one look per integral color. The old ids stay: saved plans use them.
+  ...concreteLooks(),
   // Natural stone
   M({ id: 'flagstone-dg', name: 'Flagstone set in DG', use: 'hardscape', group: 'Natural stone', recipe: 'flagstone', palette: ['#c3b39a', '#a99a82', '#8e7f69'], thickness: 0.04 }),
   M({ id: 'flagstone', name: 'Flagstone', use: 'hardscape', group: 'Natural stone', recipe: 'flagstone', palette: ['#b3a088', '#9b8a72', '#7c6c58'], thickness: 0.06 }),
