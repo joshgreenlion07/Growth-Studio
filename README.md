@@ -163,6 +163,24 @@ Messages use `window.postMessage`:
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
   plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
+- Tru-Scapes landscape lighting (`truscapes-<model>` features in the Lighting
+  group, e.g. `truscapes-ts-b301`, `truscapes-ts-b102`, `truscapes-ts-a6000`,
+  `truscapes-ts-tssa-200`; the list is `TRUSCAPES` in `src/siteplan/truscapes.ts`)
+  are drawn to the maker's spec sheets and light the yard after dusk with their
+  published lumens, beam angle and color temperature. A feature placement can
+  carry `fixture: { finish?, beamDeg?, kelvin?, tiltDeg?, mountHeight? }`:
+  `finish` is a finish the fixture is sold in (`black`, `bronze`, `brown`,
+  `white`, `gray`, `stainless`, or the maker's code `BLK`, `BRZ`, ...),
+  `beamDeg` and `kelvin` snap to the lamp or color choices it offers (others are
+  dropped), `tiltDeg` (0-90, wells 0-20) tips an aimed head from straight up
+  toward the placement's front (`rotationDeg` turns it), and `mountHeight` is
+  meters above grade for a cap, riser or wall fixture (a cap light's is the
+  underside of the cap). A cap or face light sent without `mountHeight` within
+  0.75 m of a wall or raised planter moves onto that face, turns out from it and
+  takes the cap's height. Stake and in-grade fixtures stand on the paving where a
+  hardscape zone covers them. The sample "Night lighting: Tru-Scapes" lights the
+  modern backyard; its look is closest to Tru-Scapes' own photos about an hour
+  after sunset.
 - `plan.models` places a designer's own rendering on a drawn footprint:
   `{ id, polygon, asset, kind: 'glb' | 'image', height?, turn: 0-3, fit: 'contain' | 'stretch' }`.
   The file is not in the plan. `asset` is an id; the studio asks for each file

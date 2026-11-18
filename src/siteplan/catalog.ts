@@ -16,6 +16,7 @@ import { BELGARD_LINES } from './belgard';
 import { BASALITE_LINES } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
+import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 
 export type PlantForm =
@@ -309,6 +310,7 @@ export type FeatureKind =
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
+  | 'landscapeLight'
   | 'bench'
   | 'loungeSet'
   | 'diningSet'
@@ -341,6 +343,8 @@ export interface FeatureSpec {
   model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g';
   /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
   options?: FeatureOption[];
+  /** A lighting fixture's maker spec (kind 'landscapeLight', siteplan/truscapes.ts). */
+  fixture?: FixtureSpec;
   placeholder: true;
 }
 
@@ -769,6 +773,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'putting-cup', name: 'Putting cup', group: 'Accents', kind: 'puttingCup', footprint: [0.15, 0.15] }),
   F({ id: 'path-light', name: 'Path light, brass mushroom', group: 'Lighting', kind: 'pathLight', footprint: [0.25, 0.25] }),
   F({ id: 'spot-light', name: 'Uplight, bronze', group: 'Lighting', kind: 'spotLight', footprint: [0.12, 0.12] }),
+  // Tru-Scapes low-voltage LED fixtures and transformers, drawn and lit to the maker's specs (siteplan/truscapes.ts).
+  ...truscapesFeatures().map(F),
   F({ id: 'bench', name: 'Bench', group: 'Furniture', kind: 'bench', footprint: [1.5, 0.45] }),
   F({ id: 'lounge-set', name: 'Lounge set', group: 'Furniture', kind: 'loungeSet', footprint: [3.2, 2.6] }),
   F({ id: 'bistro-set', name: 'Bistro set', group: 'Furniture', kind: 'bistroSet', footprint: [1.4, 1.4] }),
