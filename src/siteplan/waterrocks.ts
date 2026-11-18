@@ -54,6 +54,7 @@ export const FLAG_LIP_SIZES: FeatureSize[] = [flat(18, 9, 2), flat(24, 10, 2), f
 export const FLAG_LEDGE_SIZES: FeatureSize[] = [flat(30, 16, 6), flat(36, 18, 8), flat(48, 20, 10), flat(60, 22, 12), flat(72, 24, 14)];
 export const FLAG_EDGE_SIZES: FeatureSize[] = [flat(12, 9, 2), flat(18, 12, 2), flat(24, 14, 2), flat(30, 16, 2)];
 
+/** Moss rock and Canyon Tech boulders: offered. */
 export const WATER_ROCK_FEATURES: FeatureSpec[] = [
   F({ id: 'moss-rock-rounded', name: 'Moss rock boulder, rounded', group: 'Water', kind: 'mossRock', footprint: MOSS_ROUNDED_SIZES[MEDIUM].size.slice(0, 2) as [number, number], sizes: MOSS_ROUNDED_SIZES, size: MEDIUM,
     options: [{ key: 'moss', label: 'Moss and lichen', default: true }],
@@ -71,6 +72,14 @@ export const WATER_ROCK_FEATURES: FeatureSpec[] = [
     options: [{ key: 'moss', label: 'Lichen and rust', default: true }],
     about: 'Natural boulder, the second boulder type Green Lion sets: weathered, angular stone in warm gray and tan with rust-orange lichen patches and little moss, set partly buried. Bought from Resource Building Materials as Canyon Tech Boulders. Its color and shape are drawn from Green Lion\'s job photos; the supplier gave no description.',
     facts: ['Sizes are length x depth x the height that shows; about a fifth of the rock is set below the ground', `A 22 in boulder is about ${boulderWeightLb(CANYON_SIZES[0].size)} lb, a 4 ft boulder about ${boulderWeightLb(CANYON_SIZES[3].size)} lb (estimated from size)`] }),
+];
+
+/**
+ * Flagstone pieces. Built and drawn (builder/flagstone.ts) but NOT in the catalog yet: each is drawn in one of Green Lion's
+ * three flagstones (Cold Water Canyon, AZ Classic Oak, SUI Black Slate), whose looks come with the stepping stones'
+ * flagstone looks; they are added to `FEATURES` when those land, so no stand-in stone is ever offered.
+ */
+export const FLAGSTONE_FEATURES: FeatureSpec[] = [
   F({ id: 'flagstone-lip-stone', name: 'Flagstone spillway lip stone', group: 'Water', kind: 'flagLip', footprint: FLAG_LIP_SIZES[1].size.slice(0, 2) as [number, number], sizes: FLAG_LIP_SIZES, size: 1,
     about: 'A long flagstone slab with a rounded, slightly drooping front edge: the stone a fall pours over. Set level across the top of a fall, its front edge toward the water (the front of the placement). Pick the flagstone in Look.',
     facts: ['Length x depth x thickness; AZ Classic Oak is 2 in thick, SUI Black Slate 1 in', 'Pick the stone: Cold Water Canyon, AZ Classic Oak or SUI Black Slate'] }),
