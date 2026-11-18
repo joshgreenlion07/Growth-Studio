@@ -30,6 +30,8 @@ export interface Look {
   color: string;
   sw: string;
   laying?: true;
+  /** A generic large-format cast slab: the look a one-slab pad takes when no maker's unit is its size. For pads only. */
+  padSlab?: true;
   /** The laying patterns the paver offers, the default first. */
   layings?: { id: string; name: string }[];
   /** Four colors, light to dark, averaged from the maker's swatch. */
@@ -114,8 +116,10 @@ export function lookOf(m: MaterialSpec): Look {
     look.laying = true;
     look.layings = lays.map((k) => ({ id: k, name: layingName(m, k) }));
   }
-  if (sizes?.length) look.sizes = sizes.map(([a, b]) => [a, b]);
-  if (sizeText?.length) look.sizeText = sizeText;
+  if (m.padSlab) look.padSlab = true;
+  if (sizes?.length && !m.padSlab) look.sizes = sizes.map(([a, b]) => [a, b]);
+  if (m.padSlab) look.sizeText = ['Cast to the size of the pad, 2 in thick'];
+  else if (sizeText?.length) look.sizeText = sizeText;
   else if (SIZE_TEXT[line]) look.sizeText = SIZE_TEXT[line];
   // Basalite lists sizes in millimeters with inches (Premier Slab: 594 x 594 x 60 mm).
   else if (maker === 'Basalite' && media?.sizes.length) look.sizeText = media.sizes.slice();
