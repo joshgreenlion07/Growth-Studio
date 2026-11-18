@@ -62,7 +62,6 @@ import { build as bougainvillea } from './shrubs/bougainvillea';
 import { build as maidenGrassMorningLight } from './grasses/maiden-grass-morning-light';
 import { build as roseFlowerCarpetRed } from './shrubs/rose-flower-carpet-red';
 import { build as cyclamenRed } from './perennials/cyclamen-red';
-import { build as primroseRed } from './perennials/primrose-red';
 import { build as lantanaNewGold } from './groundcover/lantana-new-gold';
 import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro';
 import { build as daylilyRed } from './perennials/daylily-red';
@@ -78,6 +77,7 @@ import { build as lomandraPlatinumBeauty } from './grasses/lomandra-platinum-bea
 import { build as liriopeSilverySunproof } from './grasses/liriope-silvery-sunproof';
 import { build as redYucca } from './succulents/red-yucca';
 import { build as echeveria } from './succulents/echeveria';
+import { build as primroseRed } from './perennials/primrose-red';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
