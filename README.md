@@ -447,6 +447,10 @@ Messages use `window.postMessage`:
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
+- A wall's cap overhangs both faces and its open ends by the same amount: the
+  maker's own overhang where its cap and block sizes give one (`capOver` on
+  the line's wall unit), else 2 1/2 in (the usual 2 to 3 in). Raised planters
+  follow the same rule.
 - Curbs (`kind: 'edging'` with a curb look) are Belgard Melville Curb units:
   4 in thick, 24 in long with a joint between units, 6 1/2 in tall. `reveal`
   is how much stands above grade in meters (0 to 0.1651); left out, 3 in.
