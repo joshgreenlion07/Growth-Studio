@@ -33,6 +33,10 @@ finished-work photos in `reference/green-lion-style/`.
   plant that has no file yet.
   Lighting fixtures (Tru-Scapes, `siteplan/truscapes.ts`) are built by
   `landscapelights.ts` and lit through `engine/landlights.ts`.
+  Composite decks (a hardscape zone in a maker's deck board, `siteplan/decking.ts`)
+  are built board by board in `deck.ts` from the layout in `deck-layout.ts`:
+  picture frame, straight, diagonal or chevron field, openings for a hot tub,
+  fascia; features on a deck stand on its boards (`onDecks`).
   `construction.ts` builds the build stages (demo, excavate, trench,
   backfill, base, bedding) from the plan's paving, walls and
   `plan.utilities`: pits cut from a distance field (marching squares; the
@@ -63,7 +67,8 @@ finished-work photos in `reference/green-lion-style/`.
   `engine/surfaces.ts`. Manufacturer photos (Belgard, Basalite) are color and
   pattern references only; do not embed them. The one exception is the material
   panel (owner's decision, 2026-11-16): it shows the maker's swatch photo loaded
-  live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`); the
+  live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`,
+  Trex deck swatches in `siteplan/decking.ts`); the
   photo is never copied into the app or used as a texture.
 - Use only real Green Lion content. Plant sizes and the catalog are starting
   values until Green Lion's own plant and material list replaces them. Never

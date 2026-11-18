@@ -143,6 +143,22 @@ Messages use `window.postMessage`:
   sides at that height. A line of kind `steps` is a flight of stairs: the line is the
   top edge, `height` the total rise, `riser` and `tread` in meters; it goes down away
   from the raised zone it touches and uses its hardscape `catalogId`.
+- A composite deck is a hardscape zone whose `catalogId` is a maker's deck board
+  (shelf `Decking`, `trex-enhance-naturals-<color>`, `trex-enhance-basics-<color>`,
+  `trex-transcend-island-mist`; see `src/siteplan/decking.ts`). It is built board by
+  board (`src/builder/deck.ts`, layout in `deck-layout.ts`): `elevation` is the top of
+  the boards above grade (left out, 8 in), with fascia on the sides and dark framing
+  under the gaps. `deck` (all optional) sets how it is laid:
+  `{ pattern?: 'straight' | 'diagonal' | 'chevron', angleDeg?, boardIn?, frame?, divider?, seamOffset?, fascia?, holes? }`.
+  `angleDeg` is the board direction (straight) or the seam direction (diagonal and
+  chevron boards run at 45 degrees to it), degrees from plan x toward plan y; left out,
+  the longest side. `frame` (default true) is a one-board picture frame along the edge
+  and around each opening, mitered at the corners. `seamOffset` moves the chevron seam
+  across the deck (meters from the middle); `divider` adds a board along it. `holes` are
+  openings framed like the edge. A hot tub feature placed with its center on a deck is
+  set into its own opening (it stands on the ground); every other feature and uploaded
+  model on a deck stands on the boards. The looks carry `sizeText` (board and fascia
+  sizes), `page` and `image` (Trex's own swatch photo, loaded live).
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
   plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
@@ -195,7 +211,7 @@ Messages use `window.postMessage`:
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
   id, part, material }` when what it is on changes. Everything built from the
   plan can be pointed at. `part` is `main`, `border`, `edge` (paver edging),
-  `wall`, `cap`, `curb`, `fence`, `steps` or `stone` for a catalog surface;
+  `wall`, `cap`, `curb`, `fence`, `steps`, `stone` or `deck` (a composite deck's boards) for a catalog surface;
   `turf` or `bed` for a lawn, synthetic grass, mulch, bark, humus, rock or DG
   zone (painted on the ground, found by the zone under the hit point); and
   `plant`, `water`, `structure`, `feature` or `model` for the rest. `id` is the

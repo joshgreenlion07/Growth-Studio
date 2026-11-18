@@ -5,6 +5,7 @@ import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
+import { boardFaceSet } from './deckboards';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -1331,6 +1332,8 @@ function flagstoneSet(spec: MaterialSpec): PBRSet {
 }
 
 function deckSet(spec: MaterialSpec): PBRSet {
+  // A maker's deck board: the board face alone (the deck is built board by board, builder/deck.ts).
+  if (spec.board) return boardFaceSet(spec.board, pal(spec), topMean(spec));
   const colors = pal(spec);
   const Bw = 0.14, T = 2.24;
   return paint(1024, T, 6, (u, v) => {

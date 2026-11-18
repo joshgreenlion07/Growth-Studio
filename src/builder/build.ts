@@ -13,6 +13,7 @@ import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint } from './hardscape';
+import { onDecks } from './deck';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
@@ -322,8 +323,11 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  const features = buildFeatures(plan.features, gm.height, fixtureSite(plan, gm.height));
-  const models = buildModels(plan.models ?? [], gm.height, assets);
+  // Features and models placed on a composite deck stand on its boards (a hot tub is set into it); lighting
+  // fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
+  const standOn = onDecks(plan, gm.height);
+  const features = buildFeatures(plan.features, standOn, fixtureSite(plan, standOn));
+  const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
   const bodies = bodyGrid(lineBodies(plan));

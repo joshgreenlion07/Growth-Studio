@@ -5,6 +5,7 @@
 import { CONTAINERS, featureById, layingName, layingsFor, materialById, plantById, type MaterialSpec } from '../siteplan/catalog';
 import { BELGARD_MEDIA, makerImage } from '../siteplan/belgard-media';
 import { BASALITE_MEDIA, basaliteImage } from '../siteplan/basalite-media';
+import { deckMedia } from '../siteplan/decking';
 import { STRUCTURE_NAMES, WATER_NAMES, materialInfo, pointKind } from '../siteplan/material-info';
 import type { SitePlan, WaterKind } from '../siteplan/types';
 
@@ -127,6 +128,13 @@ export function lookOf(m: MaterialSpec): Look {
   const image = maker === 'Belgard' ? makerImage(mediaLine, color) : maker === 'Basalite' ? basaliteImage(mediaLine, color) : undefined;
   if (image) look.image = image;
   if (media) look.page = media.page;
+  // Composite deck boards: the board as the maker lists it, its product page and swatch photo.
+  if (m.board) {
+    const d = deckMedia(m.id);
+    look.sizeText = [`${m.board.thicknessIn} x ${m.board.widthIn} in x ${m.board.lengthsFt.join(', ')} ft boards`, `Fascia ${m.board.fasciaIn[0]} x ${m.board.fasciaIn[1]} in`];
+    if (d?.line.page) look.page = d.line.page;
+    if (d?.image) look.image = d.image;
+  }
   // Synthetic turf: its pile and weight as the maker lists them, and the product page.
   if (m.turf) {
     const blade = m.turf.blade === 'mixed' ? 'C, diamond and omega' : m.turf.blade;

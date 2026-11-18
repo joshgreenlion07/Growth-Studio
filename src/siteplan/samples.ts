@@ -1,4 +1,5 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
+import { sampleCompositeDeck } from './sample-deck';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -450,4 +451,5 @@ export const SAMPLES = [
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
+  { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
 ];

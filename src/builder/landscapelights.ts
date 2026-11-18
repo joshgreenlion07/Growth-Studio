@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { FeatureSpec } from '../siteplan/catalog';
 import type { FeaturePlacement, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { pointInPolygon } from '../siteplan/geometry';
+import { isBoardDeck } from '../siteplan/deckzone';
 import { FIXTURE_FINISHES, fixtureSetting, type FinishId, type FixtureSpec } from '../siteplan/truscapes';
 import { kelvinColor, type LandLight } from '../engine/landlights';
 import { boxUV } from './materials';
@@ -598,7 +599,8 @@ export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): Fixtur
  * ground the wall stands on.
  */
 export function finishedSurface(zones: Zone[], height: (p: Vec2) => number): (p: Vec2) => number {
-  const paving = zones.map((z, i) => ({ z, top: zoneTop(z, i) })).filter(({ z }) => z.kind === 'hardscape' && z.polygon.length > 2);
+  // A composite deck's boards are already in `height` (onDecks), so only paving is added here.
+  const paving = zones.map((z, i) => ({ z, top: zoneTop(z, i) })).filter(({ z }) => z.kind === 'hardscape' && z.polygon.length > 2 && !isBoardDeck(z));
   return (p) => {
     let top = 0;
     for (const { z, top: t } of paving) if (t > top && pointInPolygon(p, z.polygon)) top = t;
