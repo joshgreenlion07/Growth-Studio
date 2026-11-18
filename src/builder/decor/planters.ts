@@ -111,16 +111,19 @@ function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
  * sedum spilling over the open side. Positions scale with the planter; one shorter than 30 in keeps one end's set.
  */
 const PLANTING: { id: string; x: number; z: number; container?: PlantPlacement['container'] }[] = [
-  { id: 'red-yucca', x: 0.06, z: -0.03 },
-  { id: 'blue-fescue', x: -0.28, z: 0.05 },
-  { id: 'primrose-red', x: -0.34, z: -0.11 },
-  { id: 'primrose-red', x: -0.19, z: -0.12 },
-  { id: 'echeveria', x: -0.17, z: 0.12 },
-  { id: 'blue-sedum', x: -0.37, z: 0.13 },
-  { id: 'blue-fescue', x: 0.33, z: -0.06 },
-  { id: 'primrose-red', x: 0.35, z: 0.1 },
-  { id: 'echeveria', x: 0.24, z: 0.12 },
-  { id: 'blue-sedum', x: 0.38, z: -0.13 },
+  { id: 'red-yucca', x: -0.06, z: -0.03 },
+  // The end seen in the photos (+x, with the house on its right as you face it): fescue in the middle, primroses on
+  // the house side, an echeveria and blue sedum spilling over the open side.
+  { id: 'blue-fescue', x: 0.28, z: 0.04 },
+  { id: 'primrose-red', x: 0.34, z: -0.11 },
+  { id: 'primrose-red', x: 0.19, z: -0.12 },
+  { id: 'echeveria', x: 0.17, z: 0.12 },
+  { id: 'blue-sedum', x: 0.37, z: 0.13 },
+  // The other end, turned the other way round.
+  { id: 'blue-fescue', x: -0.33, z: -0.06 },
+  { id: 'primrose-red', x: -0.35, z: 0.1 },
+  { id: 'echeveria', x: -0.24, z: 0.12 },
+  { id: 'blue-sedum', x: -0.38, z: -0.13 },
 ];
 const BASE_W = 36 * IN, BASE_D = 16 * IN;
 
@@ -141,8 +144,8 @@ export function planterPlants(features: FeaturePlacement[]): PlantPlacement[] {
     const sx = p.W / BASE_W, sz = p.D / BASE_D;
     const short = p.W < 30 * IN - 1e-6;
     PLANTING.forEach((it, k) => {
-      if (short && it.x > 0.2) return;
-      const lx = short && it.id === 'red-yucca' ? 0.08 * sx : it.x * sx, lz = it.z * sz;
+      if (short && it.x < -0.2) return;
+      const lx = short && it.id === 'red-yucca' ? -0.08 * sx : it.x * sx, lz = it.z * sz;
       out.push({ id: `${f.id}-plant-${k}`, catalogId: it.id, source: f.source, position: [f.position[0] + lx * p.cos + lz * p.sin, f.position[1] - lx * p.sin + lz * p.cos] });
     });
   }
