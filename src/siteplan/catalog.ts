@@ -341,10 +341,6 @@ export interface FeatureSpec {
   model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g';
   /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
   options?: FeatureOption[];
-  /** Pillar water feature: bowl planters on its pillars (left out, yes). */
-  bowls?: boolean;
-  /** Bowl planters: planted (left out, yes) or soil and top dressing only. */
-  planted?: boolean;
   placeholder: true;
 }
 
@@ -430,6 +426,7 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'blue-sedum', name: 'Blue sedum', botanical: 'Sedum reflexum \'Blue Spruce\'', group: 'Succulents', form: 'groundcover', installHeight: 0.08, installSpread: 0.15, matureHeight: 0.15, matureSpread: 0.6, yearsToMature: 2, foliage: '#7fa3a0', foliage2: '#a6c6c2', evergreen: true, spacing: 0.3, container: '1 gal' }),
   P({ id: 'foxtail-agave', name: 'Foxtail agave', botanical: 'Agave attenuata', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 1.2, matureSpread: 1.2, yearsToMature: 6, foliage: '#7fa890', foliage2: '#a9cbb6', evergreen: true, spacing: 1.2, container: '5 gal' }),
   P({ id: 'agave', name: 'Agave', botanical: 'Agave \'Blue Glow\'', group: 'Succulents', form: 'agave', installHeight: 0.3, installSpread: 0.4, matureHeight: 0.6, matureSpread: 0.9, yearsToMature: 6, foliage: '#4f8a80', foliage2: '#7fb0a6', evergreen: true, spacing: 0.9, container: '5 gal' }),
+  P({ id: 'blue-agave', name: 'Blue agave', botanical: 'Agave tequilana \'Weber Azul\'', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.8, yearsToMature: 8, foliage: '#7d99a2', foliage2: '#a7bcc0', evergreen: true, spacing: 1.8, container: '5 gal' }),
   P({ id: 'red-yucca', name: 'Red yucca', botanical: 'Hesperaloe parviflora', group: 'Succulents', form: 'agave', installHeight: 1.3, installSpread: 0.85, matureHeight: 1.5, matureSpread: 1.25, yearsToMature: 4, foliage: '#5f7868', foliage2: '#7d9184', flower: '#c9493f', flower2: '#e48a6a', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'echeveria', name: 'Echeveria', botanical: 'Echeveria \'Lola\'', group: 'Succulents', form: 'agave', installHeight: 0.065, installSpread: 0.12, matureHeight: 0.08, matureSpread: 0.16, yearsToMature: 2, foliage: '#a8a2b3', foliage2: '#c9bfc6', flower: '#e9895a', evergreen: true, spacing: 0.2, container: '4" pot' }),
   // Tropicals
@@ -746,21 +743,19 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'water-wall-stucco', name: 'Water wall, stucco and dark stone', group: 'Water', kind: 'waterWallStucco', footprint: [3.4, 1.4] }),
   F({ id: 'copper-bowl', name: 'Copper bowl planter', group: 'Accents', kind: 'copperBowl', footprint: [0.75, 0.75] }),
   // Three-pillar stucco pondless water feature and its bowl planters, drawn to a finished Green Lion install
-  // (builder/pillarfountain.ts has the sizes and how they were measured).
-  ...([true, false] as const).map((bowls) => F({
-    id: bowls ? 'three-pillar-water-feature' : 'three-pillar-water-feature-no-bowls',
-    name: bowls ? 'Three-pillar stucco water feature, with bowl planters' : 'Three-pillar stucco water feature, no bowls',
-    group: 'Water', kind: 'pillarFountain', bowls, footprint: [168 * 0.0254, 50 * 0.0254],
-    about: 'A pondless water feature: three smooth-troweled stucco pillars with golden split-face ledger stone panels between them, a 12 in copper sheer spillway in each panel, copper scuppers pouring from the outer pillars, and a black Mexican beach pebble basin edged with a charcoal curb.' + (bowls ? ' A patina bowl planter with an agave sits on each pillar.' : ''),
-    facts: ['Basin 14 ft x 4 ft 2 in, Belgard Melville Curb, Anthracite, showing 5 1/2 in, black Mexican beach pebble 1-2 in, no open water', 'Pillars 2 ft 8 in wide x 2 ft deep x 5 ft 6 in tall, Santa Barbara smooth trowel stucco, warm gray', 'Panels 2 ft wide x 5 ft tall, set back 1 ft 8 in, split-face travertine ledger stone', 'Two 12 in copper sheer spillways (lip 31 in up, LED lit) and two 1 in copper scuppers', ...(bowls ? ['Three 23 in patina bowl planters with Agave \'Blue Glow\''] : [])],
-  })),
-  ...([true, false] as const).map((planted) => F({
-    id: planted ? 'patina-bowl-planter' : 'patina-bowl-planter-empty',
-    name: planted ? 'Patina bowl planter, 23 in, with agave' : 'Patina bowl planter, 23 in, empty',
-    group: 'Accents', kind: 'patinaBowl', planted, footprint: [23 * 0.0254, 23 * 0.0254],
-    about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, light gravel top dressing.' + (planted ? ' Planted with an Agave \'Blue Glow\'.' : ''),
-    facts: ['23 in across x 9 in tall, 11 in foot', 'Verdigris-teal rim band, dark bronze body', planted ? 'Agave \'Blue Glow\', kept about 14 in across' : 'Soil and gravel top dressing, no plant'],
-  })),
+  // (builder/pillarfountain.ts has the sizes and how they were measured). The bowls on the pillars are an option; a
+  // bowl planter on its own is planted unless its placement says `planted: false`.
+  F({
+    id: 'three-pillar-water-feature', name: 'Three-pillar stucco water feature', group: 'Water', kind: 'pillarFountain', footprint: [168 * 0.0254, 50 * 0.0254],
+    options: [{ key: 'bowls', label: 'Bowl planters on the pillars', default: true }],
+    about: 'A pondless water feature: three smooth-troweled stucco pillars with golden split-face ledger stone panels between them, a 12 in copper sheer spillway in each panel, copper scuppers pouring from the outer pillars, and a black Mexican beach pebble basin edged with a charcoal curb. A patina bowl planter with a blue agave sits on each pillar (an option).',
+    facts: ['Basin 14 ft x 4 ft 2 in, Belgard Melville Curb, Anthracite, showing 5 1/2 in, black Mexican beach pebble 1-2 in, no open water', 'Pillars 2 ft 8 in wide x 2 ft deep x 5 ft 6 in tall, Santa Barbara smooth trowel stucco, warm gray', 'Panels 2 ft wide x 5 ft tall, set back 1 ft 8 in, split-face travertine ledger stone', 'Two 12 in copper sheer spillways (lip 31 in up, LED lit) and two 1 in copper scuppers', 'Option: three 23 in patina bowl planters with blue agave (Agave tequilana)'],
+  }),
+  F({
+    id: 'patina-bowl-planter', name: 'Patina bowl planter, 23 in', group: 'Accents', kind: 'patinaBowl', plantable: true, footprint: [23 * 0.0254, 23 * 0.0254],
+    about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, gray gravel top dressing, planted with a blue agave (or left empty).',
+    facts: ['23 in across x 9 in tall, 11 in foot', 'Verdigris-teal rim band, dark bronze body', 'Blue agave (Agave tequilana \'Weber Azul\'), kept about 14 in across'],
+  }),
   F({ id: 'corten-screen', name: 'Corten screen panel', group: 'Accents', kind: 'cortenScreen', footprint: [1.8, 0.1] }),
   F({ id: 'corten-planter', name: 'Corten planter', group: 'Accents', kind: 'cortenPlanter', footprint: [0.6, 0.6] }),
   ...DECOR_FEATURES,

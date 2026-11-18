@@ -487,11 +487,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'pillarFountain': {
-        pillarFountain(sink, f.id, spec.bowls !== false);
+        pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
         break;
       }
       case 'patinaBowl': {
-        patinaBowl(sink, f.id, 0, 0, 0, spec.planted !== false);
+        patinaBowl(sink, f.id, 0, 0, 0, f.planted !== false);
         break;
       }
       case 'trellisCable': {

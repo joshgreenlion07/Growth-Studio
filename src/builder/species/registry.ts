@@ -35,6 +35,7 @@ import { build as variegatedYucca } from './succulents/variegated-yucca';
 import { build as blueSedum } from './succulents/blue-sedum';
 import { build as foxtailAgave } from './succulents/foxtail-agave';
 import { build as agave } from './succulents/agave';
+import { build as blueAgave } from './succulents/blue-agave';
 import { build as banana } from './tropicals/banana';
 import { build as elephantEar } from './tropicals/elephant-ear';
 import { build as ajuga } from './groundcover/ajuga';
@@ -124,6 +125,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'blue-sedum': blueSedum,
   'foxtail-agave': foxtailAgave,
   'agave': agave,
+  'blue-agave': blueAgave,
   'banana': banana,
   'elephant-ear': elephantEar,
   'ajuga': ajuga,

@@ -25,8 +25,8 @@ import { catalogMaterial, pbrMaterial, plainMaterial } from './materials';
  *   Scuppers    a 1 in copper pipe (1 1/4 in outside) centered low on the front of each outer pillar, 18 1/2 in up,
  *               standing out 5 1/2 in and tipped down a little, pouring a rope of water into the pebbles.
  *   Bowls       a 23 in x 9 in bowl planter centered on each pillar top: a verdigris-teal band on the upper shoulder and
- *               rim over a dark bronze body, planted with an Agave 'Blue Glow' (the catalog's) kept about 14 in across,
- *               in gray gravel top dressing.
+ *               rim over a dark bronze body, planted with a blue agave (Agave tequilana 'Weber Azul', the catalog's
+ *               blue-agave) kept about 14 in across, in gray gravel top dressing. The bowls are an option.
  *
  * Local space: x along the feature, +z out of the front, y up from the paving; the footprint is centered on the basin.
  */
@@ -329,8 +329,8 @@ const BOWL_PROFILE: [number, number][] = [
 ];
 /** Index of the rim's top in BOWL_PROFILE. */
 const BOWL_RIM = 12;
-/** The bowl's agave, as a scale on Agave 'Blue Glow''s mature 2 x 3 ft: about 14 in across and 10 in tall. */
-const BOWL_AGAVE_SIZE = 0.42;
+/** The bowl's blue agave, as a scale on its mature 5 x 6 ft: about 14 in across and 12 in tall. */
+const BOWL_AGAVE_SIZE = 0.2;
 /** Soil (and top dressing) level inside the bowl, inches above its foot. */
 const BOWL_SOIL = 7.9;
 
@@ -418,8 +418,8 @@ export function patinaBowl(sink: FountainSink, seed: string, x: number, y: numbe
     g.translate(x + Math.cos(a) * rr, soilY + s * 0.12 + r() * 0.1 * IN, z + Math.sin(a) * rr);
     sink.add(tones[Math.floor(r() * tones.length)], g);
   }
-  // Agave 'Blue Glow' as in the photos: a full rosette about 14 in across and 10 in tall, held there by the bowl.
-  if (planted) sink.plant('agave', x, soilY - 0.01, z, BOWL_AGAVE_SIZE);
+  // Blue agave as in the photos: a full young rosette about 14 in across, held there by the bowl.
+  if (planted) sink.plant('blue-agave', x, soilY - 0.01, z, BOWL_AGAVE_SIZE);
 }
 
 /** The three-pillar water feature, built into `sink` in local space (front +z). */
