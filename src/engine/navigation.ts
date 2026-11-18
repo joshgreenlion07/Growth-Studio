@@ -23,6 +23,7 @@ import * as THREE from 'three';
  *   Y            material pointer  P
  *   RS click     lock its material L
  *   Menu         back to start     Home (walk / fly)
+ *   View         use what you aim at  G   (open / close a door or lid, switch a fire, water or light)
  *   D-pad ← →    pick a quick tool  , .   (every mode; see app/quicktools.ts)
  *   D-pad ↑ ↓    use it             = -   (hold ↓ or - to clear)
  *
@@ -120,6 +121,8 @@ export interface NavHost {
   togglePlantLabels(): void;
   /** D-pad for the quick tools: left / right pick one, up / down use it; `held` once ↓ has been held QUICK_HOLD_MS. */
   quick(dir: QuickDir, held: boolean): void;
+  /** Use (open / switch) what the view is on: the controller's View button or G. */
+  use(): void;
 }
 
 export class Navigation {
@@ -177,6 +180,10 @@ export class Navigation {
       if (k === 'm') { this.host.toggleMeasure(); return; }
       if (k === 'p') { this.host.togglePointer(); return; }
       if (k === 'l') { this.host.togglePointLock(); return; }
+      if (k === 'g') {
+        if (viewHasKeys(e)) this.host.use();
+        return;
+      }
       if (k === 'n') {
         if (viewHasKeys(e)) this.host.togglePlantLabels();
         return;
@@ -355,6 +362,8 @@ export class Navigation {
       if (tapped(BTN.RS)) this.host.togglePointLock();
       // Menu (Start) goes home: the first saved view, or back to the start point in first person.
       if (tapped(BTN.MENU)) this.host.home();
+      // View (the two-squares button): use what the view is on, in every mode.
+      if (tapped(BTN.VIEW)) this.host.use();
       if (first && tapped(BTN.A)) this.host.toggleFly();
       // D-pad, in every mode: the quick tools. ← → pick a tool, ↑ ↓ use it, ↓ held clears.
       if (tapped(BTN.LEFT)) this.host.quick('left', false);

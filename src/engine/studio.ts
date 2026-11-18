@@ -6,6 +6,7 @@ import { buildSceneAsync, hardscapeOnlyChange, type SceneBuild } from '../builde
 import { ModelAssets, type AssetKind } from '../builder/models';
 import { WATER_LEVEL, setGroundTextureUnits } from '../builder/ground';
 import { setFlames } from '../builder/features';
+import type { FeatureAction } from '../builder/actions';
 import { disposeMaterialCache } from '../builder/materials';
 import { GLOBAL } from './foliage';
 import { PostPipeline, type LensSettings, type Quality } from './post';
@@ -176,6 +177,16 @@ export class Studio {
   onPlantLabelsChanged: (on: boolean) => void = () => {};
   /** A controller D-pad press for the quick tools (left / right pick the tool, up / down act; `held` after a long press). */
   onQuick: (dir: QuickDir, held: boolean) => void = () => {};
+  /** The controller's View button or G: use (open / switch) what the view is on. */
+  onUse: () => void = () => {};
+  /** Something was used by hand (a door opened, a light switched): the item, the action and its new state. */
+  onAction: (a: FeatureAction) => void = () => {};
+  /** The Hand quick tool is picked: a click on something that can be used uses it instead of picking it. */
+  handActive = false;
+  /** States set by hand, kept across rebuilds while the plan still asks for what it did when they were set. */
+  private handState = new Map<string, { on: boolean; base: boolean }>();
+  private handMoving = false;
+  private hoverAt = 0;
   private viewIndex = 0;
   private navMode: NavMode = 'orbit';
   onNavModeChanged: (mode: NavMode) => void = () => {};
@@ -394,6 +405,7 @@ export class Studio {
       // B or N: plant labels, apart from the measurements.
       togglePlantLabels: () => this.setPlantLabels(!this.measure.plants),
       quick: (dir, held) => this.onQuick(dir, held),
+      use: () => this.onUse(),
     });
     this.measure = new Measurements(container);
     this.tape = new Tape(this.measure);
@@ -412,10 +424,21 @@ export class Studio {
       this.invalidate();
     });
     this.renderer.domElement.addEventListener('wheel', () => this.invalidate(), { passive: true });
+    // With the Hand picked, the pointer turns to a hand over anything that can be used.
+    this.renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!this.handActive || e.buttons || performance.now() - this.hoverAt < 120) return;
+      this.hoverAt = performance.now();
+      this.renderer.domElement.style.cursor = this.actionAt({ x: e.clientX, y: e.clientY }) ? 'pointer' : '';
+    });
     window.addEventListener('keydown', this.onKey);
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) {
         this.focusAt(e.clientX, e.clientY);
+        // With the Hand picked, a click on a door, lid, fire, water or light uses it.
+        if (this.handActive && this.useAction(0, { x: e.clientX, y: e.clientY })) {
+          down = null;
+          return;
+        }
         this.onPick(this.pickAt(e.clientX, e.clientY));
       }
       down = null;
@@ -750,6 +773,7 @@ export class Studio {
       this.yardTop = 20;
     }
     this.build = next;
+    this.reapplyHand(next);
     this.builtPlan = copy;
     this.focusSurfaces = next.surfaces.filter((o) => !o.userData?.plantId);
     this.shadowDirty = true;
@@ -943,7 +967,7 @@ export class Studio {
     // Night accents.
     if (this.build) {
       const n = s.night > 0 ? Math.min(1, 0.25 + s.night) : s.sunElevation < 2 ? 0.25 : 0;
-      for (const m of this.build.glow) m.emissiveIntensity = n * (m.color.r > 0.5 ? 7 : 2.4);
+      for (const m of this.build.glow) m.emissiveIntensity = m.userData.off ? 0 : n * (m.color.r > 0.5 ? 7 : 2.4);
       setFlames(this.build.features, s.sunElevation < 4 ? Math.min(1, 0.4 + s.night) : 0);
       this.pointLights.forEach((p) => (p.intensity = (p.userData.base ?? 0) * n));
       this.landLights.setGain(n);
@@ -995,7 +1019,8 @@ export class Studio {
   }
 
   private assignNightLights() {
-    const lights = this.build?.nightLights ?? [];
+    // Lights switched off by hand give up their place in the pool.
+    const lights = (this.build?.nightLights ?? []).filter((l) => !l.off);
     this.pointLights.forEach((p, i) => {
       const l = lights[i];
       // Unused lights stay in the scene, dark (see the constructor).
@@ -1011,7 +1036,7 @@ export class Studio {
       p.userData.base = l.intensity;
       p.userData.flicker = l.flicker;
     });
-    this.landLights.set(this.build?.landLights ?? []);
+    this.landLights.set((this.build?.landLights ?? []).filter((l) => !l.off));
     this.updateSky(false);
   }
 
@@ -1122,6 +1147,93 @@ export class Studio {
     else window.setTimeout(run, 200);
   }
   private prepared: SceneBuild | null = null;
+
+  /* -------------------------------------------------------------- */
+  /* Hand: use doors, lids, fires, water and lights (builder/actions.ts) */
+
+  /**
+   * What the center of the view (or a screen point) is on that can be used by hand: of the actions of the feature
+   * hit, the one with an anchor nearest the hit point. Null when the view is not on such a feature.
+   */
+  actionAt(client?: { x: number; y: number }): FeatureAction | null {
+    if (!this.build || !this.build.features.actions.length) return null;
+    const ndc = client ? this.clientNdc(client.x, client.y) : this.v2.set(0, 0);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    // Only what is drawn: a spa's cover is built both open and closed, and the hidden one must not catch the aim.
+    const shown = (o: THREE.Object3D | null) => {
+      for (; o; o = o.parent) if (!o.visible) return false;
+      return true;
+    };
+    const hit = this.raycaster.intersectObjects(this.build.surfaces, true).find((h) => shown(h.object));
+    if (!hit || hit.distance > 40) return null;
+    let id: string | null = null;
+    for (let o: THREE.Object3D | null = hit.object; o && !id; o = o.parent) if (typeof o.userData?.itemId === 'string') id = o.userData.itemId;
+    if (!id) return null;
+    let best: FeatureAction | null = null, bestD = Infinity;
+    const w = new THREE.Vector3();
+    for (const a of this.build.features.actions) {
+      if (a.itemId !== id) continue;
+      for (const an of a.anchors) {
+        const d = an.getWorldPosition(w).distanceToSquared(hit.point);
+        if (d < bestD) { bestD = d; best = a; }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Use what the view (or a click) is on: dir 1 opens / turns on, -1 closes / turns off, 0 switches it. Returns the
+   * action and whether it changed, or null when there is nothing there to use.
+   */
+  useAction(dir: 1 | -1 | 0, client?: { x: number; y: number }): { action: FeatureAction; changed: boolean } | null {
+    const a = this.actionAt(client);
+    if (!a) return null;
+    const next = dir === 0 ? !a.on : dir > 0;
+    if (next === a.on) return { action: a, changed: false };
+    this.setAction(a, next, false);
+    this.nav.pulse(40, 0.25);
+    this.onAction(a);
+    return { action: a, changed: true };
+  }
+
+  /** The plan now asks for what was done by hand (it was saved to the plan): keep it as the action's own state. */
+  settleAction(a: FeatureAction) {
+    a.planOn = a.on;
+    this.handState.set(`${a.itemId}:${a.key}`, { on: a.on, base: a.on });
+  }
+
+  private setAction(a: FeatureAction, on: boolean, instant: boolean) {
+    a.on = on;
+    a.set(on, instant);
+    this.handState.set(`${a.itemId}:${a.key}`, { on, base: a.planOn });
+    if (a.tick && !instant) this.handMoving = true;
+    // Fires and lights change the light pool and the glow; doors move shadows.
+    this.assignNightLights();
+    this.shadowDirty = true;
+    this.invalidate();
+  }
+
+  /** After a rebuild: what was set by hand stays, unless the plan has since been changed for that same thing. */
+  private reapplyHand(build: SceneBuild) {
+    for (const a of build.features.actions) {
+      const k = `${a.itemId}:${a.key}`;
+      const st = this.handState.get(k);
+      if (!st) continue;
+      if (st.base !== a.planOn) {
+        this.handState.delete(k);
+        continue;
+      }
+      if (st.on !== a.on) {
+        a.on = st.on;
+        a.set(st.on, true);
+      }
+    }
+  }
+
+  private clientNdc(cx: number, cy: number): THREE.Vector2 {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+  }
 
   /** Where the center of the view meets the yard (the ground, paving, walls, water), or null for sky. */
   aimPoint(): THREE.Vector3 | null {
@@ -1550,6 +1662,7 @@ export class Studio {
     if (!this.state.motion || !this.build) return false;
     if (this.state.wind > 0.001 && (this.build.plantCount > 0 || this.build.root.getObjectByName('turf'))) return true;
     if (this.build.water.surfaces.length || this.build.fallMats.length) return true;
+    if (this.build.features.actions.some((a) => a.on && a.frame)) return true;
     return this.pointLights.some((p) => p.userData.flicker && p.intensity > 0) || this.build.features.flames.some((f) => f.visible);
   }
 
@@ -1564,6 +1677,14 @@ export class Studio {
     this.moveCamera(dt, now);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
+    // Something switched on by hand that moves by itself (a spa's bubbles and steam).
+    if (this.build && this.state.motion) for (const a of this.build.features.actions) if (a.on && a.frame) a.frame(dt);
+    // A door or lid swinging.
+    if (this.handMoving && this.build) {
+      this.handMoving = this.build.features.actions.map((a) => a.tick?.(dt) ?? false).some(Boolean);
+      this.dirty = true;
+      this.shadowDirty = true;
+    }
     const focusing = Math.abs(1 / Math.max(0.3, this.focusTarget) - this.focusInv) > this.focusInv * 0.002;
     if (this.camMoved && this.pointerOn) this.pointDue = true;
     // Also keep drawing until the view is back at full resolution with its depth of field after moving.

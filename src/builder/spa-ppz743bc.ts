@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { fbm, vnoise } from '../engine/noise';
 import { paint, textureSet, type PBRSet } from '../engine/textures';
 import { pbrMaterial, plainMaterial } from './materials';
+import { spaEffects, type SpaEffects } from './spa-effects';
 
 /*
  * Cal Spas Tropical Plus PPZ-743BC (Patio Plus series), drawn to Cal Spas' spec sheet and product page:
@@ -37,6 +38,23 @@ export interface SpaSink {
   light(x: number, y: number, z: number, color: string, intensity: number, distance: number): void;
   /** Height (meters) of the ground or deck under a local point, above the spa's base. Left out, level ground. */
   under?(x: number, z: number): number;
+  /**
+   * A part that can be shown or hidden by hand (the cover closed, the cover folded up): its own adder, and the object
+   * to show. Left out, only the cover state asked for is built, into `add`.
+   */
+  part?(key: string): { add(m: THREE.Material, g: THREE.BufferGeometry): void; object: THREE.Object3D };
+  /** A moving effect (the jets' bubbles and steam): added as it is, hidden until the jets run. */
+  effect?(m: THREE.Mesh): void;
+}
+
+/** What can be used by hand on the spa (builder/actions.ts). Anchors are local points in meters. */
+export interface SpaControls {
+  /** The cover: open (folded up on the lifter behind the spa) or closed on the spa. Null without a cover. */
+  cover: { open: boolean; set(open: boolean): void; anchors(open: boolean): [number, number, number][] } | null;
+  /** The jets: bubbles on the water and steam off it while the cover is open. */
+  jets: { set(on: boolean): void; frame(dt: number): void; anchors: [number, number, number][] };
+  /** The spa light and its glow in the water (the night light itself is the caller's). */
+  lights: { set(on: boolean): void; anchors: [number, number, number][] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -542,8 +560,11 @@ function basinField(edge: PathPt[]): Basin {
 /* Builder                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Builds the spa into `sink` (W x D footprint in meters, 84 in square). Returns the materials that glow at night. */
-export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: SpaSink): THREE.MeshStandardMaterial[] {
+/**
+ * Builds the spa into `sink` (W x D footprint in meters, 84 in square). Returns the materials that glow at night and the
+ * controls for using it by hand.
+ */
+export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: SpaSink): { glow: THREE.MeshStandardMaterial[]; controls: SpaControls } {
   const m = materials();
   // The spa is drawn at its catalog size; a footprint changed in the catalog scales it.
   const sx = W / (2 * HALF * IN), sz = D / (2 * HALF * IN);
@@ -563,7 +584,36 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
     const lift = Math.max(0, sink.under?.(STEP_CX * IN * sx, (CAB + 13) * IN * sz) ?? 0);
     steps(m, (mat, g) => add(mat, g.translate(0, lift, 0)));
   }
-  if (opt.cover !== 'off') coverAndLifter(m, add, opt.cover === 'open');
+  // The jets' bubbles and steam (made with the water below) show while the jets run and the cover is open.
+  let jetsOn = false;
+  let effects: SpaEffects | null = null;
+  // The cover: with parts to show and hide, both states are built (the closed cover and the folded one) and the hand
+  // switches between them; the lifter's brackets stay put.
+  let coverOpen = opt.cover !== 'closed';
+  let cover: SpaControls['cover'] = null;
+  if (opt.cover !== 'off' && sink.part) {
+    const scaled = (to: (m: THREE.Material, g: THREE.BufferGeometry) => void) => (mat: THREE.Material, g: THREE.BufferGeometry) => {
+      if (sx !== 1 || sz !== 1) g.scale(sx, 1, sz);
+      to(mat, g);
+    };
+    const up = sink.part('cover-open'), down = sink.part('cover-closed');
+    coverAndLifter(m, scaled(up.add), true, add);
+    coverAndLifter(m, scaled(down.add), false, null);
+    const pts = (list: [number, number, number][]): [number, number, number][] => list.map(([x, y, z]) => [x * IN * sx, y * IN, z * IN * sz]);
+    cover = {
+      open: coverOpen,
+      set(open) {
+        coverOpen = open;
+        up.object.visible = open;
+        down.object.visible = !open;
+        effects?.show(jetsOn && open);
+      },
+      anchors: (open) => open
+        ? pts([[0, H + 18, -46], [0, H + 36.5, -46], [-30, H + 18, -46], [30, H + 18, -46]])
+        : pts([-28, 0, 28].flatMap((x) => [-28, 0, 28].map((z): [number, number, number] => [x, H + 4.5, z]))),
+    };
+    cover.set(coverOpen);
+  } else if (opt.cover !== 'off') coverAndLifter(m, add, opt.cover === 'open');
 
   // Water, a little below the lip, glowing from the spa light at night: a fan from the middle out to the opening's edge.
   const wp = squarePath(OPEN - 0.05, OPEN_R, NS, NA);
@@ -578,10 +628,32 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
   water.setIndex(widx);
   water.computeVertexNormals();
   if (sx !== 1 || sz !== 1) water.scale(sx, 1, sz);
+  // The jets' bubbles and steam, on the water.
+  effects = sink.effect ? spaEffects(water, new THREE.Vector3(0, wy, 0), OPEN * IN * Math.min(sx, sz)) : null;
+  for (const e of effects?.meshes ?? []) sink.effect!(e);
   sink.water(m.water, water);
   // The 5 in spa light, low in the footwell: lights the shell and the water from inside.
   sink.light(0, (H - 24) * IN, -10 * IN * sz, LED, 1.9, 3.2);
-  return [m.water, m.led];
+  const ring = (r: number, y: number) => Array.from({ length: 8 }, (_, k): [number, number, number] => [Math.cos((k * Math.PI) / 4) * r * IN * sx, y * IN, Math.sin((k * Math.PI) / 4) * r * IN * sz]);
+  const controls: SpaControls = {
+    cover,
+    jets: {
+      set(on) {
+        jetsOn = on;
+        effects?.show(on && coverOpen);
+      },
+      frame: (dt) => effects?.frame(dt),
+      anchors: ring(27, H - 16),
+    },
+    lights: {
+      set(on) {
+        m.water.userData.off = !on;
+        m.led.userData.off = !on;
+      },
+      anchors: [[0, (H - FLOOR) * IN, 0], [0, (H - 24) * IN, -10 * IN * sz], [0, (H - 26) * IN, 10 * IN * sz]],
+    },
+  };
+  return { glow: [m.water, m.led], controls };
 }
 
 /** The shell's lip: inner round-over, flat deck, outer bullnose and the skirt that dips over the cabinet corners. */
@@ -880,13 +952,16 @@ function steps(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => voi
   const bw = 21;
   add(m.riser, boxUVm(boxAt(bw, topY - lowY - 0.9, d1 - 1.4, cx - w / 2 + 0.8 + bw / 2, lowY - 0.1, back + (d1 - 1.4) / 2)));
   add(m.riser, boxUVm(boxAt(1.2, topY - lowY - 0.9, 3, cx + w / 2 - 1.4, lowY - 0.1, back + 1.5)));
+  // The top tread's front right corner stands on a leg on the lower tread, as in the photo (without it the tread's
+  // open right part looked broken, floating over the lower step).
+  add(m.riser, boxUVm(boxAt(1.6, topY - lowY - 0.9, 1.8, cx + w / 2 - 1.6, lowY - 0.1, back + d1 - 1.6)));
   tread(d1, back, topY);
   // Base frame round the bottom.
   add(m.stepFrame, boxUVm(boxAt(w + 0.2, 1.8, d1 + d2, cx, 0, back + (d1 + d2) / 2)));
 }
 
 /** The cover, closed on the spa or folded and stood up behind it on the lifter, and the lifter's brackets, arms and bar. */
-function coverAndLifter(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => void, open: boolean) {
+function coverAndLifter(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => void, open: boolean, brackets: ((m: THREE.Material, g: THREE.BufferGeometry) => void) | null = add) {
   const gap = 0.6;
   // One half: plan outline in (x, d), d from the hinge out to the edge, extruded to a unit thickness.
   const halfGeo = () => {
@@ -950,10 +1025,12 @@ function coverAndLifter(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometr
   // Lifter: a bracket on each side near the back, an arm from its pivot up to the bar, and the bar across.
   const ax = CAB + 1.6;
   for (const sx of [-1, 1]) {
-    // An L bracket on the side, reaching back past the corner to the pivot.
-    add(m.lifter, boxAt(0.45, 4.5, 9, sx * (CAB + 0.5), PIVOT[1] - 2.6, PIVOT[0] + 3.4));
-    add(m.lifter, boxAt(0.45, 7.5, 2.4, sx * (CAB + 0.5), PIVOT[1] - 4.8, PIVOT[0]));
-    add(m.lifter, tube(new THREE.Vector3(sx * (CAB + 0.5), PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * (ax + 0.8), PIVOT[1], PIVOT[0]), 1.0, 16));
+    // An L bracket on the side, reaching back past the corner to the pivot (it stays put when the cover moves).
+    if (brackets) {
+      brackets(m.lifter, boxAt(0.45, 4.5, 9, sx * (CAB + 0.5), PIVOT[1] - 2.6, PIVOT[0] + 3.4));
+      brackets(m.lifter, boxAt(0.45, 7.5, 2.4, sx * (CAB + 0.5), PIVOT[1] - 4.8, PIVOT[0]));
+      brackets(m.lifter, tube(new THREE.Vector3(sx * (CAB + 0.5), PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * (ax + 0.8), PIVOT[1], PIVOT[0]), 1.0, 16));
+    }
     add(m.lifter, tube(new THREE.Vector3(sx * ax, PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * ax, bar[1], bar[0]), 0.6, 10));
   }
   add(m.lifter, tube(new THREE.Vector3(-ax - 0.5, bar[1], bar[0]), new THREE.Vector3(ax + 0.5, bar[1], bar[0]), 0.62, 12));

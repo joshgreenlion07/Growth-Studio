@@ -34,6 +34,8 @@ export interface LandLight {
   kelvin: number;
   /** Reach in meters, past which the light is dropped (it is faded out before). */
   range: number;
+  /** Switched off by hand in the 3D view (builder/actions.ts): left out of the pool. */
+  off?: boolean;
 }
 
 const STRIDE = 12; // three vec4 per light

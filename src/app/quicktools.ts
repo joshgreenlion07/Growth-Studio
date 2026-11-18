@@ -3,6 +3,7 @@ import { QUICK_HOLD_MS, viewHasKeys, type QuickDir } from '../engine/navigation'
 import { MAX_MARKS } from '../engine/marks';
 import { BUILD_STAGES, type BuildStage } from '../builder/construction';
 import { MOODS, type Mood } from '../engine/sky';
+import type { FeatureAction } from '../builder/actions';
 
 /**
  * Quick tools: the controller's D-pad in every camera mode (and keys for the same).
@@ -95,6 +96,23 @@ const TOOLS: QuickTool[] = [
     },
   },
   {
+    // Use things by hand: open and close doors and lids, switch fires, water and lights (builder/actions.ts).
+    // A click works too while the Hand is picked, and the View button or G uses what you aim at with any tool.
+    id: 'hand',
+    name: 'Hand',
+    up: 'Open / turn on',
+    down: 'Close / turn off',
+    aims: true,
+    status: (s) => {
+      const a = s.actionAt();
+      return a ? handText(a) : HAND_NONE;
+    },
+    act(dir, s) {
+      const r = s.useAction(dir);
+      return r ? handText(r.action) : HAND_NONE;
+    },
+  },
+  {
     id: 'light',
     name: 'Light',
     up: 'Later',
@@ -131,6 +149,10 @@ const TOOLS: QuickTool[] = [
   },
 ];
 
+/** What the Hand says about an action: 'Sauna door: Open'. */
+const handText = (a: FeatureAction) => `${a.label}: ${a.words[a.on ? 0 : 1]}`;
+const HAND_NONE = 'Aim at a door, lid, fire, water or light';
+
 const STORE_KEY = 'growth-studio.quick-tool';
 /** How long the chip stays after the last change, ms. */
 const SHOW_MS = 2000;
@@ -139,6 +161,8 @@ export class QuickTools {
   private index = 0;
   private chip: HTMLDivElement;
   private aim: HTMLDivElement;
+  private aimLabel: HTMLSpanElement;
+  private aimTimer = 0;
   private hideTimer = 0;
   /** The aim cross shows only once the tools have been used this session (not just because one was remembered). */
   private used = false;
@@ -161,6 +185,8 @@ export class QuickTools {
     this.aim = document.createElement('div');
     this.aim.className = 'quick-aim';
     this.aim.setAttribute('aria-hidden', 'true');
+    this.aimLabel = document.createElement('span');
+    this.aim.append(this.aimLabel);
     scene.append(this.chip, this.aim);
     this.keys();
   }
@@ -184,7 +210,10 @@ export class QuickTools {
         /* not kept */
       }
       n.picked?.(s);
+      s.handActive = n.id === 'hand';
+      if (!s.handActive) s.renderer.domElement.style.cursor = '';
       this.show(n.status(s));
+      this.watchAim();
       return;
     }
     if (held) {
@@ -194,6 +223,40 @@ export class QuickTools {
     const text = t.act(dir === 'up' ? 1 : -1, s, this.host);
     this.landing = t.id === 'mark' && dir === 'up' && text === 'Thrown';
     this.show(text);
+  }
+
+  /** The View button or G: use what the view is on, whatever tool is picked. */
+  use() {
+    const s = this.host.studio();
+    if (!s || !this.host.enabled()) return;
+    const r = s.useAction(0);
+    this.flash(r ? handText(r.action) : HAND_NONE);
+  }
+
+  /** While the Hand is picked, name what the aim cross is on, a few times a second. */
+  private watchAim() {
+    clearInterval(this.aimTimer);
+    this.aimLabel.textContent = '';
+    if (TOOLS[this.index].id !== 'hand') return;
+    this.aimTimer = window.setInterval(() => {
+      const s = this.host.studio();
+      if (!s || TOOLS[this.index].id !== 'hand') return this.watchAim();
+      const a = s.actionAt();
+      const text = a ? handText(a) : '';
+      if (this.aimLabel.textContent !== text) this.aimLabel.textContent = text;
+    }, 200);
+  }
+
+  /** The chip with one line only (the View button / G, which work with any tool). */
+  private flash(state: string) {
+    const st = document.createElement('div');
+    st.className = 'qh-state';
+    st.textContent = state;
+    this.chip.replaceChildren(st);
+    this.place();
+    this.chip.classList.add('on');
+    clearTimeout(this.hideTimer);
+    this.hideTimer = window.setTimeout(() => this.chip.classList.remove('on'), SHOW_MS);
   }
 
   /** The marks changed: after a throw, show the count as it is once the clod has landed. */

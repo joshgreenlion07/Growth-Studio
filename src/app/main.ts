@@ -158,6 +158,21 @@ let quick: QuickTools | null = null;
 function initQuickTools(s: Studio) {
   quick = new QuickTools({ studio: () => studio, setStage: (st) => setStage(st), setMood, setYears, enabled: () => !libraryOpen() }, $('#scene'));
   s.onQuick = (dir, held) => quick?.press(dir, held);
+  s.onUse = () => quick?.use();
+  // Used by hand in the 3D view: a sauna's door or lights are its placement options, so the plan keeps them (here,
+  // and in Area Planner through the `action` message, which names the option).
+  s.onAction = (a) => {
+    if (EMBED) {
+      if (embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'action', id: a.itemId, key: a.key, on: a.on, ...(a.option ? { option: a.option } : {}) }, embedOrigin);
+      return;
+    }
+    const f = a.option ? plan.features.find((x) => x.id === a.itemId) : null;
+    if (f && a.option) {
+      f.options = { ...f.options, [a.option]: a.on };
+      s.settleAction(a);
+      if (editor.selected?.list === 'features' && editor.selected.id === f.id) renderInspector();
+    }
+  };
   // Plant labels: their own switch (B, N, or the Plants button), apart from the measurements, kept between visits.
   const btn = $<HTMLButtonElement>('#btn-plants');
   btn.addEventListener('click', () => s.setPlantLabels(!s.plantLabels));
