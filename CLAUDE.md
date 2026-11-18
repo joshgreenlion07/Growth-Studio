@@ -14,7 +14,8 @@ finished-work photos in `reference/green-lion-style/`.
   (`foliage.ts`), water and planar reflections (`water.ts`), camera look with
   focus blur, bloom and grade (`post.ts`), generated camera views (`views.ts`),
   controller, keyboard and first-person walk / fly movement (`navigation.ts`),
-  the measurements overlay (`measure.ts`), and the runtime that ties it
+  the measurements overlay and its separate plant labels (`measure.ts`), the quick tools'
+  dirt marks and tape measure (`marks.ts`; the D-pad tool table is `app/quicktools.ts`), and the runtime that ties it
   together (`studio.ts`: frame loop on the display's frame times, render on
   demand, build-then-warm-then-swap on new plans, off-screen stills; see
   "Smooth rendering" in the README before changing any of it). Full screen (button or F) switches to walk mode and
@@ -29,6 +30,10 @@ finished-work photos in `reference/green-lion-style/`.
   `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and
   keeps a generic builder per plant form as the fallback for a new catalog
   plant that has no file yet.
+  Composite decks (a hardscape zone in a maker's deck board, `siteplan/decking.ts`)
+  are built board by board in `deck.ts` from the layout in `deck-layout.ts`:
+  picture frame, straight, diagonal or chevron field, openings for a hot tub,
+  fascia; features on a deck stand on its boards (`onDecks`).
   `construction.ts` builds the build stages (demo, excavate, trench,
   backfill, base, bedding) from the plan's paving, walls and
   `plan.utilities`: pits cut from a distance field (marching squares; the
@@ -59,7 +64,8 @@ finished-work photos in `reference/green-lion-style/`.
   `engine/surfaces.ts`. Manufacturer photos (Belgard, Basalite) are color and
   pattern references only; do not embed them. The one exception is the material
   panel (owner's decision, 2026-11-16): it shows the maker's swatch photo loaded
-  live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`); the
+  live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`,
+  Trex deck swatches in `siteplan/decking.ts`); the
   photo is never copied into the app or used as a texture.
 - Use only real Green Lion content. Plant sizes and the catalog are starting
   values until Green Lion's own plant and material list replaces them. Never
