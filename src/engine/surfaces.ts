@@ -1354,10 +1354,11 @@ function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], 
  * One slab on its own, as a stepping stone: the slab's face filling the tile edge to edge (the tile is the slab), with
  * its small chamfer all round and no joint, in the line's colors on the same calibration as its paving, softly clouded
  * with a fine sand grain. `wIn` x `dIn` is the slab (inches, along u and v); a long slab's tile is its long side, and it
- * takes the part of it from u = 0 and (the canvas being flipped onto the mesh) from v = 1 down.
+ * takes the part of it from u = 0 and (the canvas being flipped onto the mesh) from v = 1 down. A one-slab paver pad
+ * (builder/hardscape.ts) uses a square one, any side.
  */
 export function slabSet(spec: MaterialSpec, wIn = 24, dIn = wIn): PBRSet {
-  const key = wIn === 24 && dIn === 24 ? `slab:${spec.id}` : `slab:${spec.id}:${wIn}x${dIn}`;
+  const key = wIn === 24 && dIn === 24 ? `slab:${spec.id}` : wIn === dIn ? `slab:${spec.id}:${wIn}` : `slab:${spec.id}:${wIn}x${dIn}`;
   return textureSet(key, () => {
     const colors = pal(spec);
     const n = colors.length;

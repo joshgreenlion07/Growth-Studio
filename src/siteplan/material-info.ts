@@ -156,14 +156,18 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
       return { group: 'Decking', about: m.id === 'wood-deck' ? 'A cedar deck: warm natural wood boards on a wood frame.' : 'A composite deck: boards that look like wood and need no staining.', spec: ['Boards on joists at 16 in on center', 'Hidden fasteners', 'Frame on concrete footings'] };
     case 'paver': {
       const porcelain = m.group === 'Porcelain';
-      const about = porcelain
+      const about = m.padSlab
+        ? 'A large-format cast concrete slab poured or cast to the size of the pad: one solid slab with no joints. Used where no maker sells a paver that size.'
+        : porcelain
         ? 'Porcelain pavers: dense, stain-resistant and cool underfoot, with a crisp modern look.'
         : m.use === 'border'
           ? 'A row of pavers set along the edge of a paved area, framing it and holding the field pavers in place.'
           : m.maker
             ? `${m.maker} ${m.line} concrete pavers.`
             : 'Concrete pavers: individual units set on sand, so they flex with the ground instead of cracking.';
-      const spec = porcelain
+      const spec = m.padSlab
+        ? ['2 in cast concrete, smooth face', 'Set on 4 in compacted base rock and 1 in bedding sand', 'One slab, no joints']
+        : porcelain
         ? ['2 cm porcelain', 'Set in sand over 4 to 6 in compacted base rock', 'Or on pedestals over a slab']
         : ['4 to 6 in compacted base rock', '1 in bedding sand', 'Plate-compacted, joints filled with polymeric sand', m.use === 'border' ? 'Edge restraint behind the border' : 'Edge restraint on open sides'];
       return { group: porcelain ? 'Porcelain' : 'Pavers', about, spec };

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { SceneBuild } from '../builder/build';
+import type { BuildStage } from '../builder/construction';
 import { stepCount } from '../builder/hardscape';
 import { builtLine } from '../builder/linepath';
 import { featureById, materialById, plantById, sizeAt } from '../siteplan/catalog';
 import { centroid, fmtFeet, signedArea } from '../siteplan/geometry';
-import type { SitePlan, Vec2 } from '../siteplan/types';
+import type { SitePlan, Vec2, Zone } from '../siteplan/types';
 import { OverlayObstacles, insideView } from './overlay';
 
 /**
@@ -48,6 +49,12 @@ export type MeasureMode = 'off' | 'totals' | 'edges';
 export const MEASURE_MODES: MeasureMode[] = ['off', 'totals', 'edges'];
 const LIFT = 0.09; // above hardscape so the lines sit on the surface
 const sqft = (m2: number) => Math.round(m2 * 10.7639).toLocaleString('en-US');
+
+/** A bed of rock (river rock, pebble, cobble, decomposed granite or gravel), not mulch: it keeps its label while digging. */
+function rockBed(z: Zone): boolean {
+  const r = materialById.get(z.catalogId)?.recipe;
+  return z.kind === 'bed' && (r === 'riverRock' || r === 'blackPebble' || r === 'cobble' || r === 'dg');
+}
 
 export class Measurements {
   readonly group = new THREE.Group();
@@ -144,6 +151,12 @@ export class Measurements {
   }
 
   /** Rebuild every line and label from the plan and the built scene (call after a rebuild or growth change). */
+  /**
+   * The build stage shown. Before Finished (the dig stages) only what matters to the dig keeps its label: Melville
+   * curb, rock beds, the person's own ruler dimensions, and plants that were already there.
+   */
+  stage: BuildStage = 'finished';
+
   rebuild(plan: SitePlan, build: SceneBuild, years: number) {
     this.clear();
     const gy = (p: Vec2) => Math.max(0, build.gm.height(p));
@@ -155,6 +168,7 @@ export class Measurements {
   /** Hand-placed plants (not mass-planted fill): name and size at the current growth year. */
   private plantLabels(plan: SitePlan, years: number, gy: (p: Vec2) => number) {
     for (const p of plan.plants) {
+      if (this.stage !== 'finished' && !p.existing) continue;
       const spec = plantById.get(p.catalogId);
       if (!spec) continue;
       const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
@@ -166,16 +180,18 @@ export class Measurements {
 
   /** Areas, edges, walls and runs, structures, features and the person's own rulers. */
   private measurements(plan: SitePlan, build: SceneBuild, gy: (p: Vec2) => number) {
+    const dig = this.stage !== 'finished';
 
     // Dimensions drawn with the ruler: a line with end ticks, named and measured. Shown in both views.
     for (const r of plan.rulers ?? []) this.ruler(r.a, r.b, r.label, gy);
 
     // Lot lines, dashed (every-edge view only).
-    if (this.detail && plan.site.boundary.length > 2) this.outline(plan.site.boundary, true, gy, 'lot');
+    if (this.detail && !dig && plan.site.boundary.length > 2) this.outline(plan.site.boundary, true, gy, 'lot');
 
     // Surfaces: edge lengths and area.
     for (const z of plan.zones) {
       if (z.polygon.length < 3) continue;
+      if (dig && !rockBed(z)) continue;
       this.outline(z.polygon, true, gy, 'edge');
       const c = centroid(z.polygon);
       const name = materialById.get(z.catalogId)?.name.split(',')[0] ?? (z.kind === 'turf' ? 'Lawn' : z.kind === 'bed' ? 'Planting bed' : 'Hardscape');
@@ -185,7 +201,7 @@ export class Measurements {
     }
 
     // Water.
-    for (const w of plan.water) {
+    for (const w of dig ? [] : plan.water) {
       if (w.polygon && w.polygon.length > 2) {
         // A pool set in a raised area is outlined and labeled at its own level.
         const lift = build.pools.byId.get(w.id)?.lift ?? 0;
@@ -201,6 +217,7 @@ export class Measurements {
     // Walls, fences, edging: the total length of each run (walls and fences with their height),
     // and in the every-edge view each straight run as well.
     for (const l of plan.lines) {
+      if (dig && !(l.kind === 'edging' && materialById.get(l.catalogId)?.recipe === 'curb')) continue;
       // Curbs as built: on the seam they follow, which is where they are measured.
       const pts = builtLine(l, plan.zones);
       if (pts.length < 2) continue;
@@ -228,7 +245,7 @@ export class Measurements {
     }
 
     // Houses, garages, sheds, covers.
-    for (const s of plan.structures) {
+    for (const s of dig ? [] : plan.structures) {
       if (s.polygon.length < 3) continue;
       this.outline(s.polygon, true, gy, 'edge');
       const c = centroid(s.polygon);
@@ -238,7 +255,7 @@ export class Measurements {
 
     // Features: footprint from the catalog, height from the built model.
     const box = new THREE.Box3();
-    for (const f of plan.features) {
+    for (const f of dig ? [] : plan.features) {
       const spec = featureById.get(f.catalogId);
       const obj = build.root.getObjectByName(`feature-${f.id}`);
       if (!spec) continue;

@@ -297,6 +297,11 @@ export interface MaterialSpec {
   auto?: boolean;
   /** A real flagstone (FLAGSTONES): the stone it is split from, which sets its cleft face, and its thickness (in). */
   flag?: { stone: FlagStone; thicknessIn: number };
+  /**
+   * A generic large-format cast concrete slab, poured to any size: the look a one-slab pad takes when no maker sells a
+   * unit of its size (see siteplan/pads.ts). Offered for pads only; never in a paver area's own picker.
+   */
+  padSlab?: true;
   placeholder: true;
 }
 
@@ -820,6 +825,19 @@ for (const L of BASALITE_LINES) {
 }
 
 /*
+ * Large-format cast concrete slab: a generic slab poured or cast to the size of a one-slab pad (a 3 ft x 3 ft stepping
+ * pad, say), in the same six integral colors as Green Lion concrete. No maker sells a unit of such a size in the
+ * catalog, so this is the only look offered for a pad no real product fits (siteplan/pads.ts). Smooth face, 2 in thick.
+ */
+export const PAD_SLAB_LINE = 'Large-format slab';
+export const PAD_SLAB_PREFIX = 'pad-slab-';
+MATERIALS.push(...CONCRETE_COLORS.map((c): MaterialSpec => M({
+  id: `${PAD_SLAB_PREFIX}${c.id}`, name: `Large-format slab, ${c.name.toLowerCase()}`, use: 'hardscape', group: 'Pavers', recipe: 'paver',
+  palette: [c.palette[0], c.palette[1], c.palette[1], c.palette[1]], pattern: { kind: 'grid', sizes: [[36, 36]], joint: 0.15, face: 'smooth' }, thickness: 0.05,
+  maker: 'Green Lion', line: PAD_SLAB_LINE, shelf: 'Pavers', color: c.name, padSlab: true,
+})));
+
+/*
  * Paver edging: a single row of 6 x 9 pavers laid along a drawn line (a soldier course, or a sailor course), in any color
  * Belgard sells as a 6 x 9 unit where Green Lion orders (Belgard's Pacific Stockton region, read from belgard.com):
  * Dimensions Single Unit 6 x 9 x 2 3/8 in, and Antiqued Flat Top (its 6 x 9 border stone). Catalina Grana's border and
@@ -1012,6 +1030,7 @@ export const LEGACY_IDS: Record<string, string> = {
  * concrete, fences and everything else are always offered.
  */
 export const OFFERED_LINES = new Set<string>([
+  'Large-format slab',
   'Dimensions Slabs 24 x 24',
   'Premier Slab',
   'Catalina Grana',

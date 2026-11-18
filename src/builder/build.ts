@@ -474,9 +474,15 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     standing.object.visible = stage !== 'finished';
     root.add(standing.object);
   };
+  // Paving, walls, curbs and steps come in at Finished; fences stand through every stage (they are there
+  // before the work starts and stay up during it).
+  const showHard = () => {
+    hard.object.visible = true;
+    for (const c of hard.object.children) c.visible = stage === 'finished' || c.userData.lineKind === 'fence';
+  };
   const applyStage = () => {
     const fin = stage === 'finished';
-    hard.object.visible = fin;
+    showHard();
     for (const f of structs.floors) f.visible = fin;
     if (turf.object) turf.object.visible = fin;
     if (pebbles.object) pebbles.object.visible = fin;
@@ -533,7 +539,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       swap(surfaces, old.surfaces, hard.surfaces);
       swap(glow, old.glow, hard.glow);
       old.dispose();
-      hard.object.visible = stage === 'finished';
+      showHard();
       // The colors this replaced are no longer drawn: their paint jobs are dropped.
       textureDemand(build, root);
     },
