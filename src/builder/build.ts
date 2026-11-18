@@ -23,7 +23,7 @@ import { plantGround, planterPlants } from './decor/planters';
 import { coverCeiling } from './decor/patio';
 import { CEILING_KINDS } from '../siteplan/decor';
 import { poolSteps, type PoolLayout } from './pools';
-import { buildStructures } from './structures';
+import { buildStructures, COVER_FLOOR_TOP } from './structures';
 import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
 import { buildHumus, type HumusBuild } from './humus';
@@ -340,10 +340,13 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
   const standOn = onDecks(plan, gm.height);
   // Decor set on paving stands on its top too (paving is drawn its thickness above grade); decks are in standOn.
+  // Under a cover with no paving drawn, it stands on the cover's concrete floor.
   // Lighting fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
+  const coverIdx = plan.structures.filter((s) => s.kind === 'cover' && s.polygon.length >= 3).map((s) => new PolygonIndex(s.polygon));
   const pavingTop = (p: Vec2) => {
     const z = gm.zoneAt(p);
-    return z && z.kind === 'hardscape' && !isBoardDeck(z) ? zoneTop(z, plan.zones.indexOf(z)) : 0;
+    if (z && z.kind === 'hardscape' && !isBoardDeck(z)) return zoneTop(z, plan.zones.indexOf(z));
+    return coverIdx.some((c) => c.contains(p[0], p[1])) ? COVER_FLOOR_TOP : 0;
   };
   const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn));
   const models = buildModels(plan.models ?? [], standOn, assets);
@@ -468,6 +471,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const applyStage = () => {
     const fin = stage === 'finished';
     hard.object.visible = fin;
+    for (const f of structs.floors) f.visible = fin;
     if (turf.object) turf.object.visible = fin;
     if (pebbles.object) pebbles.object.visible = fin;
     if (humus.object) humus.object.visible = fin;

@@ -209,6 +209,7 @@ export function cleanPlan(input: unknown): CleanResult {
           : `Cover "${st.id}": walls needs one true or false per edge (${polygon.length}), so it is shown open on every side.`);
       }
     }
+    if (kind === 'cover' && typeof it.posts === 'boolean') st.posts = it.posts;
     plan.structures.push(st);
   }
 
