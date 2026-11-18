@@ -46,6 +46,23 @@ function pts(v: unknown, min: number, closedRun = false): Vec2[] | null {
   return out.length >= min ? out : null;
 }
 
+/** A deck zone's layout (see DeckLayout): only the known keys, in range. */
+function readDeck(d: Record<string, unknown>): NonNullable<Zone['deck']> {
+  const out: NonNullable<Zone['deck']> = {};
+  if (d.pattern === 'straight' || d.pattern === 'diagonal' || d.pattern === 'chevron') out.pattern = d.pattern;
+  if (d.angleDeg !== undefined && d.angleDeg !== null) out.angleDeg = num(d.angleDeg, 0, -360, 360);
+  if (d.boardIn !== undefined && d.boardIn !== null) out.boardIn = num(d.boardIn, 5.5, 2.5, 12);
+  if (typeof d.frame === 'boolean') out.frame = d.frame;
+  if (typeof d.divider === 'boolean') out.divider = d.divider;
+  if (typeof d.fascia === 'boolean') out.fascia = d.fascia;
+  if (d.seamOffset !== undefined && d.seamOffset !== null) out.seamOffset = num(d.seamOffset, 0, -30, 30);
+  if (Array.isArray(d.holes)) {
+    const hs = d.holes.map((h) => pts(h, 3)).filter((h): h is Vec2[] => !!h && area(h) > 0.01).slice(0, 20);
+    if (hs.length) out.holes = hs;
+  }
+  return out;
+}
+
 const arr = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object') : [];
 
@@ -202,6 +219,8 @@ export function cleanPlan(input: unknown): CleanResult {
       if (ly.bedding !== undefined && ly.bedding !== null) out.bedding = num(ly.bedding, 0.025, 0, 0.15);
       if (out.base !== undefined || out.bedding !== undefined) z.layers = out;
     }
+    const dk = it.deck as Record<string, unknown> | undefined;
+    if (kind === 'hardscape' && dk && typeof dk === 'object') z.deck = readDeck(dk);
     const bd = it.border as Record<string, unknown> | undefined;
     if (kind === 'hardscape' && bd && typeof bd === 'object') {
       z.border = { catalogId: pickMaterial(bd.catalogId, 'border', 'border-charcoal', warnings, 'Border'), width: num(bd.width, 0.2, 0.08, 0.6) };

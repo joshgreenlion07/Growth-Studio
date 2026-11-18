@@ -129,6 +129,14 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
         ? { group: 'Natural stone', about: 'Natural flagstone pieces set with wide gaps of decomposed granite: a relaxed, natural path or patio.', spec: ['1 1/2 to 2 in thick stones', 'Set in 2 to 3 in compacted DG', 'Gaps 1 to 3 in, filled with DG'] }
         : { group: 'Natural stone', about: 'Natural flagstone set tight in a mortar bed: a solid stone patio with irregular, hand-fit pieces.', spec: ['1 1/2 to 2 in thick stones', 'Mortar bed on a 4 in concrete slab', 'Joints grouted'] };
     case 'deck':
+      if (m.board) {
+        const b = m.board;
+        return {
+          group: 'Decking',
+          about: `${m.maker} ${m.line} composite deck boards${b.grain === 'streak' ? ', streaked in several tones like weathered wood' : ', one tone with an embossed wood grain'}. Built board by board: picture-frame border, field pattern and fascia as drawn.`,
+          spec: [`${b.thicknessIn} x ${b.widthIn} in boards, ${b.lengthsFt.join(', ')} ft`, `${b.gapIn === 0.1875 ? '3/16' : b.gapIn} in gaps, hidden fasteners`, `Fascia ${b.fasciaIn[0]} x ${b.fasciaIn[1]} in on the open sides`, 'Joists at 16 in on center (12 in for diagonal and chevron boards)'],
+        };
+      }
       return { group: 'Decking', about: m.id === 'wood-deck' ? 'A cedar deck: warm natural wood boards on a wood frame.' : 'A composite deck: boards that look like wood and need no staining.', spec: ['Boards on joists at 16 in on center', 'Hidden fasteners', 'Frame on concrete footings'] };
     case 'paver': {
       const porcelain = m.group === 'Porcelain';

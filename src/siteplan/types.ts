@@ -45,6 +45,31 @@ export interface Zone extends ItemBase {
    * layer (sand under pavers, fines under synthetic grass). Left out, the material's usual depths.
    */
   layers?: { base?: number; bedding?: number };
+  /**
+   * Hardscape in a maker's composite deck boards (see siteplan/decking.ts): how the boards are laid. The deck's height
+   * is `elevation` (top of the boards above grade; left out, 8 in). Left out, straight boards with a picture frame.
+   */
+  deck?: DeckLayout;
+}
+
+/** How a composite deck is laid (all optional). */
+export interface DeckLayout {
+  /** straight: boards along the deck. diagonal: at 45 degrees. chevron: two halves at 45 degrees meeting on a center seam. */
+  pattern?: 'straight' | 'diagonal' | 'chevron';
+  /** Direction of the boards (straight), or of the seam (diagonal, chevron: boards at 45 degrees to it), degrees from plan x toward plan y. Left out, the deck's longest side. */
+  angleDeg?: number;
+  /** Board face width, inches. Left out, the board's own (5 1/2 in). */
+  boardIn?: number;
+  /** Picture-frame border: one board along the outside edge and around each opening, mitered at the corners. Left out, true. */
+  frame?: boolean;
+  /** Chevron: a straight divider board along the seam. Left out, none (the halves meet board to board). */
+  divider?: boolean;
+  /** Chevron: the seam's distance from the middle of the deck, meters, across the seam. */
+  seamOffset?: number;
+  /** Fascia boards on the sides. Left out, true. */
+  fascia?: boolean;
+  /** Openings through the deck (a tree, an access hatch), framed like the edge. A hot tub placed on a deck is set into its own opening without being listed. */
+  holes?: Vec2[][];
 }
 
 /** steps: a flight of stairs whose top edge is the line, going down away from a raised zone. */
