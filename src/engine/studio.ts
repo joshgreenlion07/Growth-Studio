@@ -1328,6 +1328,8 @@ export class Studio {
   setStage(stage: BuildStage) {
     if (stage === this.stage) return;
     this.stage = stage;
+    // Fewer measurement labels while digging (see Measurements.stage).
+    this.measure.stage = stage;
     this.pending?.setStage(stage);
     this.invalidate();
     if (!this.build) return;
@@ -1339,6 +1341,7 @@ export class Studio {
     this.shadowDirty = true;
     this.stageLabels.set(this.build.construction.labels, stage);
     this.refreshCutaway();
+    if (this.plan && this.measure.visible) this.measure.rebuild(this.plan, this.build, this.state.years);
   }
 
   get cutawayOn(): boolean {

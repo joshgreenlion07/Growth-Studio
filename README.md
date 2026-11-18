@@ -321,6 +321,8 @@ Messages use `window.postMessage`:
   near side of a vertical plane through the point the camera looks at (in
   walk or fly, the ground ahead), draws the ground in section there for the
   current stage, and moves the camera to face the cut.
+  Fences stay up in every stage. Before Finished, measurement labels show only
+  Melville curb, rock beds, ruler dimensions and plants that were already there.
 - Controller (any "standard" pad, e.g. Xbox) and keys, in every camera mode:
   left stick move, right stick look, LT / RT zoom, LB / RB sink / rise, hold LS
   faster; X measurements (Off, Totals, Every edge; `M`); B plant labels (`N`, or

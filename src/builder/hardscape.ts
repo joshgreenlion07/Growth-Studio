@@ -618,7 +618,12 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
     group.add(new THREE.Mesh(lg, glowMat));
   }
 
-  for (const l of plan.lines) group.add(l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, plan.zones, height, geos));
+  for (const l of plan.lines) {
+    const o = l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, plan.zones, height, geos);
+    // The build stages keep fences standing (see applyStage in build.ts).
+    o.userData.lineKind = l.kind;
+    group.add(o);
+  }
 
   return {
     object: group,
