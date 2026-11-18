@@ -78,6 +78,7 @@ import { build as liriopeSilverySunproof } from './grasses/liriope-silvery-sunpr
 import { build as redYucca } from './succulents/red-yucca';
 import { build as echeveria } from './succulents/echeveria';
 import { build as primroseRed } from './perennials/primrose-red';
+import { build as gardeniaStandard } from './trees/gardenia-standard';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -162,4 +163,5 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'red-yucca': redYucca,
   'echeveria': echeveria,
   'primrose-red': primroseRed,
+  'gardenia-standard': gardeniaStandard,
 };
