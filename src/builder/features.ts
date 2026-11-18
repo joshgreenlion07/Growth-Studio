@@ -18,6 +18,8 @@ import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
+import { cascadeFall, type CascadeSink } from './cascadefall';
+import { featureSize } from '../siteplan/decor';
 import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
@@ -650,6 +652,43 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'pillarFountain': {
         pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
+        break;
+      }
+      case 'cascadeFall': {
+        // Twin cascade boulder waterfall (builder/cascadefall.ts): its river rock lies on its own shaped surface, and its
+        // fall lights are aimed beams, switched together by hand.
+        const a = (-f.rotationDeg * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+        const toLocal = (p: Vec2): [number, number] => {
+          const dx = p[0] - f.position[0], dz = p[1] - f.position[1];
+          return [dx * ca - dz * sa, dx * sa + dz * ca];
+        };
+        const beams: LandLight[] = [];
+        const glow1 = extraGlow.length, lights1 = lights.length;
+        const fallSink: CascadeSink = {
+          ...sink,
+          stones(catalogId, outline, inside, heightAt, tint) {
+            const plan = outline.map(([x, z]): Vec2 => {
+              const w = local(x, 0, z);
+              return [w.x, w.z];
+            });
+            pebbleBeds.push({
+              id: `${f.id}-pebbles-${pebbleBeds.length}`, catalogId, polygon: plan, holes: [], y: y0, tint,
+              inside: (p) => inside(...toLocal(p)),
+              heightAt: (p) => y0 + heightAt(...toLocal(p)),
+            });
+          },
+          beam(x, y, z, dir, lumens, beamDeg) {
+            beams.push({ position: local(x, y, z), direction: dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a), beamDeg, cutoffDeg: Math.min(170, beamDeg * 1.8), lumens, kelvin: 2700, range: 3 });
+          },
+        };
+        cascadeFall(fallSink, f.id, featureSize(spec, f.size, 2.3), featureOption(spec, f.options, 'pockets'));
+        landLights.push(...beams);
+        const leds = extraGlow.slice(glow1), own = lights.slice(lights1);
+        act({ key: 'light', label: 'Fall lights', words: ['On', 'Off'], anchors: [anchorAt(o, 0, 0.6, D / 4)], on: true, planOn: true, lights: true, set(on) {
+          for (const b of beams) b.off = !on;
+          for (const l of own) l.off = !on;
+          for (const m of leds) m.userData.off = !on;
+        } });
         break;
       }
       case 'fireWaterBowl': {

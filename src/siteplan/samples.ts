@@ -1,6 +1,7 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
+import { sampleCascadeFall } from './sample-cascade-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
 
@@ -61,7 +62,7 @@ export function sampleBackyard(): SitePlan {
       { id: 'kitchen-pad', source: S, kind: 'hardscape', catalogId: 'paver-ashlar-gray', polygon: [[15.4, 11.6], [19.4, 11.6], [19.4, 16.5], [15.4, 16.5]], border: { catalogId: 'border-charcoal', width: 0.2 } },
       { id: 'step-path', source: S, kind: 'bed', catalogId: 'black-pebble', polygon: [[8.4, 8.2], [10.2, 8.2], [10.2, 10.4], [8.4, 10.4]] },
       { id: 'planter-l', source: S, kind: 'bed', catalogId: 'black-mulch', polygon: [[1.6, 12.2], [2.8, 12.2], [2.8, 15.2], [1.6, 15.2]], raised: { wallCatalogId: 'wall-tan-charcoal-cap', height: 0.6 }, fill: { catalogId: 'foxtail-fern', spacing: 0.75 } },
-      { id: 'creek-bed', source: S, kind: 'bed', catalogId: 'river-rock', polygon: blob(16.6, 2.3, 2.6, 1.6, 22, 0.08, 3) },
+      { id: 'creek-bed', source: S, kind: 'bed', catalogId: 'river-rock-1-half-3', polygon: blob(16.6, 2.3, 2.6, 1.6, 22, 0.08, 3) },
     ],
     lines: [
       { id: 'fence', source: S, kind: 'fence', catalogId: 'fence-gray-lattice', points: [[0, 16.5], [0, 0], [20, 0], [20, 16.5]], height: 1.85 },
@@ -131,11 +132,11 @@ export function sampleFrontYard(): SitePlan {
     zones: [
       { id: 'beds', source: S, kind: 'bed', catalogId: 'brown-mulch', polygon: [[0, 6], [12.5, 6], [12.5, 15], [0, 15]] },
       { id: 'turf', source: S, kind: 'turf', catalogId: 'artificial-turf', polygon: [...turfEdge, [12.5, 15]] },
-      { id: 'creek', source: S, kind: 'bed', catalogId: 'white-cobble', polygon: creekPoly },
+      { id: 'creek', source: S, kind: 'bed', catalogId: 'white-cobble-2-4', polygon: creekPoly },
       { id: 'driveway', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[12.5, 6], [17.5, 6], [17.5, 15], [12.5, 15]] },
       { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[8.6, 6], [9.8, 6], [9.8, 8.0], [12.5, 8.0], [12.5, 8.6], [8.6, 8.6]] },
       { id: 'hedge-bed', source: S, kind: 'bed', catalogId: 'brown-mulch', polygon: [[1.5, 6], [8.6, 6], [8.6, 6.6], [1.5, 6.6]], fill: { catalogId: 'boxwood-hedge', spacing: 0.5 } },
-      { id: 'side', source: S, kind: 'bed', catalogId: 'river-rock', polygon: [[17.5, 0], [19, 0], [19, 15], [17.5, 15]] },
+      { id: 'side', source: S, kind: 'bed', catalogId: 'river-rock-1-half-3', polygon: [[17.5, 0], [19, 0], [19, 15], [17.5, 15]] },
     ],
     lines: [
       { id: 'edge', source: S, kind: 'edging', catalogId: 'steel-edging', points: turfEdge, height: 0.05 },
@@ -277,6 +278,49 @@ export function samplePebbleSizes(): SitePlan {
     plants: [],
     features: [],
   };
+}
+
+/**
+ * Sized loose stone side by side, a 6 x 6 ft steel-edged bed of each, rows back to front, on a lawn with a walk along
+ * the front. Few enough looks for the ground's layers (a lawn and up to seven fills).
+ */
+function stoneBeds(name: string, rows: string[][]): SitePlan {
+  const S = 'sample' as const;
+  const F = 1.8288; // 6 ft
+  const gap = 0.6, x0 = 0.8, y0 = 1.0;
+  const beds = rows.flatMap((row, ri) => row.map((id, ci) => {
+    const x = x0 + ci * (F + gap), y = y0 + ri * (F + gap);
+    return { id, poly: [[x, y], [x + F, y], [x + F, y + F], [x, y + F]] as Vec2[] };
+  }));
+  const cols = Math.max(...rows.map((r) => r.length));
+  const W = x0 * 2 + cols * F + (cols - 1) * gap, walkY = y0 + rows.length * F + (rows.length - 1) * gap + 0.3;
+  return {
+    schemaVersion: 1,
+    site: { name, boundary: [[0, 0], [W, 0], [W, walkY + 2.2], [0, walkY + 2.2]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: [[0, 0], [W, 0], [W, walkY], [0, walkY]] },
+      ...beds.map((b) => ({ id: `bed-${b.id}`, source: S, kind: 'bed' as const, catalogId: b.id, polygon: b.poly })),
+      { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[0.4, walkY], [W - 0.4, walkY], [W - 0.4, walkY + 1.2], [0.4, walkY + 1.2]] },
+    ],
+    lines: beds.map((b) => ({ id: `edge-${b.id}`, source: S, kind: 'edging' as const, catalogId: 'steel-edging', points: [...b.poly, b.poly[0]], height: 0.05 })),
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
+/** River rock in its five sizes: 3/4, 1-1 1/2, 1 1/2-3, 3-5 and 4-8 in. */
+export function sampleRiverRockSizes(): SitePlan {
+  return stoneBeds('River rock: 3/4 in to 4-8 in, 6 x 6 ft beds', [['river-rock-3-4', 'river-rock-1-1-half', 'river-rock-1-half-3', 'river-rock-3-5', 'river-rock-4-8']]);
+}
+
+/** Cobble in its three sizes (2-4, 4-8 and 8-12 in): river cobble at the back, white and tan in front. */
+export function sampleCobbleSizes(): SitePlan {
+  return stoneBeds('Cobble: 2-4, 4-8 and 8-12 in, 6 x 6 ft beds', [
+    ['river-cobble-2-4', 'river-cobble-4-8', 'river-cobble-8-12'],
+    ['white-cobble-2-4', 'white-cobble-4-8', 'white-cobble-8-12'],
+  ]);
 }
 
 /**
@@ -492,6 +536,9 @@ export const SAMPLES = [
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
+  { id: 'cascade-fall', name: 'Twin cascade boulder waterfall', make: sampleCascadeFall },
+  { id: 'river-rock', name: 'River rock sizes', make: sampleRiverRockSizes },
+  { id: 'cobble', name: 'Cobble sizes: river and white and tan', make: sampleCobbleSizes },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
 ];

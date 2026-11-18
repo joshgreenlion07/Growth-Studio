@@ -37,13 +37,16 @@ export function setGroundTextureUnits(n: number) {
 /** Ground surfaces painted by the splat shader: soil plus up to 8 materials. */
 export const MAX_GROUND_LAYERS = 8;
 
+/** The stone painted along ponds, streams and pondless runs: river rock, 1 1/2-3 in. */
+const WATER_EDGE_ROCK = 'river-rock-1-half-3';
+
 export function groundLayers(plan: SitePlan): string[] {
   const ids: string[] = [];
   const add = (id: string) => {
     if (!ids.includes(id) && ids.length < MAX_GROUND_LAYERS) ids.push(id);
   };
   for (const z of plan.zones) if (z.kind !== 'hardscape' && materialById.has(z.catalogId)) add(z.catalogId);
-  if (plan.water.some((w) => w.kind === 'pond' || w.kind === 'stream' || w.kind === 'pondless')) add('river-rock');
+  if (plan.water.some((w) => w.kind === 'pond' || w.kind === 'stream' || w.kind === 'pondless')) add(WATER_EDGE_ROCK);
   return ids;
 }
 
@@ -191,7 +194,7 @@ function splatTextures(plan: SitePlan, area: Bounds, ppm: number, layers: string
     const layer = z.kind === 'hardscape' ? 0 : layerIndex(layers, z.catalogId);
     rasterPolygon(idx, W, Hh, z.polygon, toPx, layer);
   }
-  const rock = layerIndex(layers, 'river-rock');
+  const rock = layerIndex(layers, WATER_EDGE_ROCK);
   for (const w of plan.water) {
     if (w.kind === 'pond' && w.polygon) rasterPolygon(idx, W, Hh, w.polygon, toPx, rock);
     if ((w.kind === 'stream' || w.kind === 'pondless') && w.points) {

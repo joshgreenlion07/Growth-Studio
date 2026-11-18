@@ -72,10 +72,6 @@ const BED: Record<string, Omit<MaterialInfo, 'group'>> = {
     about: 'Decomposed granite (DG): crushed granite fines that pack down into a firm, natural tan surface for paths, patios and between stepping stones.',
     spec: ['3 in deep, compacted in two lifts', 'Over weed fabric on compacted subgrade', 'Stabilizer added for walking paths', 'Held by edging along every side'],
   },
-  'river-rock': {
-    about: 'Rounded river rock in mixed grays. A low-water bed cover that never needs replacing, and the classic look for dry creek beds.',
-    spec: ['3 in deep, 1 to 3 in stones', 'Over commercial weed fabric', 'Held by edging along lawns and paths'],
-  },
   'black-pebble': {
     about: 'Smooth black beach pebbles. A dark, polished accent rock for modern beds and around water features.',
     spec: ['2 to 3 in deep, 3/4 to 1 in pebbles', 'Over commercial weed fabric'],
@@ -84,21 +80,36 @@ const BED: Record<string, Omit<MaterialInfo, 'group'>> = {
     about: 'Black lava rock: light, porous volcanic stone. A dark bed cover that stays put and does not break down.',
     spec: ['2 to 3 in deep', 'Over commercial weed fabric'],
   },
-  'white-cobble': {
-    about: 'White and tan cobble: large rounded stones that brighten a bed and read clearly from a distance.',
-    spec: ['3 to 4 in deep, 2 to 4 in stones', 'Over commercial weed fabric'],
-  },
-  cobble: {
-    about: 'River cobble: large rounded stones in warm grays, for dry creek beds, borders and low-water beds.',
-    spec: ['3 to 4 in deep, 2 to 4 in stones', 'Over commercial weed fabric'],
-  },
 };
 
 const IN = 0.0254;
 
+/**
+ * River rock and cobble, by line and size (siteplan/catalog.ts): what they are and how deep they go. The stone is a
+ * sample look until Green Lion's own is photographed.
+ */
+function sizedRockInfo(m: MaterialSpec): Omit<MaterialInfo, 'group'> | undefined {
+  if (!m.pebble || (m.line !== 'River rock' && m.line !== 'River cobble' && m.line !== 'White and tan cobble')) return undefined;
+  const size = m.color ?? `${m.pebble.minIn}-${m.pebble.maxIn} in`;
+  const depth = `${m.depthIn ?? 3} in deep`;
+  if (m.line === 'River rock') {
+    return {
+      about: `River rock, ${size}: natural water-worn stone, rounded, in a mixed blend of tan, buff, gray and brown. A low-water bed cover that never needs replacing, the classic dry creek bed, and the lining of streams and pondless waterfalls (the larger sizes along the edges, the smaller in the run).`,
+      spec: [`${depth}, ${size} stones`, 'Over commercial weed fabric (a liner under a water feature)', 'Held by edging along lawns and paths', 'Sample stone and colors, to be replaced with the stone Green Lion buys'],
+    };
+  }
+  const white = m.line === 'White and tan cobble';
+  return {
+    about: white
+      ? `White and tan cobble, ${size}: large rounded stones in cream, white and light tan that brighten a bed and read clearly from a distance.`
+      : `River cobble, ${size}: large rounded stones in warm gray, tan and brown, for dry creek beds, borders, the banks of water features and low-water beds.`,
+    spec: [`${depth}, ${size} stones, about one stone deep`, 'Over commercial weed fabric', 'Sample stone and colors, to be replaced with the stone Green Lion buys'],
+  };
+}
+
 /** Notes for a catalog material: the bed and rock notes above by id, the rest by what it is. */
 export function materialInfo(m: MaterialSpec): MaterialInfo {
-  const bed = BED[m.id];
+  const bed = BED[m.id] ?? sizedRockInfo(m);
   if (bed) return { group: m.group, ...bed };
   if (m.use === 'bed') return { group: m.group, about: `${m.name}: a bed cover.`, spec: ['3 in deep over weed fabric'] };
   switch (m.recipe) {

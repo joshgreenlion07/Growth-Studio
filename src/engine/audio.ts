@@ -337,8 +337,8 @@ export class SceneAudio {
       let level = 1;
       if (a.key === 'water') {
         const f = plan.features.find((x) => x.id === a.itemId);
-        kind = f && /water-wall/.test(f.catalogId) ? 'waterfall' : 'trickle';
-        level = kind === 'waterfall' ? 0.9 : 0.8;
+        kind = f && /water-wall|waterfall/.test(f.catalogId) ? 'waterfall' : 'trickle';
+        level = kind === 'waterfall' ? (/waterfall/.test(f?.catalogId ?? '') ? 1 : 0.9) : 0.8;
       } else if (a.key === 'fire' && a.label === 'Fire') kind = 'fire';
       else if (a.key === 'jets') kind = 'spa';
       if (!kind || !a.anchors.length) continue;

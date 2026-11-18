@@ -186,6 +186,20 @@ function plantSample(id: string, opts: SampleOptions): LibrarySample {
 function featureSample(id: string): LibrarySample {
   const f = featureById.get(id);
   if (!f) throw new Error(`Library sample: no feature "${id}" in the catalog`);
+  if (f.kind === 'cascadeFall') {
+    // A boulder waterfall stands in a planting bed, its basin at the edge of a patio, as it is built.
+    const [w, d] = f.footprint;
+    const L = Math.max(w, d) + 6, c = L / 2;
+    const plan = lot(f.name, L);
+    const front = c + d / 2;
+    plan.zones = [
+      lawn(L),
+      { id: 'bed', source: S, kind: 'bed', catalogId: 'black-mulch', polygon: box(c - w / 2 - 1.2, c - d / 2 - 1.2, c + w / 2 + 1.2, front) },
+      { id: 'patio', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: box(c - w / 2 - 1.2, front, c + w / 2 + 1.2, front + 2.4) },
+    ];
+    plan.features = [{ id: 'sample', source: S, catalogId: f.id, position: [c, c - 0.02], rotationDeg: 0 }];
+    return { plan, target: [c, 1.0, c], dist: Math.max(w, d) * 1.9 + 2.5 };
+  }
   const pad = 16 * FT;
   const L = Math.max(10, pad + 4), c = L / 2;
   const plan = lot(f.name, L);

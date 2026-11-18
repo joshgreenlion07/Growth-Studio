@@ -132,6 +132,14 @@ Messages use `window.postMessage`:
   pixels; the ground's pebble texture fills the gaps and the distance, matched
   to the stones' average color. Draft quality shows the texture alone. The
   sample "Mexican beach pebble sizes" has a 10 x 10 ft bed of each.
+- River rock in five sizes (`river-rock-3-4`, `-1-1-half`, `-1-half-3`, `-3-5`, `-4-8`: 3/4, 1-1 1/2, 1 1/2-3, 3-5
+  and 4-8 in; form `river`: rounded, egg-shaped, fuller than a beach pebble) and cobble in three (`river-cobble-2-4`,
+  `-4-8`, `-8-12` and `white-cobble-2-4`, `-4-8`, `-8-12`: 2-4, 4-8 and 8-12 in; form `cobble`: chunky and a little
+  lumpy) are drawn the same way, shelf `Rock`, lines `River rock`, `River cobble` and `White and tan cobble`. Their
+  colors are a sample natural blend until Green Lion's own stone is photographed. The old single looks still load:
+  `river-rock` as `river-rock-1-half-3`, `cobble` as `river-cobble-2-4`, `white-cobble` as `white-cobble-2-4`. Ponds,
+  streams and pondless runs paint river rock 1 1/2-3 in round their edges. Samples "River rock sizes" and "Cobble
+  sizes" have a 6 x 6 ft bed of each.
 - Soil fills: Black humus (compost mix) (`humus`), Compost (`compost`) and Dirt /
   topsoil (`topsoil`), shelf `Bed fill`, `crumb` on the look, are drawn as spread
   soil whose surface is made of soft clods (`builder/humus.ts`,
@@ -319,6 +327,15 @@ Messages use `window.postMessage`:
   bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
   The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
   `options: { bowls: false }` and `planted: false`.
+- The twin cascade boulder waterfall (`twin-cascade-boulder-waterfall`, group Water, `builder/cascadefall.ts`) is a
+  pondless boulder fall drawn from a design rendering: a spill from the top stone into a pool at the back, two channels
+  (left and right) of four falls each over flat boulder lips, and a shallow river rock basin at the front (+y before
+  `rotationDeg`), lined with river rock (1 1/2-3 in floors, 3-5 in sides, 4-8 in round the basin) and banked with moss
+  rock and Canyon Tech boulders, river cobble 4-8 in between them. Sizes: 12 x 11 ft (6 ft tall), 16 x 14 ft (7 1/2 ft,
+  the standard) and 18 x 17 ft (8 ft); the size scales the whole layout. Option `pockets` (default on): grasses and
+  perennials from the catalog in rock pockets. Hand actions: `water` and `light` (the warm underwater light at the foot
+  of each fall, aimed beams in the landscape light pool). Its sound is the waterfall voice. Sample "Twin cascade boulder
+  waterfall": the feature in a black mulch bed inside a curved retaining wall, its basin at a concrete patio.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;

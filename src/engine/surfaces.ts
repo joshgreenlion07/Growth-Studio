@@ -1566,9 +1566,9 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'turfArtificial': return turfSet(spec);
       case 'mulch': return mulchSet(spec);
       case 'dg': return spec.crumb ? humusGroundSet(spec) : dgSet(spec);
-      case 'riverRock': return stonesSet(spec, 13, 1.0, 0.3);
+      case 'riverRock': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 13, 1.0, 0.3);
       case 'blackPebble': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 22, 1.0, 0.65);
-      case 'cobble': return stonesSet(spec, 7, 1.2, 0.25);
+      case 'cobble': return spec.pebble ? pebbleGroundSet(spec) : stonesSet(spec, 7, 1.2, 0.25);
       case 'paver': return paverSet(spec, lay);
       case 'concrete': return concreteSet(spec, spec.finish ?? 'broom');
       case 'flagstone': return flagstoneSet(spec);

@@ -67,6 +67,15 @@ export interface WaterRockContext {
   ground?: GroundAt;
 }
 
+/**
+ * One boulder's geometry in a catalog boulder's shape and look (`styleId`: a moss rock shape or the Canyon Tech boulder),
+ * `size` length x depth x the height that shows, its foot at y 0, for features built of boulders (a boulder waterfall).
+ */
+export function boulderGeometry(styleId: string, size: [number, number, number], seed: string, moss: boolean, buried = 0.2): THREE.BufferGeometry {
+  const st = STYLE[styleId] ?? STYLE['moss-rock-rounded'];
+  return buildRock({ shape: st.shape, look: st.look, size, buried, seed, moss });
+}
+
 /** A boulder (a moss rock shape or a Canyon Tech boulder), set into the ground at the feature's spot. */
 export function buildWaterRock(c: WaterRockContext) {
   const st = STYLE[c.spec.id];

@@ -75,11 +75,12 @@ const agedCopper = () => plainMaterial('pf-aged-copper', { color: '#5a4636', rou
 /**
  * Clear falling water: mostly see-through, with streaks running down, the bright rolled edges of a sheer sheet (aEdge)
  * or the silhouette of a stream (fresnel), whiter where it breaks up near the bottom (uv.y in meters fallen, aEnd 0..1),
- * and a warm glow when its LED is on (uGlow, set by the light it is linked to).
+ * and a warm glow when its LED is on (uGlow, set by the light it is linked to). `white` (0 to 1) makes it the aerated
+ * white water of a fall over rock rather than a clear sheer sheet.
  */
-export function clearFallMaterial(): THREE.ShaderMaterial {
+export function clearFallMaterial(white = 0): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uTime: GLOBAL.uTime, uSunColor: GLOBAL.uSunColor, uGlow: { value: 0 } },
+    uniforms: { uTime: GLOBAL.uTime, uSunColor: GLOBAL.uSunColor, uGlow: { value: 0 }, uWhite: { value: white } },
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -95,7 +96,7 @@ export function clearFallMaterial(): THREE.ShaderMaterial {
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime; uniform vec3 uSunColor; uniform float uGlow;
+      uniform float uTime; uniform vec3 uSunColor; uniform float uGlow; uniform float uWhite;
       varying vec2 vUv; varying float vEdge; varying float vEnd; varying vec3 vN; varying vec3 vV;
       float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -109,10 +110,12 @@ export function clearFallMaterial(): THREE.ShaderMaterial {
         float rim = smoothstep(0.7, 1.0, vEdge);
         float brk = smoothstep(0.75, 1.0, vEnd) * (0.4 + 0.6 * n(vec2(vUv.x * 40.0, vUv.y * 20.0 - t * 9.0))) * 0.45;
         // Clear water: it dims what is behind a little (alpha) and adds the sky's sheen, bright streaks and rolled edges.
-        float a = clamp(0.2 + fres * 0.35 + rim * 0.35 + brk * 0.25, 0.0, 0.85);
+        // White water: broken into streaks and spray, more of it the further it falls.
+        float foam = uWhite * (0.42 + smoothstep(0.15, 0.85, s1 * 0.5 + s2 * 0.5) * 0.58) * (0.6 + 0.4 * smoothstep(0.0, 0.5, vEnd)) * (1.0 - smoothstep(0.88, 1.0, vEdge) * 0.6);
+        float a = clamp(0.2 + fres * 0.35 + rim * 0.35 + brk * 0.25 + foam * 0.85, 0.0, 0.92);
         float day = 0.22 + length(uSunColor) * 0.34;
         vec3 sheen = vec3(0.62, 0.7, 0.78) * day * (0.1 + fres * 0.5 + (1.0 - vEnd) * 0.06);
-        vec3 lit = vec3(0.92, 0.95, 0.97) * day * (streak * 0.16 + rim * 0.36 + brk * 0.35);
+        vec3 lit = vec3(0.92, 0.95, 0.97) * day * (streak * 0.16 + rim * 0.36 + brk * 0.35 + foam * 1.25);
         vec3 glow = vec3(1.0, 0.66, 0.3) * uGlow * (0.2 + streak * 0.8 + rim * 0.6) * (1.0 - vEnd * 0.6);
         gl_FragColor = vec4(sheen * a + lit + glow * 0.95, a);
       }`,
@@ -377,7 +380,7 @@ export interface FountainSink {
 }
 
 /** A warm LED strip material whose night glow also lights the water it is linked to (see linkGlow). */
-function ledMaterial(): THREE.MeshStandardMaterial {
+export function ledMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color: '#f1e4cc', emissive: new THREE.Color('#ffb466'), emissiveIntensity: 0, roughness: 0.4 });
 }
 
@@ -385,7 +388,7 @@ function ledMaterial(): THREE.MeshStandardMaterial {
  * The studio turns night accents up by setting each glow material's emissiveIntensity (to 7 at full night for a light
  * colored one). The water lit by this LED follows it through its uGlow uniform.
  */
-function linkGlow(led: THREE.MeshStandardMaterial, water: THREE.ShaderMaterial) {
+export function linkGlow(led: THREE.MeshStandardMaterial, water: THREE.ShaderMaterial) {
   let v = led.emissiveIntensity;
   Object.defineProperty(led, 'emissiveIntensity', {
     configurable: true,

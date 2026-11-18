@@ -183,9 +183,10 @@ export interface PebbleSpec {
   /**
    * The pieces' form (builder/pebbles.ts): 'pebble' (default: a smooth, wave-worn beach pebble), 'crushed' (crushed
    * stone: angular, with flat broken faces and sharp edges) or 'chip' (bark and wood chips: flat, splintery, a little
-   * curled, with the grain running their length).
+   * curled, with the grain running their length), 'river' (river rock: rounded, egg-shaped, fuller than a beach pebble)
+   * or 'cobble' (big rounded stones, chunky and a little lumpy).
    */
-  form?: 'pebble' | 'crushed' | 'chip';
+  form?: 'pebble' | 'crushed' | 'chip' | 'river' | 'cobble';
 }
 
 /**
@@ -321,6 +322,7 @@ export type FeatureKind =
   | 'waterWallStucco'
   | 'copperBowl'
   | 'pillarFountain'
+  | 'cascadeFall'
   | 'patinaBowl'
   | 'fireWaterBowl'
   | 'spotLight'
@@ -553,6 +555,33 @@ function concreteLooks(): MaterialSpec[] {
   return out;
 }
 
+/** The twin cascade waterfall's sizes: width x depth x the height of its top stone. */
+const CASCADE_SIZES: FeatureSize[] = [
+  { label: 'Small, 12 x 11 ft, 6 ft tall', size: [12 * 0.3048, 11 * 0.3048, 6 * 0.3048] },
+  { label: 'Medium, 16 x 14 ft, 7 1/2 ft tall', size: [16 * 0.3048, 14 * 0.3048, 7.5 * 0.3048] },
+  { label: 'Large, 18 x 17 ft, 8 ft tall', size: [18 * 0.3048, 17 * 0.3048, 8 * 0.3048] },
+];
+/** River rock sizes as sold: [smallest, largest] long side in inches, id key, label. */
+const RIVER_ROCK_SIZES = [[0.5, 0.9, '3-4', '3/4 in'], [1, 1.5, '1-1-half', '1-1 1/2 in'], [1.5, 3, '1-half-3', '1 1/2-3 in'], [3, 5, '3-5', '3-5 in'], [4, 8, '4-8', '4-8 in']] as const;
+/** Cobble sizes as sold. */
+const COBBLE_SIZES = [[2, 4, '2-4', '2-4 in'], [4, 8, '4-8', '4-8 in'], [8, 12, '8-12', '8-12 in']] as const;
+/** River rock, natural blend (a sample palette until Green Lion's own stone is photographed): tan, buff, gray, brown. */
+const RIVER_ROCK_COLORS = [
+  { c: '#a89c88', share: 0.17 }, { c: '#8f8576', share: 0.17 }, { c: '#b7a98f', share: 0.13 }, { c: '#726a5f', share: 0.13 },
+  { c: '#9d8a71', share: 0.12 }, { c: '#807c76', share: 0.12 }, { c: '#c6bca9', share: 0.08 }, { c: '#5b544d', share: 0.05 },
+  { c: '#8a6f55', share: 0.03 },
+];
+/** River cobble: warm gray, tan and brown, a few pale and dark stones. */
+const RIVER_COBBLE_COLORS = [
+  { c: '#b5aa97', share: 0.18 }, { c: '#9a9081', share: 0.2 }, { c: '#857c70', share: 0.17 }, { c: '#c4b9a5', share: 0.12 },
+  { c: '#6f675e', share: 0.13 }, { c: '#a08e76', share: 0.1 }, { c: '#d2c8b6', share: 0.05 }, { c: '#5a534c', share: 0.05 },
+];
+/** White and tan cobble: cream, white and light tan, a few buff and gray stones. */
+const WHITE_COBBLE_COLORS = [
+  { c: '#e2dccf', share: 0.22 }, { c: '#d4cab8', share: 0.22 }, { c: '#c6b9a2', share: 0.18 }, { c: '#ece8df', share: 0.12 },
+  { c: '#b6a78e', share: 0.12 }, { c: '#a99f92', share: 0.08 }, { c: '#cbbda0', share: 0.06 },
+];
+
 export const MATERIALS: MaterialSpec[] = [
   // Turf
   M({ id: 'lawn', name: 'Natural lawn', use: 'turf', group: 'Turf', recipe: 'lawn', palette: ['#5f8a38', '#3f6328'] }),
@@ -615,7 +644,6 @@ export const MATERIALS: MaterialSpec[] = [
       loose: { clods: 0, shreds: 0, shredIn: [0.4, 0.8] },
     } }),
   M({ id: 'decomposed-granite', name: 'Decomposed granite', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#b39a78', '#8f7a5d'] }),
-  M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
   M({ id: 'black-pebble', name: 'Black beach pebble', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble', palette: ['#4a4a48', '#2a2a29', '#151515'] }),
   M({ id: 'lava-rock', name: 'Black lava rock', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a3836', '#252322'] }),
   // Mexican beach pebble, the "black" grade Green Lion buys, unpolished: dry it is a cool blue-green gray to charcoal
@@ -659,8 +687,27 @@ export const MATERIALS: MaterialSpec[] = [
     ] },
     matches: buys, maker: 'Natural stone', line: 'Crushed gravel', shelf: 'Rock', color: label,
   })),
-  M({ id: 'white-cobble', name: 'White and tan cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#e3ddd1', '#cfc5b4', '#b5a993'] }),
-  M({ id: 'cobble', name: 'River cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#c2b8a6', '#8f8679', '#6d675e'] }),
+  // River rock in the sizes California landscape-supply yards sell it (3/4 in, 1-1 1/2, 1 1/2-3, 3-5 and 4-8 in), drawn
+  // stone by stone (form 'river': rounded, egg-shaped, fuller than a beach pebble). A sample look, to be replaced by
+  // Green Lion's own stone and photos: a mixed natural blend of tan, buff, gray and brown, a few darker and pale stones.
+  // The old single 'river-rock' look loads as the 1 1/2-3 in size (LEGACY_IDS).
+  ...RIVER_ROCK_SIZES.map(([lo, hi, key, label]) => M({
+    id: `river-rock-${key}`, name: `River rock, ${label}`, use: 'bed', group: 'Mulch and rock', recipe: 'riverRock',
+    palette: ['#b3a690', '#9d917e', '#857b6d', '#6a625a'],
+    pebble: { form: 'river', minIn: lo, maxIn: hi, wide: [0.66, 0.9], thick: [0.48, 0.72], colors: RIVER_ROCK_COLORS },
+    matches: `River rock, natural blend, ${label}`, maker: 'Natural stone', line: 'River rock', shelf: 'Rock', color: label,
+  })),
+  // Cobble: the big rounded stones, 2-4, 4-8 and 8-12 in, chunkier and rounder than river rock (form 'cobble'), in a
+  // natural river cobble blend and the white and tan blend. Sample looks, like the river rock. The old 'cobble' and
+  // 'white-cobble' looks load as the 2-4 in size (LEGACY_IDS).
+  ...COBBLE_SIZES.flatMap(([lo, hi, key, label]) => ([
+    ['river-cobble', 'River cobble', ['#c2b8a6', '#a2978a', '#8f8679', '#6d675e'], RIVER_COBBLE_COLORS],
+    ['white-cobble', 'White and tan cobble', ['#e3ddd1', '#d3c9b8', '#c2b6a1', '#a99c86'], WHITE_COBBLE_COLORS],
+  ] as const).map(([id, line, palette, colors]) => M({
+    id: `${id}-${key}`, name: `${line}, ${label}`, use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: [...palette],
+    pebble: { form: 'cobble', minIn: lo, maxIn: hi, wide: [0.7, 0.92], thick: [0.55, 0.8], colors: [...colors] },
+    matches: `${line}, ${label}`, maker: 'Natural stone', line, shelf: 'Rock', color: label,
+  }))),
   // Pavers
   M({ id: 'paver-ashlar-gray', name: 'Multi-size paver, gray blend', use: 'hardscape', group: 'Pavers', recipe: 'paver', palette: ['#b9b6af', '#a3a09a', '#8f8c87', '#7c7a76'], pattern: { kind: 'ashlar', sizes: ASHLAR, joint: 0.2, face: 'textured' }, thickness: 0.06, matches: 'Belgard Catalina / Dimensions style' }),
   M({ id: 'paver-ashlar-light', name: 'Multi-size paver, light blend', use: 'hardscape', group: 'Pavers', recipe: 'paver', palette: ['#d6d0c4', '#c6bfb2', '#b3ab9e', '#a1998c'], pattern: { kind: 'ashlar', sizes: ASHLAR, joint: 0.2, face: 'textured' }, thickness: 0.06 }),
@@ -922,6 +969,22 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water feature: three smooth-troweled stucco pillars with golden split-face ledger stone panels between them, a 12 in copper sheer spillway in each panel, copper scuppers pouring from the outer pillars, and a black Mexican beach pebble basin edged with a charcoal curb. A patina bowl planter with a blue agave sits on each pillar (an option).',
     facts: ['Basin 14 ft x 4 ft 2 in, Belgard Melville Curb, Anthracite, showing 5 1/2 in, black Mexican beach pebble 1-2 in, no open water', 'Pillars 2 ft 8 in wide x 2 ft deep x 5 ft 6 in tall, Santa Barbara smooth trowel stucco, warm gray', 'Panels 2 ft wide x 5 ft tall, set back 1 ft 8 in, split-face travertine ledger stone', 'Two 12 in copper sheer spillways (lip 31 in up, LED lit) and two 1 in copper scuppers', 'Option: three 23 in patina bowl planters with blue agave (Agave tequilana)'],
   }),
+  // Twin cascade boulder waterfall (pondless), drawn from a design rendering (builder/cascadefall.ts): two channels of
+  // four falls each from a pool at the back, river rock inside, boulders outside. Sizes scale the whole layout.
+  F({
+    id: 'twin-cascade-boulder-waterfall', name: 'Twin cascade boulder waterfall', group: 'Water', kind: 'cascadeFall',
+    footprint: [CASCADE_SIZES[1].size[0], CASCADE_SIZES[1].size[1]], sizes: CASCADE_SIZES, size: 1,
+    options: [{ key: 'pockets', label: 'Planting pockets in the rock', default: true }],
+    about: 'A pondless boulder waterfall: water spills from the top stone into a small pool at the back, then runs down two winding channels, one to the left and one to the right, each stepping down four falls over flagstone lips, into one shallow river rock basin at the front, at the patio edge. River rock lines the channels and the basin; large moss rock and Canyon Tech boulders make the outside banks and the mound behind, with planting pockets for grasses and perennials (an option). A warm underwater light glows at the foot of every fall.',
+    facts: [
+      'Medium (the default) 16 ft wide x 14 ft deep, 7 1/2 ft to the top of the back stone; also 12 x 11 ft (6 ft tall) and 18 x 17 ft (8 ft tall)',
+      'Nine falls: the spill into the top pool, then four on each side, each about 13 in at the medium size',
+      'River rock: 1 1/2-3 in on the floors, 3-5 in along the channel sides, 4-8 in round the basin (a sample stone for now)',
+      'Lips cut from Cold Water Canyon flagstone; boulders are the library\'s moss rock and Canyon Tech boulders',
+      'Pondless: the basin holds no open water; a warm LED light at the foot of each fall',
+      'Drawn from a design rendering, not a built job: the layout and sizes are a starting point',
+    ],
+  }),
   F({
     id: 'patina-bowl-planter', name: 'Patina bowl planter, 23 in', group: 'Accents', kind: 'patinaBowl', plantable: true, footprint: [23 * 0.0254, 23 * 0.0254],
     about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, gray gravel top dressing, planted with a blue agave (or left empty).',
@@ -976,7 +1039,12 @@ function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | '
   // Lava rock is porous and light.
   if (m.id === 'lava-rock') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 0.7 };
   if (m.pebble?.form === 'chip') return { fillType: 'bark', depthIn: 3 };
-  if (m.pebble) return { fillType: 'rock', depthIn: m.pebble.maxIn <= 1 ? 2 : m.pebble.maxIn <= 2 ? 2.5 : 3, tonsPerCuYd: 1.45 };
+  // Big stone is spread about one stone deep: 3-5 in river rock 4 in, 4-8 in rock and cobble 6 in, 8-12 in cobble 10 in.
+  if (m.pebble) {
+    const hi = m.pebble.maxIn;
+    const depthIn = hi <= 1 ? 2 : hi <= 2 ? 2.5 : hi <= 3 ? 3 : hi <= 4 ? 3.5 : hi <= 5 ? 4 : hi <= 8 ? 6 : 10;
+    return { fillType: 'rock', depthIn, tonsPerCuYd: m.pebble.form === 'cobble' ? 1.35 : m.pebble.form === 'river' ? 1.4 : 1.45 };
+  }
   if (m.recipe === 'blackPebble') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 1.45 };
   if (m.recipe === 'cobble') return { fillType: 'rock', depthIn: 3.5, tonsPerCuYd: 1.4 };
   return { fillType: 'rock', depthIn: 3, tonsPerCuYd: 1.4 };
@@ -996,7 +1064,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', pillarFountain: 'Water features',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', pillarFountain: 'Water features', cascadeFall: 'Water features',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
@@ -1026,6 +1094,10 @@ export const LEGACY_IDS: Record<string, string> = {
   'wood-fence': 'fence-board-on-board',
   pergola: 'pergola-wood',
   'bbq-island': 'kitchen-straight',
+  // The single river rock and cobble looks, before they came in sizes.
+  'river-rock': 'river-rock-1-half-3',
+  cobble: 'river-cobble-2-4',
+  'white-cobble': 'white-cobble-2-4',
 };
 
 /**

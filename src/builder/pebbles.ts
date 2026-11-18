@@ -12,8 +12,9 @@ import type { GroundModel } from './ground';
 import type { Quality } from '../engine/post';
 
 /**
- * Beds of loose stone or chips (a material with spec.pebble: Mexican beach pebble, crushed gravel, bark and wood chips),
- * drawn piece by piece. `pebble.form` picks the pieces: smooth beach pebbles, angular crushed stone, or flat wood chips.
+ * Beds of loose stone or chips (a material with spec.pebble: Mexican beach pebble, river rock, cobble, crushed gravel,
+ * bark and wood chips), drawn piece by piece. `pebble.form` picks the pieces: smooth beach pebbles, rounded river rock,
+ * chunky cobble, angular crushed stone, or flat wood chips.
  *
  * Every stone is one of a few smooth, slightly lopsided ovals, scaled to its own length, width and thickness from the
  * size range it is sold in, turned at random and tipped a little, and set in partly, so the bed reads as stones piled two
@@ -72,6 +73,74 @@ function pebbleShape(s: number, detail: number): THREE.BufferGeometry {
   g.computeBoundingSphere();
   shapeCache.set(key, g);
   return g;
+}
+
+/**
+ * A unit river rock or cobble (long side 1 along x before scaling), seed `s`: rounder and fuller than a beach pebble. An
+ * icosphere welded smooth and pushed only a little toward a box (exponent near 2, an egg), egg-shaped and lopsided, with
+ * broad lumps (`lump`: cobble is chunkier and lumpier than river rock) and a slightly flattened underside where it
+ * settled. Vertex color darkens toward the bottom, where stones touch and shade each other, with soft mottling.
+ */
+function roundShape(s: number, detail: number, cobble: boolean): THREE.BufferGeometry {
+  const key = `${cobble ? 'cobble' : 'river'}${s}:${detail}`;
+  const hit = shapeCache.get(key);
+  if (hit) return hit;
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.5, detail);
+  g.deleteAttribute('normal');
+  g.deleteAttribute('uv');
+  g = mergeVertices(g);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const r = rng(`${cobble ? 'cobble' : 'river'}${s}`);
+  const egg = 0.06 + r() * 0.14, lop = (r() - 0.5) * 0.18, flatBottom = 0.08 + r() * 0.14;
+  const box = (cobble ? 2.2 : 2.0) + r() * (cobble ? 0.6 : 0.35);
+  const lump = cobble ? 0.09 : 0.05;
+  const v = new THREE.Vector3();
+  const col = new Float32Array(p.count * 3), uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const sup = (Math.abs(v.x) ** box + Math.abs(v.y) ** box + Math.abs(v.z) ** box) ** (-1 / box);
+    const bumps = (vnoise(v.x * 1.6 + s * 5, v.z * 1.6 + v.y * 1.3, 1e6, s) - 0.5) * lump + (vnoise(v.x * 4 + s, v.y * 4 + v.z * 3, 1e6, s + 9) - 0.5) * 0.02;
+    const k = sup * (1 + egg * v.x + lop * v.z * v.x + bumps);
+    let y = v.y * k;
+    if (y < 0) y *= 1 - flatBottom;
+    const x = v.x * 0.5 * k, z = v.z * 0.5 * k;
+    y *= 0.5;
+    p.setXYZ(i, x, y, z);
+    uv[i * 2] = (x + y * 0.4) * 1.4 + s * 0.31;
+    uv[i * 2 + 1] = (z + y * 0.7) * 1.4 + s * 0.17;
+    const mott = vnoise(v.x * 3 + s, v.y * 3 + v.z * 2.5, 1e6, s + 3);
+    const ao = 0.45 + 0.55 * Math.min(1, Math.max(0, (v.y + 0.5) / 1.05)) ** 0.85;
+    const c = ao * (0.93 + mott * 0.1);
+    col[i * 3] = c;
+    col[i * 3 + 1] = c;
+    col[i * 3 + 2] = c;
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  shapeCache.set(key, g);
+  return g;
+}
+
+/**
+ * River rock and cobble's skin, gray to multiply each stone's color: water-worn but not polished, a fine granular grain
+ * with light and dark specks, faint bands of other mineral, matte to satin (dry stone).
+ */
+function riverMaterial(): THREE.MeshStandardMaterial {
+  const set = textureSet('riverSkin1', () =>
+    paint(512, 0.08, 1.5, (u, v) => {
+      const fine = vnoise(u * 240, v * 240, 240, 41), coarse = vnoise(u * 40, v * 40, 40, 42), fleck = vnoise(u * 320, v * 320, 320, 43);
+      const band = vnoise(u * 6 + coarse * 2, v * 22, 22, 44);
+      const light = fleck > 0.86 ? (fleck - 0.86) * 5 : 0, dark = fleck < 0.08 ? (0.08 - fleck) * 4 : 0;
+      const vein = band > 0.8 ? (band - 0.8) * 1.2 : 0;
+      const g = Math.min(1, 0.84 + fine * 0.06 + coarse * 0.06 + light * 0.4 - dark * 0.35 + vein * 0.5);
+      return { h: 0.5 + fine * 0.12 + coarse * 0.1, c: [g, g, g], r: 0.66 + fine * 0.1 + coarse * 0.06 };
+    }),
+  );
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap, roughness: 1, metalness: 0 });
+  m.normalScale.set(0.45, 0.45);
+  return m;
 }
 
 /**
@@ -204,10 +273,13 @@ function chipMaterial(): THREE.MeshStandardMaterial {
   return m;
 }
 
-type Form = 'pebble' | 'crushed' | 'chip';
-/** Per form, on each piece's linear albedo (see placeStones). */
-const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2] };
-const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : pebbleShape(s, detail));
+type Form = 'pebble' | 'crushed' | 'chip' | 'river' | 'cobble';
+/**
+ * Per form, on each piece's linear albedo (see placeStones). River rock and cobble are fuller than beach pebbles, so more
+ * of each stone turns from the sun and they shade one another more: a little more gain (set by eye on the sample beds).
+ */
+const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2], river: [1.12, 1.12, 1.16], cobble: [1.16, 1.16, 1.2] };
+const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : form === 'river' || form === 'cobble' ? roundShape(s, detail, form === 'cobble') : pebbleShape(s, detail));
 
 export interface Stone {
   x: number;
@@ -221,6 +293,8 @@ export interface Stone {
   tipZ: number;
   color: THREE.Color;
   shape: number;
+  /** How far the shape reaches from its center along an axis, as a share of its size, kept high (see pieceTop). */
+  full?: number;
 }
 
 interface Tile {
@@ -247,6 +321,8 @@ export interface PebbleBed {
   tint?: [number, number, number];
   /** The surface's height at a point, when it is not flat at `y` (a poured pile). */
   heightAt?: (p: Vec2) => number;
+  /** Where in the outline stones go, when not all of it (a winding stream bed): plan point. */
+  inside?: (p: Vec2) => boolean;
 }
 
 /** Where one bed's stones go: inside test, surface height and extent. */
@@ -275,7 +351,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
     })),
     ...beds.filter((b) => materialById.get(b.catalogId)?.pebble).map((b) => ({
       catalogId: b.catalogId,
-      area: { key: b.id, inside: (p: Vec2) => pointInPolygon(p, b.polygon) && !b.holes.some((h) => pointInPolygon(p, h)), height: b.heightAt ?? (() => b.y), polygon: b.polygon, tint: b.tint ?? ([1, 1, 1] as [number, number, number]) },
+      area: { key: b.id, inside: (p: Vec2) => pointInPolygon(p, b.polygon) && !b.holes.some((h) => pointInPolygon(p, h)) && (!b.inside || b.inside(p)), height: b.heightAt ?? (() => b.y), polygon: b.polygon, tint: b.tint ?? ([1, 1, 1] as [number, number, number]) },
     })),
   ];
   if (!areas.length) return { object: null, update() {}, dispose() {} };
@@ -284,7 +360,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const mats = new Map<Form, THREE.MeshStandardMaterial>();
   const matOf = (f: Form) => {
     let m = mats.get(f);
-    if (!m) mats.set(f, (m = f === 'crushed' ? crushedMaterial() : f === 'chip' ? chipMaterial() : pebbleMaterial()));
+    if (!m) mats.set(f, (m = f === 'crushed' ? crushedMaterial() : f === 'chip' ? chipMaterial() : f === 'river' || f === 'cobble' ? riverMaterial() : pebbleMaterial()));
     return m;
   };
   const tiles: Tile[] = [];
@@ -298,8 +374,9 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
     const mat = matOf(form);
     const avg = ((P.minIn + P.maxIn) / 2) * 0.0254;
     // Small stones get plainer shapes: their facets never show. Gravel under an inch is many pieces: the plainest shapes.
-    const nearDetail = form === 'crushed' ? (avg < 0.015 ? 0 : 1) : avg < 0.03 ? 1 : 2;
-    const farDetail = form === 'crushed' ? 0 : avg < 0.03 ? 0 : 1;
+    // Cobble 4 in and up is big enough on screen to want the roundest shape close up.
+    const nearDetail = form === 'crushed' ? (avg < 0.015 ? 0 : 1) : avg < 0.03 ? 1 : avg > 0.1 ? 3 : 2;
+    const farDetail = form === 'crushed' ? 0 : avg < 0.03 ? 0 : avg > 0.1 ? 2 : 1;
     const byTile = new Map<string, Stone[]>();
     for (const s of stones) {
       const k = `${Math.floor(s.x / TILE)},${Math.floor(s.z / TILE)}`;
@@ -410,8 +487,9 @@ export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
       const color = cols[ci].clone().multiplyScalar(0.88 + r() * 0.24).multiply(new THREE.Color(...z.tint));
       // Pebbles lie flat-ish, a few stood on edge against their neighbors, sunk a fifth to a half of their thickness.
       // Crushed stone lies any which way. Chips lie flat in a loose layer, each at its own height so none share a plane.
-      const steep = r() < (form === 'crushed' ? 0.35 : form === 'chip' ? 0.06 : 0.12);
-      const tip = form === 'crushed' ? 1.4 : form === 'chip' ? 0.3 : 0.4;
+      const round = form === 'river' || form === 'cobble';
+      const steep = r() < (form === 'crushed' ? 0.35 : form === 'chip' ? 0.06 : round ? 0.18 : 0.12);
+      const tip = form === 'crushed' ? 1.4 : form === 'chip' ? 0.3 : round ? 0.6 : 0.4;
       const py = form === 'chip' ? z.height(p) + thick * 0.3 + r() * avg * 0.12 : z.height(p) + thick * (0.5 - (0.2 + r() * 0.3));
       out.push({
         x: p[0],
@@ -425,6 +503,8 @@ export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
         tipZ: (r() - 0.5) * (steep ? 0.9 : tip * 0.9),
         color,
         shape: Math.floor(r() * SHAPES),
+        // River rock and cobble are rounder and lumpier (roundShape): they reach a little further out.
+        ...(round ? { full: 0.68 } : {}),
       });
     }
   }
@@ -445,7 +525,7 @@ const CENTER_INSET = 0.01;
  * times the sine of the tip about the other horizontal axis, with the thickness taken at its full tipped height.
  */
 function pieceTop(st: Stone): number {
-  const F = 0.56;
+  const F = st.full ?? 0.56;
   const sx = Math.abs(Math.sin(st.tipX)), sz = Math.abs(Math.sin(st.tipZ));
   return st.y + F * (st.thick * Math.max(Math.cos(st.tipX) * Math.cos(st.tipZ), 0) + Math.max(st.len, st.wid) * (sx + sz));
 }
