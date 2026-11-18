@@ -437,8 +437,10 @@ export class Studio {
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
       if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400)) {
-        // A tap on a measurement label picks its run (and nothing else); a tap anywhere else lets it go.
-        if (this.measure.tap(e.clientX, e.clientY)) {
+        // A tap on a measurement label picks its run (and nothing else); a tap anywhere else lets it go. With the Hand
+        // picked, a door, lid, fire, water or light under the label wins over it.
+        const handHit = this.handActive && !!this.actionAt({ x: e.clientX, y: e.clientY });
+        if (!handHit && this.measure.tap(e.clientX, e.clientY)) {
           down = null;
           return;
         }

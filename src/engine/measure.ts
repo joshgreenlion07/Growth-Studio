@@ -217,14 +217,21 @@ class SegGrid {
       const s = this.owners.length;
       this.owners.push(owner);
       this.segs.push(a[0], a[1], b[0], b[1]);
-      const x0 = Math.floor((Math.min(a[0], b[0]) - R) / C), x1 = Math.floor((Math.max(a[0], b[0]) + R) / C);
-      const z0 = Math.floor((Math.min(a[1], b[1]) - R) / C), z1 = Math.floor((Math.max(a[1], b[1]) + R) / C);
-      if ((x1 - x0 + 1) * (z1 - z0 + 1) > 4000) continue;
-      for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
-        const k = this.key(x, z);
-        const c = this.cells.get(k);
-        if (c) c.push(s);
-        else this.cells.set(k, [s]);
+      // The cells along the segment (within R of it), not its whole bounding box: a long diagonal stays cheap.
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const steps = Math.max(1, Math.ceil(L / (C / 2)));
+      const done = new Set<number>();
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps, px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+        const x0 = Math.floor((px - R) / C), x1 = Math.floor((px + R) / C), z0 = Math.floor((pz - R) / C), z1 = Math.floor((pz + R) / C);
+        for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+          const key = this.key(x, z);
+          if (done.has(key)) continue;
+          done.add(key);
+          const c = this.cells.get(key);
+          if (c) c.push(s);
+          else this.cells.set(key, [s]);
+        }
       }
     }
   }
@@ -804,8 +811,10 @@ export class Measurements {
 
   /** The label under a point on the page (client coordinates), if one is showing there. */
   private dimAt(cx: number, cy: number): Dim | null {
-    if (this.layer.hidden || !this.dims.length) return null;
-    const x = cx - this.obstacles.originX, y = cy - this.obstacles.originY;
+    if (!this.shown || this.layer.hidden || !this.dims.length) return null;
+    // Read at the event, not in the frame loop.
+    const r = this.layer.getBoundingClientRect();
+    const x = cx - r.left, y = cy - r.top;
     let best: Dim | null = null;
     for (const d of this.dims) {
       // A finger is wider than a pointer: a few pixels of slack round each label.
@@ -830,6 +839,8 @@ export class Measurements {
     const next = d && d !== this.sel ? d : null;
     if (next !== this.sel) {
       this.sel = next;
+      // The hover would otherwise keep showing what the click just let go of.
+      this.hov = null;
       this.highlight();
     }
     return !!d;
@@ -953,7 +964,16 @@ export class Measurements {
     const pick = this.hov ?? this.sel;
     const order = this.dimOrder;
     order.length = 0;
-    if (active) for (const d of this.dims) {
+    if (!active) {
+      // Measurements off (plant labels or a pinned tape label still showing): every run label and leader goes.
+      for (const d of this.dims) this.hideDim(d);
+      for (const l of this.leaders) if (l.style.visibility !== 'hidden') l.style.visibility = 'hidden';
+      return;
+    }
+    // A low (walk-height) view looks at the horizon: curve labels aim a little below the middle, nearer the viewer.
+    this.aimY = lift < 3 ? 0.6 : 0.5;
+    this.near = Math.max(0.05, camera.near);
+    for (const d of this.dims) {
       d.d = Math.max(0, d.center.distanceTo(cam) - d.radius);
       const limit = d.kind === 'object' ? Math.max(60, far * 1.8) : d.kind === 'lot' ? far * 1.4 : far;
       if (d.d <= limit || d === pick) order.push(d);
@@ -982,6 +1002,11 @@ export class Measurements {
     }
     for (let i = lead; i < this.leaders.length; i++) if (this.leaders[i].style.visibility !== 'hidden') this.leaders[i].style.visibility = 'hidden';
     if (pick) for (const id of pick.runs) flags[id] = 2;
+    // The hovered label left the view (or was dropped): stop showing its run.
+    if (this.hov && !this.hov.on) {
+      this.hov = null;
+      this.highlight();
+    }
     let changed = false;
     for (let i = 0; i < flags.length; i++) if (flags[i] !== this.flags[i]) { changed = true; break; }
     if (changed && this.u.uFlags.value) {
@@ -1000,7 +1025,7 @@ export class Measurements {
    * edges. Returns their length in pixels.
    */
   private visiblePieces(path: Float32Array, W: number, H: number): number {
-    const e = this.pv.elements, NEAR = 0.05, M = 8;
+    const e = this.pv.elements, NEAR = this.near, M = 8;
     this.npc = 0;
     let total = 0;
     for (let i = 0; i + 5 < path.length; i += 3) {
@@ -1065,9 +1090,9 @@ export class Measurements {
     }
   }
 
-  /** How far along the visible pieces (pixels) the point nearest the middle of the view is. */
+  /** How far along the visible pieces (pixels) the point nearest the middle of the view (a low view: a bit below) is. */
   private nearestCenter(W: number, H: number): number {
-    const pc = this.pc, cx = W / 2, cy = H / 2;
+    const pc = this.pc, cx = W / 2, cy = H * this.aimY;
     let best = Infinity, at = 0, walked = 0;
     for (let k = 0; k < this.npc; k++) {
       const o = k * 12, dx = pc[o + 2] - pc[o], dy = pc[o + 3] - pc[o + 1], L2 = dx * dx + dy * dy, L = Math.sqrt(L2);
@@ -1107,6 +1132,9 @@ export class Measurements {
   }
 
   private at = [0, 0, 0];
+  /** Where curve labels aim on screen (fraction of the height), and the near plane, for this frame. */
+  private aimY = 0.5;
+  private near = 0.05;
 
   /**
    * Place one run label. Returns 0 (not shown), 1 (on its run) or 2 (moved off it, using `leader`).
