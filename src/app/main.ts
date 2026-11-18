@@ -12,6 +12,7 @@ import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
 import { pictureFor, pictureNow, swatchNow } from './swatches';
 import { pointKind } from '../siteplan/material-info';
+import { padChoices, padLook, padOf } from '../siteplan/pads';
 import { closeLibrary, libraryOpen, openLibrary } from './library';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
@@ -323,7 +324,7 @@ function selectEl(id: string, options: { value: string; label: string; group?: s
 }
 
 // Only offered materials (see OFFERED_LINES in the catalog), plus the current value so a hidden one never silently changes.
-const matOptions = (use: MaterialUse, current?: string) => materialsFor(use, current).map((m) => ({ value: m.id, label: m.name, group: m.group }));
+const matOptions = (use: MaterialUse, current?: string) => materialsFor(use, current).filter((m) => !m.padSlab || m.id === current).map((m) => ({ value: m.id, label: m.name, group: m.group }));
 const featureOptions = () => FEATURES.map((f) => ({ value: f.id, label: f.name, group: f.group as FeatureGroup }));
 
 function renderToolOptions() {
@@ -460,7 +461,12 @@ function renderInspector() {
     const z = plan.zones.find((x) => x.id === sel.id)!;
     const use: MaterialUse = z.kind === 'turf' ? 'turf' : z.kind === 'bed' ? 'bed' : 'hardscape';
     box.append(h('h3', { text: z.kind === 'turf' ? 'Lawn or turf' : z.kind === 'bed' ? 'Planting bed' : 'Patio or path' }), confirmAI(z) ?? '');
-    box.append(field('Material', selectEl('z-mat', matOptions(use, z.catalogId), z.catalogId, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
+    // A one-slab pad offers only what is sold in its size (else the generic large-format slab), and shows the look it is built in.
+    const pad = z.kind === 'hardscape' ? padOf(z) : null;
+    const padCur = pad ? padLook(materialById.get(z.catalogId)!, pad.wIn, pad.dIn).id : z.catalogId;
+    const zoneMats = pad ? padChoices(pad.wIn, pad.dIn).map((m) => ({ value: m.id, label: m.name, group: m.group })) : matOptions(use, z.catalogId);
+    box.append(field('Material', selectEl('z-mat', zoneMats, padCur, (v) => { snapshot(); z.catalogId = v; changed('structure'); }, 'Material')));
+    if (pad) box.append(h('p', { class: 'muted', text: `One solid ${Math.round(pad.wIn)} x ${Math.round(pad.dIn)} in slab, no joints. Only products sold in this size are listed.` }));
     if (z.kind === 'hardscape') {
       const zm = materialById.get(z.catalogId);
       const lays = layingsFor(zm);

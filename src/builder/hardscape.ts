@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { materialById, type FenceStyle } from '../siteplan/catalog';
+import { materialById, type FenceStyle, type MaterialSpec } from '../siteplan/catalog';
+import { padLook, padOf, type PadRect } from '../siteplan/pads';
 import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
-import { latticeAlpha, materialTextures, photoAlbedo, wallCapTextures } from '../engine/surfaces';
+import { latticeAlpha, materialTextures, photoAlbedo, slabSet, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
@@ -484,6 +485,40 @@ function cutFaces(lines: Vec2[][], zone: Vec2[], y0: number, y1: number): THREE.
   return g;
 }
 
+/** Size of one pad slab's texture: the longer side, to a quarter inch. */
+const padTileIn = (r: PadRect) => Math.round(Math.max(r.wIn, r.dIn) * 4) / 4;
+
+/** The material of a pad: its slab, the texture one slab across (cached per look and size). */
+function padMaterial(spec: MaterialSpec, r: PadRect): THREE.MeshStandardMaterial {
+  const sizeIn = padTileIn(r);
+  return pbrMaterial(`pad:${spec.id}:${sizeIn}`, slabSet(spec, sizeIn));
+}
+
+/**
+ * Rewrites a pad's UVs so its one-slab texture spans the slab edge to edge: the top (and its bevel, held at the edge so
+ * the painted chamfer reads as the slab's arris) maps across the rectangle once; the sides take a strip of it.
+ */
+function padUV(g: THREE.BufferGeometry, r: PadRect) {
+  const pos = g.getAttribute('position') as THREE.BufferAttribute, nor = g.getAttribute('normal') as THREE.BufferAttribute;
+  const uv = new Float32Array(pos.count * 2);
+  const T = padTileIn(r) * 0.0254, W = r.wIn * 0.0254, D = r.dIn * 0.0254;
+  const clamp = (v: number) => Math.min(0.999, Math.max(0.001, v));
+  for (let i = 0; i < pos.count; i++) {
+    const dx = pos.getX(i) - r.center[0], dz = pos.getZ(i) - r.center[1];
+    const s = dx * r.a[0] + dz * r.a[1], q = dx * r.b[0] + dz * r.b[1];
+    let u = clamp(s / W + 0.5), v = clamp(q / D + 0.5);
+    if (Math.abs(nor.getY(i)) <= 0.6) {
+      // A side face: along its edge, a thin strip of the slab's middle.
+      const along = Math.abs(nor.getX(i) * r.a[0] + nor.getZ(i) * r.a[1]) > 0.5 ? v : u;
+      u = along;
+      v = clamp(0.45 + (pos.getY(i) + 0.06) * 2);
+    }
+    uv[i * 2] = u * T;
+    uv[i * 2 + 1] = v * T;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
 export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pools: PoolLayout): HardscapeBuild {
   const group = new THREE.Group();
   group.name = 'hardscape';
@@ -508,7 +543,8 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
       const mat = (m: THREE.Material) => (cut ? pools.cutMaterial(m) : m);
       const bev = spec?.recipe === 'deck' ? 0.004 : 0.006;
       let field = z.polygon;
-      if (z.border && materialById.has(z.border.catalogId)) {
+      const pad = padOf(z);
+      if (z.border && !pad && materialById.has(z.border.catalogId)) {
         const w = Math.max(0.08, Math.min(0.6, z.border.width));
         const inner = insetPolygon(z.polygon, w);
         field = inner;
@@ -544,8 +580,12 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         }
       }
       const g = slab(field, -0.06, t + 0.0005, bev);
+      // A one-slab pad: one solid slab at its drawn size, its texture one slab across (no joints, no cut pieces), in a
+      // product sold in that size (else the generic large-format slab). Its height and position are the zone's own.
+      const padSpec = pad && spec ? padLook(spec, pad.wIn, pad.dIn) : null;
+      if (pad && padSpec) padUV(g, pad);
       geos.push(g);
-      const mesh = new THREE.Mesh(g, mat(catalogMaterial(z.catalogId, {}, z.laying)));
+      const mesh = new THREE.Mesh(g, mat(pad && padSpec ? padMaterial(padSpec, pad) : catalogMaterial(z.catalogId, {}, z.laying)));
       mesh.receiveShadow = true;
       mesh.castShadow = t > 0.15;
       if (cut && pools.cutDepth) mesh.customDepthMaterial = pools.cutDepth;
@@ -564,7 +604,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
       mesh.name = `zone-${z.id}`;
       mesh.userData.itemId = z.id;
       mesh.userData.part = 'main';
-      mesh.userData.catalogId = z.catalogId;
+      mesh.userData.catalogId = padSpec?.id ?? z.catalogId;
       group.add(mesh);
       surfaces.push(mesh);
     } else if (z.raised && materialById.has(z.raised.wallCatalogId)) {

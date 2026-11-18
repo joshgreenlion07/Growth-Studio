@@ -229,6 +229,7 @@ export function cleanPlan(input: unknown): CleanResult {
       const e = num(it.elevation, 0, 0, 3);
       if (e > 0.005) z.elevation = e;
     }
+    if (kind === 'hardscape' && typeof it.pad === 'boolean') z.pad = it.pad;
     if (LAYING_PATTERNS.includes(it.laying as LayingPattern)) z.laying = it.laying as LayingPattern;
     const ly = it.layers as Record<string, unknown> | undefined;
     if (kind !== 'bed' && ly && typeof ly === 'object') {

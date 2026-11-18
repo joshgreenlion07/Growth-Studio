@@ -17,10 +17,10 @@ export function runRecipe(key: string): PBRSet | null {
     const spec = materialById.get(mat[1]);
     return spec ? materialTextures(spec, mat[2] as LayingPattern | undefined) : null;
   }
-  const slab = /^slab:(.+)$/.exec(key);
+  const slab = /^slab:([^:]+)(?::(\d+(?:\.\d+)?))?$/.exec(key);
   if (slab) {
     const spec = materialById.get(slab[1]);
-    return spec ? slabSet(spec) : null;
+    return spec ? slabSet(spec, slab[2] ? +slab[2] : 24) : null;
   }
   const cap = /^cap:(.+)$/.exec(key);
   if (cap) {

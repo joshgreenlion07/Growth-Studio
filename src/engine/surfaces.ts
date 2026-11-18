@@ -1356,7 +1356,7 @@ function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], 
  * with a fine sand grain. Square slabs only (`sizeIn` is the side).
  */
 export function slabSet(spec: MaterialSpec, sizeIn = 24): PBRSet {
-  return textureSet(`slab:${spec.id}`, () => {
+  return textureSet(sizeIn === 24 ? `slab:${spec.id}` : `slab:${spec.id}:${sizeIn}`, () => {
     const colors = pal(spec);
     const n = colors.length;
     const T = sizeIn * IN;
