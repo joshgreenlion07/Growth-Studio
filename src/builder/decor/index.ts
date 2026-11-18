@@ -17,7 +17,7 @@ export function buildDecor(kind: DecorKind, c0: DecorContext) {
     ...c0,
     add: (m, g) => c0.add(m, g.translate(0, up, 0)),
     light: (x, y, z, ...rest) => c0.light(x, y + up, z, ...rest),
-    flame: (w, h, x, y, z, ry) => c0.flame(w, h, x, y + up, z, ry),
+    fire: (tongues, style) => c0.fire(tongues.map((t) => ({ ...t, y: t.y + up })), style),
   } : c0;
   switch (kind) {
     case 'cortenPlanterTall': return cortenPlanterTall(c);

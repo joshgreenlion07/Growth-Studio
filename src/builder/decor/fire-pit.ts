@@ -3,6 +3,7 @@ import { featureSize } from '../../siteplan/decor';
 import { rng } from '../../siteplan/geometry';
 import { photoAlbedo } from '../../engine/surfaces';
 import { boxUV, pbrMaterial, plainMaterial } from '../materials';
+import { lineBurner } from '../fire';
 import { box, gfrcCharcoal, IN, mat, type DecorContext } from './kit';
 
 /*
@@ -10,7 +11,8 @@ import { box, gfrcCharcoal, IN, mat, type DecorContext } from './kit';
  * glass-fiber concrete with softly eased edges, floating on a plinth set in about 3 1/4 in all round. Measured from
  * its photo against the lounge set: 60 x 30 in, 12 1/2 in tall (an 8 1/2 in body on a 4 in plinth). The burner pan
  * is about 65% of the length and 41% of the width (39 x 12 1/2 in), 1 3/4 in deep, filled with reflective fire glass
- * over the burner; the flame stands in the middle. At night the glass bed glows and the fire lights the seating.
+ * over a 28 in line burner down its middle; the flames stand along the burner, tallest over the middle. At night the
+ * glass bed glows and the fire lights the seating.
  * Local x runs along the length.
  */
 
@@ -40,10 +42,12 @@ export function firePitLinear(c: DecorContext) {
   const bedY = yTopSolid + 0.004;
   c.add(ember, box(Lp - 2 * lt, 0.006, Wp - 2 * lt, 0, yTopSolid - 0.002, 0));
   c.add(glassMaterial(), fireGlass(Lp - 2 * lt - 0.006, Wp - 2 * lt - 0.006, bedY, H - bedY - 0.006, `${c.f.id}-glass`));
-  // Flame: one tall, narrow flame in the middle of the burner, as in the photo.
+  // Flame: a line burner down the middle of the pan, 28 in on the 60 in pit (the run the owner measured on the job's pit), scaled with
+  // the pit's length on the other sizes. Its flames stand along the whole run, tallest over the middle (about 13 in
+  // there, as in the job photo) and lower toward the ends.
   const top = H - 0.012;
-  c.flame(0.15, 0.42, 0, top, 0);
-  c.flame(0.11, 0.38, 0, top, 0, Math.PI / 2 - 0.0001);
+  const run = Math.min(Lp - 4 * IN, (28 * IN * L) / (60 * IN));
+  c.fire(lineBurner(run, top, 0.38, c.f.id, { across: Math.min(0.025, Wp * 0.08) }));
   c.light(0, H + 0.45, 0, '#ff9a4a', 6.5, 7.5, true);
 }
 

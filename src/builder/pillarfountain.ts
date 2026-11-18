@@ -77,7 +77,7 @@ const agedCopper = () => plainMaterial('pf-aged-copper', { color: '#5a4636', rou
  * or the silhouette of a stream (fresnel), whiter where it breaks up near the bottom (uv.y in meters fallen, aEnd 0..1),
  * and a warm glow when its LED is on (uGlow, set by the light it is linked to).
  */
-function clearFallMaterial(): THREE.ShaderMaterial {
+export function clearFallMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { uTime: GLOBAL.uTime, uSunColor: GLOBAL.uSunColor, uGlow: { value: 0 } },
     transparent: true,
@@ -123,7 +123,7 @@ function clearFallMaterial(): THREE.ShaderMaterial {
 }
 
 /** Foam where the water lands in the pebbles: soft white churn, moving. */
-function splashMaterial(): THREE.ShaderMaterial {
+export function splashMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { uTime: GLOBAL.uTime, uSunColor: GLOBAL.uSunColor },
     transparent: true,
@@ -152,7 +152,7 @@ function splashMaterial(): THREE.ShaderMaterial {
  * A sheer-descent sheet leaving a lip at `top` (center of the lip's front edge), falling to `bottomY`: a ribbon that
  * curves out from the wall as it falls (exit speed `out` m/s) and narrows from `w0` to `w1`, with a slight belly.
  */
-function sheetGeometry(top: THREE.Vector3, bottomY: number, w0: number, w1: number, out: number): THREE.BufferGeometry {
+export function sheetGeometry(top: THREE.Vector3, bottomY: number, w0: number, w1: number, out: number): THREE.BufferGeometry {
   const drop = top.y - bottomY, nx = 12, ny = 24;
   const pos: number[] = [], uv: number[] = [], edge: number[] = [], end: number[] = [], idx: number[] = [];
   for (let j = 0; j <= ny; j++) {

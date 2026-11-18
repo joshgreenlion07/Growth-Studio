@@ -3,7 +3,6 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
-import { GLOBAL } from '../engine/foliage';
 import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
@@ -17,6 +16,8 @@ import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
 import { calSpaTropicalPlus } from './spa-ppz743bc';
+import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
+import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -69,32 +70,6 @@ function cyl(r0: number, r1: number, h: number, x: number, y: number, z: number,
   const g = new THREE.CylinderGeometry(r1, r0, h, seg);
   g.translate(x, y + h / 2, z);
   return g.toNonIndexed();
-}
-
-function flameMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: { uTime: GLOBAL.uTime, uOn: { value: 0 } },
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: /* glsl */ `
-      uniform float uTime; uniform float uOn; varying vec2 vUv;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      void main(){
-        vec2 uv = vUv;
-        float t = uTime * 2.2;
-        float w = n(vec2(uv.x * 9.0, uv.y * 3.0 - t)) * 0.6 + n(vec2(uv.x * 19.0, uv.y * 7.0 - t * 1.7)) * 0.4;
-        float lick = 0.5 + 0.5 * sin(uv.x * 40.0 + t * 3.0);
-        float f = clamp((1.0 - uv.y * 1.25) * (0.7 + lick * 0.3) + (w - 0.5) * 0.9, 0.0, 1.0);
-        f *= smoothstep(0.0, 0.06, uv.x) * smoothstep(1.0, 0.94, uv.x);
-        vec3 c = mix(vec3(1.0, 0.25, 0.03), vec3(1.0, 0.78, 0.35), f);
-        gl_FragColor = vec4(c * f * 5.0 * uOn, 1.0);
-      }`,
-  });
 }
 
 /** A stepping stone's slab: its own color when it names one, else the default Dimensions Slab 24 x 24 color. */
@@ -192,17 +167,18 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     const shade = spec.group === 'Shade';
     const light = (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker = false) =>
       lights.push({ position: local(x, y, z), color, intensity, distance, flicker, ...(shade ? { shade: true } : {}) });
-    // Each feature's fire has its own flame material, so it can be lit or put out by hand on its own.
-    let ownFlame: THREE.ShaderMaterial | null = null;
-    const flame = (w: number, h: number, x: number, y: number, z: number, ry = 0) => {
-      if (!ownFlame) {
-        ownFlame = flameMaterial();
-        owned.push(ownFlame);
+    // Each feature's fire has its own flame material (one per style), so it can be lit or put out by hand on its own.
+    const fireMats = new Map<FireStyle, THREE.ShaderMaterial>();
+    const fire = (tongues: Tongue[], style: FireStyle = 'gas') => {
+      let m = fireMats.get(style);
+      if (!m) {
+        m = fireMaterial(style);
+        owned.push(m);
+        fireMats.set(style, m);
       }
-      const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0), ownFlame);
-      fl.position.set(x, y, z);
-      fl.rotation.y = ry;
-      fl.renderOrder = 3;
+      const fl = fireMesh(tongues, m);
+      // A grill burns only when it is lit by hand.
+      if (style === 'grill') fl.userData.manual = true;
       geos.push(fl.geometry);
       o.add(fl);
       flames.push(fl);
@@ -278,7 +254,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.stacked, inner);
         add(mat.graniteLight, top);
         add(mat.lava, cyl(0.46, 0.46, 0.18, 0, 0, 0, 24));
-        for (let k = 0; k < 3; k++) flame(0.6, 0.62, 0, 0.18, 0, (k / 3) * Math.PI);
+        // A 16 in ring burner under the lava rock.
+        fire(ringBurner(0.2, 0.18, 0.5, f.id));
         light(0, 0.8, 0, '#ff9a4a', 9, 9, true);
         break;
       }
@@ -286,8 +263,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.alum, box(W, 0.5, D, 0, 0, 0));
         add(mat.granite, box(W + 0.04, 0.04, D + 0.04, 0, 0.5, 0));
         add(mat.glassFire, box(W * 0.62, 0.02, 0.18, 0, 0.53, 0));
-        flame(W * 0.6, 0.32, 0, 0.54, 0);
-        flame(W * 0.6, 0.28, 0, 0.54, 0, Math.PI / 2 - 0.0001);
+        // A line burner down the middle of the glass channel.
+        fire(lineBurner(W * 0.56, 0.54, 0.27, f.id, { across: 0.03 }));
         light(0, 0.75, 0, '#ff9a4a', 6, 7, true);
         break;
       }
@@ -376,8 +353,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         const fz = -(D - depth) / 2 + depth / 2 + 0.005;
         // Grill: the firebox on the counter, its grate, and the hood hinged along its back top edge (lifts by hand).
         const gx = -W * 0.18, gz = -(D - depth) / 2, gd = depth * 0.85;
-        add(mat.steel, box(0.85, 0.2, gd, gx, Hc, gz));
-        add(mat.grate, box(0.78, 0.01, gd - 0.06, gx, Hc + 0.2, gz));
+        grillFirebox(add, fire, light, mat, gx, Hc, gz, 0.85, 0.2, gd, f.id);
         const hood = hinge(gx, Hc + 0.2, gz - gd / 2);
         hood.add(mat.steel, box(0.86, 0.18, gd, gx, Hc + 0.2, gz));
         hood.add(mat.steel, new THREE.CylinderGeometry(0.012, 0.012, 0.6, 8).rotateZ(Math.PI / 2).translate(gx, Hc + 0.3, gz + gd / 2 + 0.05).toNonIndexed());
@@ -590,7 +566,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'patioHeater':
       case 'ceilingFan': {
         // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
-        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
+        buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
       case 'blackPlanter': {
@@ -607,6 +583,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'pillarFountain': {
         pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
+        break;
+      }
+      case 'fireWaterBowl': {
+        cazoFireWaterBowl(sink, (t) => fire(t), (x, y, z, c, i, d) => light(x, y, z, c, i, d, true), f.id);
         break;
       }
       case 'patinaBowl': {
@@ -835,14 +815,54 @@ function stratusPergola(
   light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
 }
 
+type GrillMats = Record<'steel' | 'grate' | 'black' | 'inside', THREE.Material>;
+
+/**
+ * A built-in gas grill's firebox standing on the counter at (x, y, z), w x h x d: a hollow stainless box with a dark
+ * inside, four burner tubes running front to back with a row of short blue flames each side of their crown, a grate
+ * of bars over them, and a knob for each burner on the front. The flames burn only when the grill is lit by hand.
+ */
+function grillFirebox(add: (m: THREE.Material, g: THREE.BufferGeometry) => void, fire: (t: Tongue[], style?: FireStyle) => void,
+  light: (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker?: boolean) => void,
+  mat: GrillMats, x: number, y: number, z: number, w: number, h: number, d: number, seed: string) {
+  const t = 0.012;
+  add(mat.steel, box(w, 0.01, d, x, y, z));
+  for (const s of [-1, 1]) {
+    add(mat.steel, box(w, h, t, x, y, z + s * (d / 2 - t / 2)));
+    add(mat.steel, box(t, h, d - 2 * t, x + s * (w / 2 - t / 2), y, z));
+    // The dark, heat-stained inside of the walls.
+    add(mat.inside, box(w - 2 * t, h - 0.03, 0.003, x, y + 0.01, z + s * (d / 2 - t - 0.0015)));
+    add(mat.inside, box(0.003, h - 0.03, d - 2 * t, x + s * (w / 2 - t - 0.0015), y + 0.01, z));
+  }
+  add(mat.inside, box(w - 2 * t, 0.004, d - 2 * t, x, y + 0.01, z));
+  // Burners: tubes 1 in across, ports along their crown.
+  const len = d - 0.1, ty = y + 0.06, r = 0.0127;
+  const xs = [-0.36, -0.12, 0.12, 0.36].map((k) => x + k * (w - 2 * t));
+  xs.forEach((bx, k) => {
+    add(mat.black, new THREE.CylinderGeometry(r, r, len, 12).rotateX(Math.PI / 2).translate(bx, ty, z).toNonIndexed());
+    const a = new THREE.Vector3(bx, ty + r * 0.75, z - len / 2 + 0.025), b = new THREE.Vector3(bx, ty + r * 0.75, z + len / 2 - 0.025);
+    fire(tubeBurner(a, b, 0.04, `${seed}-burner${k}`, 0.022, r * 0.6), 'grill');
+    // Its knob on the front.
+    add(mat.steel, new THREE.CylinderGeometry(0.021, 0.023, 0.026, 18).rotateX(Math.PI / 2).translate(bx, y + 0.1, z + d / 2 + 0.013).toNonIndexed());
+  });
+  // The grate: bars front to back, flush with the firebox top, on two cross rails.
+  const gw = w - 2 * t - 0.01, pitch = 0.019;
+  const n = Math.floor(gw / pitch);
+  for (let i = 0; i <= n; i++) add(mat.grate, box(0.007, 0.012, d - 2 * t - 0.01, x - (n * pitch) / 2 + i * pitch, y + h - 0.012, z));
+  for (const s of [-1, 1]) add(mat.grate, box(gw, 0.008, 0.012, x, y + h - 0.02, z + s * (d / 2 - 0.06)));
+  // The burners' glow on the grate, the open hood and whatever stands near: soft, from well above the grate.
+  light(x, y + h + 0.55, z + 0.1, '#ffa860', 0.5, 2.2, true);
+}
+
 /**
  * The fires by the light of day: lit from dusk. A fire put out by hand (userData.force false) stays out; one lit by
- * hand (true) burns in daylight too.
+ * hand (true) burns in daylight too. A grill's burners stay off until lit by hand.
  */
 export function setFlames(fb: FeatureBuild, on: number) {
   for (const f of fb.flames) {
     const force = f.userData.force as boolean | undefined;
-    const v = force === false ? 0 : force === true ? Math.max(on, 0.9) : on;
+    // A grill (userData.manual) burns only when lit by hand.
+    const v = force === false ? 0 : force === true ? Math.max(on, 0.9) : f.userData.manual ? 0 : on;
     f.visible = v > 0.02;
     (f.material as THREE.ShaderMaterial).uniforms.uOn.value = v;
   }
@@ -856,8 +876,11 @@ export function setFlames(fb: FeatureBuild, on: number) {
 function handActions(itemId: string, o: THREE.Object3D, fixture: boolean, own: NightLight[], flames: THREE.Mesh[], falls: Set<THREE.Material>, glow: THREE.MeshStandardMaterial[], out: FeatureAction[]) {
   if (flames.length) {
     const fireLights = own.filter((l) => l.flicker);
+    // A grill starts off, its light with it.
+    const manual = flames.every((fl) => fl.userData.manual);
+    if (manual) for (const l of fireLights) l.off = true;
     const p = flames[0].position;
-    out.push({ itemId, key: 'fire', label: 'Fire', words: ['On', 'Off'], anchors: [anchorAt(o, p.x, p.y + 0.2, p.z)], on: true, planOn: true, lights: true, set(on) {
+    out.push({ itemId, key: 'fire', label: manual ? 'Grill burners' : 'Fire', words: ['On', 'Off'], anchors: [anchorAt(o, p.x, p.y + 0.2, p.z)], on: !manual, planOn: !manual, lights: true, set(on) {
       for (const fl of flames) fl.userData.force = on;
       for (const l of fireLights) l.off = !on;
     } });
