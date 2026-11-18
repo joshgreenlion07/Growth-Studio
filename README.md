@@ -246,6 +246,11 @@ Messages use `window.postMessage`:
   `catalog` message) takes `options: { [key]: boolean }` on its placement; keys the feature does not offer
   are dropped. The SaunaLife CL5G sauna (`saunalife-cl5g`) offers `doorOpen` (default off) and `lightsOn`
   (default on: LED light bars inside, and a warm light through the glass at night).
+- The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
+  'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
+  steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
+  (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
+  and `steps: false` to leave the steps out.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;

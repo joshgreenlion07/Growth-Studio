@@ -160,6 +160,10 @@ export interface FeaturePlacement extends ItemBase {
   materialId?: string;
   /** Choices for the feature's on/off options (its catalog `options`, e.g. a sauna's door and lights). Left out, the defaults. */
   options?: Record<string, boolean>;
+  /** A maker's hot tub: its cover folded up on the lifter ('open', the default), on the spa ('closed'), or none ('off'). */
+  cover?: 'open' | 'closed' | 'off';
+  /** A maker's hot tub: its steps. Left out, they are shown. */
+  steps?: boolean;
 }
 
 /** A door or window the designer marked on a wall. */

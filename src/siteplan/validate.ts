@@ -305,6 +305,8 @@ export function cleanPlan(input: unknown): CleanResult {
       for (const { key } of offered) if (typeof (it.options as Record<string, unknown>)[key] === 'boolean') o[key] = (it.options as Record<string, boolean>)[key];
       if (Object.keys(o).length) f.options = o;
     }
+    if (it.cover === 'open' || it.cover === 'closed' || it.cover === 'off') f.cover = it.cover;
+    if (typeof it.steps === 'boolean') f.steps = it.steps;
     plan.features.push(f);
   }
 

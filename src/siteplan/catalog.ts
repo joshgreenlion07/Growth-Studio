@@ -330,8 +330,8 @@ export interface FeatureSpec {
   page?: string;
   about?: string;
   facts?: string[];
-  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola). */
-  model?: 'stratus' | 'saunalife-cl5g';
+  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola; 'ppz-743bc': Cal Spas Tropical Plus; 'saunalife-cl5g': SaunaLife CL5G sauna). */
+  model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g';
   /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
   options?: FeatureOption[];
   /** Pillar water feature: bowl planters on its pillars (left out, yes). */
@@ -714,6 +714,13 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'kitchen-l', name: 'Outdoor kitchen, L-shaped', group: 'Kitchens', kind: 'kitchenL', footprint: [3.6, 2.6] }),
   F({ id: 'kitchen-straight', name: 'Outdoor kitchen, straight', group: 'Kitchens', kind: 'kitchenStraight', footprint: [3.0, 0.8] }),
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
+  // Cal Spas Tropical Plus PPZ-743BC, Patio Plus series (Cal Spas spec sheet and product page): 84 x 84 x 37 in, 43 jets,
+  // 6 seats with a cool-off seat. Built by builder/spa-ppz743bc.ts in the finish Green Lion installs; a placement's
+  // `cover` and `steps` choose the cover state and the steps.
+  F({ id: 'calspas-ppz-743bc', name: 'Cal Spas Tropical Plus PPZ-743BC hot tub', group: 'Spa and sauna', kind: 'hotTub', model: 'ppz-743bc', footprint: [84 * 0.0254, 84 * 0.0254],
+    maker: 'Cal Spas', page: 'https://www.calspas.com/hot-tubs-spas-for-sale/patio-plus/tropical-plus-ppz-743bc',
+    about: 'Cal Spas Tropical Plus PPZ-743BC (Patio Plus series): a 7 ft, six-seat bench spa with 43 stainless jets, a raised cool-off seat, an LED cascade waterfall and a 5 in multi-color LED spa light. Shown with the Sterling Silver shell, the Taupe Cal Edge cabinet with black corners, a grey cover on a lifter and a two-step.',
+    facts: ['84 x 84 x 37 in', '43 stainless jets; 6 seats with a cool-off seat; 4 Y-pillows', 'Pumps: 6.0 BHP and 4.0 BHP Eliminator; 5.5 kW WhisperHot titanium heater; 240 V', 'LED cascade waterfall, 5 in multi-color LED spa light, TP500 control panel', '50 sq ft Teleweir filter', 'Cal Edge horizontal cabinet panels (Smoke, Mist, Taupe)', '4 in to 2.5 in tapered cover (Dark Brown, Grey)', 'About 425 gallons; about 800 lb empty, 4,340 lb filled (dealer listing)'] }),
   F({ id: 'sauna-barrel', name: 'Barrel sauna', group: 'Spa and sauna', kind: 'saunaBarrel', footprint: [2.0, 2.4] }),
   F({ id: 'sauna-cube', name: 'Cube sauna', group: 'Spa and sauna', kind: 'saunaCube', footprint: [2.2, 2.2] }),
   // SaunaLife Model CL5G Cube Luxury (saunalife.com, installation manual V1.1): outside 80.7 in W x 63 in D x 82.7 in H.
