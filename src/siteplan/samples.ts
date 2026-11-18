@@ -278,6 +278,41 @@ export function samplePebbleSizes(): SitePlan {
 }
 
 /**
+ * Ground covers to compare: the soil fills (black humus, compost, dirt), the bark Green Lion buys (Walk On Bark and
+ * small black wood chips) and crushed gravel in its three sizes (3/8, 3/4 and 1 1/2 in), a 6 x 6 ft steel-edged bed of
+ * each in three rows (soil at the back, bark in the middle, gravel in front), with a walk along the front.
+ */
+export function sampleGroundCovers(): SitePlan {
+  const S = 'sample' as const;
+  const F = 1.8288; // 6 ft
+  const gap = 0.75, x0 = 0.8, y0 = 1.0;
+  const rows: { id: string; note: string }[][] = [
+    [{ id: 'humus', note: 'Black humus (compost mix)' }, { id: 'compost', note: 'Compost' }, { id: 'topsoil', note: 'Dirt / topsoil' }],
+    [{ id: 'walk-on-bark', note: 'Walk On Bark, natural brown' }, { id: 'black-wood-chips', note: 'Black wood chips, small' }],
+    [{ id: 'crushed-gravel-3-8', note: 'Crushed gravel, 3/8 in' }, { id: 'crushed-gravel-3-4', note: 'Crushed gravel, 3/4 in' }, { id: 'crushed-gravel-1-1-2', note: 'Crushed gravel, 1 1/2 in' }],
+  ];
+  const beds = rows.flatMap((row, ri) => row.map((b, ci) => {
+    const x = x0 + ci * (F + gap), y = y0 + ri * (F + gap);
+    return { ...b, poly: [[x, y], [x + F, y], [x + F, y + F], [x, y + F]] as Vec2[] };
+  }));
+  const W = x0 * 2 + 3 * F + 2 * gap, walkY = y0 + 3 * F + 2 * gap + 0.3;
+  return {
+    schemaVersion: 1,
+    site: { name: 'Ground covers: soil, bark and gravel, 6 x 6 ft beds', boundary: [[0, 0], [W, 0], [W, walkY + 2.2], [0, walkY + 2.2]], latitude: 37.64, longitude: -120.99, northAngleDeg: 0, streetEdge: 2 },
+    structures: [],
+    zones: [
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: [[0, 0], [W, 0], [W, walkY], [0, walkY]] },
+      ...beds.map((b) => ({ id: `bed-${b.id}`, source: S, kind: 'bed' as const, catalogId: b.id, polygon: b.poly, note: b.note })),
+      { id: 'walk', source: S, kind: 'hardscape', catalogId: 'concrete-broom', polygon: [[0.4, walkY], [W - 0.4, walkY], [W - 0.4, walkY + 1.2], [0.4, walkY + 1.2]] },
+    ],
+    lines: beds.map((b) => ({ id: `edge-${b.id}`, source: S, kind: 'edging' as const, catalogId: 'steel-edging', points: [...b.poly, b.poly[0]], height: 0.05 })),
+    water: [],
+    plants: [],
+    features: [],
+  };
+}
+
+/**
  * The soil fills side by side: black humus (compost mix), compost and dirt / topsoil, a 10 x 10 ft bed of each, steel
  * edged, with a long curving bed of black humus behind them along a lawn (about 30 m2, for the look across a yard), and a
  * walk in front.
@@ -450,6 +485,7 @@ export const SAMPLES = [
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
+  { id: 'ground-covers', name: 'Ground covers: soil, bark and gravel', make: sampleGroundCovers },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },

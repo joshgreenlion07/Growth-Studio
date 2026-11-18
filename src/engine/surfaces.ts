@@ -938,12 +938,40 @@ function pebbleGroundSet(spec: MaterialSpec): PBRSet {
   const cum: number[] = [];
   P.colors.reduce((s, x) => (cum.push(s + x.share), s + x.share), 0);
   const pickC = (h: number) => lin[Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v))];
-  const cells = Math.max(6, Math.round(1 / (avg * 0.85)));
+  const form = P.form ?? 'pebble';
+  // Chips are long and narrow: their cells are counted by width, then stretched along each chip.
+  const across = form === 'chip' ? avg * ((P.wide[0] + P.wide[1]) / 2) : avg;
+  const cells = Math.max(6, Math.round(1 / (across * 0.85)));
   // Scaled to the stones' average color, so a bed reads the same where its 3D stones give way to this texture.
   const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   const avgLin = [0, 1, 2].map((k) => P.colors.reduce((s, x) => s + x.share * toLin(parseInt(x.c.slice(1 + 2 * k, 3 + 2 * k), 16) / 255), 0));
   const mean = rockAlbedo('#' + avgLin.map((v) => Math.round(toSrgb(v) * 255).toString(16).padStart(2, '0')).join(''));
   return paint(1024, 1, 8, (u, v) => {
+    if (form === 'crushed') {
+      // Angular pieces: each cell a stone with two or three flat broken faces, lit by their tilt, dark in the gaps.
+      const cell = voronoi(u, v, cells, 17, 0.9);
+      // Distance to the cell's border (Voronoi cells are polygons: angular stones), 0 at a gap.
+      const edge = Math.min(1, (cell.f2 - cell.f1) / 0.45);
+      if (edge < 0.07) return { h: 0, c: mulRGB(lin[lin.length - 1], 0.55), r: 1 };
+      const a1 = hash(cell.id, 3) * Math.PI * 2;
+      const facet = Math.cos(Math.atan2(cell.dy, cell.dx) - a1) > 0 ? 1 : 0;
+      const tilt = (hash(cell.id, 8 + facet) - 0.5) * 0.5;
+      const grain = vnoise(u * 700, v * 700, 700, 9);
+      const c = mulRGB(pickC(hash(cell.id, 7)), (0.78 + tilt + Math.min(1, edge * 3) * 0.12) * (0.94 + grain * 0.1));
+      return { h: Math.min(1, edge * 2.2) * (0.7 + facet * 0.3), c, r: 0.85 + grain * 0.1 };
+    }
+    if (form === 'chip') {
+      // Flat chips overlapping: long cells along each chip's own direction, grain along it, darker under the next one.
+      const cell = voronoi(u, v, cells, 19, 0.95);
+      const ang = hash(cell.id, 5) * Math.PI;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      const along = cell.dx * ca - cell.dy * sa, acr = (cell.dx * sa + cell.dy * ca) * 2.6;
+      const d = Math.hypot(along * 0.55, acr) / (0.45 + hash(cell.id, 1) * 0.1);
+      if (d >= 1) return { h: 0.05, c: mulRGB(lin[lin.length - 1], 0.45), r: 1 };
+      const fib = vnoise(u * 40 + along * 3, v * 40 + acr * 9, 40, 6);
+      const c = mulRGB(pickC(hash(cell.id, 7)), (0.7 + (1 - d) * 0.3) * (0.88 + fib * 0.2));
+      return { h: 0.4 + (1 - d) * 0.5 + fib * 0.1, c, r: 0.92 };
+    }
     const cell = voronoi(u, v, cells, 13, 0.85);
     const ang = hash(cell.id, 5) * Math.PI;
     const ex = cell.dx * Math.cos(ang) - cell.dy * Math.sin(ang);
