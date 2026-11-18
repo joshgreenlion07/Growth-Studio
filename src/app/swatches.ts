@@ -10,6 +10,7 @@ import { onTexturesChanged, wantForSwatch } from '../engine/texture-jobs';
 import type * as THREE from 'three';
 import { poolTile, type PBRSet } from '../engine/textures';
 import { wantPicture, wantThumb } from './plantthumbs';
+import { wantFeaturePicture, wantFeatureThumb } from './featurethumbs';
 
 const SIZE = 256;
 const cache = new Map<string, string>();
@@ -42,6 +43,7 @@ export function swatchFor(catalogId: string, laying?: LayingPattern): Promise<st
 function make(catalogId: string, laying?: LayingPattern): Promise<string | null> {
   const [kind, id] = pointKind(catalogId);
   if (kind === 'plant') return new Promise((res) => wantThumb(id, res, () => res(null)));
+  if (kind === 'feature') return new Promise((res) => { wantFeatureThumb(id, res); window.setTimeout(() => res(null), 20000); });   // the Library's picture of it
   if (kind === 'water' && id === 'pool') return fromSet(poolTile());
   if (kind !== 'material') return Promise.resolve(null);
   const spec = materialById.get(id);
@@ -155,6 +157,7 @@ export function pictureFor(catalogId: string, laying?: LayingPattern): Promise<s
 function makePicture(catalogId: string, laying?: LayingPattern): Promise<string | null> {
   const [kind, id] = pointKind(catalogId);
   if (kind === 'plant') return new Promise((res) => wantPicture(id, res, () => res(null)));
+  if (kind === 'feature') return new Promise((res) => { wantFeaturePicture(id, res); window.setTimeout(() => res(null), 20000); });
   if (kind === 'water' && id === 'pool') return fromSet(poolTile(), BIG);
   if (kind !== 'material') return Promise.resolve(null);
   const spec = materialById.get(id);

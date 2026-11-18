@@ -2,6 +2,7 @@
 // wanted, then pictures are made one at a time so the 3D view stays smooth, and cached for the rest of the session.
 import { featureById } from '../siteplan/catalog';
 
+const BIG = 640;
 const cache = new Map<string, string>();
 const waiting = new Map<string, Set<(url: string) => void>>();
 const failed = new Set<string>();
@@ -10,6 +11,9 @@ let running = false;
 
 /** The picture if it is ready yet. */
 export const featureThumbUrl = (id: string): string | undefined => cache.get(id);
+
+/** The material panel's larger picture of a feature (key `big:<id>` in the same queue and cache). */
+export const wantFeaturePicture = (id: string, done: (url: string) => void) => wantFeatureThumb(`big:${id}`, done);
 
 /** Call back with the picture as soon as it exists, and make sure it is queued. */
 export function wantFeatureThumb(id: string, done: (url: string) => void): void {
@@ -30,14 +34,15 @@ async function pump() {
     const r = await import('./featurethumbs-render');
     while (queue.length) {
       const id = queue.shift()!;
-      const spec = featureById.get(id);
+      const big = id.startsWith('big:');   // the material panel's larger picture (key `big:<id>`)
+      const spec = featureById.get(big ? id.slice(4) : id);
       if (!spec || cache.has(id)) {
         if (!spec) failed.add(id);
         waiting.delete(id);
         continue;
       }
       try {
-        const url = r.renderFeatureThumb(spec);
+        const url = r.renderFeatureThumb(spec, big ? BIG : undefined);
         cache.set(id, url);
         for (const f of waiting.get(id) ?? []) f(url);
       } catch (err) {

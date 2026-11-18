@@ -52,9 +52,10 @@ function makeRig(): Rig {
 }
 
 /** A rendered picture of the feature, as a JPEG data URL. */
-export function renderFeatureThumb(spec: FeatureSpec): string {
+export function renderFeatureThumb(spec: FeatureSpec, size = SIZE): string {
   rig ??= makeRig();
   const { renderer, scene, sun, camera } = rig;
+  renderer.setSize(size, size, false);
   const fb = buildFeatures([{ id: `thumb-${spec.id}`, catalogId: spec.id, position: [0, 0], rotationDeg: 0 }], () => 0);
   try {
     setFlames(fb, 0);

@@ -862,6 +862,31 @@ for (const m of MATERIALS) if (m.use === 'bed') Object.assign(m, bedFill(m));
 export const materialById = new Map(MATERIALS.map((m) => [m.id, m]));
 export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
 
+/**
+ * The kind of thing a feature is, as a plural noun the parent shows ("Pergolas and gazebos"): a placed feature can be
+ * switched for any other approved feature of the same class (same spot and turn, sized to it) and for none of another.
+ * Lighting follows the maker's fixture category (path lights switch for path lights, never for a well light).
+ */
+const SWAP_CLASS: Record<FeatureKind, string> = {
+  pergolaWood: 'Pergolas and gazebos', pergolaLouvered: 'Pergolas and gazebos', gazebo: 'Pergolas and gazebos', umbrella: 'Umbrellas',
+  firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
+  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
+  hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', pillarFountain: 'Water features',
+  copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
+  cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
+  boulder: 'Boulders', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
+  pathLight: 'Path lights', spotLight: 'Accent lights', landscapeLight: 'Landscape lights',
+  bench: 'Seating', loungeSofa: 'Seating', loungeOttoman: 'Ottomans', deckBox: 'Deck boxes',
+  loungeSet: 'Furniture sets', bistroSet: 'Furniture sets', diningSet: 'Furniture sets', diningSling: 'Furniture sets',
+  patioHeater: 'Patio heaters', ceilingFan: 'Ceiling fans',
+};
+
+/** The class a feature switches within (see SWAP_CLASS). */
+export function swapClassOf(f: FeatureSpec): string {
+  return f.fixture ? f.fixture.category : SWAP_CLASS[f.kind];
+}
+
 /** Old ids from earlier saved plans. */
 export const LEGACY_IDS: Record<string, string> = {
   'accent-tree-red': 'japanese-maple-red',
