@@ -53,13 +53,14 @@ const TOOLS: QuickTool[] = [
   {
     id: 'dig',
     name: 'Dig layers',
-    up: 'Dig deeper',
-    down: 'Back up',
+    up: 'Back up',
+    down: 'Dig deeper',
     picked: (s) => s.prepareStages(),
     status: (s) => stageLabel(s.buildStage),
     act(dir, s, h) {
       const i = DIG.findIndex((x) => x.id === s.buildStage);
-      const next = DIG[Math.max(0, Math.min(DIG.length - 1, i + dir))];
+      // ▲ backs up toward the finished surface, ▼ digs deeper.
+      const next = DIG[Math.max(0, Math.min(DIG.length - 1, i - dir))];
       if (next.id !== s.buildStage) h.setStage(next.id);
       return next.label;
     },
