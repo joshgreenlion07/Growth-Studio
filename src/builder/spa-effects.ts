@@ -77,8 +77,8 @@ function steamTexture(): THREE.DataTexture {
 export interface SpaEffects {
   meshes: THREE.Mesh[];
   materials: THREE.Material[];
-  /** Show or hide the bubbles and the steam. */
-  show(on: boolean): void;
+  /** Show the bubbles and the steam at a strength from 0 (hidden) to 1 (full). */
+  level(a: number): void;
   /** Drift the patterns: dt seconds. */
   frame(dt: number): void;
 }
@@ -147,12 +147,16 @@ export function spaEffects(water: THREE.BufferGeometry, center: THREE.Vector3, h
     drift.push({ tex, vx: (k - 1) * 0.02, vy: -0.08 - k * 0.015, wob: 0.6 });
   }
 
+  const full = materials.map((m) => (m as THREE.MeshStandardMaterial).opacity);
   let t = 0;
   return {
     meshes,
     materials,
-    show(on) {
-      for (const m of meshes) m.visible = on;
+    level(a) {
+      meshes.forEach((m, i) => {
+        m.visible = a > 0.004;
+        (materials[i] as THREE.MeshStandardMaterial).opacity = full[i] * a;
+      });
     },
     frame(dt) {
       t += dt;

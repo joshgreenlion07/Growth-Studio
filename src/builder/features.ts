@@ -411,10 +411,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           const effects: THREE.Mesh[] = [];
           const sink = {
             add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d),
-            part(key: string) {
-              const h = hinge(0, 0, 0);
+            part(key: string, pivot?: [number, number, number]) {
+              const h = hinge(...(pivot ?? [0, 0, 0]));
               parts.set(key, h.group);
-              return { add: h.add, object: h.group };
+              return { add: h.add, object: h.group, own: (g: THREE.BufferGeometry) => void geos.push(g) };
             },
             effect(m: THREE.Mesh) {
               o.add(m);
@@ -433,10 +433,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           if (c.cover) {
             const cv = c.cover;
             const openAt = at(cv.anchors(true)), closedAt = at(cv.anchors(false));
-            const a: FeatureAction = { itemId: f.id, key: 'cover', label: 'Spa cover', words: ['Open', 'Closed'], anchors: cv.open ? openAt : closedAt, on: cv.open, planOn: cv.open, set(on) {
-              cv.set(on);
+            const a: FeatureAction = { itemId: f.id, key: 'cover', label: 'Spa cover', words: ['Open', 'Closed'], anchors: cv.open ? openAt : closedAt, on: cv.open, planOn: cv.open, set(on, instant) {
+              cv.set(on, instant);
               a.anchors = on ? openAt : closedAt;
             } };
+            if (cv.tick) a.tick = cv.tick;
             actions.push(a);
           }
           act({ key: 'jets', label: 'Jets', words: ['On', 'Off'], anchors: at(c.jets.anchors), on: false, planOn: false, set: (on) => c.jets.set(on), frame: (dt) => c.jets.frame(dt) });

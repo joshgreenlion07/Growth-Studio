@@ -40,9 +40,11 @@ export interface SpaSink {
   under?(x: number, z: number): number;
   /**
    * A part that can be shown or hidden by hand (the cover closed, the cover folded up): its own adder, and the object
-   * to show. Left out, only the cover state asked for is built, into `add`.
+   * to show. Left out, only the cover state asked for is built, into `add`. With a `pivot` (meters, spa space) the part's
+   * object sits there and its geometry is given in the spa's space (it is moved to the pivot), so it can turn about it;
+   * `own` hands over a geometry the builder made itself (and put into the object) to be disposed with the feature.
    */
-  part?(key: string): { add(m: THREE.Material, g: THREE.BufferGeometry): void; object: THREE.Object3D };
+  part?(key: string, pivot?: [number, number, number]): { add(m: THREE.Material, g: THREE.BufferGeometry): void; object: THREE.Object3D; own(g: THREE.BufferGeometry): void };
   /** A moving effect (the jets' bubbles and steam): added as it is, hidden until the jets run. */
   effect?(m: THREE.Mesh): void;
 }
@@ -50,7 +52,7 @@ export interface SpaSink {
 /** What can be used by hand on the spa (builder/actions.ts). Anchors are local points in meters. */
 export interface SpaControls {
   /** The cover: open (folded up on the lifter behind the spa) or closed on the spa. Null without a cover. */
-  cover: { open: boolean; set(open: boolean): void; anchors(open: boolean): [number, number, number][] } | null;
+  cover: { open: boolean; set(open: boolean, instant?: boolean): void; tick?(dt: number): boolean; anchors(open: boolean): [number, number, number][] } | null;
   /** The jets: bubbles on the water and steam off it while the cover is open. */
   jets: { set(on: boolean): void; frame(dt: number): void; anchors: [number, number, number][] };
   /** The spa light and its glow in the water (the night light itself is the caller's). */
@@ -586,33 +588,57 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
   }
   // The jets' bubbles and steam (made with the water below) show while the jets run and the cover is open.
   let jetsOn = false;
+  let coverFade = 0; // how far the cover has cleared the water (0 on it, 1 well clear): the jets' effects fade with it
   let effects: SpaEffects | null = null;
   // The cover: with parts to show and hide, both states are built (the closed cover and the folded one) and the hand
   // switches between them; the lifter's brackets stay put.
   let coverOpen = opt.cover !== 'closed';
   let cover: SpaControls['cover'] = null;
   if (opt.cover !== 'off' && sink.part) {
-    const scaled = (to: (m: THREE.Material, g: THREE.BufferGeometry) => void) => (mat: THREE.Material, g: THREE.BufferGeometry) => {
-      if (sx !== 1 || sz !== 1) g.scale(sx, 1, sz);
-      to(mat, g);
-    };
-    const up = sink.part('cover-open'), down = sink.part('cover-closed');
-    coverAndLifter(m, scaled(up.add), true, add);
-    coverAndLifter(m, scaled(down.add), false, null);
     const pts = (list: [number, number, number][]): [number, number, number][] => list.map(([x, y, z]) => [x * IN * sx, y * IN, z * IN * sz]);
-    cover = {
-      open: coverOpen,
-      set(open) {
-        coverOpen = open;
-        up.object.visible = open;
-        down.object.visible = !open;
-        effects?.show(jetsOn && open);
-      },
-      anchors: (open) => open
-        ? pts([[0, H + 18, -46], [0, H + 36.5, -46], [-30, H + 18, -46], [30, H + 18, -46]])
-        : pts([-28, 0, 28].flatMap((x) => [-28, 0, 28].map((z): [number, number, number] => [x, H + 4.5, z]))),
-    };
-    cover.set(coverOpen);
+    const anchors: NonNullable<SpaControls['cover']>['anchors'] = (open) => open
+      ? pts([[0, H + 18, -46], [0, H + 36.5, -46], [-30, H + 18, -46], [30, H + 18, -46]])
+      : pts([-28, 0, 28].flatMap((x) => [-28, 0, 28].map((z): [number, number, number] => [x, H + 4.5, z])));
+    if (Math.abs(sx - 1) < 1e-6 && Math.abs(sz - 1) < 1e-6) {
+      // The cover moves: it folds about its hinge and lifts on the lifter arms (see coverRig).
+      lifterBrackets(m, add);
+      const rig = coverRig(m, sink, coverOpen, (level) => {
+        coverFade = level;
+        effects?.level(jetsOn ? level : 0);
+      });
+      cover = {
+        open: coverOpen,
+        set(open, instant) {
+          coverOpen = open;
+          cover!.open = open;
+          rig.set(open, instant);
+        },
+        tick: (dt) => rig.tick(dt),
+        anchors,
+      };
+    } else {
+      // A resized footprint (the pose is not rigid when the plan is stretched): both poses built, the hand switches them.
+      const scaled = (to: (m: THREE.Material, g: THREE.BufferGeometry) => void) => (mat: THREE.Material, g: THREE.BufferGeometry) => {
+        if (sx !== 1 || sz !== 1) g.scale(sx, 1, sz);
+        to(mat, g);
+      };
+      const up = sink.part('cover-open'), down = sink.part('cover-closed');
+      coverAndLifter(m, scaled(up.add), true, add);
+      coverAndLifter(m, scaled(down.add), false, null);
+      cover = {
+        open: coverOpen,
+        set(open) {
+          coverOpen = open;
+          cover!.open = open;
+          coverFade = open ? 1 : 0;
+          up.object.visible = open;
+          down.object.visible = !open;
+          effects?.level(jetsOn ? coverFade : 0);
+        },
+        anchors,
+      };
+    }
+    cover.set(coverOpen, true);
   } else if (opt.cover !== 'off') coverAndLifter(m, add, opt.cover === 'open');
 
   // Water, a little below the lip, glowing from the spa light at night: a fan from the middle out to the opening's edge.
@@ -640,7 +666,7 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
     jets: {
       set(on) {
         jetsOn = on;
-        effects?.show(on && coverOpen);
+        effects?.level(on ? coverFade : 0);
       },
       frame: (dt) => effects?.frame(dt),
       anchors: ring(27, H - 16),
@@ -960,27 +986,274 @@ function steps(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => voi
   add(m.stepFrame, boxUVm(boxAt(w + 0.2, 1.8, d1 + d2, cx, 0, back + (d1 + d2) / 2)));
 }
 
+/** Gap between the cover's two halves at the hinge (in). */
+const COVER_GAP = 0.6;
+
+/** One cover half: plan outline in (x, d), d from the hinge out to the edge, extruded to a unit thickness. */
+function coverHalfGeo(): THREE.BufferGeometry {
+  const gap = COVER_GAP;
+  const s = new THREE.Shape();
+  const hw = HALF - 0.3, r = LIP_R, rh = 1;
+  const d1 = HALF - gap / 2 - 0.6;
+  s.moveTo(-hw + rh, 0);
+  s.lineTo(hw - rh, 0);
+  s.quadraticCurveTo(hw, 0, hw, rh);
+  s.lineTo(hw, d1 - r);
+  s.quadraticCurveTo(hw, d1, hw - r, d1);
+  s.lineTo(-hw + r, d1);
+  s.quadraticCurveTo(-hw, d1, -hw, d1 - r);
+  s.lineTo(-hw, rh);
+  s.quadraticCurveTo(-hw, 0, -hw + rh, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: true, bevelThickness: 0.45, bevelSize: 0.3, bevelSegments: 3, curveSegments: 10 });
+  g.computeBoundingBox();
+  return g;
+}
+
+/** The lifter's L brackets on the sides, reaching back past the corners to the arms' pivots (they stay put). `side` is one of the two sides, or both. */
+function lifterBrackets(m: Mats, brackets: (m: THREE.Material, g: THREE.BufferGeometry) => void, side?: number) {
+  const ax = CAB + 1.6;
+  for (const sx of side ? [side] : [-1, 1]) {
+    brackets(m.lifter, boxAt(0.45, 4.5, 9, sx * (CAB + 0.5), PIVOT[1] - 2.6, PIVOT[0] + 3.4));
+    brackets(m.lifter, boxAt(0.45, 7.5, 2.4, sx * (CAB + 0.5), PIVOT[1] - 4.8, PIVOT[0]));
+    brackets(m.lifter, tube(new THREE.Vector3(sx * (CAB + 0.5), PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * (ax + 0.8), PIVOT[1], PIVOT[0]), 1.0, 16));
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Cover motion                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Whole opening or closing, seconds (at full pace: starting, stopping and turning round add a little). */
+const COVER_SECONDS = 4.1;
+/** Seconds to get up to pace or to turn round, so a toggle in mid-motion reverses without a jerk. */
+const COVER_RAMP = 0.45;
+/** On the 0 (closed) to 1 (open) timeline: the fold ends at FOLD_END, the lift starts at LIFT_START (they overlap). */
+const FOLD_END = 0.55, LIFT_START = 0.43;
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+/** Ease in and out with zero speed at both ends (sine). */
+const easeIO = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(t));
+
+/**
+ * The cover and its lifter as moving parts. Three turning parts: the lifter (arms and bar) about its pivots behind the
+ * spa; the cover as a whole, hanging from the bar (it settles to hang straight down as the arms swing up); and the front
+ * half about the hinge (it folds over onto the back half, turning about the bar). The halves are built as they lie
+ * closed, and carry a morph to the shape the folded cover has (top to top, flat where they meet; the closed halves are
+ * flat underneath and tapered on top), so both end poses are the ones drawn before, exactly. The skirts ride with their
+ * halves.
+ *
+ * One number `s` (0 closed, 1 open) is the progress; it moves toward its target at a pace that changes smoothly, so
+ * reversing in mid-motion turns round without a jump.
+ */
+function coverRig(m: Mats, sink: SpaSink, openNow: boolean, onFade: (level: number) => void) {
+  const base = H + 0.15;
+  const yc = base + COVER_T0 + 0.25 + 0.62;
+  const bz = PIVOT[0] + Math.sqrt(Math.max(0, ARM ** 2 - (yc - PIVOT[1]) ** 2));
+  const top = BAR_UP[1] + 1.5, zb = BAR_UP[0];
+  const ax = CAB + 1.6;
+  const part = sink.part!;
+  const lift = part('cover-lifter', [0, PIVOT[1] * IN, PIVOT[0] * IN]);
+  const cov = part('cover-halves', [0, yc * IN, bz * IN]);
+  const fold = part('cover-fold', [0, yc * IN, bz * IN]);
+  lift.object.add(cov.object);
+  cov.object.add(fold.object);
+  const covBase = new THREE.Vector3(0, (yc - PIVOT[1]) * IN, (bz - PIVOT[0]) * IN);
+  cov.object.position.copy(covBase);
+  fold.object.position.set(0, 0, 0);
+
+  // Lifter arms and bar, as they lie closed (the arms' length from the pivots to the bar).
+  for (const sx of [-1, 1]) lift.add(m.lifter, tube(new THREE.Vector3(sx * ax, PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * ax, yc, bz), 0.6, 10));
+  lift.add(m.lifter, tube(new THREE.Vector3(-ax - 0.5, yc, bz), new THREE.Vector3(ax + 0.5, yc, bz), 0.62, 12));
+  // The hinge's vinyl across the fold.
+  cov.add(m.skirt, boxAt(2 * HALF - 1.2, 0.25, 1.6, 0, base + COVER_T0 - 0.05, 0));
+
+  // Poses. Angles about x (the lifter and the cover turn so that the cover's back half, lying toward -z, hangs down).
+  const A1 = Math.atan2(BAR_UP[1] - PIVOT[1], BAR_UP[0] - PIVOT[0]), A0 = Math.atan2(yc - PIVOT[1], bz - PIVOT[0]);
+  const ALPHA = -(A1 - A0); // the arms swing up
+  const BETA = -Math.PI / 2 - ALPHA; // the cover hangs straight down from the bar
+  const tau = new THREE.Vector3();
+  const hingeC = new THREE.Vector3(0, (base + COVER_T0 - yc) * IN, (0 - bz) * IN); // the hinge's top, relative to the bar
+  const tmpR = new THREE.Matrix4();
+  const place = (s: number) => {
+    const fo = easeIO(s / FOLD_END);
+    const l = clamp01((s - LIFT_START) / (1 - LIFT_START));
+    const settle = easeIO((l - 0.12) / 0.88);
+    lift.object.rotation.x = ALPHA * easeIO(l);
+    cov.object.rotation.x = BETA * settle;
+    cov.object.position.copy(covBase).addScaledVector(tau, settle);
+    // The front half turns about the bar, and over its last part the turn slides to be about the hinge's top, so the two
+    // halves close flat on each other.
+    const phi = -Math.PI * fo;
+    const c = hingeC.clone().multiplyScalar(easeIO((fo - 0.55) / 0.45));
+    const rc = c.clone().applyMatrix4(tmpR.makeRotationX(phi));
+    fold.object.rotation.x = phi;
+    fold.object.position.copy(c).sub(rc);
+    return { fo, l };
+  };
+  // Where the cover hangs when open: matched to the old static pose at the hinge's inner edge (the first point of the back half).
+  const finalMatrices = () => {
+    for (const o of [lift.object, cov.object, fold.object]) o.updateMatrix();
+    const mc = lift.object.matrix.clone().multiply(cov.object.matrix);
+    return { mc, mf: mc.clone().multiply(fold.object.matrix) };
+  };
+  place(1);
+  {
+    const q = new THREE.Vector3(0, (base + coverT(COVER_GAP)) * IN, -COVER_GAP * IN).sub(new THREE.Vector3(0, yc * IN, bz * IN));
+    const w0 = q.clone().applyMatrix4(finalMatrices().mc);
+    const want = new THREE.Vector3(0, (top - COVER_GAP) * IN, zb * IN);
+    const rl = new THREE.Matrix4().extractRotation(lift.object.matrix).invert();
+    tau.copy(want.sub(w0).applyMatrix4(rl));
+    tau.x = 0;
+  }
+  place(1);
+  const { mc, mf } = finalMatrices();
+  const mcInv = mc.clone().invert(), mfInv = mf.clone().invert();
+  const rotC = new THREE.Matrix3().setFromMatrix4(mcInv), rotF = new THREE.Matrix3().setFromMatrix4(mfInv);
+  const origin = new THREE.Vector3(0, yc * IN, bz * IN);
+
+  // Mapping (x, d, h) of a half, closed (as it lies on the spa) and folded (as it hangs, as drawn before).
+  const maps = {
+    B: {
+      closed: (x: number, d: number, h: number): [number, number, number] => [-x, base + h * coverT(d), -d],
+      folded: (x: number, d: number, h: number): [number, number, number] => [-x, top - d, zb + coverT(d) * (1 - h)],
+      group: cov, inv: mcInv, rot: rotC,
+    },
+    F: {
+      closed: (x: number, d: number, h: number): [number, number, number] => [x, base + h * coverT(d), d],
+      folded: (x: number, d: number, h: number): [number, number, number] => [x, top - d, zb - coverT(d) * (1 - h)],
+      group: fold, inv: mfInv, rot: rotF,
+    },
+  };
+  const unit = (to: [number, number, number]) => new THREE.Vector3(to[0] * IN, to[1] * IN, to[2] * IN);
+  /** How far the folded shape is from where the closed one has been carried to, in the world (spa space, meters). */
+  const worldGap = (k: 'B' | 'F', d: number, h: number) => {
+    const mp = maps[k], mat = k === 'B' ? mc : mf;
+    const rigid = unit(mp.closed(0, d, h)).sub(origin).applyMatrix4(mat);
+    return unit(mp.folded(0, d, h)).sub(rigid);
+  };
+
+  const morphed: THREE.Mesh[] = [];
+  const own = (g: THREE.BufferGeometry, k: 'B' | 'F', mat: THREE.Material) => {
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    maps[k].group.object.add(mesh);
+    maps[k].group.own(g);
+    morphed.push(mesh);
+  };
+
+  // The halves.
+  const g0 = coverHalfGeo();
+  const bb = g0.boundingBox!;
+  const sp = g0.getAttribute('position');
+  for (const k of ['B', 'F'] as const) {
+    const mp = maps[k];
+    let prm = Array.from({ length: sp.count }, (_, i): [number, number, number] => [sp.getX(i), sp.getY(i) + COVER_GAP / 2 + 0.3, (sp.getZ(i) - bb.min.z) / (bb.max.z - bb.min.z)]);
+    const build = (f: typeof mp.closed, arr: [number, number, number][]) => {
+      const out = new Float32Array(arr.length * 3);
+      arr.forEach(([x, d, h], i) => out.set(unit(f(x, d, h)).toArray(), i * 3));
+      return out;
+    };
+    const vol = (pos: Float32Array) => {
+      const t = new THREE.BufferGeometry();
+      t.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      return signedVolume(t);
+    };
+    if (vol(build(mp.closed, prm)) < 0) {
+      prm = prm.slice();
+      for (let i = 0; i + 2 < prm.length; i += 3) [prm[i + 1], prm[i + 2]] = [prm[i + 2], prm[i + 1]];
+    }
+    const closed = build(mp.closed, prm), folded = build(mp.folded, prm);
+    const normals = (pos: Float32Array) => {
+      const t = new THREE.BufferGeometry();
+      t.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
+      t.computeVertexNormals();
+      return t.getAttribute('normal').array as Float32Array;
+    };
+    const n0 = normals(closed), n1 = normals(folded);
+    const local = new Float32Array(closed.length), target = new Float32Array(closed.length), tn = new Float32Array(closed.length);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < closed.length; i += 3) {
+      local.set(v.set(closed[i], closed[i + 1], closed[i + 2]).sub(origin).toArray(), i);
+      target.set(v.set(folded[i], folded[i + 1], folded[i + 2]).applyMatrix4(mp.inv).toArray(), i);
+      tn.set(v.set(n1[i], n1[i + 1], n1[i + 2]).applyMatrix3(mp.rot).normalize().toArray(), i);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(local, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(n0, 3));
+    g.morphAttributes.position = [new THREE.BufferAttribute(target, 3)];
+    g.morphAttributes.normal = [new THREE.BufferAttribute(tn, 3)];
+    own(g, k, m.cover);
+  }
+  g0.dispose();
+
+  // The skirts: the edge skirt split at the hinge, each part riding on its half, moved with the half's underside.
+  const sk = squarePath(HALF, LIP_R, 10, 8);
+  const prof: [number, number][] = [[-0.1, base + 1.4], [0.3, base - 0.3], [0.32, H - 4.1], [0.2, H - 4.1], [0.18, base - 0.3], [-0.22, base + 1.4]];
+  const half = sk.length / 2;
+  for (const k of ['F', 'B'] as const) {
+    const idx = (i: number) => (k === 'F' ? i : i + half) % sk.length;
+    const g = gridSurface(half + 1, prof.length, false, (i, j) => {
+      const p = sk[idx(i)];
+      return [p.x + p.nx * prof[j][0], prof[j][1], p.z + p.nz * prof[j][0]];
+    }, planUV);
+    const pos = g.getAttribute('position') as THREE.BufferAttribute;
+    const target = new Float32Array(pos.count * 3);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const d = Math.min(HALF - 0.3, Math.max(COVER_GAP / 2 + 0.3, Math.abs(v.z) / IN));
+      const delta = worldGap(k, d, 0).applyMatrix3(maps[k].rot);
+      target.set(v.sub(origin).add(delta).toArray(), i * 3);
+      v.fromBufferAttribute(pos, i).sub(origin);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    const n = g.getAttribute('normal') as THREE.BufferAttribute;
+    g.morphAttributes.position = [new THREE.BufferAttribute(target, 3)];
+    g.morphAttributes.normal = [new THREE.BufferAttribute(new Float32Array(n.array), 3)];
+    own(g, k, m.skirt);
+  }
+
+  // Progress: it moves toward its target at a pace that eases up and down.
+  let s = openNow ? 1 : 0, target = s, vel = 0;
+  const apply = () => {
+    const { fo, l } = place(s);
+    const w = easeIO((fo - 0.55) / 0.45);
+    for (const mesh of morphed) mesh.morphTargetInfluences![0] = w;
+    // The jets' bubbles and steam come in as the cover clears the water, and go as it comes back over.
+    onFade(easeIO(l / 0.5));
+  };
+  apply();
+  return {
+    set(open: boolean, instant?: boolean) {
+      target = open ? 1 : 0;
+      if (instant) {
+        s = target;
+        vel = 0;
+        apply();
+      }
+    },
+    /** Advance dt seconds; true while still moving. */
+    tick(dt: number): boolean {
+      if (s === target) return false;
+      const dir = Math.sign(target - s), pace = 1 / COVER_SECONDS;
+      const dv = (pace / COVER_RAMP) * dt;
+      vel += Math.min(dv, Math.max(-dv, dir * pace - vel));
+      s += vel * dt;
+      if ((dir > 0 && s >= target) || (dir < 0 && s <= target)) {
+        s = target;
+        vel = 0;
+      }
+      apply();
+      return s !== target;
+    },
+  };
+}
+
 /** The cover, closed on the spa or folded and stood up behind it on the lifter, and the lifter's brackets, arms and bar. */
 function coverAndLifter(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => void, open: boolean, brackets: ((m: THREE.Material, g: THREE.BufferGeometry) => void) | null = add) {
-  const gap = 0.6;
-  // One half: plan outline in (x, d), d from the hinge out to the edge, extruded to a unit thickness.
-  const halfGeo = () => {
-    const s = new THREE.Shape();
-    const hw = HALF - 0.3, r = LIP_R, rh = 1;
-    const d1 = HALF - gap / 2 - 0.6;
-    s.moveTo(-hw + rh, 0);
-    s.lineTo(hw - rh, 0);
-    s.quadraticCurveTo(hw, 0, hw, rh);
-    s.lineTo(hw, d1 - r);
-    s.quadraticCurveTo(hw, d1, hw - r, d1);
-    s.lineTo(-hw + r, d1);
-    s.quadraticCurveTo(-hw, d1, -hw, d1 - r);
-    s.lineTo(-hw, rh);
-    s.quadraticCurveTo(-hw, 0, -hw + rh, 0);
-    const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: true, bevelThickness: 0.45, bevelSize: 0.3, bevelSegments: 3, curveSegments: 10 });
-    g.computeBoundingBox();
-    return g;
-  };
+  const gap = COVER_GAP;
+  const halfGeo = coverHalfGeo;
   /** Place one half by mapping (x, d, h in 0..1 of its thickness) to inches, keeping its faces turned out. */
   const place = (f: (x: number, d: number, h: number) => [number, number, number], mat: THREE.Material) => {
     const g = halfGeo();
@@ -1026,11 +1299,7 @@ function coverAndLifter(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometr
   const ax = CAB + 1.6;
   for (const sx of [-1, 1]) {
     // An L bracket on the side, reaching back past the corner to the pivot (it stays put when the cover moves).
-    if (brackets) {
-      brackets(m.lifter, boxAt(0.45, 4.5, 9, sx * (CAB + 0.5), PIVOT[1] - 2.6, PIVOT[0] + 3.4));
-      brackets(m.lifter, boxAt(0.45, 7.5, 2.4, sx * (CAB + 0.5), PIVOT[1] - 4.8, PIVOT[0]));
-      brackets(m.lifter, tube(new THREE.Vector3(sx * (CAB + 0.5), PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * (ax + 0.8), PIVOT[1], PIVOT[0]), 1.0, 16));
-    }
+    if (brackets) lifterBrackets(m, brackets, sx);
     add(m.lifter, tube(new THREE.Vector3(sx * ax, PIVOT[1], PIVOT[0]), new THREE.Vector3(sx * ax, bar[1], bar[0]), 0.6, 10));
   }
   add(m.lifter, tube(new THREE.Vector3(-ax - 0.5, bar[1], bar[0]), new THREE.Vector3(ax + 0.5, bar[1], bar[0]), 0.62, 12));
