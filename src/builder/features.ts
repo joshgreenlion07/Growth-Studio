@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SLAB_24_PREFIX, featureById, materialById, type FeatureKind } from '../siteplan/catalog';
+import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL } from '../engine/foliage';
@@ -8,6 +8,14 @@ import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
+import type { LandLight } from '../engine/landlights';
+import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelights';
+import { buildSaunaLifeCL5G } from './saunalife-cl5g';
+import { buildDecor } from './decor';
+import type { PebbleBed } from './pebbles';
+import type { RaisedPlacement } from './plants';
+import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
+import { calSpaTropicalPlus } from './spa-ppz743bc';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -29,10 +37,16 @@ export interface FeatureBuild {
   object: THREE.Group;
   surfaces: THREE.Mesh[];
   lights: NightLight[];
+  /** Landscape lighting fixtures' aimed beams (engine/landlights.ts), in world space. */
+  landLights: LandLight[];
   /** Emissive parts that glow at night. */
   glow: THREE.MeshStandardMaterial[];
   flames: THREE.Mesh[];
   fallMats: THREE.ShaderMaterial[];
+  /** Loose-stone beds that are part of a feature (a pebble basin), drawn stone by stone with the yard's pebbles. */
+  pebbleBeds: PebbleBed[];
+  /** Plants that stand on a feature (an agave in a bowl planter), placed with the yard's plants. */
+  plants: RaisedPlacement[];
   dispose(): void;
 }
 
@@ -83,16 +97,22 @@ function stoneMaterial(f: FeaturePlacement): string {
   return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number): FeatureBuild {
+/** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
   const lights: NightLight[] = [];
+  const landLights: LandLight[] = [];
+  const fixtureMats = new FixtureMaterials();
   const flames: THREE.Mesh[] = [];
   const fallMats: THREE.ShaderMaterial[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const rocks: RockSpot[] = [];
   const owned: THREE.Material[] = [];
+  const pebbleBeds: PebbleBed[] = [];
+  const raised: RaisedPlacement[] = [];
+  const extraGlow: THREE.MeshStandardMaterial[] = [];
 
   // Shared materials.
   const mat = {
@@ -138,14 +158,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
   const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
   owned.push(lampGlow, spaGlow, ledGlow);
+  // Night glow of the decor builders (fire glass), owned by this build.
+  const decorGlow: THREE.MeshStandardMaterial[] = [];
+  // Glowing parts of maker products built in their own files (shared, cached materials: not disposed here).
+  const makerGlow = new Set<THREE.MeshStandardMaterial>();
   const flameMat = flameMaterial();
   owned.push(flameMat);
   const falls = fallMaterial();
   fallMats.push(falls);
 
-  for (const f of features) {
+  for (let f of features) {
     const spec = featureById.get(f.catalogId);
     if (!spec) continue;
+    if (spec.fixture && site) f = site.place(f, spec.fixture);
     const o = new THREE.Group();
     const parts: Parts = new Map();
     const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
@@ -178,6 +203,29 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       o.add(s);
     };
     const r = rng(f.id);
+    // What the water feature and bowl planter builders (pillarfountain.ts) hand back, in this feature's local space.
+    const sink: FountainSink = {
+      add,
+      object(m) {
+        o.add(m);
+        if (m instanceof THREE.Mesh) geos.push(m.geometry);
+      },
+      light: (x, y, z, color, intensity, distance) => light(x, y, z, color, intensity, distance),
+      glow: (m) => extraGlow.push(m),
+      fall: (m) => fallMats.push(m),
+      own: (m) => owned.push(m),
+      pebbles(catalogId, outline, holes, topIn, tint) {
+        const plan = (pts: Vec2[]): Vec2[] => pts.map(([x, z]) => {
+          const w = local(x * IN_M, 0, z * IN_M);
+          return [w.x, w.z];
+        });
+        pebbleBeds.push({ id: `${f.id}-pebbles-${pebbleBeds.length}`, catalogId, polygon: plan(outline), holes: holes.map(plan), y: y0 + topIn * IN_M, tint });
+      },
+      plant(catalogId, x, y, z, size) {
+        const w = local(x, y, z);
+        raised.push({ id: `${f.id}-plant-${raised.length}`, source: f.source, catalogId, position: [w.x, w.z], existing: true, scale: size, baseY: w.y, detail: 1 / size });
+      },
+    };
     const kind: FeatureKind = spec.kind;
     const [W, D] = spec.footprint;
 
@@ -296,6 +344,22 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'hotTub': {
+        if (spec.model === 'ppz-743bc') {
+          const water = (m: THREE.Material, g: THREE.BufferGeometry) => {
+            const w = new THREE.Mesh(g, m);
+            w.renderOrder = 2;
+            geos.push(g);
+            o.add(w);
+          };
+          // Height of the ground or deck under a local point, relative to the spa's base (the steps stand on it).
+          const under = (x: number, z: number) => {
+            const p = local(x, 0, z);
+            return height([p.x, p.z]) - y0;
+          };
+          const sink = { add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
+          for (const g of calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink)) makerGlow.add(g);
+          break;
+        }
         const H = 0.92;
         add(mat.spaCab, box(W, H, D, 0, 0, 0));
         add(mat.shell, box(W + 0.04, 0.06, D + 0.04, 0, H, 0));
@@ -322,6 +386,18 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'saunaCube': {
+        if (spec.model === 'saunalife-cl5g') {
+          const s = buildSaunaLifeCL5G({ doorOpen: featureOption(spec, f.options, 'doorOpen'), lightsOn: featureOption(spec, f.options, 'lightsOn') });
+          for (const [m, g] of s.parts) add(m, g);
+          for (const m of s.extras) {
+            geos.push(m.geometry);
+            o.add(m);
+            surfaces.push(m);
+          }
+          for (const l of s.lights) light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
+          owned.push(...s.owned);
+          break;
+        }
         const Hh = 2.1;
         add(mat.saunaWood, box(W - 0.16, Hh - 0.2, D - 0.16, 0, 0.1, 0));
         // Rounded black frame: four corner posts and a perimeter frame.
@@ -393,6 +469,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
         break;
       }
+      case 'cortenPlanterTall':
+      case 'cortenTreePanel':
+      case 'firePitLinear':
+      case 'loungeSofa':
+      case 'loungeOttoman':
+      case 'deckBox':
+      case 'diningSling':
+      case 'patioHeater':
+      case 'ceilingFan': {
+        // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
+        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
+        break;
+      }
       case 'blackPlanter': {
         add(mat.black, box(W, 0.6, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.56, 0));
@@ -403,6 +492,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.copper, bowl.toNonIndexed());
         add(mat.pebble, cyl(0.33, 0.33, 0.02, 0, 0.26, 0, 20));
         light(0.5, 0.05, 0.5, '#ffc27a', 1.2, 2);
+        break;
+      }
+      case 'pillarFountain': {
+        pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
+        break;
+      }
+      case 'patinaBowl': {
+        patinaBowl(sink, f.id, 0, 0, 0, f.planted !== false);
         break;
       }
       case 'trellisCable': {
@@ -447,6 +544,17 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.bronze, new THREE.CylinderGeometry(0.035, 0.035, 0.14, 10).rotateX(-0.5).translate(0, 0.12, 0).toNonIndexed());
         add(mat.bronze, cyl(0.01, 0.01, 0.1, 0, 0, 0, 6));
         light(0, 0.4, -0.15, '#ffd29a', 3, 4);
+        break;
+      }
+      case 'landscapeLight': {
+        // A maker's lighting fixture (builder/landscapelights.ts): its body in the picked finish, a lens that glows
+        // at night, and its beam(s), turned and placed with the feature.
+        const fx = buildFixture(spec, f, fixtureMats, y0, site ? site.surface(f.position) : y0);
+        for (const [m, g] of fx.parts) add(m, g);
+        const a = (-f.rotationDeg * Math.PI) / 180;
+        for (const l of fx.lights) {
+          landLights.push({ ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a) });
+        }
         break;
       }
       case 'bench': {
@@ -507,12 +615,16 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow],
+    landLights,
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow, ...fixtureMats.glow],
     flames,
     fallMats,
+    pebbleBeds,
+    plants: raised,
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of owned) m.dispose();
+      fixtureMats.dispose();
       for (const m of fallMats) m.dispose();
     },
   };

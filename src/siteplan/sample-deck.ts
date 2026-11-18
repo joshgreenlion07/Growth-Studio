@@ -3,8 +3,8 @@ import type { SitePlan, Vec2 } from './types';
 /**
  * A raised composite deck laid the way Green Lion builds them: an 11 x 21 ft deck 8 in above the pavers in Trex Enhance
  * Naturals Rocky Harbor, a one-board picture frame, the field in a chevron whose seam runs across the deck beside the
- * spa, a hot tub set into the deck at one end and a cube sauna standing on it at the other, gray pavers with a charcoal
- * border all round and a fence behind. No house and no street, the way Area Planner plans arrive.
+ * spa, a hot tub in its own framed opening at one end (standing level with the deck) and a cube sauna on the boards
+ * at the other, gray pavers with a charcoal border all round and a fence behind. No house and no street, the way Area Planner plans arrive.
  */
 export function sampleCompositeDeck(): SitePlan {
   const S = 'sample' as const;

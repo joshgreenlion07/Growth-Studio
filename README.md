@@ -12,7 +12,7 @@ night lighting, and a camera with focus blur.
 - **Plan editor.** Draw areas (pavers, porcelain, concrete, turf, beds),
   fences, walls, curbs, water, plants and features. Drag to move, drag corners
   to reshape, R to turn a feature, Delete to remove, Ctrl+Z to undo.
-- **Catalog from Green Lion's work:** 64 plants, 55 surfaces (multi-size
+- **Catalog from Green Lion's work:** 68 plants, 55 surfaces (multi-size
   pavers with charcoal soldier borders and inset lights, porcelain plank,
   stamped and broom concrete, artificial turf and putting green, black mulch,
   black pebble, cobble), 9 fence styles, raised planters with caps, 27
@@ -149,19 +149,38 @@ Messages use `window.postMessage`:
   board (`src/builder/deck.ts`, layout in `deck-layout.ts`): `elevation` is the top of
   the boards above grade (left out, 8 in), with fascia on the sides and dark framing
   under the gaps. `deck` (all optional) sets how it is laid:
-  `{ pattern?: 'straight' | 'diagonal' | 'chevron', angleDeg?, boardIn?, frame?, divider?, seamOffset?, fascia?, holes? }`.
+  `{ pattern?: 'straight' | 'diagonal' | 'chevron', angleDeg?, boardIn?, frame?, divider?, seamOffset?, fascia?, tub?, holes? }`.
   `angleDeg` is the board direction (straight) or the seam direction (diagonal and
   chevron boards run at 45 degrees to it), degrees from plan x toward plan y; left out,
   the longest side. `frame` (default true) is a one-board picture frame along the edge
   and around each opening, mitered at the corners. `seamOffset` moves the chevron seam
   across the deck (meters from the middle); `divider` adds a board along it. `holes` are
-  openings framed like the edge. A hot tub feature placed with its center on a deck is
-  set into its own opening (it stands on the ground); every other feature and uploaded
-  model on a deck stands on the boards. The looks carry `sizeText` (board and fascia
+  openings framed like the edge. A hot tub feature placed with its center on a deck gets
+  its own framed opening and stands at the deck's height, its whole cabinet above the
+  boards (`tub: 'level'`, the default), or on the ground below them (`tub: 'sunk'`);
+  every other feature and uploaded model on a deck stands on the boards. The looks carry `sizeText` (board and fascia
   sizes), `page` and `image` (Trex's own swatch photo, loaded live).
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
   plant starts on its growth curve (see `installSize` and `sizeAt` in `catalog.ts`).
+- Tru-Scapes landscape lighting (`truscapes-<model>` features in the Lighting
+  group, e.g. `truscapes-ts-b301`, `truscapes-ts-b102`, `truscapes-ts-a6000`,
+  `truscapes-ts-tssa-200`; the list is `TRUSCAPES` in `src/siteplan/truscapes.ts`)
+  are drawn to the maker's spec sheets and light the yard after dusk with their
+  published lumens, beam angle and color temperature. A feature placement can
+  carry `fixture: { finish?, beamDeg?, kelvin?, tiltDeg?, mountHeight? }`:
+  `finish` is a finish the fixture is sold in (`black`, `bronze`, `brown`,
+  `white`, `gray`, `stainless`, or the maker's code `BLK`, `BRZ`, ...),
+  `beamDeg` and `kelvin` snap to the lamp or color choices it offers (others are
+  dropped), `tiltDeg` (0-90, wells 0-20) tips an aimed head from straight up
+  toward the placement's front (`rotationDeg` turns it), and `mountHeight` is
+  meters above grade for a cap, riser or wall fixture (a cap light's is the
+  underside of the cap). A cap or face light sent without `mountHeight` within
+  0.75 m of a wall or raised planter moves onto that face, turns out from it and
+  takes the cap's height. Stake and in-grade fixtures stand on the paving where a
+  hardscape zone covers them. The sample "Night lighting: Tru-Scapes" lights the
+  modern backyard; its look is closest to Tru-Scapes' own photos about an hour
+  after sunset.
 - `plan.models` places a designer's own rendering on a drawn footprint:
   `{ id, polygon, asset, kind: 'glb' | 'image', height?, turn: 0-3, fit: 'contain' | 'stretch' }`.
   The file is not in the plan. `asset` is an id; the studio asks for each file
@@ -242,6 +261,23 @@ Messages use `window.postMessage`:
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
   grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
   looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
+- A feature with on/off options (its catalog entry lists `options: { key, label, default }[]`, sent in the
+  `catalog` message) takes `options: { [key]: boolean }` on its placement; keys the feature does not offer
+  are dropped. The SaunaLife CL5G sauna (`saunalife-cl5g`) offers `doorOpen` (default off) and `lightsOn`
+  (default on: LED light bars inside, and a warm light through the glass at night).
+- A feature that comes in sizes (the catalog's `sizes`: the tall corten planter, the concrete fire pit, the tree of
+  life screen) takes an optional `size: [length, depth, height]` in meters; left out, the catalog's standard size. A
+  planter (`plantable`) is drawn with its own planting (counted with the plan's plants) unless `planted: false`.
+  Plants placed inside a planter sit on its soil.
+- The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
+  'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
+  steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
+  (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
+  and `steps: false` to leave the steps out. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
+- The three-pillar stucco water feature (`three-pillar-water-feature`) offers the option `bowls` (default on: a patina
+  bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
+  The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
+  `options: { bowls: false }` and `planted: false`.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
@@ -304,7 +340,8 @@ Messages use `window.postMessage`:
   - Parent to studio: `{ source: 'area-planner', type: 'approvals', approvals: { on: string[], off: string[] } }`
     (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
   - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
-    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint }` and
+    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint, options?, sizes?, size?,
+    plantable?, cover?, steps? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
     `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
     `ready`, now filtered to approved looks.
   - Keys (`src/siteplan/approval.ts`): `line:<maker>|<line>` (a line's paver edge is `line:<maker>|<line> 6 x 9 edge`), `mat:<id>`, `plant:<id>`, `feature:<id>`,

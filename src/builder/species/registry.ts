@@ -35,6 +35,7 @@ import { build as variegatedYucca } from './succulents/variegated-yucca';
 import { build as blueSedum } from './succulents/blue-sedum';
 import { build as foxtailAgave } from './succulents/foxtail-agave';
 import { build as agave } from './succulents/agave';
+import { build as blueAgave } from './succulents/blue-agave';
 import { build as banana } from './tropicals/banana';
 import { build as elephantEar } from './tropicals/elephant-ear';
 import { build as ajuga } from './groundcover/ajuga';
@@ -76,6 +77,7 @@ import { build as glossyAbeliaKaleidoscope } from './shrubs/glossy-abelia-kaleid
 import { build as lomandraPlatinumBeauty } from './grasses/lomandra-platinum-beauty';
 import { build as liriopeSilverySunproof } from './grasses/liriope-silvery-sunproof';
 import { build as redYucca } from './succulents/red-yucca';
+import { build as echeveria } from './succulents/echeveria';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -133,6 +135,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'blue-sedum': blueSedum,
   'foxtail-agave': foxtailAgave,
   'agave': agave,
+  'blue-agave': blueAgave,
   'banana': banana,
   'elephant-ear': elephantEar,
   'ajuga': ajuga,
@@ -150,7 +153,6 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'navel-orange': navelOrange,
   'eureka-lemon': eurekaLemon,
   'cyclamen-red': cyclamenRed,
-  'primrose-red': primroseRed,
   'lantana-new-gold': lantanaNewGold,
   'cherry-laurel-compacta': cherryLaurelCompacta,
   'hopseed-bush-purpurea': hopseedBushPurpurea,
@@ -158,4 +160,6 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'lomandra-platinum-beauty': lomandraPlatinumBeauty,
   'liriope-silvery-sunproof': liriopeSilverySunproof,
   'red-yucca': redYucca,
+  'echeveria': echeveria,
+  'primrose-red': primroseRed,
 };

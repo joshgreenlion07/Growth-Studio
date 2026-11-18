@@ -9,13 +9,19 @@ import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
+import type { LandLight } from '../engine/landlights';
+import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
-import { buildHardscape, stepsFootprint } from './hardscape';
+import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
+import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { plantGround, planterPlants } from './decor/planters';
+import { coverCeiling } from './decor/patio';
+import { CEILING_KINDS } from '../siteplan/decor';
 import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
@@ -44,6 +50,8 @@ export interface SceneBuild {
   /** Solid surfaces for autofocus and camera collision. */
   surfaces: THREE.Object3D[];
   nightLights: NightLight[];
+  /** Landscape lighting fixtures' beams (engine/landlights.ts). */
+  landLights: LandLight[];
   glow: THREE.MeshStandardMaterial[];
   /** Falling-water sheets that glow when lit at night. */
   fallMats: THREE.ShaderMaterial[];
@@ -69,7 +77,8 @@ export interface SceneBuild {
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
 export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] {
-  const out: PlantPlacement[] = [...plan.plants];
+  // Planted features (corten planters) bring their own plants.
+  const out: PlantPlacement[] = [...plan.plants, ...planterPlants(plan.features)];
   const bodies = bodyGrid(lineBodies(plan));
   // Placed plants by position, so each candidate checks only its neighbors.
   const taken = new PointGrid(1);
@@ -89,6 +98,14 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
     });
   }
   return out;
+}
+
+/** True when `p` is inside a placed feature's footprint (width x depth, turned by rotationDeg as features.ts turns it), padded. */
+function inFootprint(p: Vec2, at: Vec2, rotationDeg: number, [w, d]: [number, number], pad: number): boolean {
+  // features.ts places local (x, z) at (x cos a + z sin a, -x sin a + z cos a), a = -rotation; this is its inverse.
+  const a = (-rotationDeg * Math.PI) / 180, dx = p[0] - at[0], dy = p[1] - at[1];
+  const lx = dx * Math.cos(a) - dy * Math.sin(a), lz = dx * Math.sin(a) + dy * Math.cos(a);
+  return Math.abs(lx) <= w / 2 + pad && Math.abs(lz) <= d / 2 + pad;
 }
 
 /** Line bodies in a segment grid, tagged with their index in `list`. */
@@ -319,9 +336,16 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  // Features and models placed on a composite deck stand on its boards (a hot tub is set into it).
+  // Features and models placed on a composite deck stand on its boards (a hot tub is set into it); lighting
+  // fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
   const standOn = onDecks(plan, gm.height);
-  const features = buildFeatures(plan.features, standOn);
+  // Decor set on paving stands on its top too (paving is drawn its thickness above grade); decks are in standOn.
+  // Lighting fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
+  const pavingTop = (p: Vec2) => {
+    const z = gm.zoneAt(p);
+    return z && z.kind === 'hardscape' && !isBoardDeck(z) ? zoneTop(z, plan.zones.indexOf(z)) : 0;
+  };
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn));
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -340,19 +364,25 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (modelIdx.any(p[0], p[1])) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
-      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
+      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
+      // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
+      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl') {
+        if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
+        continue;
+      }
       if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(...spec.footprint) * 0.55) return true;
     }
     return false;
   };
   const turf = buildTurf(plan, gm, quality, blocked);
   yield 'turf';
-  const pebbles = buildPebbles(plan, gm, quality);
+  const pebbles = buildPebbles(plan, gm, quality, features.pebbleBeds);
   yield 'pebbles';
   const humus = buildHumus(plan, gm, ground.surface, quality);
   yield 'soil fills';
 
-  const placements = [...expandPlants(plan, gm), ...ctx.trees];
+  // Plants that stand on features (bowl planters on a water feature's pillars) come with the features.
+  const placements = [...expandPlants(plan, gm), ...ctx.trees, ...features.plants];
   yield 'placements';
   // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
   // per step, so the plant layer below only places them.
@@ -388,7 +418,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
@@ -465,6 +495,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     missingAssets: models.missing,
     surfaces,
     nightLights,
+    landLights: features.landLights,
     glow,
     fallMats: [...water.fallMats, ...features.fallMats],
     plantCount: placements.length - ctx.trees.length,

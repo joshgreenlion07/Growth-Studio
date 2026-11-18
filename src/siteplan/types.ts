@@ -68,6 +68,11 @@ export interface DeckLayout {
   seamOffset?: number;
   /** Fascia boards on the sides. Left out, true. */
   fascia?: boolean;
+  /**
+   * A hot tub on the deck, in its framed opening: 'level' (default) stands it on a pad at the deck's height, its whole
+   * cabinet above the boards; 'sunk' sets it down on the ground, so the deck covers the lower part of its cabinet.
+   */
+  tub?: 'level' | 'sunk';
   /** Openings through the deck (a tree, an access hatch), framed like the edge. A hot tub placed on a deck is set into its own opening without being listed. */
   holes?: Vec2[][];
 }
@@ -158,6 +163,32 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
   /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
   materialId?: string;
+  /** Choices for the feature's on/off options (its catalog `options`, e.g. a sauna's door and lights). Left out, the defaults. */
+  options?: Record<string, boolean>;
+  /** Features that come in sizes (the catalog's `sizes`): length, depth and height in meters. Left out, the catalog's size. */
+  size?: [number, number, number];
+  /** A planter's own planting: false draws it empty (soil only). Left out, planted. */
+  planted?: boolean;
+  /** A maker's hot tub: its cover folded up on the lifter ('open', the default), on the spa ('closed'), or none ('off'). */
+  cover?: 'open' | 'closed' | 'off';
+  /** A maker's hot tub: its steps. Left out, they are shown. */
+  steps?: boolean;
+  /** A lighting fixture's options (a `landscapeLight` feature). Each left out takes the fixture's default. */
+  fixture?: FixtureSetting;
+}
+
+/** How a lighting fixture is ordered and aimed: only choices its maker offers are kept. */
+export interface FixtureSetting {
+  /** Finish id ('black', 'bronze', 'brown', 'white', 'gray', 'stainless'). */
+  finish?: string;
+  /** Beam angle in degrees (fixtures with a choice of optics or lamps). */
+  beamDeg?: number;
+  /** Color temperature in kelvin (fixtures with a choice). */
+  kelvin?: number;
+  /** Aim of an adjustable head, degrees from straight up, tipped toward the placement's front. */
+  tiltDeg?: number;
+  /** Meters above grade for a fixture on a wall, cap, riser or post (the underside of the cap for cap lights). */
+  mountHeight?: number;
 }
 
 /** A door or window the designer marked on a wall. */

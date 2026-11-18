@@ -2,6 +2,8 @@ import { materialById, type LayingPattern } from '../siteplan/catalog';
 import { rockSet } from '../builder/materials';
 import { cortenSet, materialTextures, porcelainPanelSet, soilTextures, wallCapTextures } from './surfaces';
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
+import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
+import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
 
 /**
  * The texture worker's side of `textureSet`: rebuild a set from its cache key
@@ -20,6 +22,7 @@ export function runRecipe(key: string): PBRSet | null {
     const spec = materialById.get(cap[1]);
     return spec ? wallCapTextures(spec) : null;
   }
+  if (key.startsWith('cl5g-')) return cl5gRecipe(key);
   const named: Record<string, () => PBRSet> = {
     soil: soilTextures,
     corten: cortenSet,
@@ -30,6 +33,9 @@ export function runRecipe(key: string): PBRSet | null {
     bark,
     asphalt,
     poolTile,
+    'pf-stucco': pillarStuccoSet,
+    'pf-ledger': ledgerStoneSet,
+    'pf-bowl': patinaBowlSet,
   };
   return named[key]?.() ?? null;
 }

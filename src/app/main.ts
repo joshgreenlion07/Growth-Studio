@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -255,6 +255,16 @@ function setToolKey(k: ToolKey) {
   renderToolOptions();
 }
 let snapshotPending = false;
+
+/** A maker's hot tub (Cal Spas): its placement can set the cover (`cover`) and leave the steps out (`steps: false`). */
+function makerSpa(f: { kind: string; model?: string }): boolean {
+  return f.kind === 'hotTub' && !!f.model;
+}
+const SPA_COVERS = [
+  { value: 'open', label: 'Open, on its lifter' },
+  { value: 'closed', label: 'Closed, on the spa' },
+  { value: 'off', label: 'No cover' },
+];
 
 function selectEl(id: string, options: { value: string; label: string; group?: string }[], value: string, onChange: (v: string) => void, label: string) {
   const sel = h('select', { id, 'aria-label': label });
@@ -518,6 +528,14 @@ function renderInspector() {
     box.append(
       field('Feature', selectEl('f-sp', featureOptions(), f.catalogId, (v) => { snapshot(); f.catalogId = v; changed('structure'); }, 'Feature')),
       field('Turn', rot, 'Or press R on the plan.'),
+      ...(spec.options ?? []).map((op) => check(`f-op-${op.key}`, op.label, featureOption(spec, f.options, op.key), (v) => { snapshot(); f.options = { ...f.options, [op.key]: v }; changed(); })),
+      ...(spec.plantable ? [check('f-planted', 'Planted', f.planted !== false, (v) => { snapshot(); if (v) delete f.planted; else f.planted = false; changed(); })] : []),
+      ...(makerSpa(spec)
+        ? [
+            field('Cover', selectEl('f-cover', SPA_COVERS, f.cover ?? 'open', (v) => { snapshot(); f.cover = v as typeof f.cover; changed(); }, 'Cover')),
+            check('f-steps', 'Steps', f.steps !== false, (v) => { snapshot(); if (v) delete f.steps; else f.steps = false; changed(); }),
+          ]
+        : []),
       h('p', { class: 'muted', text: `${fmtFeet(spec.footprint[0])} by ${fmtFeet(spec.footprint[1])}` }),
       del,
     );
@@ -1119,7 +1137,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }
