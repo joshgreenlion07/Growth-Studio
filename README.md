@@ -193,7 +193,7 @@ Messages use `window.postMessage`:
   when it is turned on or off, and `{ source: 'growth-studio', type: 'point',
   id, part, material }` when what it is on changes. Everything built from the
   plan can be pointed at. `part` is `main`, `border`, `edge` (paver edging),
-  `wall`, `cap`, `curb`, `fence`, `steps` or `stone` for a catalog surface;
+  `wall`, `cap`, `curb`, `fence`, `steps`, `stone` or `deck` (a composite deck's boards) for a catalog surface;
   `turf` or `bed` for a lawn, synthetic grass, mulch, bark, humus, rock or DG
   zone (painted on the ground, found by the zone under the hit point); and
   `plant`, `water`, `structure`, `feature` or `model` for the rest. `id` is the

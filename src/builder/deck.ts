@@ -212,7 +212,7 @@ export function buildDeck(z: Zone, index: number, plan: SitePlan): DeckBuild {
       mesh.receiveShadow = true;
       mesh.name = `zone-${z.id}`;
       mesh.userData.itemId = z.id;
-      mesh.userData.part = 'main';
+      mesh.userData.part = 'deck';
       mesh.userData.catalogId = z.catalogId;
       group.add(mesh);
     }
@@ -241,11 +241,11 @@ export function buildDeck(z: Zone, index: number, plan: SitePlan): DeckBuild {
       const um = new THREE.Mesh(ug, plainMaterial('deck-under', { color: '#16120f', roughness: 1 }));
       um.receiveShadow = true;
       um.userData.itemId = z.id;
-      um.userData.part = 'main';
+      um.userData.part = 'deck';
       um.userData.catalogId = z.catalogId;
       group.add(um);
     }
   }
-  const surfaces = group.children.filter((o): o is THREE.Mesh => (o as THREE.Mesh).isMesh && o.userData.part === 'main');
+  const surfaces = group.children.filter((o): o is THREE.Mesh => (o as THREE.Mesh).isMesh && o.userData.part === 'deck');
   return { object: group, surfaces: surfaces.slice(0, 1), geos };
 }
