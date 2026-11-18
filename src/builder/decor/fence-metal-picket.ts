@@ -17,7 +17,7 @@ const OC = 4 * IN;           // about 4 in on center (3 7/8 in clear is the usua
  * The segment's two ends get heavier posts: the run's end, a corner, or a gate post.
  * Everything goes into a few merged buckets (picket, rail, post, curb), so a long run is a handful of draw calls.
  */
-export function metalPicketFence(l: { height: number }, a: Vec2, b: Vec2, height: (p: Vec2) => number, color: string, put: Put, heavyStart: boolean, heavyEnd: boolean) {
+export function metalPicketFence(l: { height: number }, a: Vec2, b: Vec2, height: (p: Vec2) => number, color: string, put: Put, startPost: boolean, startBend: boolean, endBend: boolean) {
   const H = l.height;
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
   if (len < 1e-4) return;
@@ -28,16 +28,16 @@ export function metalPicketFence(l: { height: number }, a: Vec2, b: Vec2, height
   const n = Math.max(1, Math.round(len / BAY));
   const rail = 1.5 * IN, railT = 0.9 * IN;
 
-  const post = (t: number, heavy: boolean, gLow: number) => {
+  const post = (t: number, heavy: boolean, gLow: number, top: number) => {
     const p = at(t), s = (heavy ? 2.5 : 2) * IN;
-    put('post', metal, segmentBox([p[0] - (dir[0] * s) / 2, p[1] - (dir[1] * s) / 2], [p[0] + (dir[0] * s) / 2, p[1] + (dir[1] * s) / 2], s, gLow - 0.12, gLow + H + (heavy ? 0.045 : 0.02)));
+    put('post', metal, segmentBox([p[0] - (dir[0] * s) / 2, p[1] - (dir[1] * s) / 2], [p[0] + (dir[0] * s) / 2, p[1] + (dir[1] * s) / 2], s, gLow - 0.12, top + (heavy ? 0.045 : 0.02)));
     if (heavy) { // a flat cap on the heavy post
       const c = s + 0.012;
-      put('post', metal, segmentBox([p[0] - (dir[0] * c) / 2, p[1] - (dir[1] * c) / 2], [p[0] + (dir[0] * c) / 2, p[1] + (dir[1] * c) / 2], c, gLow + H + 0.045, gLow + H + 0.06));
+      put('post', metal, segmentBox([p[0] - (dir[0] * c) / 2, p[1] - (dir[1] * c) / 2], [p[0] + (dir[0] * c) / 2, p[1] + (dir[1] * c) / 2], c, top + 0.045, top + 0.06));
     }
   };
 
-  const lows: number[] = [];
+  const lows: number[] = [], tops: number[] = [];
   for (let k = 0; k < n; k++) {
     const t0 = k / n, t1 = (k + 1) / n;
     const p0 = at(t0), p1 = at(t1);
@@ -45,13 +45,22 @@ export function metalPicketFence(l: { height: number }, a: Vec2, b: Vec2, height
     const hs = [height(p0), height(at((t0 + t1) / 2)), height(p1)];
     const gLow = Math.min(...hs), gHigh = Math.max(...hs);
     lows.push(gLow);
+    tops.push(gLow + H);
+    // At a bend the outer side would show an open wedge: run the curb and rails past the vertex by half the curb width.
+    const ext = 3 * IN;
+    const e0: Vec2 = k === 0 && startBend ? [p0[0] - dir[0] * ext, p0[1] - dir[1] * ext] : p0;
+    const e1: Vec2 = k === n - 1 && endBend ? [p1[0] + dir[0] * ext, p1[1] + dir[1] * ext] : p1;
     // Mow curb: 6 in wide, 3 in above the high ground, buried below the low.
-    put('curb', concrete, segmentBox(p0, p1, 6 * IN, gLow - 0.12, gHigh + 3 * IN, 0), true);
+    put('curb', concrete, segmentBox(e0, e1, 6 * IN, gLow - 0.12, gHigh + 3 * IN, 0), true);
     // Rails: one just below the top, one about 4 in off the curb.
     const base = gHigh + 3 * IN;
     const top = gLow + H;
-    put('rail', metal, segmentBox(p0, p1, railT, top - 0.2 - rail / 2 + 0.02, top - 0.2 + rail / 2 + 0.02, 0));
-    put('rail', metal, segmentBox(p0, p1, railT, base + 0.1, base + 0.1 + rail, 0));
+    // Rails never cross: the bottom one sits ~4 in off the curb, the top one ~8 in under the top, and on a short
+    // fence both are squeezed toward their ends but kept a minimum gap apart.
+    const lowY = base + Math.min(0.1, 0.15 * H);
+    const upY = Math.max(top - Math.min(0.2, 0.25 * H) - rail / 2, lowY + rail + 0.03);
+    put('rail', metal, segmentBox(e0, e1, railT, lowY, lowY + rail, 0));
+    put('rail', metal, segmentBox(e0, e1, railT, upY, upY + rail, 0));
     // Pickets: evenly spread between the posts, flush tops.
     const bayLen = len / n, post = 2 * IN;
     const room = bayLen - post - PICKET;
@@ -64,7 +73,9 @@ export function metalPicketFence(l: { height: number }, a: Vec2, b: Vec2, height
     }
   }
   for (let k = 0; k <= n; k++) {
-    const heavy = (k === 0 && heavyStart) || (k === n && heavyEnd);
-    post(k / n, heavy, Math.min(lows[Math.min(k, n - 1)], lows[Math.max(k - 1, 0)]));
+    if (k === 0 && !startPost) continue; // the previous segment already put this vertex's post
+    const heavy = k === 0 || k === n;
+    const adj = [lows[Math.min(k, n - 1)], lows[Math.max(k - 1, 0)]], adjTop = [tops[Math.min(k, n - 1)], tops[Math.max(k - 1, 0)]];
+    post(k / n, heavy, Math.min(...adj), Math.max(...adjTop));
   }
 }
