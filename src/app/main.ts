@@ -26,6 +26,7 @@ import { PlanEditor, type Tool } from './planeditor';
 import { prepareImage, readPlan, type SourceKind } from './reader';
 import { pdfFirstPage } from './pdf';
 import { QuickTools } from './quicktools';
+import { TouchControls } from './touchcontrols';
 
 /* ------------------------------------------------------------------ */
 /* Small DOM helpers                                                   */
@@ -79,6 +80,46 @@ function setViewer(on: boolean) {
   quick?.setSkip(embedViewer ? ['mark'] : []);
 }
 if (embedViewer) document.documentElement.classList.add('viewer');
+
+/**
+ * Touch mode (iPad, fingers only): on-screen joystick, mode switcher, Home and Use, and finger look and pinch in walk
+ * and fly (app/touchcontrols.ts, engine/navigation.ts). In Area Planner it is `?touch=1` on the embed address and the
+ * parent's `{ type: 'touch', on }` message. On its own the studio turns it on when the only pointer is coarse (a tablet
+ * or phone, no mouse), and the Touch button changes it, kept in localStorage `gs-touch`. Off by default for a mouse and
+ * keyboard: nothing changes.
+ */
+const TOUCH_KEY = 'gs-touch';
+function initialTouch(): boolean {
+  if (EMBED) return new URLSearchParams(location.search).get('touch') === '1';
+  try {
+    const saved = localStorage.getItem(TOUCH_KEY);
+    if (saved === '1' || saved === '0') return saved === '1';
+  } catch {
+    /* storage blocked */
+  }
+  try {
+    return matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+  } catch {
+    return false;
+  }
+}
+let touchOn = initialTouch();
+let touchUI: TouchControls | null = null;
+function setTouch(on: boolean, save = false) {
+  touchOn = on;
+  document.documentElement.classList.toggle('touch-ui', on);
+  document.getElementById('btn-touch')?.setAttribute('aria-pressed', String(on));
+  studio?.nav.setTouchMode(on);
+  touchUI?.setOn(on);
+  if (save && !EMBED) {
+    try {
+      localStorage.setItem(TOUCH_KEY, on ? '1' : '0');
+    } catch {
+      /* storage blocked */
+    }
+  }
+}
+document.documentElement.classList.toggle('touch-ui', touchOn);
 
 /** Embed mode starts with a bare lot, so no sample yard flashes before the parent's plan arrives. */
 const emptyYard = () => cleanPlan({ site: { name: 'Yard', boundary: [[0, 0], [18, 0], [18, 14], [0, 14]] } }).plan;
@@ -162,7 +203,13 @@ function bootStudio() {
     $('#btn-cutaway').setAttribute('aria-pressed', String(on));
     if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'cutaway', on }, embedOrigin);
   };
-  studio.onNavModeChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  studio.onNavModeChanged = (m) => {
+    document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    touchUI?.setMode(m);
+  };
+  touchUI = new TouchControls(host, () => studio);
+  $('#btn-touch').addEventListener('click', () => setTouch(!touchOn, true));
+  setTouch(touchOn);
   studio.setPlan(plan).then(showStageNote, () => {});
   $('#loading').hidden = true;
   // Area Planner has its own second screen; the studio on its own gets this one.
@@ -1111,6 +1158,7 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open); return; }
+  if (d.type === 'touch') { setTouch((d as { on?: unknown }).on === true); return; }
   if (d.type === 'mode') { setViewer((d as { viewer?: unknown }).viewer === true); return; }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }

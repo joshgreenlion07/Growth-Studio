@@ -32,6 +32,11 @@ import * as THREE from 'three';
  * walking, along the view when flying. Zoom and movement are eased with
  * frame-rate-independent curves, so they glide alike at 30, 60 and 120 fps.
  *
+ * Touch mode (iPad, no keyboard): `setTouchMode(true)` turns on finger controls. Orbit keeps OrbitControls' own touch
+ * (one finger orbits, two pinch and pan). In walk and fly one finger on the scene looks and two fingers pinch (the
+ * lens when walking, along the view when flying); the on-screen joystick and rise buttons (app/touchcontrols.ts) feed
+ * `setVirtualStick` and `setVirtualRise`, which join the controller's left stick and bumpers on the same eased path.
+ *
  * The camera and its look-at target move together, so OrbitControls carries
  * on from wherever the camera was left.
  */
@@ -156,6 +161,15 @@ export class Navigation {
   /** Safari pinch in progress (its own events), and when it ended: ctrl+wheel then is not a second pinch. */
   private gesture = { on: false, scale: 1, endedAt: 0 };
   private touches = new Set<number>();
+  /** Touch mode: the on-screen controls are on. */
+  private touch = false;
+  /** The on-screen joystick (-1..1, down is backward like a controller stick) and rise button (-1, 0, 1), and its eased result. */
+  private vstick = { x: 0, y: 0 };
+  private vstickOut = { x: 0, y: 0 };
+  private vrise = 0;
+  /** Fingers on the scene in first person (touch mode): one looks, two pinch. */
+  private fingers = new Map<number, { x: number; y: number }>();
+  private pinchDist = 0;
   /** When D-pad ↓ went down (ms), and whether its long press has fired. */
   private downAt = 0;
   private downHeld = false;
@@ -206,10 +220,31 @@ export class Navigation {
     c.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') this.touches.add(e.pointerId);
       if (this.host.mode() === 'orbit') return;
+      if (this.touch && e.pointerType === 'touch') {
+        // Touch mode: one finger looks, a second turns the two into a pinch.
+        this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        c.setPointerCapture?.(e.pointerId);
+        if (this.fingers.size === 2) {
+          this.drag = null;
+          this.pinchDist = this.fingerGap();
+        } else if (this.fingers.size === 1) this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        return;
+      }
       this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
       c.setPointerCapture?.(e.pointerId);
     });
     c.addEventListener('pointermove', (e) => {
+      const f = this.fingers.get(e.pointerId);
+      if (f) {
+        f.x = e.clientX;
+        f.y = e.clientY;
+        if (this.fingers.size === 2) {
+          const d = this.fingerGap();
+          if (this.pinchDist > 8 && d > 8) this.pinch(Math.log(d / this.pinchDist));
+          this.pinchDist = d;
+          return;
+        }
+      }
       if (!this.drag || e.pointerId !== this.drag.id) return;
       this.look.x += e.clientX - this.drag.x;
       this.look.y += e.clientY - this.drag.y;
@@ -218,6 +253,8 @@ export class Navigation {
     });
     const end = (e: PointerEvent) => {
       this.touches.delete(e.pointerId);
+      // After a pinch the finger left on the glass does not suddenly look; it must lift and touch again.
+      if (this.fingers.delete(e.pointerId) && this.fingers.size) this.drag = null;
       if (this.drag && e.pointerId === this.drag.id) this.drag = null;
     };
     c.addEventListener('pointerup', end);
@@ -266,6 +303,45 @@ export class Navigation {
       this.gesture.on = false;
       this.gesture.endedAt = performance.now();
     }, { passive: false });
+  }
+
+  /** Distance between the two fingers on the scene (touch mode). */
+  private fingerGap(): number {
+    const [a, b] = [...this.fingers.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  }
+
+  /** Touch mode on or off. Off drops every on-screen input, so nothing keeps moving. */
+  setTouchMode(on: boolean) {
+    this.touch = on;
+    if (!on) {
+      this.vstick.x = this.vstick.y = 0;
+      this.vrise = 0;
+      this.fingers.clear();
+      this.drag = null;
+    }
+  }
+
+  /** The on-screen joystick, -1..1 each way (y down moves backward, like a controller's left stick). 0, 0 lets go. */
+  setVirtualStick(x: number, y: number) {
+    const m = Math.hypot(x, y);
+    // A full thumb push counts as the stick's outer edge.
+    const k = m > 1 ? 1 / m : 1;
+    this.vstick.x = Number.isFinite(x) ? x * k : 0;
+    this.vstick.y = Number.isFinite(y) ? y * k : 0;
+  }
+
+  /** Look by this many pixels, as a drag on the scene does (first person). */
+  setVirtualLook(dx: number, dy: number) {
+    if (Number.isFinite(dx + dy)) {
+      this.look.x += dx;
+      this.look.y += dy;
+    }
+  }
+
+  /** The on-screen rise (1) and sink (-1) buttons, the controller's RB and LB; 0 lets go. Fly mode only. */
+  setVirtualRise(dir: -1 | 0 | 1) {
+    this.vrise = dir;
   }
 
   /** Fingers apart by `logScale` (log of the scale change): closer in, or a longer lens in walk mode. */
@@ -391,6 +467,13 @@ export class Navigation {
       mz += (k.has('s') || k.has('ArrowDown') ? 1 : 0) - (k.has('w') || k.has('ArrowUp') ? 1 : 0);
       lift += (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0);
       fast ||= k.has('Shift');
+      // The on-screen joystick and rise buttons, through the same dead zone and curve as the controller's stick.
+      if (this.touch) {
+        stick(this.vstick.x * 1.08, this.vstick.y * 1.08, this.vstickOut);
+        mx += this.vstickOut.x;
+        mz += this.vstickOut.y;
+        lift += this.vrise;
+      }
       // Diagonals no faster than straight.
       const m = Math.hypot(mx, mz);
       if (m > 1) {
