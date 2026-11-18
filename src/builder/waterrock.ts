@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { featureOption, type FeatureSpec } from '../siteplan/catalog';
 import { featureSize } from '../siteplan/decor';
 import type { FeaturePlacement } from '../siteplan/types';
-import { ROCK_GRAIN_MEAN, rockGrainSet } from '../engine/rock-surfaces';
+import { ROCK_GRAIN_MEAN, rockGrainSet, rockPittedSet } from '../engine/rock-surfaces';
 import { pbrMaterial } from './materials';
 import { buildRock, footSink, type GroundAt, type RockLook, type RockShape } from './stonegeo';
 
@@ -52,9 +52,11 @@ const STYLE: Record<string, { shape: RockShape; look: RockLook }> = {
 };
 
 /** The one material every boulder shares: the grain texture, tinted by each rock's vertex colors (scaled up for the map's mean). */
-export function boulderMaterial(): THREE.MeshStandardMaterial {
+export function boulderMaterial(pitted = false): THREE.MeshStandardMaterial {
   const k = 1 / ROCK_GRAIN_MEAN;
-  return pbrMaterial('boulder-grain', rockGrainSet(), { vertexColors: true, color: new THREE.Color().setRGB(k, k, k, THREE.LinearSRGBColorSpace) });
+  return pitted
+    ? pbrMaterial('boulder-pitted', rockPittedSet(), { vertexColors: true, color: new THREE.Color().setRGB(k, k, k, THREE.LinearSRGBColorSpace) })
+    : pbrMaterial('boulder-grain', rockGrainSet(), { vertexColors: true, color: new THREE.Color().setRGB(k, k, k, THREE.LinearSRGBColorSpace) });
 }
 
 export interface WaterRockContext {
@@ -70,10 +72,11 @@ export interface WaterRockContext {
 /**
  * One boulder's geometry in a catalog boulder's shape and look (`styleId`: a moss rock shape or the Canyon Tech boulder),
  * `size` length x depth x the height that shows, its foot at y 0, for features built of boulders (a boulder waterfall).
+ * `shape` overrides parts of the style's shape (more weathering, rounder).
  */
-export function boulderGeometry(styleId: string, size: [number, number, number], seed: string, moss: boolean, buried = 0.2): THREE.BufferGeometry {
+export function boulderGeometry(styleId: string, size: [number, number, number], seed: string, moss: boolean, buried = 0.2, shape: Partial<RockShape> = {}): THREE.BufferGeometry {
   const st = STYLE[styleId] ?? STYLE['moss-rock-rounded'];
-  return buildRock({ shape: st.shape, look: st.look, size, buried, seed, moss });
+  return buildRock({ shape: { ...st.shape, ...shape }, look: st.look, size, buried, seed, moss });
 }
 
 /** A boulder (a moss rock shape or a Canyon Tech boulder), set into the ground at the feature's spot. */

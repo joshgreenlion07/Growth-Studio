@@ -32,3 +32,32 @@ export function rockGrainSet(): PBRSet {
     }, MEAN),
   );
 }
+
+/**
+ * A more weathered grain for the boulders of a boulder waterfall (builder/cascadefall.ts): the same specks and blotch,
+ * with many more pits and pockmarks, deeper and darker, some large, as on long-weathered stone. Same mean as
+ * rockGrainSet, so the boulder material's scale holds. Painted in the texture worker (key `rk-pitted`).
+ */
+export function rockPittedSet(): PBRSet {
+  return textureSet('rk-pitted', () =>
+    paint(512, 0.9, 6, (u, v) => {
+      const blotch = fbm(u, v, 4, 5, 171);
+      const fine = vnoise(u * 180, v * 180, 180, 105);
+      const mid = fbm(u, v, 9, 3, 173);
+      const wu = u + (fbm(u, v, 9, 3, 191) - 0.5) * 0.06, wv = v + (fbm(u, v, 9, 3, 193) - 0.5) * 0.06;
+      const a = voronoi(wu, wv, 14, 177, 0.95);
+      const b = voronoi(wu, wv, 34, 179, 0.95);
+      const c = voronoi(wu, wv, 80, 181, 0.95);
+      const pitA = (1 - smooth(0.05, 0.2 + a.id * 0.16, a.f1)) * (a.id > 0.72 ? 1 : 0);
+      const pitB = (1 - smooth(0.04, 0.16 + b.id * 0.1, b.f1)) * (b.id > 0.6 ? 0.85 : 0);
+      const pitC = (1 - smooth(0.03, 0.12, c.f1)) * (c.id > 0.55 ? 0.5 : 0);
+      const pit = Math.min(1, pitA + pitB + pitC);
+      // A lighter worn rim round the bigger pits.
+      const rim = smooth(0.18, 0.3, a.f1) * (1 - smooth(0.3, 0.42, a.f1)) * (a.id > 0.72 ? 1 : 0);
+      const speck = fine > 0.86 ? 1.14 : fine < 0.12 ? 0.8 : 1;
+      const lum = (0.96 + (blotch - 0.5) * 0.34 + (mid - 0.5) * 0.22 + rim * 0.08) * speck * (1 - pit * 0.42);
+      const h = 0.5 + (blotch - 0.5) * 0.2 + (mid - 0.5) * 0.35 + (fine - 0.5) * 0.2 - pit * 0.7 + rim * 0.06;
+      return { h, c: [lum, lum * 0.99, lum * 0.98], r: 0.86 + (fine - 0.5) * 0.1 + pit * 0.08 };
+    }, MEAN),
+  );
+}
