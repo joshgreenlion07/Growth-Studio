@@ -261,7 +261,8 @@ Messages use `window.postMessage`:
   features and `plan.rulers`; Plants shows or hides the plant labels in any of
   them. The switch is remembered on the device.
 - Quick tools (D-pad): left / right pick the tool (`,` and `.`), up / down use it
-  (`=` and `-`; holding down or `-` about a second is a long press). A chip at the
+  (`=` and `-`; holding down or `-` about a second is a long press; the keys, and
+  `N`, act only while the 3D view has the keyboard, not a button or the plan pane). A chip at the
   bottom of the 3D view names the tool and what up and down do, and fades. The
   last tool is remembered. The tools are one table in `src/app/quicktools.ts`:
   - Dig layers: up digs one build stage deeper (Finished, Sand, Base rock,
@@ -309,7 +310,8 @@ Messages use `window.postMessage`:
   all are cleared, the studio sends `{ source: 'growth-studio', type: 'marks',
   marks: [{ x, z, y }] }` (every mark, oldest first, in 3D world meters: x and
   z on the plan, y the height) to the origin that sent the plan. The parent may
-  keep them; the studio does not take marks back yet.
+  keep them; the studio does not take marks back yet. After a rebuild each mark
+  is set back on the surface under it and the updated list is sent again.
 - Plant labels (B, `N`, the Plants button) are the studio's own switch; the
   measurement levels and `plan.rulers` are unaffected.
 - The `i` key pressed inside the 3D view (no modifier keys, not in a text

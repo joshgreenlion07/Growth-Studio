@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Measurements } from './measure';
 
 /**
  * Two quick tools that draw in the 3D world (see app/quicktools.ts for the controller and keys):
@@ -18,7 +19,7 @@ export interface MarkPoint {
   z: number;
 }
 
-const MAX_MARKS = 200;
+export const MAX_MARKS = 200;
 const DIRT = 0x6b4a2f;
 const FLAG = 0xff6a13;
 /** How long the landed pile takes to settle, seconds. */
@@ -106,6 +107,25 @@ export class Marks {
 
   get count() {
     return this.list.length;
+  }
+
+  /**
+   * Set each mark back on the surface under it (after the yard was rebuilt). `heightAt` gives the surface height at a
+   * point. True if any mark moved; then onChange reports the marks.
+   */
+  reground(heightAt: (x: number, z: number) => number): boolean {
+    let moved = false;
+    for (const p of this.list) {
+      const y = heightAt(p.x, p.z);
+      if (Math.abs(y - p.y) > 1e-3) {
+        p.y = y;
+        moved = true;
+      }
+    }
+    if (!moved) return false;
+    this.layout(true);
+    this.onChange(this.points);
+    return true;
   }
 
   /** Something moves (a clod in the air, a pile settling): keep drawing. */
@@ -230,7 +250,8 @@ export class Tape {
   private v = new THREE.Vector3();
   private mid = new THREE.Vector3();
 
-  constructor(container: HTMLElement) {
+  /** The distance label lives in the measurements' label layer, placed with (and ahead of) its labels. */
+  constructor(private measure: Measurements) {
     this.group.name = 'tape';
     this.group.renderOrder = 999;
     const mat = new THREE.MeshBasicMaterial({ color: 0xffc94d, depthTest: false, depthWrite: false, transparent: true });
@@ -246,8 +267,6 @@ export class Tape {
     }
     this.label = document.createElement('div');
     this.label.className = 'measure-label ml-ruler tape-label';
-    this.label.hidden = true;
-    container.appendChild(this.label);
   }
 
   /** 'a' after the first point, 'b' with the distance after the second; a third starts over. */
@@ -305,24 +324,13 @@ export class Tape {
       }
       this.mid.addVectors(ea.position, eb.position).multiplyScalar(0.5).y += 0.35;
     }
-    this.label.hidden = !(this.a && this.b);
-  }
-
-  /** Place the distance label over the middle of the line (each drawn frame). */
-  update(camera: THREE.Camera, width: number, height: number) {
-    if (this.label.hidden) return;
-    this.v.copy(this.mid).project(camera);
-    const off = this.v.z > 1 || this.v.z < -1;
-    this.label.style.visibility = off ? 'hidden' : '';
-    if (off) return;
-    const x = (this.v.x * 0.5 + 0.5) * width, y = (-this.v.y * 0.5 + 0.5) * height;
-    this.label.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+    this.measure.pin(this.label, this.a && this.b ? this.mid : null);
   }
 
   dispose() {
     this.bar.geometry.dispose();
     this.ends[0].geometry.dispose();
     (this.bar.material as THREE.Material).dispose();
-    this.label.remove();
+    this.measure.pin(this.label, null);
   }
 }

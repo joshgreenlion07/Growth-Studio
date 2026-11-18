@@ -68,6 +68,8 @@ export class Measurements {
   private shown = false;
   private detail = false;
   private plantsOn = false;
+  /** Labels other tools pin in this layer (the tape measure): placed before all others, kept across rebuilds. */
+  private pinned = new Map<HTMLElement, Label>();
   private obstacles: OverlayObstacles;
 
   constructor(container: HTMLElement) {
@@ -96,10 +98,33 @@ export class Measurements {
     this.sync();
   }
 
+  /**
+   * Show `el` at `pos` in this layer (null takes it away). It goes before every other label, so they keep clear of
+   * it, and it stays through rebuilds. Call again after changing its text, so it is measured again.
+   */
+  pin(el: HTMLDivElement, pos: THREE.Vector3 | null) {
+    let l = this.pinned.get(el);
+    if (!pos) {
+      if (l) {
+        this.pinned.delete(el);
+        el.remove();
+      }
+    } else if (!l) {
+      l = { el, pos: pos.clone(), kind: 'ruler', w: 0, h: 0, on: false, d: 0 };
+      this.pinned.set(el, l);
+      el.style.visibility = 'hidden';
+      this.layer.appendChild(el);
+    } else {
+      l.pos.copy(pos);
+      l.w = 0;
+    }
+    this.sync();
+  }
+
   private sync() {
     this.lastPV.elements[0] = NaN;
     this.group.visible = this.visible;
-    this.layer.hidden = !this.visible;
+    this.layer.hidden = !this.visible && !this.pinned.size;
   }
 
   get mode(): MeasureMode {
@@ -317,7 +342,7 @@ export class Measurements {
 
   /** Place labels for this frame (only when the view or the labels changed). */
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
-    if (!this.visible) return;
+    if (!this.visible && !this.pinned.size) return;
     // Controls that moved (a panel opened, the window resized) re-place the labels even with the view still.
     const moved = this.obstacles.refresh();
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -328,7 +353,7 @@ export class Measurements {
     const cam = camera.position;
     // Measure new labels (all reads, before any write below). Hidden labels keep their layout, so this is one
     // layout at most, the first frame after labels were added.
-    for (const l of this.labels) {
+    for (const l of [...this.pinned.values(), ...this.labels]) {
       if (!l.w) {
         l.w = l.el.offsetWidth;
         l.h = l.el.offsetHeight;
@@ -337,8 +362,15 @@ export class Measurements {
     }
     const order = this.order;
     order.length = 0;
-    for (const l of this.labels) order.push(l);
+    if (this.visible) for (const l of this.labels) order.push(l);
+    else for (const l of this.labels) if (l.on) {
+      // Measurements and plant labels off, a pinned label still shown: their labels go.
+      l.el.style.visibility = 'hidden';
+      l.on = false;
+    }
     order.sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind] || Number(b.on) - Number(a.on) || a.d - b.d);
+    // Pinned labels (the tape measure) are placed first, so the others keep clear of them.
+    order.unshift(...this.pinned.values());
     const placed = this.placed;
     // The controls over the view count as labels already placed, so no label goes under one.
     placed.length = 0;
@@ -377,7 +409,7 @@ export class Measurements {
     for (const o of this.group.children) (o as THREE.Line).geometry?.dispose();
     this.group.clear();
     this.labels = [];
-    this.layer.replaceChildren();
+    this.layer.replaceChildren(...[...this.pinned.keys()]);
   }
 
   dispose() {

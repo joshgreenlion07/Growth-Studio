@@ -40,6 +40,16 @@ export type NavMode = 'orbit' | 'walk' | 'fly';
 export type QuickDir = 'left' | 'right' | 'up' | 'down';
 /** How long ↓ is held before it counts as a long press (clear all), ms. */
 export const QUICK_HOLD_MS = 900;
+
+/**
+ * The 3D view has the keyboard: focus is on the page itself or the canvas, not in the plan pane or on a button,
+ * field or menu. The quick tool keys and N act only then.
+ */
+export function viewHasKeys(e: KeyboardEvent): boolean {
+  const t = e.target;
+  if (!(t instanceof Element)) return true; // the window or document itself
+  return t === document.body || t === document.documentElement || t instanceof HTMLCanvasElement || t.id === 'scene';
+}
 /** Eye height for walking, meters (about 5 ft 5 in). */
 export const EYE_HEIGHT = 1.65;
 
@@ -167,7 +177,10 @@ export class Navigation {
       if (k === 'm') { this.host.toggleMeasure(); return; }
       if (k === 'p') { this.host.togglePointer(); return; }
       if (k === 'l') { this.host.togglePointLock(); return; }
-      if (k === 'n') { this.host.togglePlantLabels(); return; }
+      if (k === 'n') {
+        if (viewHasKeys(e)) this.host.togglePlantLabels();
+        return;
+      }
       if (!first) return;
       if (k === 'v') { this.host.toggleFly(); return; }
       if (k === 'Home') { this.host.home(); return; }

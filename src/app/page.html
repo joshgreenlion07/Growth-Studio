@@ -232,18 +232,20 @@ section.scene-pane.fs #nav-modes { display: flex; }
 section.scene-pane.fs #nav-hint { display: block; }
 #nav-hint kbd { font-family: var(--font-mono); font-size: 10px; color: #fff; }
 /* Quick tools (D-pad): a chip at the bottom center naming the tool, what up and down do, and the result. Big enough
-   to read on a TV across the room; shows on each change and fades. */
-.quick-hud { position: absolute; z-index: 4; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px); background: rgba(20, 24, 22, 0.86); color: #f4f3ef; border-left: 3px solid #7dc00f; border-radius: 3px; padding: 8px 16px 9px; text-align: center; pointer-events: none; opacity: 1; transition: opacity 0.4s ease; }
-.quick-hud.fade { opacity: 0; }
+   to read on a TV across the room; shows on each change for 2 s. Shown and hidden by visibility, never by display or
+   an opacity fade, so the layers over the WebGL canvas stay the same (see .measure-layer). */
+.quick-hud { position: absolute; z-index: 4; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px); background: rgba(20, 24, 22, 0.86); color: #f4f3ef; border-left: 3px solid #7dc00f; border-radius: 3px; padding: 8px 16px 9px; text-align: center; pointer-events: none; visibility: hidden; }
+.quick-hud.on { visibility: visible; }
 .quick-hud .qh-tool { font: 600 20px/1.25 var(--font-ui); white-space: nowrap; }
 .quick-hud .qh-act { font: 400 13px/1.4 var(--font-ui); color: #c9cec8; white-space: pre; }
 .quick-hud .qh-state { font: 600 15px/1.35 var(--font-mono); color: #ffd24a; margin-top: 2px; }
 /* Where Mark and Tape measure aim: a small cross at the center of the view. */
-.quick-aim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 3; pointer-events: none; }
+.quick-aim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 3; pointer-events: none; visibility: hidden; }
+.quick-aim.on { visibility: visible; }
 .quick-aim::before, .quick-aim::after { content: ''; position: absolute; background: #ff6a13; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
 .quick-aim::before { left: -9px; top: -1px; width: 18px; height: 2px; }
 .quick-aim::after { left: -1px; top: -9px; width: 2px; height: 18px; }
-.measure-label.tape-label { z-index: 3; font-size: 13px; }
+.measure-label.tape-label { font-size: 13px; }
 .measure-label.tape-label span { font-size: 11px; }
 /* Labels over the 3D view: ONE composited layer for all of them, made once and kept (will-change on the layer, never
    on a label, and labels hide by visibility). Per-label layers came and went every frame as labels showed and hid,

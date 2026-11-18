@@ -176,6 +176,7 @@ function initQuickTools(s: Studio) {
   }
   // Marks thrown with the Mark tool: the parent may keep them (3D world points, meters).
   s.onMarksChanged = (marks) => {
+    quick?.marksChanged();
     if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'marks', marks: marks.map((m) => ({ x: +m.x.toFixed(3), z: +m.z.toFixed(3), y: +m.y.toFixed(3) })) }, embedOrigin);
   };
 }

@@ -391,7 +391,7 @@ export class Studio {
       quick: (dir, held) => this.onQuick(dir, held),
     });
     this.measure = new Measurements(container);
-    this.tape = new Tape(container);
+    this.tape = new Tape(this.measure);
     this.scene.add(this.marks.group, this.tape.group);
     this.marks.onChange = (m) => {
       this.invalidate();
@@ -657,6 +657,7 @@ export class Studio {
     this.shadowDirty = true;
     this.refreshCutaway();
     if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
+    this.regroundMarks();
     this.updateSky(false);
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
     this.invalidate();
@@ -753,6 +754,7 @@ export class Studio {
     this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
     if (this.measure.visible) this.measure.rebuild(plan, next, this.state.years);
+    this.regroundMarks();
     this.updateSky(true);
     this.assignNightLights();
     if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
@@ -1118,23 +1120,40 @@ export class Studio {
   aimPoint(): THREE.Vector3 | null {
     this.raycaster.setFromCamera(this.v2.set(0, 0), this.camera);
     const ray = this.raycaster.ray;
-    if (this.build) {
-      const hard = this.build.root.getObjectByName('hardscape');
-      const cons = this.build.root.getObjectByName('construction');
-      const hits = this.raycaster.intersectObjects([...this.focusSurfaces, ...(hard ? [hard] : []), ...(cons ? [cons] : []), ...this.build.water.surfaces], true);
-      // Only what is drawn: the paving is hidden during the build stages, the pits are hidden in the finished yard.
-      const shown = (o: THREE.Object3D | null) => {
-        for (; o; o = o.parent) if (!o.visible) return false;
-        return true;
-      };
-      for (const h of hits) if (h.distance < 400 && shown(h.object)) return h.point.clone();
-    }
+    const hit = this.surfaceHit();
+    if (hit) return hit;
     // Nothing built there: the level ground.
     if (ray.direction.y < -1e-3) {
       const t = -ray.origin.y / ray.direction.y;
       if (t > 0 && t < 400) return ray.at(t, new THREE.Vector3());
     }
     return null;
+  }
+
+  /** The nearest drawn yard surface along the raycaster's ray (within 400 m): ground, paving, walls, pits, water. */
+  private surfaceHit(): THREE.Vector3 | null {
+    if (!this.build) return null;
+    const hard = this.build.root.getObjectByName('hardscape');
+    const cons = this.build.root.getObjectByName('construction');
+    const hits = this.raycaster.intersectObjects([...this.focusSurfaces, ...(hard ? [hard] : []), ...(cons ? [cons] : []), ...this.build.water.surfaces], true);
+    // Only what is drawn: the paving is hidden during the build stages, the pits are hidden in the finished yard.
+    const shown = (o: THREE.Object3D | null) => {
+      for (; o; o = o.parent) if (!o.visible) return false;
+      return true;
+    };
+    for (const h of hits) if (h.distance < 400 && shown(h.object)) return h.point.clone();
+    return null;
+  }
+
+  /** After a rebuild: set the marks back on the yard's surface under them (they report the new heights). */
+  private regroundMarks() {
+    if (!this.marks.count || !this.build) return;
+    this.build.root.updateMatrixWorld(true);
+    const down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
+    this.marks.reground((x, z) => {
+      this.raycaster.set(from.set(x, 200, z), down);
+      return this.surfaceHit()?.y ?? this.groundAt(x, z);
+    });
   }
 
   /** Throw a dirt clod to the center of the view. False when the view is on the sky. */
@@ -1682,7 +1701,6 @@ export class Studio {
     this.gpuTimer?.end();
     b.cpuFrame(performance.now() - cpu0);
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
-    this.tape.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     this.stageLabels.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();
     // Yards replaced by a new one are released now that the new one has been drawn (shadow pass included).

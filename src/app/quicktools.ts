@@ -1,5 +1,6 @@
 import type { Studio } from '../engine/studio';
-import { QUICK_HOLD_MS, type QuickDir } from '../engine/navigation';
+import { QUICK_HOLD_MS, viewHasKeys, type QuickDir } from '../engine/navigation';
+import { MAX_MARKS } from '../engine/marks';
 import { BUILD_STAGES, type BuildStage } from '../builder/construction';
 import { MOODS, type Mood } from '../engine/sky';
 
@@ -45,7 +46,7 @@ const DIG = [...BUILD_STAGES].reverse();
 const stageLabel = (id: BuildStage) => BUILD_STAGES.find((s) => s.id === id)?.label ?? id;
 const YEARS = [0, 1, 3, 5, 10];
 const yearLabel = (y: number) => (y === 0 ? 'At install' : y >= 10 ? '10 years' : `${+y.toFixed(1)} year${y === 1 ? '' : 's'}`);
-const marksText = (n: number) => `${n} mark${n === 1 ? '' : 's'}`;
+const marksText = (n: number) => `${n} mark${n === 1 ? '' : 's'}${n >= MAX_MARKS ? ' (the most kept; the oldest goes)' : ''}`;
 
 const TOOLS: QuickTool[] = [
   {
@@ -70,7 +71,8 @@ const TOOLS: QuickTool[] = [
     aims: true,
     status: (s) => marksText(s.markCount),
     act(dir, s) {
-      if (dir > 0) return s.throwMark() ? marksText(s.markCount + 1) : 'Aim at the yard';
+      // The count is shown once the clod lands (QuickTools.marksChanged).
+      if (dir > 0) return s.throwMark() ? 'Thrown' : 'Aim at the yard';
       return s.removeMark() ? marksText(s.markCount) : 'No marks';
     },
     hold(s) {
@@ -141,6 +143,8 @@ export class QuickTools {
   /** The aim cross shows only once the tools have been used this session (not just because one was remembered). */
   private used = false;
   private keyHold = 0;
+  /** A clod is in the air: show the count when it lands. */
+  private landing = false;
 
   constructor(private host: QuickHost, private scene: HTMLElement) {
     try {
@@ -154,11 +158,9 @@ export class QuickTools {
     this.chip.className = 'quick-hud';
     this.chip.setAttribute('role', 'status');
     this.chip.setAttribute('aria-live', 'polite');
-    this.chip.hidden = true;
     this.aim = document.createElement('div');
     this.aim.className = 'quick-aim';
     this.aim.setAttribute('aria-hidden', 'true');
-    this.aim.hidden = true;
     scene.append(this.chip, this.aim);
     this.keys();
   }
@@ -189,7 +191,17 @@ export class QuickTools {
       if (dir === 'down' && t.hold) this.show(t.hold(s, this.host));
       return;
     }
-    this.show(t.act(dir === 'up' ? 1 : -1, s, this.host));
+    const text = t.act(dir === 'up' ? 1 : -1, s, this.host);
+    this.landing = t.id === 'mark' && dir === 'up' && text === 'Thrown';
+    this.show(text);
+  }
+
+  /** The marks changed: after a throw, show the count as it is once the clod has landed. */
+  marksChanged() {
+    const s = this.host.studio();
+    if (!this.landing || !s || TOOLS[this.index].id !== 'mark') return;
+    this.landing = false;
+    this.show(marksText(s.markCount));
   }
 
   /** Show the chip with the tool, what ↑ and ↓ do, and `state`; it fades after a moment. */
@@ -210,17 +222,12 @@ export class QuickTools {
       line('qh-act', `▲ ${t.up}   ▼ ${t.down}`),
       ...(state ? [line('qh-state', st)] : []),
     );
-    this.chip.hidden = false;
+    // Shown and hidden by visibility only (no fade): the set of layers drawn over the canvas never changes.
     this.place();
-    // Restart the fade: shown at full strength now, faded out after SHOW_MS.
-    this.chip.classList.remove('fade');
-    void this.chip.offsetWidth;
+    this.chip.classList.add('on');
     clearTimeout(this.hideTimer);
-    this.hideTimer = window.setTimeout(() => {
-      this.chip.classList.add('fade');
-      this.hideTimer = window.setTimeout(() => (this.chip.hidden = true), 450);
-    }, SHOW_MS);
-    this.aim.hidden = !(this.used && t.aims);
+    this.hideTimer = window.setTimeout(() => this.chip.classList.remove('on'), SHOW_MS);
+    this.aim.classList.toggle('on', this.used && !!t.aims);
   }
 
   /** Bottom center, raised above the stage note and the full-screen key hint when they would be under it. */
@@ -245,7 +252,7 @@ export class QuickTools {
       return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
     };
     window.addEventListener('keydown', (e) => {
-      if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (typing(e) || !viewHasKeys(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key;
       const dir: QuickDir | null = k === ',' || k === '<' ? 'left' : k === '.' || k === '>' ? 'right' : k === '=' || k === '+' ? 'up' : k === '-' || k === '_' ? 'down' : null;
       if (!dir) return;
