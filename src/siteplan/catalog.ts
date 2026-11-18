@@ -18,6 +18,7 @@ import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
+import { WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
 
 export type PlantForm =
   | 'shadeTree'
@@ -324,6 +325,7 @@ export type FeatureKind =
   | 'cortenScreen'
   | 'cortenPlanter'
   | DecorKind
+  | WaterRockKind
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
@@ -911,6 +913,8 @@ export const FEATURES: FeatureSpec[] = [
   ...DECOR_FEATURES,
   F({ id: 'black-planter', name: 'Black square planter', group: 'Accents', kind: 'blackPlanter', footprint: [0.5, 0.5] }),
   F({ id: 'boulder', name: 'Boulder', group: 'Accents', kind: 'boulder', footprint: [1.0, 0.8] }),
+  // Moss rock, Canyon Tech boulders and flagstone pieces for water features (siteplan/waterrocks.ts).
+  ...WATER_ROCK_FEATURES,
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
@@ -975,7 +979,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', pillarFountain: 'Water features',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
-  boulder: 'Boulders', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
+  boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
   pathLight: 'Path lights', spotLight: 'Accent lights', landscapeLight: 'Landscape lights',
   bench: 'Seating', loungeSofa: 'Seating', loungeOttoman: 'Ottomans', deckBox: 'Deck boxes',
   loungeSet: 'Furniture sets', bistroSet: 'Furniture sets', diningSet: 'Furniture sets', diningSling: 'Furniture sets',
