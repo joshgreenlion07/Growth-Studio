@@ -1,6 +1,7 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
+import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
 
 /**
@@ -492,4 +493,5 @@ export const SAMPLES = [
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
+  { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
 ];

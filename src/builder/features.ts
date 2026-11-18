@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
+import { featureById, featureOption, materialById, type FeatureKind, type MaterialSpec } from '../siteplan/catalog';
+import { steppingOf, stoneLook, stoneOutline, stoneTop } from '../siteplan/stepping';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
-import { cortenSet, porcelainPanelSet, slabSet } from '../engine/surfaces';
+import { cortenSet, flagFaceSet, padSet, porcelainPanelSet, slabSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
@@ -89,9 +90,33 @@ function cyl(r0: number, r1: number, h: number, x: number, y: number, z: number,
   return g.toNonIndexed();
 }
 
-/** A stepping stone's slab: its own color when it names one, else the default Dimensions Slab 24 x 24 color. */
-function stoneMaterial(f: FeaturePlacement): string {
-  return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
+/** The flagstone texture's tile (surfaces.ts flagFaceSet), meters: each piece takes a part of it that holds it whole. */
+const FLAG_TILE = 1.2;
+
+/**
+ * One natural flagstone piece: its outline (local meters, x and z) extruded to the stone's thickness with a small
+ * broken bevel round the top and bottom edges, the top `top` above the local origin, tipped a fraction of a degree as
+ * a set stone is, its face taken from its own spot on the stone's texture.
+ */
+function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: string): THREE.BufferGeometry {
+  const r = rng(`flagpiece:${seed}`);
+  const t = (flag.flag?.thicknessIn ?? 2) * 0.0254;
+  const bev = Math.min(0.005, t * 0.2);
+  const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const g = new THREE.ExtrudeGeometry(shape, { depth: t - 2 * bev, bevelEnabled: true, bevelThickness: bev, bevelSize: bev * 1.2, bevelOffset: -bev * 1.2, bevelSegments: 2, curveSegments: 1 });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, top - (t - bev), 0);
+  g.rotateX((r() - 0.5) * 0.012);
+  g.rotateZ((r() - 0.5) * 0.012);
+  // Its own part of the texture: a random spot that keeps the whole piece inside one tile (no seam crosses it).
+  let reach = 0;
+  for (const [x, z] of outline) reach = Math.max(reach, Math.abs(x), Math.abs(z));
+  const room = Math.max(0, FLAG_TILE - 2 * reach - 0.02);
+  const ou = reach + 0.01 + r() * room, ov = reach + 0.01 + r() * room;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) + ou, uv.getY(i) + ov);
+  g.computeVertexNormals();
+  return g;
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
@@ -625,10 +650,21 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'steppingStone': {
-        // One 2 3/8 in slab, solid edge to edge (no joint crosses it), set into the ground with its top about half an
-        // inch proud: its own single-slab texture, lined up so the stone's top is exactly one slab.
-        const sm = materialById.get(stoneMaterial(f))!;
-        add(pbrMaterial(`slab:${sm.id}`, slabSet(sm, Math.round((W / 0.0254) * 4) / 4)), slabBox(W, 0.06, D, 0, -0.047, 0));
+        const st = steppingOf(spec), look = materialById.get(stoneLook(f, spec))!;
+        if (st.stone === 'slab') {
+          // One 2 3/8 in slab, solid edge to edge (no joint crosses it), set into the ground with its top about half an
+          // inch proud: its own single-slab texture, lined up so the stone's top is exactly one slab.
+          const [wIn, dIn] = st.sizeIn;
+          const key = wIn === 24 && dIn === 24 ? `slab:${look.id}` : `slab:${look.id}:${wIn}x${dIn}`;
+          add(pbrMaterial(key, slabSet(look, wIn, dIn)), slabBox(W, 0.06, D, 0, stoneTop('slab') - 0.06, 0));
+        } else if (st.stone === 'pad') {
+          // A poured pad: 4 in of concrete in its line's finish and color, no saw cuts, the top 1 in above grade.
+          const g = new THREE.BoxGeometry(W, 0.1, D).translate(0, stoneTop('pad') - 0.05, 0).toNonIndexed();
+          boxUV(g);
+          add(pbrMaterial(`pad:${look.id}`, padSet(look)), g);
+        } else {
+          add(pbrMaterial(`flag:${look.id}`, flagFaceSet(look)), flagstonePiece(stoneOutline(f, spec), look, stoneTop('flagstone'), f.id));
+        }
         break;
       }
       case 'puttingCup': {
@@ -736,9 +772,9 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     o.rotation.y = (-f.rotationDeg * Math.PI) / 180;
     o.userData.itemId = f.id;
     if (spec.kind === 'steppingStone') {
-      // What the material pointer reports for a stepping stone: the slab and its color.
+      // What the material pointer reports for a stepping stone: its slab, concrete or flagstone, and color.
       o.userData.part = 'stone';
-      o.userData.catalogId = stoneMaterial(f);
+      o.userData.catalogId = stoneLook(f, spec);
     }
     o.name = `feature-${f.id}`;
     group.add(o);

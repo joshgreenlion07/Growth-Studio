@@ -317,6 +317,11 @@ export function cleanPlan(input: unknown): CleanResult {
     if (!id) continue;
     const f: FeaturePlacement = { ...base(it, 'feature'), catalogId: id, position, rotationDeg: num(it.rotationDeg, 0, -360, 360) };
     if (typeof it.materialId === 'string' && materialById.get(it.materialId)?.use === 'hardscape') f.materialId = it.materialId;
+    if (featureById.get(id)?.stepping?.stone === 'flagstone' && Array.isArray(it.outline)) {
+      // A flagstone's outline: 3 to 64 points, each within 1 m of its center.
+      const pts = it.outline.map(vec).filter((q): q is Vec2 => !!q && Math.hypot(q[0], q[1]) <= 1);
+      if (pts.length >= 3 && pts.length <= 64 && pts.length === it.outline.length) f.outline = pts;
+    }
     const offered = featureById.get(id)?.options;
     if (offered && it.options && typeof it.options === 'object') {
       const o: Record<string, boolean> = {};

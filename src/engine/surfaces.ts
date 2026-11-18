@@ -661,7 +661,7 @@ function stampedSet(spec: MaterialSpec, stamp: StampPattern): PBRSet {
   });
 }
 
-function concreteSet(spec: MaterialSpec, finish: ConcreteFinish): PBRSet {
+function concreteSet(spec: MaterialSpec, finish: ConcreteFinish, sawCuts = true): PBRSet {
   // Concrete colors are hand-picked in the render light (not a maker's photo), so they are used as they are.
   const [a, b] = spec.palette.map(hexRGB);
   const T = 3.05; // 10 ft, saw cuts every 5 ft
@@ -681,7 +681,7 @@ function concreteSet(spec: MaterialSpec, finish: ConcreteFinish): PBRSet {
   return paint(1024, T, finish === 'exposed' ? 12 : 5, (u, v) => {
     const x = u * T, y = v * T;
     const jx = Math.min(Math.abs(x - T / 2), x, T - x), jy = Math.min(Math.abs(y - T / 2), y, T - y);
-    const joint = Math.min(jx, jy) < 0.004;
+    const joint = sawCuts && Math.min(jx, jy) < 0.004;
     const mott = fbm(u, v, 5, 5, 6);
     let c = mixRGB(a, b, mott);
     let h = 0.6;
@@ -1353,15 +1353,19 @@ function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], 
 /**
  * One slab on its own, as a stepping stone: the slab's face filling the tile edge to edge (the tile is the slab), with
  * its small chamfer all round and no joint, in the line's colors on the same calibration as its paving, softly clouded
- * with a fine sand grain. Square slabs only (`sizeIn` is the side).
+ * with a fine sand grain. `wIn` x `dIn` is the slab (inches, along u and v); a long slab's tile is its long side, and it
+ * takes the part of it from u = 0 and (the canvas being flipped onto the mesh) from v = 1 down.
  */
-export function slabSet(spec: MaterialSpec, sizeIn = 24): PBRSet {
-  return textureSet(`slab:${spec.id}`, () => {
+export function slabSet(spec: MaterialSpec, wIn = 24, dIn = wIn): PBRSet {
+  const key = wIn === 24 && dIn === 24 ? `slab:${spec.id}` : `slab:${spec.id}:${wIn}x${dIn}`;
+  return textureSet(key, () => {
     const colors = pal(spec);
     const n = colors.length;
-    const T = sizeIn * IN;
+    const T = Math.max(wIn, dIn) * IN, W = wIn * IN, D = dIn * IN;
     return paint(512, T, 5, (u, v) => {
-      const e = Math.min(u, 1 - u, v, 1 - v) * T; // distance to the slab's edge, m
+      const x = u * T, y = (1 - v) * T;
+      // distance to the slab's edge, m (outside the slab, where the tile runs past a short side: the edge itself)
+      const e = Math.max(0, Math.min(x, W - x, y, D - y));
       const bev = smooth(0, 0.006, e); // a 1/4 in chamfer
       const cloud = fbm(u, v, 3, 4, 31), patch = fbm(u + 0.3, v + 0.7, 5, 3, 35);
       const grain = vnoise(u * 400, v * 400, 400, 33), fine = vnoise(u * 140, v * 140, 140, 34);
@@ -1369,6 +1373,86 @@ export function slabSet(spec: MaterialSpec, sizeIn = 24): PBRSet {
       c = mixRGB(c, colors[Math.min(n - 1, 2)], smooth(0.55, 0.85, patch) * 0.5);
       c = mulRGB(c, (0.94 + grain * 0.06 + fine * 0.03) * (0.82 + bev * 0.18));
       return { h: bev * (0.96 + grain * 0.03), c, r: 0.72 + grain * 0.1 };
+    });
+  });
+}
+
+/** A poured stepping pad's face: its concrete look with no saw cuts (a pad of 4 ft or less needs none). */
+export function padSet(spec: MaterialSpec): PBRSet {
+  return textureSet(`pad:${spec.id}`, () => concreteSet(spec, spec.finish === 'stamped' && !spec.stamp ? 'broom' : spec.finish ?? 'broom', false));
+}
+
+/**
+ * A natural flagstone's split (cleft) face, for a piece set on its own: no joints, the stone's own relief and color,
+ * on the paving calibration. 1.2 m tiles; each piece takes its own part of the tile (builder/features.ts).
+ *   sandstone  (AZ Classic Oak) cream to buff with tan swirls along its bedding, a faint pink mottle, peeled layers.
+ *   rhyolite   (Cold Water Canyon) porous reddish brown to black, pitted, with pale gray-green and dark crusts of
+ *              lichen and a little moss in the low spots.
+ *   slate      (SUI Black Slate) charcoal to black, lightly riven in long shallow steps, fine streaks, a rare rust stain.
+ */
+export function flagFaceSet(spec: MaterialSpec): PBRSet {
+  return textureSet(`flag:${spec.id}`, () => {
+    // The colors are the stone as photographed, so they go through the same calibration as a maker's swatch.
+    const alb = (h: string) => hexRGB(photoAlbedo(h));
+    const colors = spec.palette.map(alb);
+    const n = colors.length;
+    const stone = spec.flag?.stone ?? 'sandstone';
+    const lichenPale = alb('#a3a291'), lichenDark = alb('#2c2b26'), moss = alb('#646a3a');
+    const rust = alb('#7a5640');
+    return paint(1024, 1.2, stone === 'slate' ? 4 : 7, (u, v) => {
+      const grain = vnoise(u * 600, v * 600, 600, 71), fine = vnoise(u * 180, v * 180, 180, 72);
+      if (stone === 'sandstone') {
+        // Bedding swirls: bands bent by a slow warp; layers peeled off in broad flakes (terraced relief).
+        const warp = fbm(u, v, 2, 4, 73);
+        const band = 0.5 + 0.5 * Math.sin((v * 5 + warp * 3.2) * Math.PI * 2);
+        const flake = fbm(u + 0.4, v, 3, 5, 74);
+        const step = Math.floor(flake * 5) / 5, rise = smooth(0, 0.06, flake * 5 - Math.floor(flake * 5));
+        let c = mixRGB(colors[0], colors[1], smooth(0.25, 0.85, band));
+        c = mixRGB(c, colors[2], smooth(0.62, 0.9, fbm(u, v + 0.3, 4, 4, 75)) * 0.55);
+        c = mixRGB(c, colors[Math.min(3, n - 1)], smooth(0.6, 0.8, fbm(u + 0.7, v + 0.2, 3, 3, 76)) * 0.5);
+        // The "oak" grain: thin tan to rust lines swirling along the bedding.
+        const g = (v * 11 + warp * 4.5 + fbm(u, v, 6, 3, 78) * 0.6) % 1;
+        const line = smooth(0.09, 0.0, Math.abs(g - 0.5)) * (0.55 + 0.45 * fbm(u + 0.2, v + 0.9, 5, 3, 79));
+        c = mixRGB(c, mulRGB(colors[2], 0.82), line * 0.42);
+        const iron = vnoise(u * 90, v * 90, 90, 77) > 0.93 ? 1 : 0;
+        if (iron) c = mixRGB(c, rust, 0.35);
+        c = mulRGB(c, 0.9 + grain * 0.08 + fine * 0.05 + (rise - 1) * 0.04);
+        return { h: step * 0.5 + rise * 0.08 + grain * 0.04 + fine * 0.05, c, r: 0.86 + grain * 0.08 };
+      }
+      if (stone === 'rhyolite') {
+        // Porous lava: a rough, lumpy face with small dark vesicles; lichen crusts in scalloped patches, moss in hollows.
+        const lump = fbm(u, v, 5, 5, 81);
+        const vc = voronoi(u, v, 140, 82, 0.9);
+        const pore = smooth(0.12, 0.05, vc.f1) * (hash(vc.id, 3) > 0.55 ? 1 : 0);
+        let c = mixRGB(colors[0], colors[1], smooth(0.3, 0.7, fbm(u + 0.2, v, 3, 4, 83)));
+        c = mixRGB(c, colors[2], smooth(0.55, 0.85, fbm(u, v + 0.6, 4, 4, 84)) * 0.7);
+        c = mixRGB(c, colors[Math.min(3, n - 1)], smooth(0.7, 0.9, fbm(u + 0.5, v + 0.5, 6, 3, 85)) * 0.5);
+        c = mulRGB(c, (0.86 + lump * 0.2 + grain * 0.08) * (1 - pore * 0.55));
+        // Lichen grows in round rosettes 1 to 3 cm across with scalloped rims, scattered (some areas bare), pale
+        // gray-green, with smaller dark ones; moss only in a few hollows.
+        const scallop = vnoise(u * 300, v * 300, 300, 87);
+        const lc = voronoi(u, v, 36, 86, 0.9), lr = 0.18 + hash(lc.id, 5) * 0.22;
+        const patchy = smooth(0.38, 0.6, fbm(u, v, 3, 3, 90));
+        const pale = hash(lc.id, 6) > 0.55 ? smooth(lr + 0.04, lr - 0.02, lc.f1 + scallop * 0.06) * patchy : 0;
+        if (pale > 0) c = mixRGB(c, mulRGB(lichenPale, 0.8 + scallop * 0.35), pale * 0.75);
+        const dc = voronoi(u + 0.37, v + 0.61, 70, 88, 0.9);
+        const dark = hash(dc.id, 7) > 0.7 ? smooth(0.2, 0.14, dc.f1 + scallop * 0.05) : 0;
+        if (dark > 0) c = mixRGB(c, lichenDark, dark * 0.7);
+        const low = smooth(0.4, 0.3, lump) * smooth(0.7, 0.74, fbm(u, v, 20, 3, 89));
+        if (low > 0) c = mixRGB(c, mulRGB(moss, 0.8 + grain * 0.4), low * 0.7);
+        return { h: lump * 0.7 + grain * 0.12 - pore * 0.35 + pale * 0.04, c, r: 0.92 + grain * 0.06 - pale * 0.04 };
+      }
+      // Slate: long shallow riven steps along the cleavage, fine streaks, a soft sheen.
+      const riv = fbm(u * 0.6, v * 2.2, 3, 4, 91);
+      const step = Math.floor(riv * 6) / 6, edge = smooth(0, 0.05, riv * 6 - Math.floor(riv * 6));
+      const streak = vnoise(u * 8, v * 120, 1e6, 92);
+      let c = mixRGB(colors[0], colors[1], smooth(0.3, 0.75, fbm(u, v, 3, 4, 93)));
+      c = mixRGB(c, colors[2], smooth(0.6, 0.85, riv) * 0.6);
+      c = mixRGB(c, colors[Math.min(3, n - 1)], (1 - edge) * 0.5);
+      const stain = smooth(0.74, 0.82, fbm(u + 0.4, v + 0.1, 3, 4, 94));
+      if (stain > 0) c = mixRGB(c, rust, stain * 0.45);
+      c = mulRGB(c, 0.92 + streak * 0.08 + grain * 0.05);
+      return { h: step * 0.4 + edge * 0.05 + streak * 0.03 + grain * 0.02, c, r: 0.84 + grain * 0.06 + stain * 0.06 };
     });
   });
 }

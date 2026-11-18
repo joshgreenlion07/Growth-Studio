@@ -295,6 +295,8 @@ export interface MaterialSpec {
   color?: string;
   /** A border made to go with a main-course color; not listed on its own. */
   auto?: boolean;
+  /** A real flagstone (FLAGSTONES): the stone it is split from, which sets its cleft face, and its thickness (in). */
+  flag?: { stone: FlagStone; thicknessIn: number };
   placeholder: true;
 }
 
@@ -360,8 +362,14 @@ export interface FeatureSpec {
   options?: FeatureOption[];
   /** A lighting fixture's maker spec (kind 'landscapeLight', siteplan/truscapes.ts). */
   fixture?: FixtureSpec;
+  /** A stepping stone (kind 'steppingStone'): what it is and its size in inches, [across (local x), along (local z)]. A
+   *  flagstone's size is the range its pieces are picked from, [smallest, largest]. */
+  stepping?: { stone: SteppingStoneType; sizeIn: [number, number] };
   placeholder: true;
 }
+
+/** A stepping stone: one Belgard Dimensions Slab, a pad of Green Lion's poured concrete, or one natural flagstone piece. */
+export type SteppingStoneType = 'slab' | 'pad' | 'flagstone';
 
 export interface FeatureOption {
   key: string;
@@ -766,13 +774,34 @@ const BELGARD: MaterialSpec[] = [
 MATERIALS.push(...BELGARD);
 
 /*
- * Belgard Dimensions Slabs 24 x 24 x 2 3/8 in, used one at a time as stepping stones (the slab line's other sizes stay
- * hidden until that line is mapped). Smooth face, the Dimensions Slabs colors. A stepping stone placement names one of
- * these as its materialId; laid as a field they read as a 24 x 24 grid.
+ * Belgard Dimensions Slabs, 2 3/8 in thick, used one at a time as stepping stones in the line's three sizes (12 x 24,
+ * 24 x 24 and 24 x 36; the stepping stone features carry the size). Smooth face, the Dimensions Slabs colors: one look
+ * per color, named for the 24 x 24 it was first mapped as. A stepping stone placement names one of these as its
+ * materialId; laid as a field they read as a 24 x 24 grid.
  */
 export const SLAB_24_PREFIX = 'dimensions-slab-24-';
 const SLABS = BELGARD_LINES.find((l) => l.slug === 'dimensions-slabs');
 MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ id: `${SLAB_24_PREFIX}${slugOf(n)}`, name: `Dimensions Slab 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [[24, 24]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Dimensions Slabs', maker: 'Belgard', line: 'Dimensions Slabs 24 x 24', shelf: 'Pavers', color: n })));
+
+/*
+ * Flagstone Green Lion buys, for stepping stones (and the flagstone pieces of water features). Each is natural stone
+ * split along its bedding, so every piece has its own outline; the colors follow the yards' own descriptions:
+ *   Cold Water Canyon (Resource Building Materials): a porous rhyolite (lava) flagstone, reddish brown to black, with
+ *     dark and pale lichen on its top; flat, semi rounded to irregular pieces.
+ *   AZ Classic Oak (California Landscape Supply, sold Select, 2 in thick): Arizona sandstone, pale cream to buff with
+ *     tan swirls and a faint pink mottle.
+ *   SUI Black Slate (Stone Universe, via California Landscape Supply, 1 in thick): charcoal gray to black, lightly riven.
+ * Cold Water Canyon's thickness is not given (sold by the pound): drawn 2 in, as flagstone steppers usually are.
+ * Not offered as paving areas yet (auto): they are used one piece at a time.
+ */
+export type FlagStone = 'rhyolite' | 'sandstone' | 'slate';
+export const FLAGSTONE_PREFIX = 'flagstone-';
+export const FLAGSTONES: { id: string; name: string; sold: string; stone: FlagStone; thicknessIn: number; palette: string[] }[] = [
+  { id: 'flagstone-cold-water-canyon', name: 'Cold Water Canyon', sold: 'Resource Building Materials', stone: 'rhyolite', thicknessIn: 2, palette: ['#6a4a3b', '#553d32', '#3a2f2b', '#7a5845'] },
+  { id: 'flagstone-az-classic-oak', name: 'AZ Classic Oak', sold: 'California Landscape Supply', stone: 'sandstone', thicknessIn: 2, palette: ['#e3cfae', '#d6bb95', '#c7a47e', '#dfc0a8'] },
+  { id: 'flagstone-sui-black-slate', name: 'SUI Black Slate', sold: 'Stone Universe, through California Landscape Supply', stone: 'slate', thicknessIn: 1, palette: ['#5b5954', '#504e4a', '#464541', '#64605a'] },
+];
+MATERIALS.push(...FLAGSTONES.map((g): MaterialSpec => M({ id: g.id, name: `${g.name} flagstone`, use: 'hardscape', group: 'Natural stone', recipe: 'flagstone', palette: g.palette, thickness: g.thicknessIn * 0.0254, matches: `${g.name} flagstone (${g.sold})`, line: `${g.name} flagstone`, color: g.name, auto: true, flag: { stone: g.stone, thicknessIn: g.thicknessIn } })));
 
 /*
  * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm (23 1/2 in) square slab, 60 mm thick, laid in a grid on
@@ -886,7 +915,19 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
   // A single Belgard Dimensions Slab 24 x 24 set as a stepping stone; its placement's materialId picks the color.
-  F({ id: 'stepping-stone-24', name: 'Stepping stone, 24 x 24 slab', group: 'Accents', kind: 'steppingStone', footprint: [0.6096, 0.6096] }),
+  F({ id: 'stepping-stone-24', name: 'Stepping stone, 24 x 24 slab', group: 'Accents', kind: 'steppingStone', footprint: [0.6096, 0.6096], stepping: { stone: 'slab', sizeIn: [24, 24] } }),
+  // Stepping stones in the sizes usually set (the placement's materialId picks the color; sizes are across x along z,
+  // and a path turns x along the path, so a long stone lies across the walk):
+  // the Dimensions Slabs line's other two sizes,
+  F({ id: 'stepping-stone-12x24', name: 'Stepping stone, 12 x 24 slab', group: 'Accents', kind: 'steppingStone', footprint: [0.3048, 0.6096], stepping: { stone: 'slab', sizeIn: [12, 24] } }),
+  F({ id: 'stepping-stone-24x36', name: 'Stepping stone, 24 x 36 slab', group: 'Accents', kind: 'steppingStone', footprint: [0.6096, 0.9144], stepping: { stone: 'slab', sizeIn: [24, 36] } }),
+  // 3 x 3 ft and 4 x 4 ft pads of Green Lion's poured concrete (no maker sells a precast stepping slab this big: pads
+  // this size are formed and poured in place, 4 in thick, top 1 in above grade, in a concrete line's finish and color),
+  F({ id: 'stepping-pad-36', name: 'Stepping pad, 3 x 3 ft poured concrete', group: 'Accents', kind: 'steppingStone', footprint: [0.9144, 0.9144], stepping: { stone: 'pad', sizeIn: [36, 36] } }),
+  F({ id: 'stepping-pad-48', name: 'Stepping pad, 4 x 4 ft poured concrete', group: 'Accents', kind: 'steppingStone', footprint: [1.2192, 1.2192], stepping: { stone: 'pad', sizeIn: [48, 48] } }),
+  // and flagstone steppers, one natural piece each, in the yards' two stepper sizes (the footprint is the middle size).
+  F({ id: 'flagstone-stepper-18-24', name: 'Flagstone stepper, 18 to 24 in', group: 'Accents', kind: 'steppingStone', footprint: [0.5334, 0.5334], stepping: { stone: 'flagstone', sizeIn: [18, 24] } }),
+  F({ id: 'flagstone-stepper-24-36', name: 'Flagstone stepper, 24 to 36 in', group: 'Accents', kind: 'steppingStone', footprint: [0.762, 0.762], stepping: { stone: 'flagstone', sizeIn: [24, 36] } }),
   F({ id: 'putting-cup', name: 'Putting cup', group: 'Accents', kind: 'puttingCup', footprint: [0.15, 0.15] }),
   F({ id: 'path-light', name: 'Path light, brass mushroom', group: 'Lighting', kind: 'pathLight', footprint: [0.25, 0.25] }),
   F({ id: 'spot-light', name: 'Uplight, bronze', group: 'Lighting', kind: 'spotLight', footprint: [0.12, 0.12] }),
