@@ -1056,7 +1056,12 @@ function initFullscreen() {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggle(); }
-    else if (e.key === 'Escape' && on && !document.fullscreenElement) set(false);
+    else if (e.key === 'Escape' && on && !document.fullscreenElement) {
+      // Full screen the parent gave (its own fill, no Fullscreen API): tell it, as the exit button does.
+      if (viaParent && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-exit' }, embedOrigin);
+      viaParent = false;
+      set(false);
+    }
   });
 }
 
@@ -1173,7 +1178,7 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   // The parent hides the 3D tab: stop drawing (plant thumbnails still render), and start again when it is shown.
-  if (d.type === 'pause') { studio?.pause(); return; }
+  if (d.type === 'pause') { studio?.pause(); touchUI?.reset(); return; }
   if (d.type === 'resume') { studio?.resume(); return; }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'cutaway') { studio?.setCutaway(!!(d as { on?: unknown }).on); return; }

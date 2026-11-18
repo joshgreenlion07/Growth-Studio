@@ -412,7 +412,9 @@ export class Studio {
 
     // Tap to focus.
     let down: { x: number; y: number } | null = null;
+    let downAt = 0;
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
+      downAt = performance.now();
       // A second finger makes it a pinch or pan, never a tap.
       down = e.isPrimary ? { x: e.clientX, y: e.clientY } : null;
       this.invalidate();
@@ -426,8 +428,8 @@ export class Studio {
     });
     window.addEventListener('keydown', this.onKey);
     this.renderer.domElement.addEventListener('pointerup', (e) => {
-      // A finger wobbles more than a mouse does.
-      if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 10 : 4)) {
+      // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
+      if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400)) {
         this.focusAt(e.clientX, e.clientY);
         // With the Hand picked, a click on a door, lid, fire, water or light uses it.
         if (this.handActive && this.useAction(0, { x: e.clientX, y: e.clientY })) {
@@ -1988,6 +1990,7 @@ export class Studio {
   pause() {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.nav.releaseTouch();
     this.audio.setPaused(true);
   }
 

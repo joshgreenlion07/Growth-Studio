@@ -213,7 +213,10 @@ export class Navigation {
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+      this.releaseTouch();
+    });
 
     // Drag to look in first person. A click without movement still reaches the scene's tap-to-pick.
     const c = host.canvas;
@@ -224,7 +227,7 @@ export class Navigation {
         // Touch mode: one finger looks, a second turns the two into a pinch.
         this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         c.setPointerCapture?.(e.pointerId);
-        if (this.fingers.size === 2) {
+        if (this.fingers.size >= 2) {
           this.drag = null;
           this.pinchDist = this.fingerGap();
         } else if (this.fingers.size === 1) this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -254,7 +257,10 @@ export class Navigation {
     const end = (e: PointerEvent) => {
       this.touches.delete(e.pointerId);
       // After a pinch the finger left on the glass does not suddenly look; it must lift and touch again.
-      if (this.fingers.delete(e.pointerId) && this.fingers.size) this.drag = null;
+      if (this.fingers.delete(e.pointerId) && this.fingers.size) {
+        this.drag = null;
+        this.pinchDist = this.fingerGap();
+      }
       if (this.drag && e.pointerId === this.drag.id) this.drag = null;
     };
     c.addEventListener('pointerup', end);
@@ -307,19 +313,26 @@ export class Navigation {
 
   /** Distance between the two fingers on the scene (touch mode). */
   private fingerGap(): number {
+    if (this.fingers.size !== 2) return 0;
     const [a, b] = [...this.fingers.values()];
     return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  }
+
+  /** Forget every finger and on-screen input (a lost pointerup, a hidden page, a mode change), so nothing sticks. */
+  releaseTouch() {
+    this.touches.clear();
+    this.fingers.clear();
+    this.drag = null;
+    this.pinchDist = 0;
+    this.vstick.x = this.vstick.y = 0;
+    this.vrise = 0;
+    this.look.x = this.look.y = 0;
   }
 
   /** Touch mode on or off. Off drops every on-screen input, so nothing keeps moving. */
   setTouchMode(on: boolean) {
     this.touch = on;
-    if (!on) {
-      this.vstick.x = this.vstick.y = 0;
-      this.vrise = 0;
-      this.fingers.clear();
-      this.drag = null;
-    }
+    this.releaseTouch();
   }
 
   /** The on-screen joystick, -1..1 each way (y down moves backward, like a controller's left stick). 0, 0 lets go. */
@@ -413,6 +426,7 @@ export class Navigation {
       this.vel.set(0, 0, 0);
       this.lookVel.yaw = this.lookVel.pitch = 0;
       this.zoomLeft = 0;
+      this.releaseTouch();
       this.lastMode = mode;
     }
     // Something else moved the camera since the last frame (a view tween, the mouse orbit).

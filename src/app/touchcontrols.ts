@@ -25,6 +25,7 @@ export class TouchControls {
   private stickId = -1;
   private rise = { up: false, down: false };
   private on = false;
+  private riseIds = { up: -1, down: -1 };
 
   constructor(container: HTMLElement, private studio: () => Studio | null) {
     const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = '') => {
@@ -83,17 +84,23 @@ export class TouchControls {
 
     // Rise and sink (fly).
     const lift = el('div', 'tc-rise');
+    const ids = { up: -1, down: -1 };
+    this.riseIds = ids;
     const mk = (key: 'up' | 'down', label: string, title: string) => {
       const b = el('button', 'tc-btn tc-hold', label);
       b.type = 'button';
       b.title = title;
       b.addEventListener('pointerdown', (e) => {
+        if (ids[key] >= 0) return;
+        ids[key] = e.pointerId;
         b.setPointerCapture?.(e.pointerId);
         this.rise[key] = true;
         b.classList.add('on');
         this.sendRise();
       });
-      const up = () => {
+      const up = (e: PointerEvent) => {
+        if (e.pointerId !== ids[key]) return;
+        ids[key] = -1;
         this.rise[key] = false;
         b.classList.remove('on');
         this.sendRise();
@@ -123,9 +130,15 @@ export class TouchControls {
     if (!on) this.releaseAll();
   }
 
+  /** The page is paused or hidden: let go of everything on screen. */
+  reset() {
+    this.releaseAll();
+  }
+
   /** The movement mode changed: show the joystick (walk, fly) and the rise buttons (fly) as they apply. */
   setMode(m: NavMode) {
     this.root.dataset.mode = m;
+    document.documentElement.classList.toggle('tc-first', m !== 'orbit');
     for (const b of this.modeBtns) b.setAttribute('aria-pressed', String(b.dataset.mode === m));
     this.releaseAll();
   }
@@ -156,6 +169,7 @@ export class TouchControls {
   private releaseAll() {
     this.releaseStick();
     this.rise.up = this.rise.down = false;
+    this.riseIds.up = this.riseIds.down = -1;
     this.root.querySelectorAll('.tc-hold').forEach((b) => b.classList.remove('on'));
     this.sendRise();
   }

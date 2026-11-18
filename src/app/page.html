@@ -227,6 +227,8 @@ html.library-open .tc-root { display: none !important; }
 html.touch-ui, html.touch-ui body { touch-action: manipulation; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 html.touch-ui #scene canvas { touch-action: none; }
 html.touch-ui #nav-hint, html.touch-ui #nav-modes { display: none !important; }
+html.touch-ui #stage-card, html.touch-ui section.scene-pane.fs #stage-card { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); max-width: calc(100% - 24px); }
+html.touch-ui.tc-first #stage-card { display: none; }
 html.touch-ui .quick-hud { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); }
 html.touch-ui .scene-tools button, html.touch-ui #views button { min-height: 44px; padding: 0 14px; font-size: 14px; }
 .tc-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; pointer-events: auto; max-width: calc(100% - 24px); }
@@ -243,6 +245,7 @@ html.touch-ui .scene-tools button, html.touch-ui #views button { min-height: 44p
 .tc-root:not([data-mode="orbit"]) .tc-stick { display: block; }
 .tc-root[data-mode="fly"] .tc-rise { display: flex; }
 section.scene-pane.fs .tc-rise { right: calc(max(18px, env(safe-area-inset-right, 0px)) + 84px); }
+@media (max-width: 380px) { .tc-bar { gap: 4px; } .tc-btn { padding: 0 10px; font-size: 14px; } }
 html.embed #btn-touch { display: none; }
 #nav-modes { display: none; gap: 1px; }
 #measure-modes { display: flex; gap: 1px; align-items: stretch; }
