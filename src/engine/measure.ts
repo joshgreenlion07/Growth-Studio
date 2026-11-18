@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SceneBuild } from '../builder/build';
 import { stepCount } from '../builder/hardscape';
+import { builtLine } from '../builder/linepath';
 import { featureById, materialById, plantById, sizeAt } from '../siteplan/catalog';
 import { centroid, fmtFeet, signedArea } from '../siteplan/geometry';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -200,15 +201,17 @@ export class Measurements {
     // Walls, fences, edging: the total length of each run (walls and fences with their height),
     // and in the every-edge view each straight run as well.
     for (const l of plan.lines) {
-      if (l.points.length < 2) continue;
+      // Curbs as built: on the seam they follow, which is where they are measured.
+      const pts = builtLine(l, plan.zones);
+      if (pts.length < 2) continue;
       const tall = l.kind !== 'edging' ? l.height : 0;
-      this.outline(l.points, false, gy, 'edge', tall);
+      this.outline(pts, false, gy, 'edge', tall);
       let total = 0;
-      for (let i = 0; i < l.points.length - 1; i++) total += Math.hypot(l.points[i + 1][0] - l.points[i][0], l.points[i + 1][1] - l.points[i][1]);
+      for (let i = 0; i < pts.length - 1; i++) total += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
       // the label sits halfway along the whole run
-      let m: Vec2 = l.points[0], walked = 0;
-      for (let i = 0; i < l.points.length - 1; i++) {
-        const a = l.points[i], b = l.points[i + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      let m: Vec2 = pts[0], walked = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1], seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
         if (walked + seg >= total / 2) { const t = seg ? (total / 2 - walked) / seg : 0; m = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; break; }
         walked += seg;
       }
