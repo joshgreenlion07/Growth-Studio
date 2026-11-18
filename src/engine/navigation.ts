@@ -53,6 +53,8 @@ export function viewHasKeys(e: KeyboardEvent): boolean {
 }
 /** Eye height for walking, meters (about 5 ft 5 in). */
 export const EYE_HEIGHT = 1.65;
+/** Lowest fly height above the ground, meters (about 1 ft): low enough to look along paver joints and a wall's base. */
+export const FLY_FLOOR = 0.3;
 
 const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, MENU: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 
@@ -279,7 +281,8 @@ export class Navigation {
   /** Fly speed for the current height: faster high up, so the neighborhood is quick to cross but a bed is not overshot. */
   private flySpeed() {
     const cam = this.host.camera;
-    return 3 + Math.max(1, cam.position.y - this.host.groundAt(cam.position.x, cam.position.z)) * 0.9;
+    // Slow down near the ground so a close look at a corner or a plant does not overshoot.
+    return 1 + Math.max(FLY_FLOOR, cam.position.y - this.host.groundAt(cam.position.x, cam.position.z)) * 1.1;
   }
 
   /** Seconds since the last frame, from the frame's own timestamp (the same one requestAnimationFrame gets). */
@@ -470,9 +473,9 @@ export class Navigation {
       // Follow the ground at eye height (eases down after flying).
       step.y = (ground + EYE_HEIGHT - cam.position.y) * ease(6, dt);
     } else {
-      // Never below eye height in fly mode; never above the sky the scene is built for.
-      if (mode === 'fly' && cam.position.y + step.y < ground + EYE_HEIGHT) {
-        step.y = ground + EYE_HEIGHT - cam.position.y;
+      // Never into the ground in fly mode; never above the sky the scene is built for.
+      if (mode === 'fly' && cam.position.y + step.y < ground + FLY_FLOOR) {
+        step.y = ground + FLY_FLOOR - cam.position.y;
         if (this.vel.y < 0) this.vel.y = 0;
       }
       if (cam.position.y + step.y > 220) {
