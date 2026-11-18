@@ -306,7 +306,12 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
             geos.push(g);
             o.add(w);
           };
-          const sink = { add, water, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
+          // Height of the ground or deck under a local point, relative to the spa's base (the steps stand on it).
+          const under = (x: number, z: number) => {
+            const p = local(x, 0, z);
+            return height([p.x, p.z]) - y0;
+          };
+          const sink = { add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
           for (const g of calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink)) makerGlow.add(g);
           break;
         }

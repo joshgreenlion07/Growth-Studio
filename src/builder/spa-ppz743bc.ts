@@ -35,6 +35,8 @@ export interface SpaSink {
   /** The water surface: its own transparent mesh. */
   water(m: THREE.Material, g: THREE.BufferGeometry): void;
   light(x: number, y: number, z: number, color: string, intensity: number, distance: number): void;
+  /** Height (meters) of the ground or deck under a local point, above the spa's base. Left out, level ground. */
+  under?(x: number, z: number): number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -556,7 +558,11 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
   shellBasin(m, add, edge);
   fittings(m, add, basin);
   cabinet(m, add);
-  if (opt.steps) steps(m, add);
+  if (opt.steps) {
+    // The steps stand on whatever is in front of the spa: the ground, or the boards of a deck the spa is set into.
+    const lift = Math.max(0, sink.under?.(STEP_CX * IN * sx, (CAB + 13) * IN * sz) ?? 0);
+    steps(m, (mat, g) => add(mat, g.translate(0, lift, 0)));
+  }
   if (opt.cover !== 'off') coverAndLifter(m, add, opt.cover === 'open');
 
   // Water, a little below the lip, glowing from the spa light at night: a fan from the middle out to the opening's edge.
@@ -839,10 +845,12 @@ function cornerPiece(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) 
   add(m.port, port);
 }
 
+const STEP_CX = 7.5;
+
 /** Two-step: a top step against the front of the cabinet and a lower step in front, wave treads on a black frame. */
 function steps(m: Mats, add: (m: THREE.Material, g: THREE.BufferGeometry) => void) {
   // Size and place read from the installed photo: 35 in wide, an 18 in top step, a little right of the middle.
-  const w = 35, cx = 7.5, back = CAB + 0.35;
+  const w = 35, cx = STEP_CX, back = CAB + 0.35;
   const tread = (depth: number, z0: number, top: number) => {
     // Rounded tread, its front edge bowed out a little.
     const s = new THREE.Shape();
