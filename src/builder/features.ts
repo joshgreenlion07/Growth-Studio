@@ -299,16 +299,17 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           owned.push(led);
           extraGlow.push(led);
           const own = lights.length;
-          const open = featureOption(spec, f.options, 'louversOpen');
-          // A plan that never set the louvers keeps the old fixed pose, 22 degrees open.
-          const unset = f.options?.louversOpen === undefined;
-          const st = stratusPergola(W, D, stratusFrame, led, add, light, o, open, unset ? 22 / 90 : undefined);
+          // Three poses: the old fixed 22 degrees (nothing chosen), fully open, closed flat. The planner keeps only on/off
+          // options that differ from their defaults (both false here), so open and closed each have a key of their own.
+          const start = featureOption(spec, f.options, 'louversOpen') ? 'open' : featureOption(spec, f.options, 'louversClosed') ? 'closed' : 'tilt';
+          const st = stratusPergola(W, D, stratusFrame, led, add, light, o, start);
           for (const g of st.geos) geos.push(g);
           for (const c of o.children) if (c instanceof THREE.InstancedMesh) surfaces.push(c);
           const roofLights = lights.slice(own);
           // The two are told apart by where the aim is: the LED strips are the lights, the blades between them the louvers.
           const at = (xs: number[], y: number) => xs.flatMap((x) => [-1, 1].map((z) => anchorAt(o, x, y, z * st.span / 3)));
-          act({ key: 'louvers', label: 'Louvers', words: ['Open', 'Closed'], anchors: at(st.bladeXs, st.y), on: open, planOn: open, option: 'louversOpen', ...st.rig });
+          actions.push({ itemId: f.id, key: 'louvers', label: 'Louvers', words: ['Open', 'Closed'], anchors: at(st.bladeXs, st.y), on: start === 'open', planOn: start === 'open', option: 'louversOpen',
+            values: () => ({ louversOpen: st.state() === 'open', louversClosed: st.state() === 'closed' }), ...st.rig });
           act({ key: 'lights', label: 'Pergola lights', words: ['On', 'Off'], anchors: at(st.stripXs, st.y - 0.03), on: true, planOn: true, lights: true, set(on) {
             led.userData.off = !on;
             for (const l of roofLights) l.off = !on;
@@ -793,8 +794,7 @@ function stratusPergola(
   add: (m: THREE.Material, g: THREE.BufferGeometry) => void,
   light: (x: number, y: number, z: number, color: string, intensity: number, distance: number) => void,
   out: THREE.Object3D,
-  open: boolean,
-  initial?: number,
+  start: 'tilt' | 'open' | 'closed',
 ) {
   const H = 98.6 * IN_M;
   const post = 0.127, beamH = 0.165, beamT = 0.095;
@@ -855,13 +855,15 @@ function stratusPergola(
     stripMesh.instanceMatrix.needsUpdate = true;
   };
   // Drive: t runs 0 (flat) to 1 (open); a plan that never chose starts at the old fixed 22 degrees.
-  let t = initial ?? (open ? 1 : 0), target = open ? 1 : 0;
+  let t = start === 'tilt' ? 22 / 90 : start === 'open' ? 1 : 0, target = start === 'open' ? 1 : 0, touched = start !== 'tilt';
   const ease = (v: number) => v * v * (3 - 2 * v);
   const apply = () => pose(STRATUS_OPEN * ease(t));
   apply();
+  const state = () => (!touched ? 'tilt' : target === 1 ? 'open' : 'closed');
   const rig: Pick<FeatureAction, 'set' | 'tick'> = {
     set(next, instant) {
       target = next ? 1 : 0;
+      touched = true;
       if (instant) { t = target; apply(); }
     },
     tick(dt) {
@@ -877,7 +879,7 @@ function stratusPergola(
   // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between
   // them. One light per pergola: the scene's light pool is small (see build.ts), the strips themselves glow regardless.
   light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
-  return { rig, geos: [bladeGeo, stripGeo], stripXs: ledIdx.map((i) => xs[i]), bladeXs: xs.filter((_, i) => i % 4 === 2), y: yPivot, span };
+  return { rig, state, geos: [bladeGeo, stripGeo], stripXs: ledIdx.map((i) => xs[i]), bladeXs: xs.filter((_, i) => i % 4 === 2), y: yPivot, span };
 }
 
 type GrillMats = Record<'steel' | 'grate' | 'black' | 'inside', THREE.Material>;
