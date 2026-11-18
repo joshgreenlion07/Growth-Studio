@@ -57,6 +57,11 @@ export interface SceneBuild {
   /** Show one build stage. 'finished' (the default) is the finished yard. */
   setStage(stage: BuildStage): void;
   /**
+   * Build the stage views now, hidden (they are otherwise built the first time a stage asks for them), so a later
+   * stage change only shows and hides.
+   */
+  prepareStages(): void;
+  /**
    * Rebuild only the paving, walls, curbs, fences and steps for a plan that differs from the
    * built one in their looks alone (see hardscapeOnlyChange). The rest of the yard is kept.
    */
@@ -423,6 +428,14 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Build stages: before the yard is finished only plants that were already there (and the neighbors' trees) stand.
   // They are built the first time a stage asks for them.
   let standing: PlantLayer | null = null;
+  const ensureStanding = () => {
+    if (standing) return;
+    standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel });
+    standing.object.name = 'plants-standing';
+    standing.setYears(years);
+    standing.object.visible = stage !== 'finished';
+    root.add(standing.object);
+  };
   const applyStage = () => {
     const fin = stage === 'finished';
     hard.object.visible = fin;
@@ -432,12 +445,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     features.object.visible = fin;
     models.object.visible = fin;
     plants.object.visible = fin;
-    if (!fin && !standing) {
-      standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel });
-      standing.object.name = 'plants-standing';
-      standing.setYears(years);
-      root.add(standing.object);
-    }
+    if (!fin) ensureStanding();
     if (standing) standing.object.visible = !fin;
     ground.stage.uSoil.value = fin ? 0 : 1;
     const cut = fin ? null : site().cut;
@@ -466,6 +474,11 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     setStage(s: BuildStage) {
       stage = s;
       applyStage();
+    },
+    prepareStages() {
+      // Asking for the notes builds the construction views (at the stage shown, so hidden at Finished).
+      void construction.notes;
+      ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
       newTextureGeneration();
