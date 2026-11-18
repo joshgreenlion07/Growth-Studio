@@ -116,6 +116,20 @@ function pickPlant(raw: unknown, warnings: string[]): string {
   return 'boxwood';
 }
 
+/** Feature ids that became a choice on another feature (2026-11-18): the water feature's bowls, the bowl planter's plant. */
+const RETIRED_FEATURES: Record<string, { id: string; options?: Record<string, boolean>; planted?: false }> = {
+  'three-pillar-water-feature-no-bowls': { id: 'three-pillar-water-feature', options: { bowls: false } },
+  'patina-bowl-planter-empty': { id: 'patina-bowl-planter', planted: false },
+};
+
+/** A placement of a retired feature id as the feature it became, with that variant's choice (a copy; others as they are). */
+function unretire(it: Record<string, unknown>): Record<string, unknown> {
+  const r = typeof it.catalogId === 'string' ? RETIRED_FEATURES[it.catalogId] : undefined;
+  if (!r) return it;
+  const options = { ...r.options, ...(it.options && typeof it.options === 'object' ? (it.options as Record<string, unknown>) : {}) };
+  return { ...it, catalogId: r.id, options, ...(r.planted === false ? { planted: false } : {}) };
+}
+
 function pickFeature(raw: unknown, warnings: string[]): string | null {
   const id = legacy(raw);
   if (typeof id === 'string' && featureById.has(id)) return id;
@@ -294,7 +308,7 @@ export function cleanPlan(input: unknown): CleanResult {
     plan.plants.push(p);
   }
 
-  for (const it of arr(o.features)) {
+  for (const it of arr(o.features).map(unretire)) {
     const position = vec(it.position);
     if (!position) continue;
     const id = pickFeature(it.catalogId, warnings);

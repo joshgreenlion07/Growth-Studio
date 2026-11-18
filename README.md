@@ -12,7 +12,7 @@ night lighting, and a camera with focus blur.
 - **Plan editor.** Draw areas (pavers, porcelain, concrete, turf, beds),
   fences, walls, curbs, water, plants and features. Drag to move, drag corners
   to reshape, R to turn a feature, Delete to remove, Ctrl+Z to undo.
-- **Catalog from Green Lion's work:** 64 plants, 55 surfaces (multi-size
+- **Catalog from Green Lion's work:** 68 plants, 55 surfaces (multi-size
   pavers with charcoal soldier borders and inset lights, porcelain plank,
   stamped and broom concrete, artificial turf and putting green, black mulch,
   black pebble, cobble), 9 fence styles, raised planters with caps, 27
@@ -273,7 +273,11 @@ Messages use `window.postMessage`:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
   (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
-  and `steps: false` to leave the steps out.
+  and `steps: false` to leave the steps out. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
+- The three-pillar stucco water feature (`three-pillar-water-feature`) offers the option `bowls` (default on: a patina
+  bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
+  The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
+  `options: { bowls: false }` and `planted: false`.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
@@ -337,7 +341,7 @@ Messages use `window.postMessage`:
     (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
   - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
     structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint, options?, sizes?, size?,
-    plantable? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
+    plantable?, cover?, steps? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
     `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
     `ready`, now filtered to approved looks.
   - Keys (`src/siteplan/approval.ts`): `line:<maker>|<line>` (a line's paver edge is `line:<maker>|<line> 6 x 9 edge`), `mat:<id>`, `plant:<id>`, `feature:<id>`,
