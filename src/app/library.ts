@@ -217,6 +217,8 @@ let state: {
   years: number;
   pose: { eye: THREE.Vector3; target: THREE.Vector3; fov: number } | null;
   token: number;
+  /** A sample is being built: the studio's actions are the previous item's until it resolves. */
+  building?: boolean;
   waiting: Map<string, { on: boolean; timer: number }>;
   note: string;
   off: () => void;
@@ -299,6 +301,10 @@ function show(reframe = true) {
     return;
   }
   const my = ++state.token;
+  state.building = true;
+  if (reframe) host.studio.clearHandState('sample:');
+  const stale = state.root.querySelector<HTMLElement>('#lib-acts');
+  if (stale) stale.innerHTML = '';
   host.studio.setYears(smp.years ?? 3);
   const t = new THREE.Vector3(...smp.target);
   const pose = { eye: t.clone().add(new THREE.Vector3(0.35, 0.62, 1).normalize().multiplyScalar(smp.dist)), target: t, fov: 40 };
@@ -306,15 +312,15 @@ function show(reframe = true) {
   if (!keep) state.pose = pose;
   host.studio.setPlan(smp.plan, keep).then(() => {
     if (state && my === state.token && !keep) host.studio.restorePose(pose);
-    if (state && my === state.token) fillActions();
-  }, (err) => console.error(err));
+    if (state && my === state.token) { state.building = false; fillActions(); }
+  }, (err) => { console.error(err); if (state && my === state.token) state.building = false; });
 }
 
 /** Buttons for what the sample can do by hand (louvers, a door, lights): drawn once the sample is built. */
 function fillActions() {
   const box = state?.root.querySelector<HTMLElement>('#lib-acts');
   if (!box || !state?.variant || state.variant.item.kind !== 'feature') return;
-  const list = state.host.studio.featureActions('sample');
+  const list = state.building ? [] : state.host.studio.featureActions('sample');
   box.innerHTML = list.length ? `<h4>Try it</h4><div class="lib-chips">${list.map((a) => `<button type="button" data-act="useact" data-val="${esc(a.key)}" aria-pressed="${a.on}">${esc(a.label)}: ${esc(a.words[a.on ? 0 : 1])}</button>`).join('')}</div>` : '';
 }
 
