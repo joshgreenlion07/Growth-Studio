@@ -70,6 +70,9 @@ import { build as cannaTropicanna } from './tropicals/canna-tropicanna';
 import { build as skyrocketJuniper } from './trees/skyrocket-juniper';
 import { build as navelOrange } from './trees/navel-orange';
 import { build as eurekaLemon } from './trees/eureka-lemon';
+import { build as cherryLaurelCompacta } from './shrubs/cherry-laurel-compacta';
+import { build as hopseedBushPurpurea } from './shrubs/hopseed-bush-purpurea';
+import { build as glossyAbeliaKaleidoscope } from './shrubs/glossy-abelia-kaleidoscope';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -146,4 +149,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'cyclamen-red': cyclamenRed,
   'primrose-red': primroseRed,
   'lantana-new-gold': lantanaNewGold,
+  'cherry-laurel-compacta': cherryLaurelCompacta,
+  'hopseed-bush-purpurea': hopseedBushPurpurea,
+  'glossy-abelia-kaleidoscope': glossyAbeliaKaleidoscope,
 };
