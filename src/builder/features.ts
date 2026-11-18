@@ -324,9 +324,18 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           owned.push(led);
           extraGlow.push(led);
           const own = lights.length;
-          stratusPergola(W, D, stratusFrame, led, add, light);
+          // Three poses: the old fixed 22 degrees (nothing chosen), fully open, closed flat. The planner keeps only on/off
+          // options that differ from their defaults (both false here), so open and closed each have a key of their own.
+          const start = featureOption(spec, f.options, 'louversOpen') ? 'open' : featureOption(spec, f.options, 'louversClosed') ? 'closed' : 'tilt';
+          const st = stratusPergola(W, D, stratusFrame, led, add, light, o, start);
+          for (const g of st.geos) geos.push(g);
+          for (const c of o.children) if (c instanceof THREE.InstancedMesh) surfaces.push(c);
           const roofLights = lights.slice(own);
-          act({ key: 'lights', label: 'Pergola lights', words: ['On', 'Off'], anchors: [anchorAt(o, 0, 2.3, 0)], on: true, planOn: true, lights: true, set(on) {
+          // The two are told apart by where the aim is: the LED strips are the lights, the blades between them the louvers.
+          const at = (xs: number[], y: number) => xs.flatMap((x) => [-1, 1].map((z) => anchorAt(o, x, y, z * st.span / 3)));
+          actions.push({ itemId: f.id, key: 'louvers', label: 'Louvers', words: ['Open', 'Closed'], anchors: at(st.bladeXs, st.y), on: start === 'open', planOn: start === 'open', option: 'louversOpen',
+            values: () => ({ louversOpen: st.state() === 'open', louversClosed: st.state() === 'closed' }), ...st.rig });
+          act({ key: 'lights', label: 'Pergola lights', words: ['On', 'Off'], anchors: at(st.stripXs, st.y - 0.03), on: true, planOn: true, lights: true, set(on) {
             led.userData.off = !on;
             for (const l of roofLights) l.off = !on;
           } });
@@ -436,10 +445,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           const effects: THREE.Mesh[] = [];
           const sink = {
             add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d),
-            part(key: string) {
-              const h = hinge(0, 0, 0);
+            part(key: string, pivot?: [number, number, number]) {
+              const h = hinge(...(pivot ?? [0, 0, 0]));
               parts.set(key, h.group);
-              return { add: h.add, object: h.group };
+              return { add: h.add, object: h.group, own: (g: THREE.BufferGeometry, mesh?: THREE.Mesh) => { geos.push(g); if (mesh) surfaces.push(mesh); } };
             },
             effect(m: THREE.Mesh) {
               o.add(m);
@@ -458,10 +467,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           if (c.cover) {
             const cv = c.cover;
             const openAt = at(cv.anchors(true)), closedAt = at(cv.anchors(false));
-            const a: FeatureAction = { itemId: f.id, key: 'cover', label: 'Spa cover', words: ['Open', 'Closed'], anchors: cv.open ? openAt : closedAt, on: cv.open, planOn: cv.open, set(on) {
-              cv.set(on);
+            const a: FeatureAction = { itemId: f.id, key: 'cover', label: 'Spa cover', words: ['Open', 'Closed'], anchors: cv.open ? openAt : closedAt, on: cv.open, planOn: cv.open, set(on, instant) {
+              cv.set(on, instant);
               a.anchors = on ? openAt : closedAt;
             } };
+            if (cv.tick) a.tick = cv.tick;
             actions.push(a);
           }
           act({ key: 'jets', label: 'Jets', words: ['On', 'Off'], anchors: at(c.jets.anchors), on: false, planOn: false, set: (on) => c.jets.set(on), frame: (dt) => c.jets.frame(dt) });
@@ -807,9 +817,12 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
  * published): square posts about 5 in on square base plates about 8 in, flush with the outside of a deep fascia beam
  * band (about 6 1/2 in) that runs round the top; the long beams are made in two lengths with a joint at mid-span.
  * The louvers (about 6 in at a 5.9 in pitch) span the short way between the long beams on pivots just under the beam
- * top, tilted partly open; every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
+ * top, driven by a 20 V battery motor from a post-mounted button panel (flat and sealed shut to vertical); every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
  * each long beam. One warm light under the roof lights the space at night.
  */
+/** The Stratus louvers' open angle. SunVilla does not publish it; motorized louvers of this kind turn to vertical. */
+const STRATUS_OPEN = Math.PI / 2;
+
 function stratusPergola(
   W: number,
   D: number,
@@ -817,6 +830,8 @@ function stratusPergola(
   led: THREE.Material,
   add: (m: THREE.Material, g: THREE.BufferGeometry) => void,
   light: (x: number, y: number, z: number, color: string, intensity: number, distance: number) => void,
+  out: THREE.Object3D,
+  start: 'tilt' | 'open' | 'closed',
 ) {
   const H = 98.6 * IN_M;
   const post = 0.127, beamH = 0.165, beamT = 0.095;
@@ -845,29 +860,63 @@ function stratusPergola(
   const inner = W - 2 * beamT - 0.02;
   const pitch = 0.15;
   const n = Math.floor(inner / pitch);
-  const blade = 0.16, thick = 0.02, span = D - 2 * beamT - 0.1;
-  const tilt = (22 * Math.PI) / 180;
   const yPivot = H - 0.075;
-  for (let i = 0; i < n; i++) {
-    const x = -((n - 1) * pitch) / 2 + i * pitch;
-    const parts: [THREE.Material, THREE.BufferGeometry][] = [];
-    // The blade, slightly crowned (a thin rib along its top), and the drip lip on its lower edge.
-    parts.push([frame, new THREE.BoxGeometry(blade, thick, span)]);
-    parts.push([frame, new THREE.BoxGeometry(blade * 0.35, 0.008, span).translate(0, thick / 2 + 0.004, 0)]);
-    parts.push([frame, new THREE.BoxGeometry(0.008, 0.024, span).translate(blade / 2 - 0.004, 0.012, 0)]);
-    // The LED strip: a rounded diffuser along the blade's underside, so it shows from any side below.
-    if (i % 4 === 0) parts.push([led, new THREE.CylinderGeometry(0.011, 0.011, span - 0.12, 8).rotateX(Math.PI / 2).translate(0, -thick / 2 - 0.004, 0)]);
-    for (const [m, g] of parts) {
-      g.rotateZ(tilt);
-      g.translate(x, yPivot, 0);
-      add(m, g.toNonIndexed());
-    }
-    // End caps and pivot brackets on the gutter rails.
-    for (const sz of [-1, 1]) add(frame, box(0.05, 0.045, 0.03, x, yPivot - 0.035, sz * (span / 2 + 0.015)));
+  // Closed the blades lie flat and meet along their edges (a 3 mm joint under a drip lip that hangs below it).
+  const blade = 0.147, thick = 0.02, span = D - 2 * beamT - 0.1;
+  // All blades share one geometry per material and are drawn as instances turned about their own pivot line.
+  const bladeGeo = mergeGeometries([
+    new THREE.BoxGeometry(blade, thick, span),
+    new THREE.BoxGeometry(blade * 0.35, 0.006, span).translate(0, thick / 2 + 0.003, 0),
+    new THREE.BoxGeometry(0.006, 0.036, span).translate(blade / 2 - 0.001, -0.012, 0),
+  ].map((g) => g.toNonIndexed()), false)!;
+  const stripGeo = new THREE.CylinderGeometry(0.011, 0.011, span - 0.12, 8).rotateX(Math.PI / 2).translate(0, -thick / 2 - 0.004, 0).toNonIndexed();
+  const xs: number[] = [];
+  for (let i = 0; i < n; i++) xs.push(-((n - 1) * pitch) / 2 + i * pitch);
+  const ledIdx = xs.map((_, i) => i).filter((i) => i % 4 === 0);
+  const bladeMesh = new THREE.InstancedMesh(bladeGeo, frame, n);
+  const stripMesh = new THREE.InstancedMesh(stripGeo, led, ledIdx.length);
+  for (const m of [bladeMesh, stripMesh]) {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.frustumCulled = false;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    out.add(m);
   }
+  const q = new THREE.Quaternion(), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), mtx = new THREE.Matrix4();
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const pose = (angle: number) => {
+    q.setFromAxisAngle(zAxis, angle);
+    xs.forEach((x, i) => bladeMesh.setMatrixAt(i, mtx.compose(pos.set(x, yPivot, 0), q, one)));
+    ledIdx.forEach((i, k) => stripMesh.setMatrixAt(k, mtx.compose(pos.set(xs[i], yPivot, 0), q, one)));
+    bladeMesh.instanceMatrix.needsUpdate = true;
+    stripMesh.instanceMatrix.needsUpdate = true;
+  };
+  // Drive: t runs 0 (flat) to 1 (open); a plan that never chose starts at the old fixed 22 degrees.
+  let t = start === 'tilt' ? 22 / 90 : start === 'open' ? 1 : 0, target = start === 'open' ? 1 : 0, touched = start !== 'tilt';
+  const ease = (v: number) => v * v * (3 - 2 * v);
+  const apply = () => pose(STRATUS_OPEN * ease(t));
+  apply();
+  const state = () => (!touched ? 'tilt' : target === 1 ? 'open' : 'closed');
+  const rig: Pick<FeatureAction, 'set' | 'tick'> = {
+    set(next, instant) {
+      target = next ? 1 : 0;
+      touched = true;
+      if (instant) { t = target; apply(); }
+    },
+    tick(dt) {
+      if (t === target) return false;
+      const step = dt / 2.6;
+      t = target > t ? Math.min(target, t + step) : Math.max(target, t - step);
+      apply();
+      return true;
+    },
+  };
+  // End caps and pivot brackets on the gutter rails.
+  for (const x of xs) for (const sz of [-1, 1]) add(frame, box(0.05, 0.045, 0.03, x, yPivot - 0.035, sz * (span / 2 + 0.015)));
   // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between
   // them. One light per pergola: the scene's light pool is small (see build.ts), the strips themselves glow regardless.
   light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
+  return { rig, state, geos: [bladeGeo, stripGeo], stripXs: ledIdx.map((i) => xs[i]), bladeXs: xs.filter((_, i) => i % 4 === 2), y: yPivot, span };
 }
 
 type GrillMats = Record<'steel' | 'grate' | 'black' | 'inside', THREE.Material>;

@@ -185,16 +185,35 @@ function initQuickTools(s: Studio) {
   s.onAction = (a) => {
     if (EMBED) {
       // View-only: the door or light moves here as a preview; the parent is not told, so its plan keeps its options.
-      if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'action', id: a.itemId, key: a.key, on: a.on, ...(a.option ? { option: a.option } : {}) }, embedOrigin);
+      if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'action', id: a.itemId, key: a.key, on: a.on, ...(a.option ? { option: a.option } : {}), ...(a.values ? { options: a.values() } : {}) }, embedOrigin);
       return;
     }
-    const f = a.option ? plan.features.find((x) => x.id === a.itemId) : null;
-    if (f && a.option) {
-      f.options = { ...f.options, [a.option]: a.on };
+    const f = a.option || a.values ? plan.features.find((x) => x.id === a.itemId) : null;
+    if (f && (a.option || a.values)) {
+      f.options = { ...f.options, ...(a.values ? a.values() : { [a.option!]: a.on }) };
       s.settleAction(a);
       if (editor.selected?.list === 'features' && editor.selected.id === f.id) renderInspector();
     }
   };
+  // Sound (engine/audio.ts): a button over the 3D view and a volume slider, kept between visits. It starts only after
+  // the first click or key, as browsers require.
+  const sound = s.audio;
+  const soundBtn = $<HTMLButtonElement>('#btn-sound'), volume = $<HTMLInputElement>('#volume');
+  if (sound?.available) {
+    const sync = () => {
+      soundBtn.setAttribute('aria-pressed', String(sound.on));
+      soundBtn.textContent = sound.on ? 'Sound' : 'Sound off';
+      volume.value = String(sound.volume);
+      volume.disabled = !sound.on;
+    };
+    sound.onChange = sync;
+    sync();
+    soundBtn.addEventListener('click', () => sound.setOn(!sound.on));
+    volume.addEventListener('input', () => sound.setVolume(+volume.value));
+  } else {
+    soundBtn.hidden = true;
+    $('#sound-group').hidden = true;
+  }
   // Plant labels: their own switch (B, N, or the Plants button), apart from the measurements, kept between visits.
   const btn = $<HTMLButtonElement>('#btn-plants');
   btn.addEventListener('click', () => s.setPlantLabels(!s.plantLabels));

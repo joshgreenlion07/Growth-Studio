@@ -127,6 +127,7 @@ td .botanical { line-height: 1.3; }
 .num input { width: 7em; border: 1px solid var(--line); background: var(--paper); padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .unit { font-size: 12px; color: var(--ink-2); font-family: var(--font-mono); }
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+#sound-group[hidden] { display: none; }
 .muted { color: var(--ink-2); font-size: 13px; margin: 0; }
 .ai-note { margin: 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 13px; display: grid; gap: 6px; justify-items: start; }
 .ai-note p { margin: 0; }
@@ -416,6 +417,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
             <button id="btn-second" type="button" aria-pressed="false" title="Second screen: a window (best on a second display) showing what the pointer is on">Second screen</button>
             <button id="btn-focus" type="button" aria-pressed="true" title="Focus blur on or off">Focus</button>
             <button id="btn-wind" type="button" aria-pressed="true" title="Wind on or off">Wind</button>
+            <button id="btn-sound" type="button" aria-pressed="true" title="Sound on or off: ambience for the time of day, water, fire and spa. Sound effects generated with ElevenLabs.">Sound</button>
             <div id="nav-modes" role="group" aria-label="Movement">
               <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
               <button type="button" data-mode="fly" aria-pressed="false" title="Fly freely (V or controller A)">Fly</button>
@@ -471,6 +473,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
               <label class="check">f/<input id="fstop" type="range" min="1.4" max="16" step="0.1" value="4" aria-label="Aperture"></label>
               <label class="check">Wind <input id="wind" type="range" min="0" max="1.5" step="0.05" value="0.55" aria-label="Wind"></label>
               <label class="check"><input id="motion" type="checkbox" checked> Motion</label>
+              <label id="sound-group" class="check" title="Sound effects generated with ElevenLabs">Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="Sound volume"></label>
               <label class="check" title="Show what changes on screen from moment to moment, to track down flicker or slowdowns"><input id="diag" type="checkbox"> Diagnostics</label>
               <select id="quality" aria-label="Render quality">
                 <option value="draft">Draft</option><option value="light">Light</option><option value="balanced" selected>Balanced</option><option value="max">Maximum</option>

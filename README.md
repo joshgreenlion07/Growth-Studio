@@ -304,7 +304,7 @@ Messages use `window.postMessage`:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
   (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
-  and `steps: false` to leave the steps out. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
+  and `steps: false` to leave the steps out. The cover folds and lifts as an animation (about 4 s); a spa whose footprint is stretched away from 84 x 84 in falls back to swapping the two poses with no animation. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
 - The three-pillar stucco water feature (`three-pillar-water-feature`) offers the option `bowls` (default on: a patina
   bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
   The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
@@ -502,6 +502,47 @@ Messages use `window.postMessage`:
   skipped in the shader; night lights that are off cost nothing per pixel.
 - Losing WebGL (Safari can take it away under memory pressure) shows
   "Restoring the 3D view" and rebuilds the yard when it comes back.
+
+## Sound
+
+Sound effects generated with ElevenLabs.
+
+`src/engine/audio.ts` (Web Audio) gives the 3D scenes sound; the clips are in `public/sounds/` (about 0.68 MB in all;
+the single-file build `npm run build:artifact` embeds them as base64 in `#sound-data`, the normal build copies them to
+`sounds/`).
+
+- Ambience follows the sky: a daytime backyard loop and a night crickets loop, crossfaded with the sky's darkness
+  (Afternoon, Golden hour, Blue hour, Night and the time slider).
+- Positional loops at ponds, streams, falls, fountains, water walls (`water` action), lit fires (`fire` action) and
+  spa jets that are on (`jets` action): distance gain, stereo pan from the listener (the camera when walking or
+  flying, the look-at point from orbit). Only the nearest 3 trickles, 2 falls, 2 fires and 1 spa sound at once; the
+  rest are silent and free. Pools are quiet.
+- Water switched by hand (Hand tool, G, controller) plays the start or stop one-shot at the water; the loop fades in
+  after the start and out on stop. Water is off, fire unlit and everything before the Finished stage is silent.
+- The Sound button (over the 3D view) and the Volume slider (Camera group) are kept in `localStorage` (`gs-sound`).
+  Sound starts after the first click or key, is on by default (also in `?embed=1` and `?viewer=1`), stops when the tab
+  is hidden and on the planner's `pause` message (`resume` restarts it). The second-screen window has no sound.
+- `studio.audio.debug()` lists the context state, gains, listener and each voice's distance and gain.
+
+Credits and license: the clips are free-tier ElevenLabs sound effects. The free plan requires attribution ("Sound
+effects generated with ElevenLabs", shown in the Sound button and Volume tooltips and here) and does not allow
+commercial use: a paid plan is needed before this ships in a commercial product.
+
+Prompts (model `eleven_text_to_sound_v2`, `mp3_44100_64`, loops generated with `loop: true`):
+
+| File | Length | Prompt |
+| --- | --- | --- |
+| `day.mp3` | 14 s | Peaceful daytime suburban backyard ambience: soft birdsong, a light breeze rustling leaves, very faint distant neighborhood hum. Calm, seamless, no sudden sounds. |
+| `night.mp3` | 14 s | Summer night ambience: steady crickets chirping with a gentle breeze. Calm, seamless, no sudden sounds. |
+| `trickle.mp3` | 12 s | Small garden water feature, gentle water trickling over a spillway into a stone basin, soft splashing. Seamless loop, steady, no other sounds. |
+| `waterfall.mp3` | 12 s | Larger backyard waterfall cascading into a pond, rushing water over rocks, deeper steady flow. Seamless loop, no other sounds. |
+| `fire.mp3` | 12 s | Outdoor fire pit crackling softly, gentle wood pops and steady flame hiss. Seamless loop, no voices. |
+| `spa.mp3` | 12 s | Hot tub spa jets running, steady bubbling and churning water with a soft motor hum. Seamless loop, no voices. |
+| `water-on.mp3` | 4 s | A water pump switching on, motor hum starting, then water begins to flow and splash into a pond, building to a steady stream. |
+| `water-off.mp3` | 4 s | A water feature switching off: flowing water slows and stops, pump goes quiet, a few last drips falling into a basin. |
+
+The player also blends each loop's last 0.35 s into its start (equal power) when it decodes it, so the loop point
+cannot click.
 
 ## Next steps
 1. Replace the starter catalog with Green Lion's plant list (names, container

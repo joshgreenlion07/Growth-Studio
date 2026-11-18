@@ -14,6 +14,7 @@ import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from
 import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
+import { SceneAudio } from './audio';
 import type { BuildStage, StageLabel } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode, type QuickDir } from './navigation';
 import { Marks, Tape, ftIn, type MarkPoint } from './marks';
@@ -166,6 +167,8 @@ export class Studio {
   views: CameraView[] = [];
   /** Controller, keyboard and first-person movement; see navigation.ts for the controls. */
   readonly nav: Navigation;
+  /** Sound for the scene (engine/audio.ts): ambience by time of day, positional water, fire and spa. */
+  readonly audio = new SceneAudio();
   /** Lengths, areas and sizes drawn over the scene. */
   readonly measure: Measurements;
   /** Quick tools drawn in the world: thrown dirt marks and the tape measure (see marks.ts). */
@@ -779,6 +782,7 @@ export class Studio {
     this.shadowDirty = true;
     this.scene.add(next.root);
     this.stageLabels.set(next.construction.labels, this.stage);
+    this.audio.setBuild(plan, next, this.stage);
     this.refreshCutaway();
     this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
@@ -1191,9 +1195,35 @@ export class Studio {
     const next = dir === 0 ? !a.on : dir > 0;
     if (next === a.on) return { action: a, changed: false };
     this.setAction(a, next, false);
+    this.noteAction(a.itemId, a.key, a.on);
     this.nav.pulse(40, 0.25);
     this.onAction(a);
     return { action: a, changed: true };
+  }
+
+  /** A feature action was switched by hand (any route): its sound. */
+  noteAction(itemId: string, key: string, on: boolean) {
+    this.audio.noteAction(itemId, key, on);
+  }
+
+  /** What can be used by hand on a placed feature (the Library item view lists these as buttons). */
+  featureActions(itemId: string): FeatureAction[] {
+    return this.build ? this.build.features.actions.filter((a) => a.itemId === itemId) : [];
+  }
+
+  /** Forget what was done by hand to items whose id starts with `prefix` (the Library's sample, when the item changes). */
+  clearHandState(prefix: string) {
+    for (const k of [...this.handState.keys()]) if (k.startsWith(prefix)) this.handState.delete(k);
+  }
+
+  /** Switch one of a feature's actions by key, animated; returns it (null if there is none). */
+  toggleFeatureAction(itemId: string, key: string): FeatureAction | null {
+    const a = this.featureActions(itemId).find((x) => x.key === key);
+    if (!a) return null;
+    this.setAction(a, !a.on, false);
+    this.noteAction(a.itemId, a.key, a.on);
+    this.onAction(a);
+    return a;
   }
 
   /** The plan now asks for what was done by hand (it was saved to the plan): keep it as the action's own state. */
@@ -1328,6 +1358,7 @@ export class Studio {
   setStage(stage: BuildStage) {
     if (stage === this.stage) return;
     this.stage = stage;
+    this.audio.setStage(stage);
     // Fewer measurement labels while digging (see Measurements.stage).
     this.measure.stage = stage;
     this.pending?.setStage(stage);
@@ -1680,6 +1711,7 @@ export class Studio {
     const animate = this.animating();
     if (this.state.motion) GLOBAL.uTime.value += dt;
     this.moveCamera(dt, now);
+    this.audio.update(this.camera, this.sky.uniforms.uNight.value, this.mode === 'orbit' ? this.controls.target : null);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
     // Something switched on by hand that moves by itself (a spa's bubbles and steam).
@@ -1951,9 +1983,11 @@ export class Studio {
   pause() {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.audio.setPaused(true);
   }
 
   resume() {
+    this.audio.setPaused(false);
     if (!this.raf && !this.disposed) {
       this.lastTs = -1;
       this.invalidate();
@@ -2081,6 +2115,7 @@ export class Studio {
     this.marks.dispose();
     this.tape.dispose();
     this.stageLabels.dispose();
+    this.audio.dispose();
     disposeMaterialCache();
     this.renderer.dispose();
     this.renderer.domElement.remove();
