@@ -616,14 +616,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'mossRock':
       case 'canyonBoulder': {
         // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
-        buildWaterRock({ f, spec, add, lift: lift?.(f.position) });
+        buildWaterRock({ f, spec, add, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
         break;
       }
       case 'flagLip':
       case 'flagLedge':
       case 'flagEdge': {
         // Flagstone pieces for water features (builder/flagstone.ts).
-        buildFlagstone({ f, spec, add, material: catalogMaterial('slab-24'), lift: lift?.(f.position) });
+        buildFlagstone({ f, spec, add, material: catalogMaterial('slab-24'), lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
         break;
       }
       case 'blackPlanter': {

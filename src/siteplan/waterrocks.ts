@@ -34,7 +34,7 @@ const sizesOf = ([rl, rd, rh]: [number, number, number]): FeatureSize[] => STEPS
 /** Rounded: wide and low, worn smooth on every side. Tall: stands on end. Flat-top: long and low with a flat top. */
 export const MOSS_ROUNDED_SIZES = sizesOf([1, 0.82, 0.68]);
 export const MOSS_TALL_SIZES = sizesOf([0.75, 0.6, 0.95]);
-export const MOSS_FLAT_SIZES = sizesOf([1, 0.72, 0.44]);
+export const MOSS_FLAT_SIZES = sizesOf([1.1, 0.8, 0.5]);
 export const CANYON_SIZES = sizesOf([1, 0.8, 0.62]).slice(1);
 
 const MEDIUM = 1;
