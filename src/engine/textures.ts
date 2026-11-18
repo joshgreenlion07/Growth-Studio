@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise } from './noise';
+import type { PaverDetail } from './paver-detail';
 
 /**
  * Procedural PBR textures, drawn once on the CPU and cached. Every surface in
@@ -13,6 +14,8 @@ export interface PBRSet {
   roughnessMap: THREE.Texture;
   /** Meters covered by one repeat of the texture. */
   tileMeters: number;
+  /** The close-range face detail drawn on top of these maps in real size (engine/paver-detail.ts), if any. */
+  detail?: PaverDetail;
 }
 
 export type RGB = [number, number, number];
@@ -34,9 +37,16 @@ interface Sample {
 }
 
 let anisotropy = 8;
+let rendererAnisotropy = 8;
 export function setMaxAnisotropy(n: number) {
   anisotropy = Math.min(8, n);
+  rendererAnisotropy = Math.max(1, n);
 }
+/**
+ * The renderer's own limit (16 on most GPUs). Only the pattern maps of detailed pavers use it (see paverSet), so a walk
+ * seen at a low angle stays sharp; everything else keeps 8, as the ground splat samples many maps a pixel.
+ */
+export const maxAnisotropy = () => rendererAnisotropy;
 
 /**
  * Keys of the sets the texture worker can paint by itself (texture-recipes.ts

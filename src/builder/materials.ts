@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { layingOf, materialById, type LayingPattern } from '../siteplan/catalog';
 import { forgetTextureSet, paint, textureSet, type PBRSet } from '../engine/textures';
 import { fbm, vnoise } from '../engine/noise';
+import { applyPaverDetail, disposeEdgeMap } from '../engine/paver-detail';
 
 /** Standard materials whose textures are scaled in meters (UVs in meters). */
 
@@ -16,7 +17,10 @@ function scaled(t: THREE.Texture, tile: number) {
 
 export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
   let m = cache.get(key);
-  if (m) return m;
+  if (m) {
+    touchEdges(m);
+    return m;
+  }
   m = new THREE.MeshStandardMaterial({
     map: scaled(set.map, set.tileMeters),
     normalMap: scaled(set.normalMap, set.tileMeters),
@@ -25,8 +29,39 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
     metalness: 0,
     ...extra,
   });
+  if (set.detail) applyPaverDetail(m, set.detail, set.tileMeters);
   cache.set(key, m);
+  touchEdges(m);
   return m;
+}
+
+/**
+ * Edge maps of detailed pavers (engine/paver-detail.ts) are kept for the most recently used few, as stamped looks are:
+ * a random-ashlar map is its own 4 MB per color. Releasing one releases the materials drawn with it (their pattern
+ * sets stay cached, so a material asked for again is made at once and its edge map painted again).
+ */
+const EDGE_KEEP = 8;
+const edgeUse = new Map<string, number>();
+const edgeKey = (m: THREE.Material): string | undefined => (m.userData.paverDetail as { detail?: { edges?: { key?: string } } } | undefined)?.detail?.edges?.key;
+function touchEdges(m: THREE.Material) {
+  const id = edgeKey(m);
+  if (!id) return;
+  edgeUse.delete(id);
+  edgeUse.set(id, buildEpoch);
+  for (const [old, epoch] of edgeUse) {
+    if (edgeUse.size <= EDGE_KEEP) break;
+    if (epoch >= buildEpoch - 1) continue;
+    edgeUse.delete(old);
+    for (const [k, mm] of cache) {
+      if (edgeKey(mm) !== old) continue;
+      mm.map?.dispose();
+      mm.normalMap?.dispose();
+      mm.roughnessMap?.dispose();
+      mm.dispose();
+      cache.delete(k);
+    }
+    disposeEdgeMap(old);
+  }
 }
 
 /**

@@ -4,7 +4,7 @@ import { materialById, type FenceStyle, type MaterialSpec } from '../siteplan/ca
 import { padLook, padOf, type PadRect } from '../siteplan/pads';
 import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
-import { latticeAlpha, materialTextures, photoAlbedo, slabSet, wallCapTextures } from '../engine/surfaces';
+import { hasPaverDetail, latticeAlpha, materialTextures, photoAlbedo, slabSet, soldierTileIn, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
@@ -226,8 +226,10 @@ function runPieces(L: number, P: number): number[] {
  * across) or a sailor course (long side along). Runs between real corners are laid by runPieces and meet on a mitre at
  * each corner; a border with no real corners (a curve) runs continuously. Each paver maps to its own cell of the
  * border texture, so its joints fall exactly where the pavers do. The outer face down to the base follows the same pieces.
+ * With `cells`, each run of `n` pavers moves on to the texture's next row of pieces (`size` meters across the band, `m`
+ * rows), so the course takes every piece the texture holds before its colors repeat, not only the first row's.
  */
-function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false, pieceIn = sailor ? 9 : 6): THREE.BufferGeometry {
+function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sailor = false, pieceIn = sailor ? 9 : 6, cells?: { n: number; m: number; size: number }): THREE.BufferGeometry {
   const pos: number[] = [], uv: number[] = [], nor: number[] = [], idx: number[] = [];
   const n = outer.length;
   const P = pieceIn * 0.0254;
@@ -282,7 +284,8 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sai
         const u0 = s0 <= S[i] + 1e-7 ? -1 : s0 - S[i];
         const u1 = s1 >= S[i + 1] - 1e-7 ? len + 1 : s1 - S[i];
         const along = (u: number) => j * P + (u + S[i] - s0);
-        const tex = (q: Vec2): [number, number] => (sailor ? [q[1], along(q[0])] : [along(q[0]), q[1]]);
+        const row = cells ? (Math.floor(j / cells.n) % cells.m) * cells.size : 0;
+        const tex = (q: Vec2): [number, number] => (sailor ? [q[1] + row, along(q[0])] : [along(q[0]), q[1] + row]);
         tri(clipConvex([[u0, -0.01], [u1, -0.01], [u1, W], [u0, W]], trap), world, tex);
         // Outer face of this paver, down to the base.
         const o0 = Math.max(0, u0), o1 = Math.min(len, u1);
@@ -292,7 +295,7 @@ function borderGeometry(outer: Vec2[], inner: Vec2[], y: number, y0: number, sai
             const w = world([u, 0]);
             pos.push(w[0], yy, w[1]);
             nor.push(nrm[0], 0, nrm[1]);
-            uv.push(...((sailor ? [y - yy, along(u)] : [along(u), y - yy]) as [number, number]));
+            uv.push(...((sailor ? [y - yy + row, along(u)] : [along(u), y - yy + row]) as [number, number]));
           }
           idx.push(sb, sb + 1, sb + 2, sb, sb + 2, sb + 3);
         }
@@ -549,8 +552,16 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         const inner = insetPolygon(z.polygon, w);
         field = inner;
         const sailor = z.border.course === 'sailor';
-        const pz = materialById.get(z.border.catalogId)?.pattern?.sizes?.[0] ?? [6, 9];
-        const bg = borderGeometry(z.polygon, inner, t, -0.06, sailor, sailor ? Math.max(pz[0], pz[1]) : Math.min(pz[0], pz[1]));
+        const bp = materialById.get(z.border.catalogId)?.pattern;
+        const pz = bp?.sizes?.[0] ?? [6, 9];
+        const pieceIn = sailor ? Math.max(pz[0], pz[1]) : Math.min(pz[0], pz[1]);
+        // A soldier texture (a along the course, b across) holds L / b rows of L / a pieces; a sailor course runs down
+        // its columns instead.
+        const [a, b] = pz, L = soldierTileIn(a, b);
+        // (Detailed lines only, so every other line's border looks as it did.)
+        const cells = bp?.kind !== 'soldier' || pieceIn !== (sailor ? b : a) || !hasPaverDetail(z.border.catalogId) ? undefined
+          : sailor ? { n: Math.round(L / b), m: Math.round(L / a), size: a * 0.0254 } : { n: Math.round(L / a), m: Math.round(L / b), size: b * 0.0254 };
+        const bg = borderGeometry(z.polygon, inner, t, -0.06, sailor, pieceIn, cells);
         geos.push(bg);
         const bm = new THREE.Mesh(bg, mat(catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide })));
         bm.receiveShadow = true;

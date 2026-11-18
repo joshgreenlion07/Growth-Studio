@@ -11,7 +11,8 @@ import { disposeMaterialCache } from '../builder/materials';
 import { GLOBAL } from './foliage';
 import { PostPipeline, type LensSettings, type Quality } from './post';
 import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from './sky';
-import { setMaxAnisotropy } from './textures';
+import { maxAnisotropy, setMaxAnisotropy } from './textures';
+import { disposePaverDetail, restorePaverDetail, setDetailAnisotropy } from './paver-detail';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
 import { SceneAudio } from './audio';
@@ -316,6 +317,7 @@ export class Studio {
       }
     }
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
+    setDetailAnisotropy(Math.min(4, maxAnisotropy()));
     setGroundTextureUnits(this.renderer.capabilities.maxTextures);
     // Before any lit material compiles: the landscape-lighting loop and its uniforms go into three's light pass.
     initLandLights(this.renderer.capabilities.maxFragmentUniforms);
@@ -577,6 +579,8 @@ export class Studio {
     this.keyLight.shadow.map?.dispose();
     this.keyLight.shadow.map = null;
     this.shadowDirty = true;
+    // Edge maps drop their pixels once uploaded; they are painted again for the new context.
+    restorePaverDetail();
     this.size.w = 0;
     this.resize();
     if (this.plan) this.applyPlan(this.plan, true, false);
@@ -2139,6 +2143,7 @@ export class Studio {
     this.stageLabels.dispose();
     this.audio.dispose();
     disposeMaterialCache();
+    disposePaverDetail();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
