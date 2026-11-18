@@ -64,6 +64,9 @@ import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro'
 import { build as daylilyRed } from './perennials/daylily-red';
 import { build as fortnightLily } from './perennials/fortnight-lily';
 import { build as cannaTropicanna } from './tropicals/canna-tropicanna';
+import { build as cherryLaurelCompacta } from './shrubs/cherry-laurel-compacta';
+import { build as hopseedBushPurpurea } from './shrubs/hopseed-bush-purpurea';
+import { build as glossyAbeliaKaleidoscope } from './shrubs/glossy-abelia-kaleidoscope';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -134,4 +137,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'bougainvillea': bougainvillea,
   'maiden-grass-morning-light': maidenGrassMorningLight,
   'rose-flower-carpet-red': roseFlowerCarpetRed,
+  'cherry-laurel-compacta': cherryLaurelCompacta,
+  'hopseed-bush-purpurea': hopseedBushPurpurea,
+  'glossy-abelia-kaleidoscope': glossyAbeliaKaleidoscope,
 };
