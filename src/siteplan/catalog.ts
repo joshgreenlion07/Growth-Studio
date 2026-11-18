@@ -177,6 +177,12 @@ export interface PebbleSpec {
   wide: [number, number];
   thick: [number, number];
   colors: { c: string; share: number }[];
+  /**
+   * The pieces' form (builder/pebbles.ts): 'pebble' (default: a smooth, wave-worn beach pebble), 'crushed' (crushed
+   * stone: angular, with flat broken faces and sharp edges) or 'chip' (bark and wood chips: flat, splintery, a little
+   * curled, with the grain running their length).
+   */
+  form?: 'pebble' | 'crushed' | 'chip';
 }
 
 /**
@@ -499,13 +505,13 @@ export const MATERIALS: MaterialSpec[] = [
   // soft clods, a few short shreds of dark bark, a very rare pale fleck. The id stays `humus` so saved plans keep it.
   M({ id: 'humus', name: 'Black humus (compost mix)', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#3a302a', '#211b18'],
     crumb: {
-      soil: [{ c: '#352f28', share: 0.3 }, { c: '#3f372e', share: 0.28 }, { c: '#2c261d', share: 0.2 }, { c: '#483f34', share: 0.16 }, { c: '#53493b', share: 0.06 }],
+      soil: [{ c: '#3b3027', share: 0.3 }, { c: '#46392d', share: 0.28 }, { c: '#31281f', share: 0.2 }, { c: '#514133', share: 0.16 }, { c: '#5d4c3b', share: 0.06 }],
       fiber: ['#4f3f2d', '#65523d', '#7f6a4f', '#3c3024'],
       speck: ['#bdb8aa', '#9c9482'],
-      mean: '#3e352d',
-      mound: 0.035,
-      style: { clods: 1, scale: 1, fibers: 0.6, lightFibers: 0.1 },
-      loose: { clods: 22, shreds: 6, shredIn: [0.4, 1.2] },
+      mean: '#43372c',
+      mound: 0.02,
+      style: { clods: 0.55, scale: 0.32, fibers: 0.6, lightFibers: 0.12 },
+      loose: { clods: 0, shreds: 3, shredIn: [0.3, 0.9] },
     } }),
   // Compost: dark brown, a little lighter and coarser than black humus, with plenty of woody bits and shredded fiber,
   // some of it lighter brown.
@@ -515,20 +521,20 @@ export const MATERIALS: MaterialSpec[] = [
       fiber: ['#5a4630', '#7a6044', '#97795a', '#46362a'],
       speck: ['#b0a690', '#928872'],
       mean: '#4a3d30',
-      mound: 0.04,
-      style: { clods: 0.85, scale: 1.25, fibers: 1, lightFibers: 0.45 },
-      loose: { clods: 26, shreds: 30, shredIn: [0.6, 2] },
+      mound: 0.025,
+      style: { clods: 0.6, scale: 0.42, fibers: 1, lightFibers: 0.4 },
+      loose: { clods: 0, shreds: 16, shredIn: [0.5, 1.6] },
     } }),
   // Dirt / topsoil: medium brown, fine, drier and more powdery, few clods and hardly a fiber.
   M({ id: 'topsoil', name: 'Dirt / topsoil', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#6e5a46', '#4c3d2f'],
     crumb: {
-      soil: [{ c: '#5e4a38', share: 0.3 }, { c: '#685340', share: 0.28 }, { c: '#523f30', share: 0.2 }, { c: '#735e4a', share: 0.16 }, { c: '#806a54', share: 0.06 }],
+      soil: [{ c: '#6e5843', share: 0.3 }, { c: '#7a6349', share: 0.28 }, { c: '#614d3b', share: 0.2 }, { c: '#86705a', share: 0.16 }, { c: '#937d65', share: 0.06 }],
       fiber: ['#5a4636', '#6e5946', '#7f6a55', '#4e3d2f'],
-      speck: ['#a89a86', '#8e8270'],
-      mean: '#544436',
-      mound: 0.03,
-      style: { clods: 0.45, scale: 0.75, fibers: 0.12, lightFibers: 0 },
-      loose: { clods: 8, shreds: 1, shredIn: [0.4, 0.8] },
+      speck: ['#b3a690', '#988a74'],
+      mean: '#705a45',
+      mound: 0.015,
+      style: { clods: 0.35, scale: 0.28, fibers: 0.1, lightFibers: 0 },
+      loose: { clods: 0, shreds: 0, shredIn: [0.4, 0.8] },
     } }),
   M({ id: 'decomposed-granite', name: 'Decomposed granite', use: 'bed', group: 'Mulch and rock', recipe: 'dg', palette: ['#b39a78', '#8f7a5d'] }),
   M({ id: 'river-rock', name: 'River rock', use: 'bed', group: 'Mulch and rock', recipe: 'riverRock', palette: ['#a8a399', '#8d8a83', '#5f5b55'] }),
@@ -545,6 +551,35 @@ export const MATERIALS: MaterialSpec[] = [
       { c: '#424a4d', share: 0.14 }, { c: '#33393c', share: 0.1 }, { c: '#6e6a62', share: 0.04 }, { c: '#7a6b58', share: 0.02 },
     ] },
     matches: `Mexican beach pebble, black, ${label}`, maker: 'Natural stone', line: 'Mexican beach pebble', shelf: 'Rock', color: label,
+  })),
+  // Bark and wood chips Green Lion buys by the yard (California Landscape Supply), drawn chip by chip (builder/pebbles.ts,
+  // form 'chip'). Walk On Bark: shredded fir and pine chips, 1-3 in, natural tan to red-brown with some fresh, paler wood.
+  M({ id: 'walk-on-bark', name: 'Walk On Bark, natural brown', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
+    palette: ['#9a6b47', '#83593a', '#6d4a31', '#563a27'],
+    pebble: { form: 'chip', minIn: 1, maxIn: 3, wide: [0.18, 0.38], thick: [0.12, 0.24], colors: [
+      { c: '#93653f', share: 0.23 }, { c: '#7f5636', share: 0.25 }, { c: '#6b472d', share: 0.2 }, { c: '#a87a52', share: 0.13 },
+      { c: '#583a25', share: 0.12 }, { c: '#b08660', share: 0.02 }, { c: '#46301f', share: 0.05 },
+    ] },
+    matches: 'Walk On Bark (California Landscape Supply)' }),
+  // Small black wood chips: dyed wood chips, 1/2-1 1/2 in, charcoal black with a little brown wood showing at the breaks.
+  M({ id: 'black-wood-chips', name: 'Black wood chips, small', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
+    palette: ['#4a433d', '#403a35', '#36312d', '#2c2826'],
+    pebble: { form: 'chip', minIn: 0.5, maxIn: 1.5, wide: [0.3, 0.55], thick: [0.12, 0.22], colors: [
+      { c: '#403a35', share: 0.28 }, { c: '#36312d', share: 0.26 }, { c: '#4a433d', share: 0.2 }, { c: '#2c2826', share: 0.14 },
+      { c: '#5a4b3e', share: 0.07 }, { c: '#6b5847', share: 0.05 },
+    ] },
+    matches: 'Small Black Wood Chips (California Landscape Supply)' }),
+  // Crushed gravel in the three sizes Green Lion buys (3/8 in Lodi crushed stone, 3/4 in crushed rock, 1 1/2 in gravel),
+  // drawn stone by stone (form 'crushed'), in one valley tan-gray blend so the sizes compare: warm tan, gray and
+  // brown-gray pieces, a few rust-stained and pale ones.
+  ...([[0.25, 0.5, '3-8', '3/8 in', 'Lodi crushed stone 3/8 in (SiteOne)'], [0.45, 0.85, '3-4', '3/4 in', '3/4 in crushed rock (California Landscape Supply)'], [1, 1.6, '1-1-2', '1 1/2 in', '1 1/2 in gravel (Resource Building Materials)']] as const).map(([lo, hi, key, label, buys]) => M({
+    id: `crushed-gravel-${key}`, name: `Crushed gravel, ${label}`, use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
+    palette: ['#a99c8a', '#928676', '#7d7366', '#665e54'],
+    pebble: { form: 'crushed', minIn: lo, maxIn: hi, wide: [0.62, 0.9], thick: [0.45, 0.75], colors: [
+      { c: '#a69a88', share: 0.2 }, { c: '#918677', share: 0.2 }, { c: '#7d7467', share: 0.17 }, { c: '#b8ac99', share: 0.12 },
+      { c: '#6b635a', share: 0.12 }, { c: '#9c8168', share: 0.1 }, { c: '#cbc0ae', share: 0.05 }, { c: '#575049', share: 0.04 },
+    ] },
+    matches: buys, maker: 'Natural stone', line: 'Crushed gravel', shelf: 'Rock', color: label,
   })),
   M({ id: 'white-cobble', name: 'White and tan cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#e3ddd1', '#cfc5b4', '#b5a993'] }),
   M({ id: 'cobble', name: 'River cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#c2b8a6', '#8f8679', '#6d675e'] }),
@@ -809,6 +844,7 @@ function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | '
   if (m.id === 'decomposed-granite') return { fillType: 'dg', depthIn: 3, tonsPerCuYd: 1.4 };
   // Lava rock is porous and light.
   if (m.id === 'lava-rock') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 0.7 };
+  if (m.pebble?.form === 'chip') return { fillType: 'bark', depthIn: 3 };
   if (m.pebble) return { fillType: 'rock', depthIn: m.pebble.maxIn <= 1 ? 2 : m.pebble.maxIn <= 2 ? 2.5 : 3, tonsPerCuYd: 1.45 };
   if (m.recipe === 'blackPebble') return { fillType: 'rock', depthIn: 2.5, tonsPerCuYd: 1.45 };
   if (m.recipe === 'cobble') return { fillType: 'rock', depthIn: 3.5, tonsPerCuYd: 1.4 };
