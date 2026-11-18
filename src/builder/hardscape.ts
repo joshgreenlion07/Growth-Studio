@@ -10,6 +10,8 @@ import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './mater
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
+import { buildDeck } from './deck';
+import { deckTopOf, isBoardDeck } from '../siteplan/deckzone';
 
 /**
  * Patios with soldier borders and inset lights, raised planters, walls with
@@ -432,6 +434,7 @@ export interface HardscapeBuild {
 /** Top of a hardscape zone above grade: its material's thickness, its elevation when raised, and a
     hair per zone so overlapping paving does not flicker. `index` is the zone's place in plan.zones. */
 export function zoneTop(z: Zone, index: number): number {
+  if (isBoardDeck(z)) return deckTopOf(z, index);
   return (materialById.get(z.catalogId)?.thickness ?? 0.07) + index * 0.0015 + (z.elevation ?? 0);
 }
 
@@ -488,7 +491,13 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
   const lightGeo: THREE.BufferGeometry[] = [];
   const glowMat = new THREE.MeshStandardMaterial({ color: '#d8d3c8', emissive: new THREE.Color('#ffd49a'), emissiveIntensity: 0, roughness: 0.3, metalness: 0.4 });
   plan.zones.forEach((z: Zone, i) => {
-    if (z.kind === 'hardscape') {
+    if (isBoardDeck(z)) {
+      // A composite deck: built board by board (deck.ts).
+      const d = buildDeck(z, i, plan);
+      geos.push(...d.geos);
+      surfaces.push(...d.surfaces);
+      group.add(d.object);
+    } else if (z.kind === 'hardscape') {
       const spec = materialById.get(z.catalogId);
       // A raised area: the whole surface lifts by its elevation and sits on solid sides of the same material.
       const t = zoneTop(z, i);

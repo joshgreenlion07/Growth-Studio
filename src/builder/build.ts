@@ -11,6 +11,8 @@ import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
+import { onDecks } from './deck';
+import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
@@ -322,13 +324,15 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  // Decor set on paving stands on its top (the paving is drawn its thickness above grade).
+  // Features and models placed on a composite deck stand on its boards (a hot tub is set into it).
+  const standOn = onDecks(plan, gm.height);
+  // Decor set on paving stands on its top too (paving is drawn its thickness above grade); decks are in standOn.
   const pavingTop = (p: Vec2) => {
     const z = gm.zoneAt(p);
-    return z && z.kind === 'hardscape' ? zoneTop(z, plan.zones.indexOf(z)) : 0;
+    return z && z.kind === 'hardscape' && !isBoardDeck(z) ? zoneTop(z, plan.zones.indexOf(z)) : 0;
   };
-  const features = buildFeatures(plan.features, gm.height, coverCeiling(plan.structures), pavingTop);
-  const models = buildModels(plan.models ?? [], gm.height, assets);
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop);
+  const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
   const bodies = bodyGrid(lineBodies(plan));
@@ -394,7 +398,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, plantGround(plan.features, gm.height, pavingTop), quality !== 'draft', { lod: true, reflects, shadowTexel });
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
