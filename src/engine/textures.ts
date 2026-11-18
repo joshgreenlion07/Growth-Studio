@@ -426,6 +426,11 @@ export function textureSet(key: string, make: () => PBRSet): PBRSet {
 }
 
 /** Shared house, roof, bark, road and pool textures: painted once (in the worker) and kept. */
+/** Forget one cached set (its textures are disposed by whoever holds them), so it is painted again if asked for. */
+export function forgetTextureSet(key: string) {
+  cache.delete(key);
+}
+
 /** Forget every cached set. The worker calls it after each job so it holds no pixels. */
 export function clearTextureSets() {
   cache.clear();

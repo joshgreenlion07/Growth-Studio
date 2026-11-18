@@ -506,7 +506,7 @@ const CONCRETE_LINES: { id: string; line: string; finish: ConcreteFinish; stamp?
   { id: 'stamped-plank', line: 'Stamped wood plank', finish: 'stamped', stamp: 'plank' },
 ];
 /** Ids that existed before the concrete lines; each now stands in for its line's look in that color. */
-const CONCRETE_OLD: Record<string, string> = { 'smooth:natural-gray': 'concrete-smooth', 'broom:natural-gray': 'concrete-broom', 'broom:desert-tan': 'concrete-tan' };
+const CONCRETE_OLD: Record<string, string> = { 'broom:natural-gray': 'concrete-broom' };
 function concreteLooks(): MaterialSpec[] {
   const out: MaterialSpec[] = [];
   for (const L of CONCRETE_LINES) {
@@ -528,6 +528,9 @@ function concreteLooks(): MaterialSpec[] {
   old('concrete-stamped-light', 'Stamped concrete, light slate', ['#d6d1c6', '#c4beb2'], 'stamped');
   old('concrete-stamped-tan', 'Stamped concrete, tan tile', ['#d3bf9c', '#bba783'], 'stamped');
   old('concrete-stamped', 'Stamped concrete, slate', ['#a99a86', '#8a7c6b'], 'stamped');
+  // Kept with their old colors so saved plans look the same; the lines' Natural gray smooth and Desert tan broom are new looks.
+  old('concrete-smooth', 'Smooth-trowel concrete', ['#bebbb4', '#aaa79f'], 'smooth');
+  old('concrete-tan', 'Colored concrete, tan', ['#c9b89c', '#b6a487'], 'broom');
   old('concrete-exposed', 'Exposed aggregate', ['#a59a8c', '#857a6d'], 'exposed');
   old('concrete-red', 'Colored concrete, terracotta', ['#a5604f', '#8f5244'], 'smooth');
   return out;
@@ -1008,7 +1011,7 @@ export function isOffered(m: MaterialSpec): boolean {
 
 /** Offered materials for a use; `keep` (the current value) is listed too even when hidden, so it never silently changes. */
 export function materialsFor(use: MaterialUse, keep?: string): MaterialSpec[] {
-  return MATERIALS.filter((m) => m.use === use && (isOffered(m) || m.id === keep));
+  return MATERIALS.filter((m) => m.use === use && ((isOffered(m) && !(m.auto && m.group === 'Concrete')) || m.id === keep));
 }
 
 /* ------------------------------------------------------------------ */
