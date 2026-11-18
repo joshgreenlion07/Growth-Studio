@@ -336,7 +336,8 @@ Messages use `window.postMessage`:
     and its lights (the LED remote inside by the door); a kitchen's grill lid
     and its doors; any fire (fire pits and tables, the linear fire pit, a patio
     heater: out, or lit even by day); a water wall's or fountain's water; path
-    lights and uplights; the Stratus pergola's LED lights; the Cal Spas spa's
+    lights and uplights; each Tru-Scapes fixture (its beams and lens); the
+    Stratus pergola's LED lights; the Cal Spas spa's
     cover (folded up or closed), jets (bubbles round the seats and steam off the
     water while the cover is open) and lights. Of several things on one feature,
     the one nearest the aim point is used. What is set by hand stays through

@@ -664,11 +664,29 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         // A maker's lighting fixture (builder/landscapelights.ts): its body in the picked finish, a lens that glows
         // at night, and its beam(s), turned and placed with the feature.
         const fx = buildFixture(spec, f, fixtureMats, y0, site ? site.surface(f.position) : y0);
-        for (const [m, g] of fx.parts) add(m, g);
-        const a = (-f.rotationDeg * Math.PI) / 180;
-        for (const l of fx.lights) {
-          landLights.push({ ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a) });
+        // Its own copy of each lens, so this fixture can be switched off by hand on its own.
+        const lenses = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+        for (const [m, g] of fx.parts) {
+          if (!fixtureMats.glow.includes(m as THREE.MeshStandardMaterial)) {
+            add(m, g);
+            continue;
+          }
+          let c = lenses.get(m);
+          if (!c) {
+            c = (m as THREE.MeshStandardMaterial).clone();
+            owned.push(c);
+            extraGlow.push(c);
+            lenses.set(m, c);
+          }
+          add(c, g);
         }
+        const a = (-f.rotationDeg * Math.PI) / 180;
+        const beams = fx.lights.map((l) => ({ ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a) }));
+        landLights.push(...beams);
+        if (beams.length) act({ key: 'light', label: spec.name, words: ['On', 'Off'], anchors: [anchorAt(o, 0, 0.25, 0)], on: true, planOn: true, lights: true, set(on) {
+          for (const b of beams) b.off = !on;
+          for (const c of lenses.values()) c.userData.off = !on;
+        } });
         break;
       }
       case 'bench': {

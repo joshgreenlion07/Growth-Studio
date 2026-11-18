@@ -1036,7 +1036,7 @@ export class Studio {
       p.userData.base = l.intensity;
       p.userData.flicker = l.flicker;
     });
-    this.landLights.set(this.build?.landLights ?? []);
+    this.landLights.set((this.build?.landLights ?? []).filter((l) => !l.off));
     this.updateSky(false);
   }
 
