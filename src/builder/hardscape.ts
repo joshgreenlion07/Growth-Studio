@@ -485,8 +485,8 @@ function cutFaces(lines: Vec2[][], zone: Vec2[], y0: number, y1: number): THREE.
   return g;
 }
 
-/** Size of one pad slab's texture: the longer side, to a quarter inch. */
-const padTileIn = (r: PadRect) => Math.round(Math.max(r.wIn, r.dIn) * 4) / 4;
+/** Size of one pad slab's texture: the longer side in 6 in steps, 12 to 48 in, so drawn sizes share a few cached textures (the map spans the slab edge to edge whatever it is). */
+const padTileIn = (r: PadRect) => Math.min(48, Math.max(12, Math.round(Math.max(r.wIn, r.dIn) / 6) * 6));
 
 /** The material of a pad: its slab, the texture one slab across (cached per look and size). */
 function padMaterial(spec: MaterialSpec, r: PadRect): THREE.MeshStandardMaterial {

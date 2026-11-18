@@ -477,17 +477,19 @@ function renderInspector() {
           changed();
         }, 'Laying pattern'), isAntiqued(zm) ? "Belgard's Antiqued Flat Top patterns." : 'Belgard 3-piece patterns for the 6 x 12, 9 x 12 and 12 x 12 set.'));
       }
-      box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border', z.border?.catalogId)], z.border?.catalogId ?? '', (v) => {
-        snapshot();
-        z.border = v ? { catalogId: v, width: z.border?.width ?? 0.2 } : undefined;
-        if (!v) z.borderLights = false;
-        changed('structure');
-      }, 'Border')));
-      if (z.border) {
-        box.append(
-          field('Border width', numInput('z-bw', z.border.width * 39.37, 1, 3, 24, (v) => { snapshot(); z.border!.width = v / 39.37; changed(); }, 'in')),
-          check('z-bl', 'Lights in the border', !!z.borderLights, (v) => { snapshot(); z.borderLights = v; changed(); }),
-        );
+      if (!pad) {
+        box.append(field('Border', selectEl('z-border', [{ value: '', label: 'No border' }, ...matOptions('border', z.border?.catalogId)], z.border?.catalogId ?? '', (v) => {
+          snapshot();
+          z.border = v ? { catalogId: v, width: z.border?.width ?? 0.2 } : undefined;
+          if (!v) z.borderLights = false;
+          changed('structure');
+        }, 'Border')));
+        if (z.border) {
+          box.append(
+            field('Border width', numInput('z-bw', z.border.width * 39.37, 1, 3, 24, (v) => { snapshot(); z.border!.width = v / 39.37; changed(); }, 'in')),
+            check('z-bl', 'Lights in the border', !!z.borderLights, (v) => { snapshot(); z.borderLights = v; changed(); }),
+          );
+        }
       }
     }
     if (z.kind === 'bed') {

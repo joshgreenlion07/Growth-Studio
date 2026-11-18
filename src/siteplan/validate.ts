@@ -90,7 +90,7 @@ function pickMaterial(raw: unknown, use: string, fallback: string, warnings: str
     const lower = id.toLowerCase();
     const fake = use === 'turf' && /synth|artificial|fake|astro/.test(lower);
     // "grass" is in Synthetic grass's name, but a plain grass id means a natural lawn: only a fake-sounding id may match it.
-    const near = (m: (typeof MATERIALS)[number]) => m.use === use && (fake || m.id !== 'synthetic-turf') && (m.id.includes(lower) || m.name.toLowerCase().includes(lower));
+    const near = (m: (typeof MATERIALS)[number]) => m.use === use && !m.padSlab && (fake || m.id !== 'synthetic-turf') && (m.id.includes(lower) || m.name.toLowerCase().includes(lower));
     // A close name prefers an offered material (OFFERED_LINES); an exact id above is always kept, offered or not.
     const hit = MATERIALS.find((m) => near(m) && isOffered(m)) ?? MATERIALS.find(near);
     if (hit) return hit.id;
