@@ -55,6 +55,7 @@ function readDeck(d: Record<string, unknown>): NonNullable<Zone['deck']> {
   if (typeof d.frame === 'boolean') out.frame = d.frame;
   if (typeof d.divider === 'boolean') out.divider = d.divider;
   if (typeof d.fascia === 'boolean') out.fascia = d.fascia;
+  if (d.tub === 'level' || d.tub === 'sunk') out.tub = d.tub;
   if (d.seamOffset !== undefined && d.seamOffset !== null) out.seamOffset = num(d.seamOffset, 0, -30, 30);
   if (Array.isArray(d.holes)) {
     const hs = d.holes.map((h) => pts(h, 3)).filter((h): h is Vec2[] => !!h && area(h) > 0.01).slice(0, 20);

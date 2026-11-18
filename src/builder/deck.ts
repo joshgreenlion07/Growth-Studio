@@ -14,13 +14,16 @@ import { pbrMaterial, plainMaterial } from './materials';
 /**
  * Composite decks built board by board (a hardscape zone whose look is a maker's deck board, see siteplan/decking.ts):
  * the layout from deck-layout.ts, each board a solid with eased edges and its own run of grain, fascia on the sides,
- * the dark framing seen through the gaps, and openings for a hot tub set into the deck. Anything else placed on a deck
- * stands on its boards (see `onDecks`).
+ * the dark framing seen through the gaps, and framed openings for a hot tub. Anything else placed on a deck
+ * stands on its boards (see `onDecks`); a hot tub in its opening stands at the deck's height unless the deck sets it down.
  */
 
 const IN = 0.0254;
 
-/** Feature kinds set down into a deck through an opening in it (they stand on the ground), not on top of it. */
+/**
+ * Feature kinds that get their own framed opening in a deck (a hot tub). In it they stand on a pad at the deck's height,
+ * the whole cabinet above the boards, as Green Lion builds them; a deck with `tub: 'sunk'` sets them down to the ground.
+ */
 const SET_IN: ReadonlySet<string> = new Set(['hotTub']);
 /** Room left around a hot tub in its opening, meters (1/2 in). */
 const TUB_CLEAR = 0.0127;
@@ -37,7 +40,12 @@ function footprintOf(f: FeaturePlacement, pad: number): Vec2[] | null {
 
 /** The openings of a deck: its own cutouts and every hot tub whose center is on it. */
 export function deckHoles(z: Zone, features: FeaturePlacement[]): Vec2[][] {
-  const out: Vec2[][] = (z.deck?.holes ?? []).filter((h) => h.length >= 3);
+  return [...(z.deck?.holes ?? []).filter((h) => h.length >= 3), ...tubHoles(z, features)];
+}
+
+/** The opening of each hot tub whose center is on a deck: its footprint and the clearance around it. */
+function tubHoles(z: Zone, features: FeaturePlacement[]): Vec2[][] {
+  const out: Vec2[][] = [];
   for (const f of features) {
     const spec = featureById.get(f.catalogId);
     if (!spec || !SET_IN.has(spec.kind) || !pointInPolygon(f.position, z.polygon)) continue;
@@ -68,18 +76,24 @@ export function layoutOf(z: Zone, features: FeaturePlacement[]): DeckLayout {
 }
 
 /**
- * A height function for things placed in the yard: on a deck (and not in one of its openings) it is the top of the
- * boards, elsewhere the ground's. Features and uploaded models stand on it.
+ * A height function for things placed in the yard: on a deck it is the top of the boards, in one of its own cutouts and
+ * elsewhere the ground's. A hot tub in its opening stands at the deck's height too, unless the deck sets it down
+ * (`tub: 'sunk'`). Features and uploaded models stand on it.
  */
 export function onDecks(plan: SitePlan, height: (p: Vec2) => number): (p: Vec2) => number {
   const decks = plan.zones
     .map((z, i) => ({ z, i }))
     .filter(({ z }) => isBoardDeck(z))
-    .map(({ z, i }) => ({ poly: z.polygon, holes: deckHoles(z, plan.features), top: deckTopOf(z, i) }));
+    .map(({ z, i }) => ({ poly: z.polygon, holes: deckHoles(z, plan.features), tubs: z.deck?.tub === 'sunk' ? [] : tubHoles(z, plan.features), top: deckTopOf(z, i) }));
   if (!decks.length) return height;
+  const inside = (p: Vec2, rings: Vec2[][]) => rings.some((o) => pointInPolygon(p, o));
   return (p) => {
     const h = height(p);
-    for (const d of decks) if (pointInPolygon(p, d.poly) && !d.holes.some((o) => pointInPolygon(p, o))) return Math.max(h, d.top);
+    for (const d of decks) {
+      if (!pointInPolygon(p, d.poly)) continue;
+      if (inside(p, d.tubs)) return Math.max(h, d.top);
+      return inside(p, d.holes) ? h : Math.max(h, d.top);
+    }
     return h;
   };
 }

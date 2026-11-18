@@ -149,15 +149,16 @@ Messages use `window.postMessage`:
   board (`src/builder/deck.ts`, layout in `deck-layout.ts`): `elevation` is the top of
   the boards above grade (left out, 8 in), with fascia on the sides and dark framing
   under the gaps. `deck` (all optional) sets how it is laid:
-  `{ pattern?: 'straight' | 'diagonal' | 'chevron', angleDeg?, boardIn?, frame?, divider?, seamOffset?, fascia?, holes? }`.
+  `{ pattern?: 'straight' | 'diagonal' | 'chevron', angleDeg?, boardIn?, frame?, divider?, seamOffset?, fascia?, tub?, holes? }`.
   `angleDeg` is the board direction (straight) or the seam direction (diagonal and
   chevron boards run at 45 degrees to it), degrees from plan x toward plan y; left out,
   the longest side. `frame` (default true) is a one-board picture frame along the edge
   and around each opening, mitered at the corners. `seamOffset` moves the chevron seam
   across the deck (meters from the middle); `divider` adds a board along it. `holes` are
-  openings framed like the edge. A hot tub feature placed with its center on a deck is
-  set into its own opening (it stands on the ground); every other feature and uploaded
-  model on a deck stands on the boards. The looks carry `sizeText` (board and fascia
+  openings framed like the edge. A hot tub feature placed with its center on a deck gets
+  its own framed opening and stands at the deck's height, its whole cabinet above the
+  boards (`tub: 'level'`, the default), or on the ground below them (`tub: 'sunk'`);
+  every other feature and uploaded model on a deck stands on the boards. The looks carry `sizeText` (board and fascia
   sizes), `page` and `image` (Trex's own swatch photo, loaded live).
 - A plant can carry `container` ('1g', '2g', '5g', '15g', '24b', '36b', '48b'): the
   nursery container it is installed from. It sets the install size and where the
