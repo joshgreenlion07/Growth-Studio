@@ -95,6 +95,14 @@ export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] 
   return out;
 }
 
+/** True when `p` is inside a placed feature's footprint (width x depth, turned by rotationDeg as features.ts turns it), padded. */
+function inFootprint(p: Vec2, at: Vec2, rotationDeg: number, [w, d]: [number, number], pad: number): boolean {
+  // features.ts places local (x, z) at (x cos a + z sin a, -x sin a + z cos a), a = -rotation; this is its inverse.
+  const a = (-rotationDeg * Math.PI) / 180, dx = p[0] - at[0], dy = p[1] - at[1];
+  const lx = dx * Math.cos(a) - dy * Math.sin(a), lz = dx * Math.sin(a) + dy * Math.cos(a);
+  return Math.abs(lx) <= w / 2 + pad && Math.abs(lz) <= d / 2 + pad;
+}
+
 /** Line bodies in a segment grid, tagged with their index in `list`. */
 function bodyGrid(list: { a: Vec2; b: Vec2; half: number }[]) {
   return { list, grid: new SegmentGrid(list.map((s, tag) => ({ a: s.a, b: s.b, tag }))), maxHalf: list.reduce((m, s) => Math.max(m, s.half), 0) };
@@ -346,18 +354,24 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
+      // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
+      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl') {
+        if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
+        continue;
+      }
       if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(...spec.footprint) * 0.55) return true;
     }
     return false;
   };
   const turf = buildTurf(plan, gm, quality, blocked);
   yield 'turf';
-  const pebbles = buildPebbles(plan, gm, quality);
+  const pebbles = buildPebbles(plan, gm, quality, features.pebbleBeds);
   yield 'pebbles';
   const humus = buildHumus(plan, gm, ground.surface, quality);
   yield 'soil fills';
 
-  const placements = [...expandPlants(plan, gm), ...ctx.trees];
+  // Plants that stand on features (bowl planters on a water feature's pillars) come with the features.
+  const placements = [...expandPlants(plan, gm), ...ctx.trees, ...features.plants];
   yield 'placements';
   // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
   // per step, so the plant layer below only places them.
