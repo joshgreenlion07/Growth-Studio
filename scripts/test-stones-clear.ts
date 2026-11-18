@@ -19,7 +19,7 @@ const rel = (s: (typeof all)[0], f: FeaturePlacement) => {
   return [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
 };
 // Same top estimate as the filter (tip rise included).
-const top = (s: (typeof all)[0]) => { const t = Math.min(1.3, Math.hypot(s.tipX, s.tipZ)); return s.y + s.thick * 0.3 * Math.cos(t) + s.len * 0.5 * Math.sin(t); };
+const top = (s: (typeof all)[0]) => s.y + 0.56 * (s.thick * Math.max(Math.cos(s.tipX) * Math.cos(s.tipZ), 0) + Math.max(s.len, s.wid) * (Math.abs(Math.sin(s.tipX)) + Math.abs(Math.sin(s.tipZ))));
 // Pebbles over a slab face (center inside the slab inset 4 mm) with top above the slab top.
 const poking = (list: typeof all) => list.filter((s) => feats.some((f) => { const [x, z] = rel(s, f); return Math.abs(x) < S - 0.004 && Math.abs(z) < S - 0.004 && top(s) > TOP; })).length;
 // The first version: every piece whose circle touched the slab + 1 cm.
