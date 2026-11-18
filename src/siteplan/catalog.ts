@@ -133,7 +133,7 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
   return isAntiqued(spec) && k === 'a' ? '3-piece Pattern A' : LAYING_NAMES[k];
 }
 
-export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
+export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat' | 'metalPicket';
 export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
@@ -262,6 +262,8 @@ export interface MaterialSpec {
   pattern?: PaverPattern;
   finish?: ConcreteFinish;
   fence?: FenceStyle;
+  /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
+  fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
   /** Hardscape thickness above grade, meters. */
   thickness?: number;
@@ -638,6 +640,10 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'fence-dark-stained', name: 'Dog-ear, dark stain', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#5a3f30', '#4c3427', '#40291f'], fence: 'dogEar' }),
   M({ id: 'fence-weathered', name: 'Dog-ear, weathered', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#9a8a78', '#887868', '#766758'], fence: 'dogEar' }),
   M({ id: 'fence-iron-view', name: 'Iron view fence, black', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#1e1e1e', '#2a2a2a'], fence: 'steelPicket' }),
+  // Black powder-coated ornamental metal picket on a low concrete mow curb (builder/decor/fence-metal-picket.ts): flush-top pickets 4 in on center, two rails, posts every 6 ft.
+  M({ id: 'fence-black-metal-picket', name: 'Black metal picket, 5 ft', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#1b1b1d'], fence: 'metalPicket', fenceHeight: 1.52 }),
+  M({ id: 'fence-black-metal-picket-4ft', name: 'Black metal picket, 4 ft', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#1b1b1d'], fence: 'metalPicket', fenceHeight: 1.22 }),
+  M({ id: 'fence-bronze-metal-picket', name: 'Bronze metal picket, 5 ft', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#4a3a2c'], fence: 'metalPicket', fenceHeight: 1.52 }),
   M({ id: 'fence-steel-picket', name: 'Steel picket, black', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#1e1e1e', '#2a2a2a'], fence: 'steelPicket' }),
   // Edging
   M({ id: 'curb-charcoal', name: 'Charcoal curb', use: 'edging', group: 'Edging', recipe: 'curb', palette: ['#55534f', '#4a4845'], matches: 'Belgard Melville curb style' }),

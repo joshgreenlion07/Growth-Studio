@@ -10,6 +10,7 @@ import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './mater
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
 import type { PoolLayout } from './pools';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
+import { metalPicketFence } from './decor/fence-metal-picket';
 import { buildDeck } from './deck';
 import { deckTopOf, isBoardDeck } from '../siteplan/deckzone';
 
@@ -826,6 +827,7 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       const a = l.points[i], b = l.points[i + 1];
       const y0 = Math.min(height(a), height(b), 0) - 0.08;
       if (l.kind === 'fence' && spec?.fence === 'grayBoardLattice') grayBoardLattice(l, a, b, y0, put, (yard ??= yardSide(l, zones)), i > 0);
+      else if (l.kind === 'fence' && spec?.fence === 'metalPicket') metalPicketFence(l, a, b, height, spec.palette[0], put, true, true);
       else if (l.kind === 'fence') fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
       else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }

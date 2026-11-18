@@ -50,6 +50,7 @@ const CATEGORIES: Category[] = [
   { id: 'pavers', label: 'Pavers' },
   { id: 'walls', label: 'Walls' },
   { id: 'edging', label: 'Curbs and edging' },
+  { id: 'fences', label: 'Fences' },
   { id: 'concrete', label: 'Concrete' },
   { id: 'shade', label: 'Shade and roofs' },
   { id: 'kitchens', label: 'Kitchens' },
@@ -59,13 +60,14 @@ const CATEGORIES: Category[] = [
   { id: 'testers', label: 'Testers' },
 ];
 
-/** The category a look belongs in, or null when the Library leaves it out (fences, auto borders). */
+/** The category a look belongs in, or null when the Library leaves it out (auto borders). */
 function catOf(m: MaterialSpec): string | null {
   if (m.auto || m.id.startsWith('border-of-')) return null;
   if (isTester(m)) return 'testers';
   if (m.use === 'turf') return 'turf';
   if (m.use === 'bed') return 'beds';
   if (m.use === 'wall') return 'walls';
+  if (m.use === 'fence') return 'fences';
   if (m.use === 'edging' || m.shelf === 'Paver edge') return 'edging';
   if (m.use === 'hardscape' && m.group === 'Concrete') return 'concrete';
   if (m.use === 'hardscape' && m.group === 'Pavers') return 'pavers';

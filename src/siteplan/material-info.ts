@@ -33,6 +33,7 @@ const FENCE_ABOUT: Record<NonNullable<MaterialSpec['fence']>, string> = {
   horizontal: 'A horizontal slat fence: wood boards run sideways between posts for a clean, modern line.',
   vinyl: 'A vinyl privacy fence: solid panels that never need paint or stain.',
   steelPicket: 'An ornamental steel picket fence: open, secure and low-maintenance.',
+  metalPicket: 'A powder-coated ornamental metal picket fence: flush-top pickets about 4 in on center between two rails, square posts every 6 ft, on a low concrete mow curb. See-through, secure and fade-resistant.',
   chainlinkSlat: 'A chain-link fence with privacy slats woven through it.',
 };
 
@@ -160,7 +161,7 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
         spec: ['6 in compacted base, first course below grade', 'Drain rock and a perforated drain behind walls that hold soil', 'Cap glued down'],
       };
     case 'fence':
-      return { group: 'Fences', about: FENCE_ABOUT[m.fence ?? 'boardOnBoard'], spec: m.fence === 'steelPicket' || m.fence === 'chainlinkSlat' ? ['Posts set in concrete', 'Panels or fabric between posts'] : ['Posts set in concrete about every 6 to 8 ft', 'Rails and boards fastened with exterior screws'] };
+      return { group: 'Fences', about: FENCE_ABOUT[m.fence ?? 'boardOnBoard'], spec: m.fence === 'steelPicket' || m.fence === 'metalPicket' || m.fence === 'chainlinkSlat' ? ['Posts set in concrete', 'Panels or fabric between posts'] : ['Posts set in concrete about every 6 to 8 ft', 'Rails and boards fastened with exterior screws'] };
     case 'curb':
       return { group: 'Curb', about: m.maker ? `${m.maker} ${m.line}: a solid concrete curb unit that edges beds, lawn and paving.` : 'A concrete curb that edges beds, lawn and paving.', spec: ['Set on compacted base', 'Shows about 3 in above grade unless set otherwise'] };
     case 'steelEdging':

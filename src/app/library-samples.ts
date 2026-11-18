@@ -159,7 +159,7 @@ function materialSample(item: { kind: 'material'; id: string }, opts: SampleOpti
     const L = 7, c = L / 2;
     const plan = lot(m.name, L);
     plan.zones = [lawn(L)];
-    plan.lines = [{ id: 'sample', source: S, kind: 'fence', catalogId: m.id, points: [[c - TEN / 2, c], [c + TEN / 2, c]], height: 1.8 }];
+    plan.lines = [{ id: 'sample', source: S, kind: 'fence', catalogId: m.id, points: [[c - TEN / 2, c], [c + TEN / 2, c]], height: m.fenceHeight ?? 1.8 }];
     return { plan, target: [c, 0.9, c], dist: 5.5 };
   }
 
