@@ -9,6 +9,9 @@ import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
 import { buildDecor } from './decor';
+import type { PebbleBed } from './pebbles';
+import type { RaisedPlacement } from './plants';
+import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -34,6 +37,10 @@ export interface FeatureBuild {
   glow: THREE.MeshStandardMaterial[];
   flames: THREE.Mesh[];
   fallMats: THREE.ShaderMaterial[];
+  /** Loose-stone beds that are part of a feature (a pebble basin), drawn stone by stone with the yard's pebbles. */
+  pebbleBeds: PebbleBed[];
+  /** Plants that stand on a feature (an agave in a bowl planter), placed with the yard's plants. */
+  plants: RaisedPlacement[];
   dispose(): void;
 }
 
@@ -94,6 +101,9 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const geos: THREE.BufferGeometry[] = [];
   const rocks: RockSpot[] = [];
   const owned: THREE.Material[] = [];
+  const pebbleBeds: PebbleBed[] = [];
+  const raised: RaisedPlacement[] = [];
+  const extraGlow: THREE.MeshStandardMaterial[] = [];
 
   // Shared materials.
   const mat = {
@@ -181,6 +191,29 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       o.add(s);
     };
     const r = rng(f.id);
+    // What the water feature and bowl planter builders (pillarfountain.ts) hand back, in this feature's local space.
+    const sink: FountainSink = {
+      add,
+      object(m) {
+        o.add(m);
+        if (m instanceof THREE.Mesh) geos.push(m.geometry);
+      },
+      light: (x, y, z, color, intensity, distance) => light(x, y, z, color, intensity, distance),
+      glow: (m) => extraGlow.push(m),
+      fall: (m) => fallMats.push(m),
+      own: (m) => owned.push(m),
+      pebbles(catalogId, outline, holes, topIn, tint) {
+        const plan = (pts: Vec2[]): Vec2[] => pts.map(([x, z]) => {
+          const w = local(x * IN_M, 0, z * IN_M);
+          return [w.x, w.z];
+        });
+        pebbleBeds.push({ id: `${f.id}-pebbles-${pebbleBeds.length}`, catalogId, polygon: plan(outline), holes: holes.map(plan), y: y0 + topIn * IN_M, tint });
+      },
+      plant(catalogId, x, y, z, size) {
+        const w = local(x, y, z);
+        raised.push({ id: `${f.id}-plant-${raised.length}`, source: f.source, catalogId, position: [w.x, w.z], existing: true, scale: size, baseY: w.y, detail: 1 / size });
+      },
+    };
     const kind: FeatureKind = spec.kind;
     const [W, D] = spec.footprint;
 
@@ -421,6 +454,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         light(0.5, 0.05, 0.5, '#ffc27a', 1.2, 2);
         break;
       }
+      case 'pillarFountain': {
+        pillarFountain(sink, f.id, spec.bowls !== false);
+        break;
+      }
+      case 'patinaBowl': {
+        patinaBowl(sink, f.id, 0, 0, 0, spec.planted !== false);
+        break;
+      }
       case 'trellisCable': {
         for (const sx of [-1, 1]) add(mat.black, box(0.08, 2.0, 0.08, sx * W / 2, 0, 0));
         for (let k = 0; k < 6; k++) add(mat.steel, box(W, 0.006, 0.006, 0, 0.35 + k * 0.28, 0));
@@ -523,9 +564,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow, ...decorGlow],
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow],
     flames,
     fallMats,
+    pebbleBeds,
+    plants: raised,
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of owned) m.dispose();
