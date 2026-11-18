@@ -11,6 +11,7 @@ import { rockField, type RockSpot } from './rocks';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
+import { calSpaTropicalPlus } from './spa-ppz743bc';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -148,6 +149,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
   const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
   owned.push(lampGlow, spaGlow, ledGlow);
+  // Glowing parts of maker products built in their own files (shared, cached materials: not disposed here).
+  const makerGlow = new Set<THREE.MeshStandardMaterial>();
   const flameMat = flameMaterial();
   owned.push(flameMat);
   const falls = fallMaterial();
@@ -329,6 +332,22 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'hotTub': {
+        if (spec.model === 'ppz-743bc') {
+          const water = (m: THREE.Material, g: THREE.BufferGeometry) => {
+            const w = new THREE.Mesh(g, m);
+            w.renderOrder = 2;
+            geos.push(g);
+            o.add(w);
+          };
+          // Height of the ground or deck under a local point, relative to the spa's base (the steps stand on it).
+          const under = (x: number, z: number) => {
+            const p = local(x, 0, z);
+            return height([p.x, p.z]) - y0;
+          };
+          const sink = { add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
+          for (const g of calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink)) makerGlow.add(g);
+          break;
+        }
         const H = 0.92;
         add(mat.spaCab, box(W, H, D, 0, 0, 0));
         add(mat.shell, box(W + 0.04, 0.06, D + 0.04, 0, H, 0));
@@ -548,7 +567,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow],
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...makerGlow],
     flames,
     fallMats,
     pebbleBeds,
