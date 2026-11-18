@@ -402,7 +402,9 @@ Messages use `window.postMessage`:
   A curb drawn within 1 ft of a seam between two surfaces (pavers and lawn,
   lawn and pebble) is built on that seam, following its corners: one face
   flush with the higher surface's edge (a patio's soldier course stays in
-  full view), the body on the lower side.
+  full view), the body on the lower side. A line that crosses an edge or a
+  notch's mouth stays as drawn. Curb lengths (labels, linear ft) are measured
+  along the line as built.
 - Paver edging is a `kind: 'edging'` line whose `catalogId` is a look on the
   `Paver edge` shelf (`paver-edge-<line>-<color>`, use `border`): one row of
   6 x 9 pavers centered on the line, laid paver by paver with mitres at

@@ -6,6 +6,7 @@ import { cleanPlan } from '../siteplan/validate';
 import { expandPlants } from '../builder/build';
 import { BUILD_STAGES, type BuildStage } from '../builder/construction';
 import { groundModel } from '../builder/ground';
+import { builtLine } from '../builder/linepath';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
@@ -491,7 +492,7 @@ function renderInspector() {
     box.append(h('h3', { text: l.kind === 'fence' ? 'Fence' : l.kind === 'wall' ? 'Wall' : l.kind === 'steps' ? 'Steps' : 'Curb or edging' }), confirmAI(l) ?? '');
     box.append(field('Style', selectEl('l-mat', matOptions(l.kind === 'steps' ? 'hardscape' : l.kind, l.catalogId), l.catalogId, (v) => { snapshot(); l.catalogId = v; changed(); }, 'Style')));
     if (l.kind !== 'edging') box.append(field('Height', numInput('l-h', ft(l.height), 0.25, 0.5, l.kind === 'wall' ? 21 : 10, (v) => { snapshot(); l.height = toM(v); changed(); })));
-    box.append(h('p', { class: 'muted', text: `${Math.round(ft(polylineLength(l.points)))} linear ft` }), del);
+    box.append(h('p', { class: 'muted', text: `${Math.round(ft(polylineLength(builtLine(l, plan.zones))))} linear ft` }), del);
     return;
   }
 
@@ -588,7 +589,7 @@ function renderPlantList() {
   const sq = new Map<string, number>();
   for (const z of plan.zones) sq.set(z.catalogId, (sq.get(z.catalogId) ?? 0) + area(z.polygon) * ft(1) ** 2);
   const lf = new Map<string, number>();
-  for (const l of plan.lines) lf.set(l.catalogId, (lf.get(l.catalogId) ?? 0) + ft(polylineLength(l.points)));
+  for (const l of plan.lines) lf.set(l.catalogId, (lf.get(l.catalogId) ?? 0) + ft(polylineLength(builtLine(l, plan.zones))));
   $('#material-list-body').replaceChildren(
     ...[...sq.entries()].map(([id, v]) => h('tr', {}, h('td', { text: materialById.get(id)?.name ?? id }), h('td', { class: 'num-cell', text: `${Math.round(v).toLocaleString()} sq ft` }))),
     ...[...lf.entries()].map(([id, v]) => h('tr', {}, h('td', { text: materialById.get(id)?.name ?? id }), h('td', { class: 'num-cell', text: `${Math.round(v)} linear ft` }))),
