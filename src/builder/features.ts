@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
-import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
+import { cortenSet, porcelainPanelSet, slabSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
@@ -62,6 +62,23 @@ const IN_M = 0.0254;
 function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d);
   boxUV(g);
+  g.translate(x, y + h / 2, z);
+  return g.toNonIndexed();
+}
+
+/**
+ * A box whose every face starts its texture at its own corner (UVs in meters from 0): with a texture one slab across,
+ * the top is exactly that one slab, edge to edge, and no joint of a paving pattern can cross it.
+ */
+function slabBox(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(w, h, d);
+  boxUV(g);
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute, n = g.getAttribute('normal');
+  for (let i = 0; i < uv.count; i++) {
+    const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
+    const du = ny > 0.6 ? w / 2 : nx > 0.6 ? d / 2 : w / 2, dv = ny > 0.6 ? d / 2 : h / 2;
+    uv.setXY(i, uv.getX(i) + du, uv.getY(i) + dv);
+  }
   g.translate(x, y + h / 2, z);
   return g.toNonIndexed();
 }
@@ -608,8 +625,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'steppingStone': {
-        // A 2 3/8 in slab set into the ground with its top about half an inch proud.
-        add(catalogMaterial(stoneMaterial(f)), box(W, 0.06, D, 0, -0.047, 0));
+        // One 2 3/8 in slab, solid edge to edge (no joint crosses it), set into the ground with its top about half an
+        // inch proud: its own single-slab texture, lined up so the stone's top is exactly one slab.
+        const sm = materialById.get(stoneMaterial(f))!;
+        add(pbrMaterial(`slab:${sm.id}`, slabSet(sm, Math.round((W / 0.0254) * 4) / 4)), slabBox(W, 0.06, D, 0, -0.047, 0));
         break;
       }
       case 'puttingCup': {

@@ -1225,6 +1225,29 @@ function roughStone(u: number, v: number, T: number, id: number, colors: RGB[], 
   return { h, c, r: 0.95 + pit * 0.05 };
 }
 
+/**
+ * One slab on its own, as a stepping stone: the slab's face filling the tile edge to edge (the tile is the slab), with
+ * its small chamfer all round and no joint, in the line's colors on the same calibration as its paving, softly clouded
+ * with a fine sand grain. Square slabs only (`sizeIn` is the side).
+ */
+export function slabSet(spec: MaterialSpec, sizeIn = 24): PBRSet {
+  return textureSet(`slab:${spec.id}`, () => {
+    const colors = pal(spec);
+    const n = colors.length;
+    const T = sizeIn * IN;
+    return paint(512, T, 5, (u, v) => {
+      const e = Math.min(u, 1 - u, v, 1 - v) * T; // distance to the slab's edge, m
+      const bev = smooth(0, 0.006, e); // a 1/4 in chamfer
+      const cloud = fbm(u, v, 3, 4, 31), patch = fbm(u + 0.3, v + 0.7, 5, 3, 35);
+      const grain = vnoise(u * 400, v * 400, 400, 33), fine = vnoise(u * 140, v * 140, 140, 34);
+      let c = mixRGB(colors[0], colors[Math.min(n - 1, 1)], cloud);
+      c = mixRGB(c, colors[Math.min(n - 1, 2)], smooth(0.55, 0.85, patch) * 0.5);
+      c = mulRGB(c, (0.94 + grain * 0.06 + fine * 0.03) * (0.82 + bev * 0.18));
+      return { h: bev * (0.96 + grain * 0.03), c, r: 0.72 + grain * 0.1 };
+    });
+  });
+}
+
 /** The cap of a rough-hewn wall: the same porous, flecked stone, 18 in pieces along the wall, with no courses. */
 export function wallCapTextures(spec: MaterialSpec): PBRSet {
   return textureSet(`cap:${spec.id}`, () => {
