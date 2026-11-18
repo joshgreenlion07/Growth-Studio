@@ -1,4 +1,4 @@
-import type { SitePlan, Vec2 } from './types';
+import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -391,6 +391,54 @@ export function sampleStratusPremier(): SitePlan {
   };
 }
 
+/**
+ * The modern backyard lit at night with Tru-Scapes fixtures the way Green Lion lays out a lighting plan: bullet up
+ * lights at the cypresses, maple and citrus, floods into the olive, well lights at the water wall, a wash on the
+ * corten screen, path lights along the lawn and beds, hardscape lights under the raised planter's cap, paver
+ * lights in the patio border, and the transformer on the house. Best seen in the Night or Blue hour mood.
+ */
+export function sampleTruscapes(): SitePlan {
+  const S = 'sample' as const;
+  const plan = sampleBackyard();
+  plan.site.name = 'Night lighting: Tru-Scapes fixtures in the modern backyard';
+  const ts = (id: string, catalog: string, position: Vec2, rotationDeg = 0, fixture?: FeaturePlacement['fixture']): FeaturePlacement => ({
+    id, source: S, catalogId: `truscapes-${catalog}`, position, rotationDeg, ...(fixture ? { fixture } : {}),
+  });
+  // Rotation turns a fixture's front (an aimed head's aim): 0 faces +y, 180 faces -y (the back fence), 90 faces -x.
+  const lights: FeaturePlacement[] = [
+    // Up lights (set just outside the canopy, aimed in): a bullet in front of each end cypress, two floods crossing into the olive, one at the maple and the citrus.
+    ts('up-cy0', 'ts-b102', [2.2, 1.55], 180, { tiltDeg: 8, finish: 'bronze' }),
+    ts('up-cy4', 'ts-b102', [9.4, 1.55], 180, { tiltDeg: 8, finish: 'bronze' }),
+    ts('up-olive1', 'ts-b106', [11.9, 2.4], 150, { tiltDeg: 18, finish: 'bronze' }),
+    ts('up-olive2', 'ts-b106', [13.4, 2.3], 215, { tiltDeg: 18, finish: 'bronze' }),
+    ts('up-maple', 'ts-b102', [2.0, 7.3], 105, { tiltDeg: 14, beamDeg: 60, finish: 'bronze' }),
+    ts('up-citrus1', 'ts-b102', [18.5, 6.7], 260, { tiltDeg: 12, beamDeg: 60, finish: 'bronze' }),
+    ts('up-citrus2', 'ts-b102', [18.5, 9.6], 260, { tiltDeg: 12, beamDeg: 60, finish: 'bronze' }),
+    // Well lights in the bed grazing the water wall, and a wash on the corten screen.
+    ts('well1', 'ts-b201', [4.7, 1.8], 180, { tiltDeg: 12 }),
+    ts('well2', 'ts-b201', [6.5, 1.8], 180, { tiltDeg: 12 }),
+    ts('wash-screen', 'ts-b105', [12.6, 1.1], 180, { tiltDeg: 28, finish: 'bronze' }),
+    // Path lights along the lawn and the beds, and a modern one at the stepping pads.
+    ts('path1', 'ts-b301', [3.6, 9.75], 0, { finish: 'bronze' }),
+    ts('path2', 'ts-b301', [12.6, 9.75], 0, { finish: 'bronze' }),
+    ts('path3', 'ts-b302', [16.2, 5.6], 0, { finish: 'bronze' }),
+    ts('path4', 'ts-b302', [7.0, 3.0], 0, { finish: 'bronze' }),
+    ts('path5', 'ts-b308', [10.55, 8.9], 90),
+    // Hardscape lights under the raised planter's cap, facing the patio.
+    ts('cap1', 'ts-a6000', [2.8, 12.9], 270, { mountHeight: 0.55, finish: 'bronze' }),
+    ts('cap2', 'ts-a6000', [2.8, 13.7], 270, { mountHeight: 0.55, finish: 'bronze' }),
+    ts('cap3', 'ts-a6000', [2.8, 14.5], 270, { mountHeight: 0.55, finish: 'bronze' }),
+    // Paver lights in the patio's soldier border where the lawn meets it.
+    ts('paver1', 'ts-hpl-9', [5.4, 10.5], 0),
+    ts('paver2', 'ts-hpl-9', [11.4, 10.5], 0),
+    // The transformer on the house wall by the spa, bottom a foot above the patio.
+    ts('transformer', 'ts-tssa-200', [15.0, 16.49], 180, { mountHeight: 0.38 }),
+  ];
+  // The generic path and up lights give way to the Tru-Scapes ones; the fire table is left out so the lighting reads.
+  plan.features = [...plan.features.filter((f) => !['path-light', 'spot-light', 'fire-table'].includes(f.catalogId)), ...lights];
+  return plan;
+}
+
 export const SAMPLES = [
   { id: 'backyard', name: 'Modern backyard', make: sampleBackyard },
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
@@ -401,4 +449,5 @@ export const SAMPLES = [
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
+  { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
 ];

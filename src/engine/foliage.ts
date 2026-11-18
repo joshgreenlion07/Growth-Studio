@@ -155,6 +155,7 @@ export function patchFoliage<M extends THREE.MeshStandardMaterial>(mat: M, o: Fo
       .replace(
         '#include <common>',
         `#include <common>
+         #define GS_LEAF
          uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uTranslucency;`,
       )
       .replace(

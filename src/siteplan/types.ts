@@ -133,6 +133,22 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
   /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
   materialId?: string;
+  /** A lighting fixture's options (a `landscapeLight` feature). Each left out takes the fixture's default. */
+  fixture?: FixtureSetting;
+}
+
+/** How a lighting fixture is ordered and aimed: only choices its maker offers are kept. */
+export interface FixtureSetting {
+  /** Finish id ('black', 'bronze', 'brown', 'white', 'gray', 'stainless'). */
+  finish?: string;
+  /** Beam angle in degrees (fixtures with a choice of optics or lamps). */
+  beamDeg?: number;
+  /** Color temperature in kelvin (fixtures with a choice). */
+  kelvin?: number;
+  /** Aim of an adjustable head, degrees from straight up, tipped toward the placement's front. */
+  tiltDeg?: number;
+  /** Meters above grade for a fixture on a wall, cap, riser or post (the underside of the cap for cap lights). */
+  mountHeight?: number;
 }
 
 /** A door or window the designer marked on a wall. */

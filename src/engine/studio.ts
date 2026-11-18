@@ -28,6 +28,7 @@ export interface PointHit {
   catalogId: string;
 }
 import { GpuFrameTimer, LONG_GPU_MS } from './gputimer';
+import { LandLightPool, initLandLights } from './landlights';
 import { generateViews, type CameraView } from './views';
 import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
 import { FrameBudget } from './framebudget';
@@ -122,6 +123,8 @@ export class Studio {
   private keyLight = new THREE.DirectionalLight(0xffffff, 3);
   private fillLight = new THREE.HemisphereLight(0xbfd4ea, 0x4a4030, 0.15);
   private pointLights: THREE.PointLight[] = [];
+  /** Landscape lighting fixtures (landlights.ts): aimed beams, many more than the point lights. */
+  private landLights = new LandLightPool();
   private mirror: PlanarMirror;
   private build: SceneBuild | null = null;
   private plan: SitePlan | null = null;
@@ -290,6 +293,8 @@ export class Studio {
     }
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
     setGroundTextureUnits(this.renderer.capabilities.maxTextures);
+    // Before any lit material compiles: the landscape-lighting loop and its uniforms go into three's light pass.
+    initLandLights(this.renderer.capabilities.maxFragmentUniforms);
 
     this.post = new PostPipeline(this.renderer);
     this.budget = new FrameBudget();
@@ -925,6 +930,7 @@ export class Studio {
       for (const m of this.build.glow) m.emissiveIntensity = n * (m.color.r > 0.5 ? 7 : 2.4);
       setFlames(this.build.features, s.sunElevation < 4 ? Math.min(1, 0.4 + s.night) : 0);
       this.pointLights.forEach((p) => (p.intensity = (p.userData.base ?? 0) * n));
+      this.landLights.setGain(n);
     }
     this.invalidate();
   }
@@ -989,6 +995,7 @@ export class Studio {
       p.userData.base = l.intensity;
       p.userData.flicker = l.flicker;
     });
+    this.landLights.set(this.build?.landLights ?? []);
     this.updateSky(false);
   }
 
@@ -1524,6 +1531,9 @@ export class Studio {
     const goal = 1 / Math.max(0.3, this.focusTarget);
     this.focusInv += (goal - this.focusInv) * (1 - Math.exp(-dt * 5));
     this.post.focus = 1 / this.focusInv;
+
+    // A yard with more fixtures than the device shows keeps the ones nearest the view.
+    this.landLights.update(this.controls.target);
 
     // Fire flicker.
     const t = GLOBAL.uTime.value;

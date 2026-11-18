@@ -9,6 +9,8 @@ import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
+import type { LandLight } from '../engine/landlights';
+import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint } from './hardscape';
 import { lineCenter, lineThickness } from './linepath';
@@ -43,6 +45,8 @@ export interface SceneBuild {
   /** Solid surfaces for autofocus and camera collision. */
   surfaces: THREE.Object3D[];
   nightLights: NightLight[];
+  /** Landscape lighting fixtures' beams (engine/landlights.ts). */
+  landLights: LandLight[];
   glow: THREE.MeshStandardMaterial[];
   /** Falling-water sheets that glow when lit at night. */
   fallMats: THREE.ShaderMaterial[];
@@ -313,7 +317,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  const features = buildFeatures(plan.features, gm.height);
+  const features = buildFeatures(plan.features, gm.height, fixtureSite(plan, gm.height));
   const models = buildModels(plan.models ?? [], gm.height, assets);
   yield 'water, features, models';
 
@@ -454,6 +458,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     missingAssets: models.missing,
     surfaces,
     nightLights,
+    landLights: features.landLights,
     glow,
     fallMats: [...water.fallMats, ...features.fallMats],
     plantCount: placements.length - ctx.trees.length,
