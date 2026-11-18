@@ -73,7 +73,7 @@ export function renderFeatureThumb(spec: FeatureSpec): string {
     const center = ok ? bb.getCenter(new THREE.Vector3()) : new THREE.Vector3(0, HEIGHT_GUESS[spec.group] / 2, 0);
     const size = ok ? bb.getSize(new THREE.Vector3()) : new THREE.Vector3(fw, HEIGHT_GUESS[spec.group], fd);
     // Very thin or tiny things (lights, cups, trellis cables) still get a readable frame.
-    const radius = Math.max(0.35, 0.5 * Math.hypot(size.x, size.y, size.z));
+    const radius = Math.max(spec.fixture ? 0.07 : 0.35, 0.5 * Math.hypot(size.x, size.y, size.z));
     const look = new THREE.Vector3(center.x, Math.max(center.y, size.y * 0.42), center.z);
     const dist = (radius / Math.sin(THREE.MathUtils.degToRad(15))) * 0.95;
     camera.position.copy(look).addScaledVector(new THREE.Vector3(0.75, 0.6, 1.1).normalize(), dist);
