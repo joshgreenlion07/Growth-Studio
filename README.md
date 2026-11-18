@@ -246,6 +246,11 @@ Messages use `window.postMessage`:
   life screen) takes an optional `size: [length, depth, height]` in meters; left out, the catalog's standard size. A
   planter (`plantable`) is drawn with its own planting (counted with the plan's plants) unless `planted: false`.
   Plants placed inside a planter sit on its soil.
+- The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
+  'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
+  steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
+  (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
+  and `steps: false` to leave the steps out.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;

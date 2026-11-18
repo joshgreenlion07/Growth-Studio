@@ -162,6 +162,10 @@ export interface FeaturePlacement extends ItemBase {
   size?: [number, number, number];
   /** A planter's own planting: false draws it empty (soil only). Left out, planted. */
   planted?: boolean;
+  /** A maker's hot tub: its cover folded up on the lifter ('open', the default), on the spa ('closed'), or none ('off'). */
+  cover?: 'open' | 'closed' | 'off';
+  /** A maker's hot tub: its steps. Left out, they are shown. */
+  steps?: boolean;
 }
 
 /** A door or window the designer marked on a wall. */
