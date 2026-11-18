@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -518,6 +518,7 @@ function renderInspector() {
     box.append(
       field('Feature', selectEl('f-sp', featureOptions(), f.catalogId, (v) => { snapshot(); f.catalogId = v; changed('structure'); }, 'Feature')),
       field('Turn', rot, 'Or press R on the plan.'),
+      ...(spec.options ?? []).map((op) => check(`f-op-${op.key}`, op.label, featureOption(spec, f.options, op.key), (v) => { snapshot(); f.options = { ...f.options, [op.key]: v }; changed(); })),
       h('p', { class: 'muted', text: `${fmtFeet(spec.footprint[0])} by ${fmtFeet(spec.footprint[1])}` }),
       del,
     );
@@ -1119,7 +1120,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }

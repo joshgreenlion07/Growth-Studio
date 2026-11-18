@@ -16,6 +16,7 @@ import { BELGARD_LINES } from './belgard';
 import { BASALITE_LINES } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
+import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 
 export type PlantForm =
   | 'shadeTree'
@@ -131,7 +132,7 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
   return isAntiqued(spec) && k === 'a' ? '3-piece Pattern A' : LAYING_NAMES[k];
 }
 
-export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
+export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
 export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
@@ -304,6 +305,7 @@ export type FeatureKind =
   | 'puttingCup'
   | 'cortenScreen'
   | 'cortenPlanter'
+  | DecorKind
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
@@ -325,18 +327,37 @@ export interface FeatureSpec {
   kind: FeatureKind;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
+  /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
+  sizes?: FeatureSize[];
+  size?: number;
+  /** It holds plants of its own (a planter): drawn planted unless its placement says `planted: false`. */
+  plantable?: boolean;
   /** A maker's product, drawn to its published size: the maker, its product page, and plain facts for the panel. */
   maker?: string;
   page?: string;
   about?: string;
   facts?: string[];
-  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola). */
-  model?: 'stratus';
+  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola; 'ppz-743bc': Cal Spas Tropical Plus; 'saunalife-cl5g': SaunaLife CL5G sauna). */
+  model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g';
+  /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
+  options?: FeatureOption[];
   /** Pillar water feature: bowl planters on its pillars (left out, yes). */
   bowls?: boolean;
   /** Bowl planters: planted (left out, yes) or soil and top dressing only. */
   planted?: boolean;
   placeholder: true;
+}
+
+export interface FeatureOption {
+  key: string;
+  label: string;
+  default: boolean;
+}
+
+/** A placement's choice for one of its feature's options, or the option's default. */
+export function featureOption(spec: FeatureSpec, options: Record<string, boolean> | undefined, key: string): boolean {
+  const o = spec.options?.find((x) => x.key === key);
+  return options?.[key] ?? o?.default ?? false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -402,12 +423,15 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'salvia-hot-lips', name: 'Salvia \'Hot Lips\'', botanical: 'Salvia microphylla \'Hot Lips\'', group: 'Perennials and color', form: 'perennial', installHeight: 0.3, installSpread: 0.3, matureHeight: 0.9, matureSpread: 1.3, yearsToMature: 2, foliage: '#4f7a34', foliage2: '#6c9248', flower: '#d81f3a', flower2: '#ffffff', evergreen: true, spacing: 0.9, container: '1 gal' }),
   P({ id: 'spanish-lavender-otto-quast', name: 'Spanish lavender \'Otto Quast\'', botanical: 'Lavandula stoechas \'Otto Quast\'', group: 'Perennials and color', form: 'perennial', installHeight: 0.4, installSpread: 0.45, matureHeight: 0.75, matureSpread: 0.9, yearsToMature: 3, foliage: '#5f7752', foliage2: '#8a9c7c', flower: '#3a1f4e', flower2: '#8e4ab8', evergreen: true, spacing: 0.75, container: '5 gal' }),
   P({ id: 'annual-color', name: 'Seasonal color', botanical: 'Petunia x hybrida', group: 'Perennials and color', form: 'annuals', installHeight: 0.12, installSpread: 0.15, matureHeight: 0.2, matureSpread: 0.3, yearsToMature: 1, foliage: '#447232', foliage2: '#669842', flower: '#f2c12e', flower2: '#e8508a', evergreen: false, spacing: 0.25, container: '4" pot' }),
+  P({ id: 'primrose-red', name: 'Primrose, red', botanical: 'Primula x polyantha', group: 'Perennials and color', form: 'annuals', installHeight: 0.1, installSpread: 0.18, matureHeight: 0.13, matureSpread: 0.22, yearsToMature: 1, foliage: '#4c7a32', foliage2: '#6e9a45', flower: '#c3141c', flower2: '#f3c22e', evergreen: false, spacing: 0.25, container: '4" pot' }),
   P({ id: 'foxtail-fern', name: 'Foxtail fern', botanical: 'Asparagus densiflorus \'Myersii\'', group: 'Perennials and color', form: 'fern', installHeight: 0.3, installSpread: 0.4, matureHeight: 0.6, matureSpread: 0.9, yearsToMature: 3, foliage: '#4a8d25', foliage2: '#69b031', evergreen: true, spacing: 0.75, container: '5 gal' }),
   // Succulents
   P({ id: 'variegated-yucca', name: 'Variegated yucca', botanical: 'Yucca filamentosa \'Color Guard\'', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 0.75, matureSpread: 0.9, yearsToMature: 4, foliage: '#e6d874', foliage2: '#2e5c2c', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'blue-sedum', name: 'Blue sedum', botanical: 'Sedum reflexum \'Blue Spruce\'', group: 'Succulents', form: 'groundcover', installHeight: 0.08, installSpread: 0.15, matureHeight: 0.15, matureSpread: 0.6, yearsToMature: 2, foliage: '#7fa3a0', foliage2: '#a6c6c2', evergreen: true, spacing: 0.3, container: '1 gal' }),
   P({ id: 'foxtail-agave', name: 'Foxtail agave', botanical: 'Agave attenuata', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 1.2, matureSpread: 1.2, yearsToMature: 6, foliage: '#7fa890', foliage2: '#a9cbb6', evergreen: true, spacing: 1.2, container: '5 gal' }),
   P({ id: 'agave', name: 'Agave', botanical: 'Agave \'Blue Glow\'', group: 'Succulents', form: 'agave', installHeight: 0.3, installSpread: 0.4, matureHeight: 0.6, matureSpread: 0.9, yearsToMature: 6, foliage: '#4f8a80', foliage2: '#7fb0a6', evergreen: true, spacing: 0.9, container: '5 gal' }),
+  P({ id: 'red-yucca', name: 'Red yucca', botanical: 'Hesperaloe parviflora', group: 'Succulents', form: 'agave', installHeight: 1.3, installSpread: 0.85, matureHeight: 1.5, matureSpread: 1.25, yearsToMature: 4, foliage: '#5f7868', foliage2: '#7d9184', flower: '#c9493f', flower2: '#e48a6a', evergreen: true, spacing: 0.9, container: '5 gal' }),
+  P({ id: 'echeveria', name: 'Echeveria', botanical: 'Echeveria \'Lola\'', group: 'Succulents', form: 'agave', installHeight: 0.065, installSpread: 0.12, matureHeight: 0.08, matureSpread: 0.16, yearsToMature: 2, foliage: '#a8a2b3', foliage2: '#c9bfc6', flower: '#e9895a', evergreen: true, spacing: 0.2, container: '4" pot' }),
   // Tropicals
   P({ id: 'banana', name: 'Banana', botanical: 'Musa basjoo', group: 'Tropicals', form: 'tropical', installHeight: 1.5, installSpread: 1.0, matureHeight: 4.0, matureSpread: 3.0, yearsToMature: 3, foliage: '#58982e', foliage2: '#6fae3c', evergreen: false, spacing: 2.5, container: '15 gal' }),
   P({ id: 'elephant-ear', name: 'Elephant ear', botanical: 'Colocasia esculenta', group: 'Tropicals', form: 'tropical', installHeight: 0.5, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.5, yearsToMature: 2, foliage: '#3b722f', foliage2: '#5c9442', evergreen: false, spacing: 1.2, container: '5 gal' }),
@@ -552,6 +576,8 @@ export const MATERIALS: MaterialSpec[] = [
   // Fences
   M({ id: 'fence-board-on-board', name: 'Board-on-board, natural cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#b08a63', '#9a7552', '#86643f'], fence: 'boardOnBoard' }),
   M({ id: 'fence-gray-lattice', name: 'Gray board, cedar lattice top', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7d8083', '#6d7073', '#5d6063'], fence: 'grayLattice' }),
+  // Green Lion's own build (builder/decor/fence-gray-lattice.ts): gray-painted board-on-board to the fence height, a 1 ft cedar lattice topper above it, natural cedar posts and cap.
+  M({ id: 'fence-gray-board-cedar-lattice', name: 'Gray board-on-board, cedar lattice topper', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7c8083', '#74787b', '#6c7073'], fence: 'grayBoardLattice' }),
   M({ id: 'fence-dog-ear', name: 'Dog-ear picket, natural', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#c4a47e', '#b0906a', '#9a7b57'], fence: 'dogEar' }),
   M({ id: 'fence-horizontal', name: 'Horizontal slat, cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#a5714a', '#8a5d3b', '#76502f'], fence: 'horizontal' }),
   M({ id: 'fence-vinyl', name: 'Vinyl privacy, white', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#ecebe6', '#e2e0da'], fence: 'vinyl' }),
@@ -700,8 +726,21 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'kitchen-l', name: 'Outdoor kitchen, L-shaped', group: 'Kitchens', kind: 'kitchenL', footprint: [3.6, 2.6] }),
   F({ id: 'kitchen-straight', name: 'Outdoor kitchen, straight', group: 'Kitchens', kind: 'kitchenStraight', footprint: [3.0, 0.8] }),
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
+  // Cal Spas Tropical Plus PPZ-743BC, Patio Plus series (Cal Spas spec sheet and product page): 84 x 84 x 37 in, 43 jets,
+  // 6 seats with a cool-off seat. Built by builder/spa-ppz743bc.ts in the finish Green Lion installs; a placement's
+  // `cover` and `steps` choose the cover state and the steps.
+  F({ id: 'calspas-ppz-743bc', name: 'Cal Spas Tropical Plus PPZ-743BC hot tub', group: 'Spa and sauna', kind: 'hotTub', model: 'ppz-743bc', footprint: [84 * 0.0254, 84 * 0.0254],
+    maker: 'Cal Spas', page: 'https://www.calspas.com/hot-tubs-spas-for-sale/patio-plus/tropical-plus-ppz-743bc',
+    about: 'Cal Spas Tropical Plus PPZ-743BC (Patio Plus series): a 7 ft, six-seat bench spa with 43 stainless jets, a raised cool-off seat, an LED cascade waterfall and a 5 in multi-color LED spa light. Shown with the Sterling Silver shell, the Taupe Cal Edge cabinet with black corners, a grey cover on a lifter and a two-step.',
+    facts: ['84 x 84 x 37 in', '43 stainless jets; 6 seats with a cool-off seat; 4 Y-pillows', 'Pumps: 6.0 BHP and 4.0 BHP Eliminator; 5.5 kW WhisperHot titanium heater; 240 V', 'LED cascade waterfall, 5 in multi-color LED spa light, TP500 control panel', '50 sq ft Teleweir filter', 'Cal Edge horizontal cabinet panels (Smoke, Mist, Taupe)', '4 in to 2.5 in tapered cover (Dark Brown, Grey)', 'About 425 gallons; about 800 lb empty, 4,340 lb filled (dealer listing)'] }),
   F({ id: 'sauna-barrel', name: 'Barrel sauna', group: 'Spa and sauna', kind: 'saunaBarrel', footprint: [2.0, 2.4] }),
   F({ id: 'sauna-cube', name: 'Cube sauna', group: 'Spa and sauna', kind: 'saunaCube', footprint: [2.2, 2.2] }),
+  // SaunaLife Model CL5G Cube Luxury (saunalife.com, installation manual V1.1): outside 80.7 in W x 63 in D x 82.7 in H.
+  F({ id: 'saunalife-cl5g', name: 'SaunaLife CL5G Cube Luxury sauna, 4 person', group: 'Spa and sauna', kind: 'saunaCube', model: 'saunalife-cl5g', footprint: [80.71 * 0.0254, 63 * 0.0254],
+    maker: 'SaunaLife', page: 'https://saunalife.com/saunas/cube-luxury-series-model-cl5g/',
+    about: 'SaunaLife Cube-Series Model CL5G: a rounded-cube outdoor sauna for up to 4 people, thermo-spruce staves with black front details, a full bronze-glass front with a glass door, shingled roof, thermo-aspen benches and LED light bars.',
+    facts: ['Outside 80.7 in W x 63 in D x 82.7 in H; inside 77.2 W x 55.1 D x 74.8 H', 'Thermo-spruce walls (42 mm), front and back walls 28 mm; shingle roof with drip rails', 'Tempered bronze glass front and door (8 mm), door 23.2 x 66.5 in, square wooden handle', 'Thermo-aspen benches: upper 17.7 in deep, lower 31.1 in, side 23.6 in; white LED light bars', 'Heater bought separately'],
+    options: [{ key: 'doorOpen', label: 'Door open', default: false }, { key: 'lightsOn', label: 'Interior lights on', default: true }] }),
   F({ id: 'water-wall-plaster', name: 'Water wall, plaster and ledgestone', group: 'Water', kind: 'waterWallPlaster', footprint: [4.2, 1.2] }),
   F({ id: 'water-wall-porcelain', name: 'Water wall, porcelain panel', group: 'Water', kind: 'waterWallPorcelain', footprint: [2.6, 0.9] }),
   F({ id: 'water-wall-stucco', name: 'Water wall, stucco and dark stone', group: 'Water', kind: 'waterWallStucco', footprint: [3.4, 1.4] }),
@@ -724,6 +763,7 @@ export const FEATURES: FeatureSpec[] = [
   })),
   F({ id: 'corten-screen', name: 'Corten screen panel', group: 'Accents', kind: 'cortenScreen', footprint: [1.8, 0.1] }),
   F({ id: 'corten-planter', name: 'Corten planter', group: 'Accents', kind: 'cortenPlanter', footprint: [0.6, 0.6] }),
+  ...DECOR_FEATURES,
   F({ id: 'black-planter', name: 'Black square planter', group: 'Accents', kind: 'blackPlanter', footprint: [0.5, 0.5] }),
   F({ id: 'boulder', name: 'Boulder', group: 'Accents', kind: 'boulder', footprint: [1.0, 0.8] }),
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),

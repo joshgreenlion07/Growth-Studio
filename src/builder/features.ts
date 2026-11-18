@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SLAB_24_PREFIX, featureById, materialById, type FeatureKind } from '../siteplan/catalog';
+import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL } from '../engine/foliage';
@@ -8,9 +8,12 @@ import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
+import { buildSaunaLifeCL5G } from './saunalife-cl5g';
+import { buildDecor } from './decor';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
+import { calSpaTropicalPlus } from './spa-ppz743bc';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -90,7 +93,7 @@ function stoneMaterial(f: FeaturePlacement): string {
   return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -148,6 +151,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
   const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
   owned.push(lampGlow, spaGlow, ledGlow);
+  // Night glow of the decor builders (fire glass), owned by this build.
+  const decorGlow: THREE.MeshStandardMaterial[] = [];
+  // Glowing parts of maker products built in their own files (shared, cached materials: not disposed here).
+  const makerGlow = new Set<THREE.MeshStandardMaterial>();
   const flameMat = flameMaterial();
   owned.push(flameMat);
   const falls = fallMaterial();
@@ -329,6 +336,22 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'hotTub': {
+        if (spec.model === 'ppz-743bc') {
+          const water = (m: THREE.Material, g: THREE.BufferGeometry) => {
+            const w = new THREE.Mesh(g, m);
+            w.renderOrder = 2;
+            geos.push(g);
+            o.add(w);
+          };
+          // Height of the ground or deck under a local point, relative to the spa's base (the steps stand on it).
+          const under = (x: number, z: number) => {
+            const p = local(x, 0, z);
+            return height([p.x, p.z]) - y0;
+          };
+          const sink = { add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
+          for (const g of calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink)) makerGlow.add(g);
+          break;
+        }
         const H = 0.92;
         add(mat.spaCab, box(W, H, D, 0, 0, 0));
         add(mat.shell, box(W + 0.04, 0.06, D + 0.04, 0, H, 0));
@@ -355,6 +378,18 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'saunaCube': {
+        if (spec.model === 'saunalife-cl5g') {
+          const s = buildSaunaLifeCL5G({ doorOpen: featureOption(spec, f.options, 'doorOpen'), lightsOn: featureOption(spec, f.options, 'lightsOn') });
+          for (const [m, g] of s.parts) add(m, g);
+          for (const m of s.extras) {
+            geos.push(m.geometry);
+            o.add(m);
+            surfaces.push(m);
+          }
+          for (const l of s.lights) light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
+          owned.push(...s.owned);
+          break;
+        }
         const Hh = 2.1;
         add(mat.saunaWood, box(W - 0.16, Hh - 0.2, D - 0.16, 0, 0.1, 0));
         // Rounded black frame: four corner posts and a perimeter frame.
@@ -424,6 +459,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'cortenPlanter': {
         add(mat.corten, box(W, 0.7, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
+        break;
+      }
+      case 'cortenPlanterTall':
+      case 'cortenTreePanel':
+      case 'firePitLinear':
+      case 'loungeSofa':
+      case 'loungeOttoman':
+      case 'deckBox':
+      case 'diningSling':
+      case 'patioHeater':
+      case 'ceilingFan': {
+        // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
+        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
       case 'blackPlanter': {
@@ -548,7 +596,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow],
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow],
     flames,
     fallMats,
     pebbleBeds,

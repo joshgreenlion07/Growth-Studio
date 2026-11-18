@@ -300,6 +300,16 @@ export function cleanPlan(input: unknown): CleanResult {
     if (!id) continue;
     const f: FeaturePlacement = { ...base(it, 'feature'), catalogId: id, position, rotationDeg: num(it.rotationDeg, 0, -360, 360) };
     if (typeof it.materialId === 'string' && materialById.get(it.materialId)?.use === 'hardscape') f.materialId = it.materialId;
+    const offered = featureById.get(id)?.options;
+    if (offered && it.options && typeof it.options === 'object') {
+      const o: Record<string, boolean> = {};
+      for (const { key } of offered) if (typeof (it.options as Record<string, unknown>)[key] === 'boolean') o[key] = (it.options as Record<string, boolean>)[key];
+      if (Object.keys(o).length) f.options = o;
+    }
+    if (Array.isArray(it.size) && it.size.length === 3 && it.size.every((v: unknown) => typeof v === 'number' && Number.isFinite(v))) f.size = [num(it.size[0], 1, 0.1, 6), num(it.size[1], 1, 0.02, 6), num(it.size[2], 1, 0.05, 4)];
+    if (it.planted === false) f.planted = false;
+    if (it.cover === 'open' || it.cover === 'closed' || it.cover === 'off') f.cover = it.cover;
+    if (typeof it.steps === 'boolean') f.steps = it.steps;
     plan.features.push(f);
   }
 
