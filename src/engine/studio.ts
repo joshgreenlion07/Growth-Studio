@@ -1195,10 +1195,15 @@ export class Studio {
     const next = dir === 0 ? !a.on : dir > 0;
     if (next === a.on) return { action: a, changed: false };
     this.setAction(a, next, false);
-    this.audio.noteAction(a);
+    this.noteAction(a.itemId, a.key, a.on);
     this.nav.pulse(40, 0.25);
     this.onAction(a);
     return { action: a, changed: true };
+  }
+
+  /** A feature action was switched by hand (any route): its sound. */
+  noteAction(itemId: string, key: string, on: boolean) {
+    this.audio.noteAction(itemId, key, on);
   }
 
   /** The plan now asks for what was done by hand (it was saved to the plan): keep it as the action's own state. */

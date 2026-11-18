@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { SitePlan, Vec2 } from '../siteplan/types';
 import type { SceneBuild } from '../builder/build';
-import type { FeatureAction } from '../builder/actions';
 import type { BuildStage } from '../builder/construction';
 
 /**
@@ -49,6 +48,21 @@ const START_LEAD = 1.1;
 const LOOP_BLEND = 0.35;
 const SELECT_EVERY = 0.14;
 const PREF_KEY = 'gs-sound';
+const GESTURES = ['pointerup', 'touchend', 'click', 'keydown'] as const;
+const LOOPS = ['day', 'night', 'trickle', 'waterfall', 'fire', 'spa'];
+const ONE_SHOTS = ['water-on', 'water-off'];
+
+/** Set an audio parameter, ignoring anything that is not a finite number. */
+function setParam(p: AudioParam, v: number) {
+  if (Number.isFinite(v)) p.value = v;
+}
+
+/** Place a panner (older Safari has only setPosition). */
+function setPanner(p: PannerNode, x: number, y: number, z: number) {
+  if (!Number.isFinite(x + y + z)) return;
+  if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; }
+  else (p as unknown as { setPosition(x: number, y: number, z: number): void }).setPosition(x, y, z);
+}
 
 interface Emitter {
   id: string;
@@ -173,9 +187,8 @@ export class SceneAudio {
       return;
     }
     // Browsers allow sound only after a gesture: the first click, key or touch starts it.
-    window.addEventListener('pointerdown', this.onGesture, true);
-    window.addEventListener('keydown', this.onGesture, true);
-    window.addEventListener('touchend', this.onGesture, true);
+    // Only these end a real activation (a touch pointerdown does not on iOS or Android).
+    for (const t of GESTURES) window.addEventListener(t, this.onGesture, true);
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
@@ -229,9 +242,16 @@ export class SceneAudio {
     this.unlock();
   };
 
+  private stopListening() {
+    for (const t of GESTURES) window.removeEventListener(t, this.onGesture, true);
+  }
+
   private readonly onVisibility = () => this.apply();
 
-  /** Make the context (once) and let it run if sound is on. */
+  /**
+   * Called inside a real activation: make the context (once) and try to start it. It counts as unlocked, and the
+   * gesture listeners go, only once it is really running; until then every activation tries again.
+   */
   private unlock() {
     if (this.failed || this.disposed) return;
     if (!this.ctx) {
@@ -243,11 +263,21 @@ export class SceneAudio {
         return;
       }
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.masterLevel();
+      setParam(this.master.gain, this.masterLevel());
       this.master.connect(this.ctx.destination);
+      // Every clip now, so the first switch of water already has its sounds.
+      for (const n of LOOPS) void this.load(n, true);
+      for (const n of ONE_SHOTS) void this.load(n, false);
     }
-    this.unlocked = true;
-    this.apply();
+    const ctx = this.ctx;
+    if (!this.prefs.on) return;
+    void ctx.resume().then(() => {
+      if (ctx.state === 'running' && !this.unlocked) {
+        this.unlocked = true;
+        this.stopListening();
+      }
+      this.apply();
+    }, () => {});
   }
 
   private masterLevel(): number {
@@ -256,15 +286,15 @@ export class SceneAudio {
 
   /** Whether sound should be running now. */
   private wantRunning(): boolean {
-    return this.prefs.on && !this.paused && !document.hidden && this.unlocked;
+    return this.prefs.on && !this.paused && !document.hidden && this.ctx !== null;
   }
 
   private apply() {
     const ctx = this.ctx;
     if (!ctx || this.disposed) return;
-    if (this.master) this.master.gain.value = this.masterLevel();
+    if (this.master) setParam(this.master.gain, this.masterLevel());
     if (this.wantRunning()) {
-      if (ctx.state !== 'running') void ctx.resume().catch(() => {});
+      if (ctx.state !== 'running' && this.unlocked) void ctx.resume().catch(() => {});
       this.sinceSelect = 1;
     } else if (ctx.state === 'running') void ctx.suspend().catch(() => {});
   }
@@ -275,8 +305,8 @@ export class SceneAudio {
   /** A new yard was built and put on screen: find what sounds in it. */
   setBuild(plan: SitePlan, build: SceneBuild, stage: BuildStage) {
     this.stage = stage;
+    const old = this.emitters;
     this.emitters = [];
-    this.dropAllVoices();
     const finished = () => this.stage === 'finished';
     const groundAt = (x: number, z: number) => {
       try {
@@ -315,10 +345,19 @@ export class SceneAudio {
       const pos = new THREE.Vector3();
       for (const o of a.anchors) pos.add(o.getWorldPosition(this.v));
       pos.multiplyScalar(1 / a.anchors.length);
-      this.emitters.push({ id: `${a.itemId}:${a.key}`, kind, level, pos, gate: () => finished() && a.on, holdUntil: 0 });
+      // Spa jets are muffled under a closed cover.
+      const cover = a.key === 'jets' ? build.features.actions.find((c) => c.itemId === a.itemId && c.key === 'cover') : undefined;
+      this.emitters.push({ id: `${a.itemId}:${a.key}`, kind, level, pos, gate: () => finished() && a.on && (!cover || cover.on), holdUntil: 0 });
     }
+    // Voices of sources that are still in the yard play on (no restart); the others fade out over a moment.
+    for (const e of this.emitters) {
+      const before = old.find((o) => o.id === e.id);
+      if (before) e.holdUntil = before.holdUntil;
+      const v = this.voices.get(e.id);
+      if (v) v.emitter = e;
+    }
+    for (const [id, v] of this.voices) if (!this.emitters.some((e) => e.id === id)) v.retiring = true;
     this.sinceSelect = 1;
-    this.preloadForYard();
   }
 
   setStage(stage: BuildStage) {
@@ -330,14 +369,14 @@ export class SceneAudio {
    * Something was switched by hand. Water makes its start or stop sound at the water; the loop follows (a fade-in a
    * moment after the start, a fade-out right away on stop).
    */
-  noteAction(a: FeatureAction) {
-    const e = this.emitters.find((x) => x.id === `${a.itemId}:${a.key}`);
-    if (!e || a.key !== 'water' || this.stage !== 'finished') return;
+  noteAction(itemId: string, key: string, on: boolean) {
+    const e = this.emitters.find((x) => x.id === `${itemId}:${key}`);
+    if (!e || key !== 'water' || this.stage !== 'finished') return;
     const ctx = this.ctx;
     if (!ctx) return;
-    e.holdUntil = a.on ? ctx.currentTime + START_LEAD : 0;
+    e.holdUntil = on ? ctx.currentTime + START_LEAD : 0;
     this.sinceSelect = 1;
-    this.playOneShot(a.on ? 'water-on' : 'water-off', e);
+    this.playOneShot(on ? 'water-on' : 'water-off', e);
   }
 
   /* ------------------------------------------------------------------ */
@@ -363,10 +402,16 @@ export class SceneAudio {
     camera.getWorldDirection(this.fwd);
     this.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
     const l = ctx.listener;
-    if (l.positionX) {
-      l.positionX.value = this.lx; l.positionY.value = this.ly; l.positionZ.value = this.lz;
-      l.forwardX.value = this.fwd.x; l.forwardY.value = this.fwd.y; l.forwardZ.value = this.fwd.z;
-      l.upX.value = this.up.x; l.upY.value = this.up.y; l.upZ.value = this.up.z;
+    if (Number.isFinite(this.lx + this.ly + this.lz + this.fwd.x + this.fwd.y + this.fwd.z + this.up.x + this.up.y + this.up.z)) {
+      if (l.positionX) {
+        l.positionX.value = this.lx; l.positionY.value = this.ly; l.positionZ.value = this.lz;
+        l.forwardX.value = this.fwd.x; l.forwardY.value = this.fwd.y; l.forwardZ.value = this.fwd.z;
+        l.upX.value = this.up.x; l.upY.value = this.up.y; l.upZ.value = this.up.z;
+      } else {
+        const old = l as unknown as { setPosition(x: number, y: number, z: number): void; setOrientation(a: number, b: number, c: number, d: number, e: number, f: number): void };
+        old.setPosition(this.lx, this.ly, this.lz);
+        old.setOrientation(this.fwd.x, this.fwd.y, this.fwd.z, this.up.x, this.up.y, this.up.z);
+      }
     }
 
     // Ambience.
@@ -377,8 +422,8 @@ export class SceneAudio {
     const k = 1 - Math.exp(-dt / 1.2);
     this.dayG += (this.dayWant - this.dayG) * k;
     this.nightG += (this.nightWant - this.nightG) * k;
-    if (this.day) this.day.gain.gain.value = this.dayG;
-    if (this.night) this.night.gain.gain.value = this.nightG;
+    if (this.day) setParam(this.day.gain.gain, this.dayG);
+    if (this.night) setParam(this.night.gain.gain, this.nightG);
 
     // Which sources sound: a few times a second.
     this.sinceSelect += dt;
@@ -390,12 +435,12 @@ export class SceneAudio {
     const kf = 1 - Math.exp(-dt / 0.25);
     for (const [id, v] of this.voices) {
       const d = this.place(v.emitter, this.v);
-      v.pan.positionX.value = this.v.x; v.pan.positionY.value = this.v.y; v.pan.positionZ.value = this.v.z;
+      setPanner(v.pan, this.v.x, this.v.y, this.v.z);
       const held = ctx.currentTime < v.emitter.holdUntil;
       v.want = v.retiring || held ? 0 : distanceGain(v.emitter.kind, d) * v.emitter.level * KINDS[v.emitter.kind].gain;
       // Switching off goes quicker than a distance change.
       v.g += (v.want - v.g) * (v.retiring ? 1 - Math.exp(-dt / 0.35) : kf);
-      v.gain.gain.value = v.g;
+      setParam(v.gain.gain, v.g);
       if (v.retiring && v.g < 0.002) {
         this.releaseVoice(v);
         this.voices.delete(id);
@@ -500,12 +545,12 @@ export class SceneAudio {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const gain = ctx.createGain();
-    gain.gain.value = g;
+    setParam(gain.gain, g);
     const pan = ctx.createPanner();
     pan.panningModel = 'equalpower';
     pan.distanceModel = 'linear';
     pan.rolloffFactor = 0;
-    pan.positionX.value = out.x; pan.positionY.value = out.y; pan.positionZ.value = out.z;
+    setPanner(pan, out.x, out.y, out.z);
     src.connect(gain).connect(pan).connect(this.master!);
     this.oneShots.add(src);
     src.onended = () => {
@@ -524,7 +569,7 @@ export class SceneAudio {
     if (have) return have;
     const p = (async () => {
       const ctx = this.ctx;
-      if (!ctx) return;
+      if (!ctx) { this.loading.delete(name); return; }
       try {
         const bytes = await clipBytes(name);
         const raw = await ctx.decodeAudioData(bytes);
@@ -532,19 +577,11 @@ export class SceneAudio {
       } catch (e) {
         // Missing or undecodable clip: that sound is skipped, nothing else is affected.
         console.warn(`Sound "${name}" could not be loaded`, e);
+        this.loading.delete(name);
       }
     })();
     this.loading.set(name, p);
     return p;
-  }
-
-  /** Warm the start and stop sounds when the yard has water you can switch. */
-  private preloadForYard() {
-    if (!this.ctx) return;
-    if (this.emitters.some((e) => e.id.endsWith(':water'))) {
-      void this.load('water-on', false);
-      void this.load('water-off', false);
-    }
   }
 
   /** A look at what is sounding, for checks. */
@@ -579,9 +616,7 @@ export class SceneAudio {
 
   dispose() {
     this.disposed = true;
-    window.removeEventListener('pointerdown', this.onGesture, true);
-    window.removeEventListener('keydown', this.onGesture, true);
-    window.removeEventListener('touchend', this.onGesture, true);
+    this.stopListening();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.dropAllVoices();
     for (const s of this.oneShots) { try { s.stop(); } catch { /* done */ } }
@@ -595,21 +630,27 @@ export class SceneAudio {
   }
 }
 
-/** The clip's file: inlined in the single-file build (`#sound-data`), else next to the page under `sounds/`. */
+let inlineClips: Record<string, string> | null | undefined;
+
+/** The clip's file: inlined in the single-file build (`#sound-data`, parsed once), else next to the page under `sounds/`. */
 async function clipBytes(name: string): Promise<ArrayBuffer> {
-  const el = typeof document !== 'undefined' ? document.getElementById('sound-data') : null;
-  if (el?.textContent) {
-    try {
-      const b64 = (JSON.parse(el.textContent) as Record<string, string>)[name];
-      if (b64) {
-        const bin = atob(b64);
-        const out = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-        return out.buffer;
+  if (inlineClips === undefined) {
+    inlineClips = null;
+    const el = typeof document !== 'undefined' ? document.getElementById('sound-data') : null;
+    if (el?.textContent) {
+      try {
+        inlineClips = JSON.parse(el.textContent) as Record<string, string>;
+      } catch {
+        /* use the files */
       }
-    } catch {
-      /* fall through to the file */
     }
+  }
+  const b64 = inlineClips?.[name];
+  if (b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
   }
   const r = await fetch(new URL(`sounds/${name}.mp3`, document.baseURI).href);
   if (!r.ok) throw new Error(`${name}.mp3: ${r.status}`);
