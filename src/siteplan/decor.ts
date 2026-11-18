@@ -9,7 +9,9 @@ import type { FeatureSpec } from './catalog';
  * `builder/decor/`.
  */
 
-export type DecorKind = 'cortenPlanterTall' | 'cortenTreePanel' | 'firePitLinear' | 'loungeSofa' | 'loungeOttoman' | 'deckBox';
+export type DecorKind = 'cortenPlanterTall' | 'cortenTreePanel' | 'firePitLinear' | 'loungeSofa' | 'loungeOttoman' | 'deckBox' | 'diningSling' | 'patioHeater' | 'ceilingFan';
+/** Decor hung from a cover's ceiling: placed in plan like any feature, but it does not stand on the ground. */
+export const CEILING_KINDS: readonly DecorKind[] = ['patioHeater', 'ceilingFan'];
 
 /** A size a placed feature can be set to: length (x), depth (z) and height, meters. */
 export interface FeatureSize {
@@ -45,6 +47,13 @@ export const DECOR_FEATURES: FeatureSpec[] = [
     about: 'The lounge set\'s ottoman: a white aluminum frame with a light gray cushion.' }),
   F({ id: 'deck-box-gray-resin', name: 'Deck box, gray resin wicker', group: 'Furniture', kind: 'deckBox', footprint: [48 * IN, 22 * IN],
     about: 'A lidded resin storage box in taupe gray, resin wicker panels in a smooth frame, about 48 x 22 x 28 in.' }),
+  F({ id: 'dining-set-sling-8', name: 'Dining set, white table and 8 gray sling chairs', group: 'Furniture', kind: 'diningSling', footprint: [3.3, 2.1],
+    about: 'An 84 x 40 in white aluminum dining table with eight stacking sling chairs: dark gray aluminum frames, gray textilene slings.' }),
+  F({ id: 'infratech-heater-39', name: 'Infratech patio heater, 39 in, ceiling mounted', group: 'Shade', kind: 'patioHeater', footprint: [39 * IN, 6 * IN], maker: 'Infratech',
+    about: 'An Infratech electric infrared patio heater hung under the patio roof, as on the plan\'s spec sheet.',
+    facts: ['39 in long, 8.19 in high, 6 in deep, 14 lb', '4000 W, 240 V, 16.67 A, medium wave infrared; heats about 80 sq ft', 'Stainless steel; mounted 96 to 120 in above the floor', 'Hung from the roof of the cover it is under (9 ft without one)'] }),
+  F({ id: 'ceiling-fan-8-blade', name: 'Ceiling fan, 8 blade, 60 in', group: 'Shade', kind: 'ceilingFan', footprint: [60 * IN, 60 * IN],
+    about: 'An eight-blade outdoor ceiling fan in oil-rubbed bronze with a light kit, on a short downrod under the patio roof.' }),
 ];
 
 /** The size a placed feature draws at: its own, else the catalog's default size, else its footprint and `h`. */

@@ -23,6 +23,8 @@ export interface DecorContext {
   flame: (w: number, h: number, x: number, y: number, z: number, ry?: number) => void;
   /** A material that glows at night; the build owns it. */
   glow: (m: THREE.MeshStandardMaterial) => void;
+  /** Ceiling height over the feature when it stands under a cover (meters above its ground), for ceiling-hung things. */
+  ceiling?: number;
 }
 
 export const IN = 0.0254;

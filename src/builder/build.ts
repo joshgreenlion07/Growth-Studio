@@ -16,6 +16,8 @@ import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
 import { plantGround, planterPlants } from './decor/planters';
+import { coverCeiling } from './decor/patio';
+import { CEILING_KINDS } from '../siteplan/decor';
 import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
@@ -315,7 +317,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  const features = buildFeatures(plan.features, gm.height);
+  const features = buildFeatures(plan.features, gm.height, coverCeiling(plan.structures));
   const models = buildModels(plan.models ?? [], gm.height, assets);
   yield 'water, features, models';
 
@@ -334,7 +336,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (modelIdx.any(p[0], p[1])) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
-      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
+      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(...spec.footprint) * 0.55) return true;
     }
     return false;
