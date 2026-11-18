@@ -1,6 +1,7 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
+import { sampleFire } from './sample-fire';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -490,4 +491,5 @@ export const SAMPLES = [
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
+  { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
 ];

@@ -5,6 +5,7 @@ import type { FeaturePlacement } from '../../siteplan/types';
 import { clamp01, fbm, vnoise } from '../../engine/noise';
 import { mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from '../../engine/textures';
 import { boxUV, pbrMaterial, plainMaterial } from '../materials';
+import type { FireStyle, Tongue } from '../fire';
 
 /*
  * Shared pieces for the decor builders: what a builder is handed, box helpers in local feature space (front +z,
@@ -19,8 +20,8 @@ export interface DecorContext {
   add: (m: THREE.Material, g: THREE.BufferGeometry) => void;
   /** A night light at a local point. */
   light: (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker?: boolean) => void;
-  /** A flame card at a local point (lit at dusk and night). */
-  flame: (w: number, h: number, x: number, y: number, z: number, ry?: number) => void;
+  /** A fire: flame tongues standing on a burner's shape (builder/fire.ts), lit at dusk and night. */
+  fire: (tongues: Tongue[], style?: FireStyle) => void;
   /** A material that glows at night; the build owns it. */
   glow: (m: THREE.MeshStandardMaterial) => void;
   /** Ceiling height over the feature when it stands under a cover (meters above its ground), for ceiling-hung things. */

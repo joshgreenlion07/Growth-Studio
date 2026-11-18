@@ -21,6 +21,14 @@ night lighting, and a camera with focus blur.
   uplights).
 - **Water:** ponds, pools with a tanning ledge, fountains, streams and
   pondless waterfalls with lit falls.
+- **Fire:** gas flames drawn as many flickering flame tongues standing on each
+  burner's real shape (`builder/fire.ts`): the linear fire pit's 28 in line
+  burner, the round pit's ring under lava rock, the fire table's line, the
+  Cazo fire and water bowl's 12 in ring, and a grill's burner tubes (short
+  blue flames, off until lit by hand). The flames lick, flicker and tear into
+  loose tips, lean downwind with the Wind setting, glow at night and read
+  orange by day; each fire's light flickers on its own beat. The sample
+  "Fire" shows every kind.
 - **Growth:** install, 1, 3, 5 and 10 years, from each plant's nursery and
   mature size.
 - **Light:** real sun position for the property's latitude, north arrow and
@@ -333,9 +341,10 @@ Messages use `window.postMessage`:
     picked, a click on the thing does the same and the pointer turns to a hand
     over it. What can be used (`builder/actions.ts`, registered as features are
     built, switched and animated without a rebuild): the SaunaLife sauna's door
-    and its lights (the LED remote inside by the door); a kitchen's grill lid
-    and its doors; any fire (fire pits and tables, the linear fire pit, a patio
-    heater: out, or lit even by day); a water wall's or fountain's water; path
+    and its lights (the LED remote inside by the door); a kitchen's grill lid,
+    its doors and its burners (off until lit); any fire (fire pits and tables,
+    the linear fire pit, the Cazo fire and water bowl, a patio heater: out, or
+    lit even by day); a water wall's, fountain's or fire and water bowl's water; path
     lights and uplights; each Tru-Scapes fixture (its beams and lens); the
     Stratus pergola's LED lights; the Cal Spas spa's
     cover (folded up or closed), jets (bubbles round the seats and steam off the

@@ -1810,14 +1810,16 @@ export class Studio {
     // A yard with more fixtures than the device shows keeps the ones nearest the view.
     this.landLights.update(this.controls.target);
 
-    // Fire flicker.
+    // Fire flicker: a slow breath, quicker jumps and a fast shimmer, each fire on its own beat (no two in step).
     const t = GLOBAL.uTime.value;
-    for (const p of this.pointLights) {
+    this.pointLights.forEach((p, i) => {
       if (p.userData.flicker && p.userData.base > 0 && p.intensity > 0) {
         const n = this.skyNow ? Math.min(1, 0.25 + this.skyNow.night) : 1;
-        p.intensity = (p.userData.base ?? 0) * n * (0.82 + 0.18 * Math.sin(t * 13.0) * Math.sin(t * 7.3 + 1.2));
+        const k = i * 2.39996;
+        const fl = 0.85 + 0.065 * Math.sin(t * 6.9 + k) + 0.045 * Math.sin(t * 12.7 + k * 1.7) + 0.035 * Math.sin(t * 23.3 + k * 2.9) + 0.02 * Math.sin(t * 41.0 + k * 0.6);
+        p.intensity = (p.userData.base ?? 0) * n * fl;
       }
-    }
+    });
 
     // At the lighter settings plants switch to fewer leaves sooner (as if the view were smaller).
     const lodScale = this.state.quality === 'light' || this.state.quality === 'draft' ? 0.6 : 1;

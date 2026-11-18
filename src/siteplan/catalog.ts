@@ -306,6 +306,7 @@ export type FeatureKind =
   | 'copperBowl'
   | 'pillarFountain'
   | 'patinaBowl'
+  | 'fireWaterBowl'
   | 'spotLight'
   | 'steppingPad'
   | 'steppingStone'
@@ -765,6 +766,12 @@ const F = (s: Omit<FeatureSpec, 'placeholder'>): FeatureSpec => ({ ...s, placeho
 export const FEATURES: FeatureSpec[] = [
   F({ id: 'fire-table', name: 'Fire table, rectangular', group: 'Fire', kind: 'fireTable', footprint: [1.5, 0.75] }),
   F({ id: 'fire-pit', name: 'Fire pit, round stone', group: 'Fire', kind: 'firePit', footprint: [1.3, 1.3] }),
+  // The Outdoor Plus Cazo Fire & Water Bowl, GFRC, 31 in (maker's spec sheet and product page): built by
+  // builder/cazo-fire-water-bowl.ts. The scupper faces the placement's front.
+  F({ id: 'top-cazo-fire-water-bowl-31', name: 'The Outdoor Plus Cazo fire and water bowl, 31 in GFRC', group: 'Fire', kind: 'fireWaterBowl', footprint: [31 * 0.0254, 34 * 0.0254],
+    maker: 'The Outdoor Plus', page: 'https://theoutdoorplus.com/product/cazo-fire-water-bowl/',
+    about: 'The Outdoor Plus Cazo: a round GFRC concrete bowl with a 12 in stainless ring burner under lava rock and a copper scupper in the rim that pours a smooth sheet of water. Shown in Natural Gray.',
+    facts: ['31 in across x 10 in tall, 10 in flat base, 3 in flat rim (also 24, 36 and 48 in)', 'Match lit OPT-31RFW or 12 V electronic ignition OPT-31RFWE12V; natural gas or propane, 65,000 BTU', '12 in 304 stainless ring burner in a stainless fire pan; lava rock included', 'Copper scupper with a 3/4 in inlet, 7-10 GPM', '18 GFRC colors, smooth, rustic and metallic'] }),
   F({ id: 'pergola-louvered', name: 'Louvered pergola, aluminum', group: 'Shade', kind: 'pergolaLouvered', footprint: [4.3, 3.7] }),
   // SunVilla Stratus 10 x 13 ft motorized pergola (sunvilla.com): overall 157.3 in L x 118.7 in W x 98.6 in H, aluminum
   // frame in a matte charcoal finish, battery-driven louvered roof, an integrated gutter and LED lighting in the roof.
