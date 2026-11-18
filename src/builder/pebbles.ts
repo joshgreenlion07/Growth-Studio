@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { materialById, type MaterialSpec } from '../siteplan/catalog';
 import { bounds, pointInPolygon, rng } from '../siteplan/geometry';
-import type { SitePlan, Vec2 } from '../siteplan/types';
+import { featureById } from '../siteplan/catalog';
+import type { FeaturePlacement, SitePlan, Vec2 } from '../siteplan/types';
 import { vnoise } from '../engine/noise';
 import { rockAlbedo } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
@@ -207,7 +208,7 @@ type Form = 'pebble' | 'crushed' | 'chip';
 const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2] };
 const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : pebbleShape(s, detail));
 
-interface Stone {
+export interface Stone {
   x: number;
   y: number;
   z: number;
@@ -248,7 +249,7 @@ export interface PebbleBed {
 }
 
 /** Where one bed's stones go: inside test, surface height and extent. */
-interface BedArea {
+export interface BedArea {
   key: string;
   inside: (p: Vec2) => boolean;
   height: (p: Vec2) => number;
@@ -290,7 +291,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.6;
   for (const { area, catalogId } of areas) {
     const spec = materialById.get(catalogId)!;
-    const stones = placeStones(area, spec);
+    const stones = clearOfSteppingStones(placeStones(area, spec), plan.features, gm.height);
     const P = spec.pebble!;
     const form: Form = P.form ?? 'pebble';
     const mat = matOf(form);
@@ -370,7 +371,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
  * does), each with its own size from the sold range (more of the middle sizes), shape, turn, tip, color and how deep it
  * sits. Only where this zone is the top one.
  */
-function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
+export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   const P = spec.pebble!;
   const form = P.form ?? 'pebble';
   const r = rng(`pebbles:${z.key}`);
@@ -427,4 +428,54 @@ function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
     }
   }
   return out;
+}
+
+/** Slab tops above the ground at the stone's center (features.ts: a stepping stone's 0.06 m slab sunk 0.047 m; a pad is 0.06 m). */
+const SLAB_TOP = { steppingStone: 0.013, steppingPad: 0.06 } as const;
+/** How far in from the slab's edge a piece must reach to count as over its face (a pebble tucked under the edge stays). */
+const FACE_INSET = 0.004;
+/** Pieces centred inside the slab inset this far are always dropped. */
+const CENTER_INSET = 0.01;
+
+/**
+ * Highest point of a piece, kept on the high side. The unit shapes reach 0.5 x their size times a fullness of up to about 1.12
+ * (pebbleShape's superellipsoid, egg and lopsided terms) along each axis; they are drawn with the plain mesh (normal map
+ * only: no displacement, no vertex or shader offset), so the mesh is the surface. The rise adds each axis's half-extent
+ * times the sine of the tip about the other horizontal axis, with the thickness taken at its full tipped height.
+ */
+function pieceTop(st: Stone): number {
+  const F = 0.56;
+  const sx = Math.abs(Math.sin(st.tipX)), sz = Math.abs(Math.sin(st.tipZ));
+  return st.y + F * (st.thick * Math.max(Math.cos(st.tipX) * Math.cos(st.tipZ), 0) + Math.max(st.len, st.wid) * (sx + sz));
+}
+
+/**
+ * Drops the pieces that would show through a stepping stone's top: first every piece centred inside the slab face inset 1 cm (hidden under it when low, so dropping them costs nothing); then those whose footprint (a circle of the piece's
+ * own reach, so it holds at any turn) overlaps the slab's face, inset a few mm, AND whose top rises above the slab top.
+ * Pieces lower than the slab that butt against or tuck under its edge stay, as do pieces centered outside the slab
+ * that do not rise over its face. Done after placing, so every kept piece has exactly its place, size and color.
+ */
+export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacement[], height: (p: Vec2) => number): Stone[] {
+  const slabs = features.flatMap((f) => {
+    const spec = featureById.get(f.catalogId);
+    if (spec?.kind !== 'steppingStone' && spec?.kind !== 'steppingPad') return [];
+    const a = (-f.rotationDeg * Math.PI) / 180;
+    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), hw: spec.footprint[0] / 2 - FACE_INSET, hd: spec.footprint[1] / 2 - FACE_INSET, top: height(f.position) + SLAB_TOP[spec.kind] }];
+  });
+  if (!slabs.length) return stones;
+  return stones.filter((st) => {
+    const reach = Math.max(st.len, st.wid) * 0.5;
+    let top: number | undefined;
+    for (const k of slabs) {
+      const dx = st.x - k.at[0], dy = st.z - k.at[1];
+      if (Math.abs(dx) > 0.5 + reach || Math.abs(dy) > 0.5 + reach) continue;
+      // Into the slab's own frame (the inverse of features.ts's local -> plan turn).
+      const lx = dx * k.c - dy * k.s, lz = dx * k.s + dy * k.c;
+      if (Math.abs(lx) < k.hw - CENTER_INSET + FACE_INSET && Math.abs(lz) < k.hd - CENTER_INSET + FACE_INSET) return false;
+      const ox = Math.max(Math.abs(lx) - k.hw, 0), oz = Math.max(Math.abs(lz) - k.hd, 0);
+      if (ox * ox + oz * oz >= reach * reach) continue;
+      if ((top ??= pieceTop(st)) > k.top) return false;
+    }
+    return true;
+  });
 }
