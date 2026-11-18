@@ -10,9 +10,12 @@ import { OverlayObstacles, insideView } from './overlay';
  * Measurements overlay, in two levels:
  *   totals  the area of each surface, the total length of each wall, fence and
  *           curb run (walls and fences with their height), and the size of
- *           structures, features and hand-placed plants. Outlines, no edge labels.
+ *           structures and features. Outlines, no edge labels.
  *   edges   all of that plus every straight run labeled, end ticks and lot lines.
  * Dimensions the person drew with the ruler show in both views, named and measured, above everything else.
+ *
+ * Plant labels (each hand-placed plant's name, height and spread at the current growth year) are a separate
+ * switch (setPlants), independent of the level: they can show with the measurements off, and stay hidden with them on.
  *
  * Lines are 3D (drawn on top of everything so grass never hides them); labels
  * are HTML placed over the canvas each frame, nearest and most important first,
@@ -64,6 +67,9 @@ export class Measurements {
   private order: Label[] = [];
   private shown = false;
   private detail = false;
+  private plantsOn = false;
+  /** Labels other tools pin in this layer (the tape measure): placed before all others, kept across rebuilds. */
+  private pinned = new Map<HTMLElement, Label>();
   private obstacles: OverlayObstacles;
 
   constructor(container: HTMLElement) {
@@ -77,8 +83,48 @@ export class Measurements {
     this.obstacles = new OverlayObstacles(container, this.layer);
   }
 
+  /** Anything to draw: measurements, plant labels, or both (rebuild() is needed while this is true). */
   get visible() {
-    return this.shown;
+    return this.shown || this.plantsOn;
+  }
+
+  get plants() {
+    return this.plantsOn;
+  }
+
+  /** Show or hide the plant labels, apart from the measurements; call rebuild() after turning them on. */
+  setPlants(on: boolean) {
+    this.plantsOn = on;
+    this.sync();
+  }
+
+  /**
+   * Show `el` at `pos` in this layer (null takes it away). It goes before every other label, so they keep clear of
+   * it, and it stays through rebuilds. Call again after changing its text, so it is measured again.
+   */
+  pin(el: HTMLDivElement, pos: THREE.Vector3 | null) {
+    let l = this.pinned.get(el);
+    if (!pos) {
+      if (l) {
+        this.pinned.delete(el);
+        el.remove();
+      }
+    } else if (!l) {
+      l = { el, pos: pos.clone(), kind: 'ruler', w: 0, h: 0, on: false, d: 0 };
+      this.pinned.set(el, l);
+      el.style.visibility = 'hidden';
+      this.layer.appendChild(el);
+    } else {
+      l.pos.copy(pos);
+      l.w = 0;
+    }
+    this.sync();
+  }
+
+  private sync() {
+    this.lastPV.elements[0] = NaN;
+    this.group.visible = this.visible;
+    this.layer.hidden = !this.visible && !this.pinned.size;
   }
 
   get mode(): MeasureMode {
@@ -88,10 +134,8 @@ export class Measurements {
   /** Show or hide the overlay; call rebuild() after changing between totals and edges. */
   setMode(mode: MeasureMode) {
     this.shown = mode !== 'off';
-    this.lastPV.elements[0] = NaN;
     this.detail = mode === 'edges';
-    this.group.visible = this.shown;
-    this.layer.hidden = !this.shown;
+    this.sync();
   }
 
   setVisible(on: boolean) {
@@ -102,6 +146,25 @@ export class Measurements {
   rebuild(plan: SitePlan, build: SceneBuild, years: number) {
     this.clear();
     const gy = (p: Vec2) => Math.max(0, build.gm.height(p));
+    if (this.plantsOn) this.plantLabels(plan, years, gy);
+    if (this.shown) this.measurements(plan, build, gy);
+    for (const o of this.group.children) o.renderOrder = 999;
+  }
+
+  /** Hand-placed plants (not mass-planted fill): name and size at the current growth year. */
+  private plantLabels(plan: SitePlan, years: number, gy: (p: Vec2) => number) {
+    for (const p of plan.plants) {
+      const spec = plantById.get(p.catalogId);
+      if (!spec) continue;
+      const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
+      const k = p.scale ?? 1;
+      const h = sz.height * k, s = sz.spread * k;
+      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'plant');
+    }
+  }
+
+  /** Areas, edges, walls and runs, structures, features and the person's own rulers. */
+  private measurements(plan: SitePlan, build: SceneBuild, gy: (p: Vec2) => number) {
 
     // Dimensions drawn with the ruler: a line with end ticks, named and measured. Shown in both views.
     for (const r of plan.rulers ?? []) this.ruler(r.a, r.b, r.label, gy);
@@ -188,18 +251,6 @@ export class Measurements {
       this.footprint(f.position, spec.footprint, f.rotationDeg, gy);
       this.label(`${spec.name.split(',')[0]}\n${fmtFeet(spec.footprint[0])} × ${fmtFeet(spec.footprint[1])}${tall}`, new THREE.Vector3(f.position[0], top + 0.3, f.position[1]), 'object');
     }
-
-    // Hand-placed plants (not mass-planted fill): size at the current growth year.
-    for (const p of plan.plants) {
-      const spec = plantById.get(p.catalogId);
-      if (!spec) continue;
-      const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
-      const k = p.scale ?? 1;
-      const h = sz.height * k, s = sz.spread * k;
-      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'plant');
-    }
-
-    for (const o of this.group.children) o.renderOrder = 999;
   }
 
   /** Draw a polygon or polyline on the ground with a length on each straight run. */
@@ -275,7 +326,7 @@ export class Measurements {
 
   private label(text: string, pos: THREE.Vector3, kind: LabelKind) {
     const el = document.createElement('div');
-    el.className = `measure-label ml-${kind === 'plant' ? 'object' : kind}`;
+    el.className = `measure-label ml-${kind}`;
     const [head, ...rest] = text.split('\n');
     el.append(head);
     for (const r of rest) {
@@ -291,7 +342,7 @@ export class Measurements {
 
   /** Place labels for this frame (only when the view or the labels changed). */
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
-    if (!this.shown) return;
+    if (!this.visible && !this.pinned.size) return;
     // Controls that moved (a panel opened, the window resized) re-place the labels even with the view still.
     const moved = this.obstacles.refresh();
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -302,7 +353,7 @@ export class Measurements {
     const cam = camera.position;
     // Measure new labels (all reads, before any write below). Hidden labels keep their layout, so this is one
     // layout at most, the first frame after labels were added.
-    for (const l of this.labels) {
+    for (const l of [...this.pinned.values(), ...this.labels]) {
       if (!l.w) {
         l.w = l.el.offsetWidth;
         l.h = l.el.offsetHeight;
@@ -311,8 +362,15 @@ export class Measurements {
     }
     const order = this.order;
     order.length = 0;
-    for (const l of this.labels) order.push(l);
+    if (this.visible) for (const l of this.labels) order.push(l);
+    else for (const l of this.labels) if (l.on) {
+      // Measurements and plant labels off, a pinned label still shown: their labels go.
+      l.el.style.visibility = 'hidden';
+      l.on = false;
+    }
     order.sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind] || Number(b.on) - Number(a.on) || a.d - b.d);
+    // Pinned labels (the tape measure) are placed first, so the others keep clear of them.
+    order.unshift(...this.pinned.values());
     const placed = this.placed;
     // The controls over the view count as labels already placed, so no label goes under one.
     placed.length = 0;
@@ -351,7 +409,7 @@ export class Measurements {
     for (const o of this.group.children) (o as THREE.Line).geometry?.dispose();
     this.group.clear();
     this.labels = [];
-    this.layer.replaceChildren();
+    this.layer.replaceChildren(...[...this.pinned.keys()]);
   }
 
   dispose() {

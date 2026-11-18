@@ -14,6 +14,7 @@
  */
 import { BELGARD_LINES } from './belgard';
 import { BASALITE_LINES } from './basalite';
+import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 
 export type PlantForm =
@@ -261,7 +262,9 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock';
+  shelf?: 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
+  board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
   pebble?: PebbleSpec;
   /** Soft fill drawn as a bed of clods (black humus, compost, dirt): its soil, fiber and speck colors, relief and mound. */
@@ -631,6 +634,12 @@ MATERIALS.push(...(SLABS?.colors ?? []).map(([n, palette]): MaterialSpec => M({ 
  * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm (23 1/2 in) square slab, 60 mm thick, laid in a grid on
  * its spacer joints. Its colors are clouded blends. Basalite sells no border stone for it, so it has no matching border.
  */
+// Composite deck boards (siteplan/decking.ts), one look per color.
+for (const L of DECK_LINES) {
+  for (const [n, palette] of L.colors) {
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.maker} ${L.name}, ${n}`, use: 'hardscape', group: 'Decking', recipe: 'deck', palette, thickness: L.board.thicknessIn * 0.0254, matches: `${L.maker} ${L.name}`, maker: L.maker, line: L.name, shelf: 'Decking', color: n, board: L.board }));
+  }
+}
 for (const L of BASALITE_LINES) {
   for (const [n, palette] of L.colors) {
     MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud', jointSand: L.jointSand }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
@@ -783,6 +792,9 @@ export const OFFERED_LINES = new Set<string>([
   'Papyrus Artforms',
   'Castlemanor Grana',
   'Castlemanor Rustic',
+  'Enhance Naturals',
+  'Enhance Basics',
+  'Transcend',
 ]);
 
 /*
@@ -790,7 +802,7 @@ export const OFFERED_LINES = new Set<string>([
  * Planner saves those choices for the team. Without an override, a maker line on the paver or wall shelves is approved
  * when it is in OFFERED_LINES (mapped in depth); everything else is approved.
  */
-const GATED_SHELVES = new Set(['Pavers', 'Retaining walls', 'Garden walls']);
+const GATED_SHELVES = new Set(['Pavers', 'Retaining walls', 'Garden walls', 'Decking']);
 /** Groups whose looks without a maker are generic testers, to be removed as real product lines replace them. */
 const TESTER_GROUPS = new Set<MaterialGroup>(['Pavers', 'Porcelain', 'Natural stone', 'Decking', 'Walls', 'Edging']);
 
