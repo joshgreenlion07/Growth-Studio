@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SLAB_24_PREFIX, featureById, materialById, type FeatureKind } from '../siteplan/catalog';
+import { SLAB_24_PREFIX, featureById, featureOption, materialById, type FeatureKind } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import type { FeaturePlacement, Vec2 } from '../siteplan/types';
 import { GLOBAL } from '../engine/foliage';
@@ -8,6 +8,7 @@ import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
+import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { buildDecor } from './decor';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
@@ -377,6 +378,18 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'saunaCube': {
+        if (spec.model === 'saunalife-cl5g') {
+          const s = buildSaunaLifeCL5G({ doorOpen: featureOption(spec, f.options, 'doorOpen'), lightsOn: featureOption(spec, f.options, 'lightsOn') });
+          for (const [m, g] of s.parts) add(m, g);
+          for (const m of s.extras) {
+            geos.push(m.geometry);
+            o.add(m);
+            surfaces.push(m);
+          }
+          for (const l of s.lights) light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
+          owned.push(...s.owned);
+          break;
+        }
         const Hh = 2.1;
         add(mat.saunaWood, box(W - 0.16, Hh - 0.2, D - 0.16, 0, 0.1, 0));
         // Rounded black frame: four corner posts and a perimeter frame.
