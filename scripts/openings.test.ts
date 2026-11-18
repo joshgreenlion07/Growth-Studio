@@ -75,6 +75,18 @@ function check(label: string, house: ExistingStructure, all: ExistingStructure[]
       }
       if (b.y0 < -1e-9 || b.y1 > house.height - 0.1) fail(`${label}: box above the eave (y1 ${b.y1}, H ${house.height})`);
     }
+    // Under a cover, below its beam/header (roof underside less 0.55 m header, less 0.1 m); marked openings within 1 m of their mark.
+    for (const c of all.filter((o) => o.kind === 'cover')) {
+      const under = c.height - (c.room || c.walls?.some(Boolean) ? 0.55 : 0.42) - 0.1;
+      for (const tt of [op.t - op.w / 2, op.t, op.t + op.w / 2]) {
+        const p: Vec2 = [sd.a[0] + sd.dir[0] * tt + sd.out[0] * 0.3, sd.a[1] + sd.dir[1] * tt + sd.out[1] * 0.3];
+        if (pointInPolygon(p, c.polygon) && op.h1 > under + 1e-6) fail(`${label}: opening top ${op.h1} above cover beam ${under}`);
+      }
+    }
+    if (house.openings) {
+      const near = house.openings.some((m) => Math.abs((m.at[0] - sd.a[0]) * sd.dir[0] + (m.at[1] - sd.a[1]) * sd.dir[1] - op.t) <= 1.0 + 1e-6);
+      if (!near) fail(`${label}: marked opening moved more than 1 m`);
+    }
     // Wall plane check at the middle of the pane: the point just behind the glass is wall (inside), just in front is outside.
     const mid: Vec2 = [sd.a[0] + sd.dir[0] * op.t, sd.a[1] + sd.dir[1] * op.t];
     if (!pointInPolygon([mid[0] - sd.out[0] * 0.05, mid[1] - sd.out[1] * 0.05], house.polygon)) fail(`${label}: nothing behind the glass`);
@@ -115,6 +127,15 @@ const big = mk('h', 'house', shapes.rect);
 const bp = planOpenings(big, [big], [6, 4]);
 const doorsCount = bp.placed.filter((o) => o.h0 < 0.1).length, windows = bp.placed.length - doorsCount;
 if (doorsCount !== 1 || windows < 6) fail(`rect house lost its openings: ${doorsCount} doors, ${windows} windows`);
+// Sheds and garages with short walls still get a (narrow) door; low covers lower the windows.
+const shed = mk('s', 'shed', rect(0, 0, 2.2, 2), 2.4);
+const sp = planOpenings(shed, [shed], [5, 5]);
+if (!sp.placed.some((o) => o.h0 < 0.1 && o.w <= 1.0)) fail('short-walled shed has no door');
+const lowH = mk('h', 'house', shapes.rect, 3), lowC = mk('c', 'cover', [[0, 8], [12, 8], [12, 11], [0, 11]], 2.6);
+const lp = planOpenings(lowH, [lowH, lowC], [6, 4]);
+if (lp.placed.some((o) => o.h1 > 2.6 - 0.42 - 0.1 + 1e-6 && lp.sides.find((x) => x.edge === o.edge)!.out[1] > 0.5)) fail('low cover: opening above beam');
+console.log(`short shed door: ${sp.placed.some((o) => o.h0 < 0.1)}, low-cover openings: ${lp.placed.length}`);
+
 // An open patio roofed over the whole yard wall keeps the wall's windows and door.
 const patio = mk('c', 'cover', [[0, 8], [12, 8], [12, 11], [0, 11]], 3);
 const pp = planOpenings(big, [big, patio], [6, 4]);

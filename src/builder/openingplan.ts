@@ -51,7 +51,7 @@ export function wallSides(poly: Vec2[]): WallSide[] {
   return out;
 }
 
-const SAMPLE = 0.025;
+const SAMPLE = 0.05;
 
 /**
  * What stands up from a cover's floor and could meet a house wall: its walls (every walled edge, even one along the
@@ -126,13 +126,13 @@ export function freeRuns(sd: WallSide, poly: Vec2[], others: Vec2[][], clear: nu
   return runs;
 }
 
-/** Move an opening of width w centered at t into the run that holds it (or the nearest run it fits in); null if none is wide enough. */
-export function fitInRuns(runs: [number, number][], t: number, w: number): number | null {
+/** Move an opening of width w centered at t into the run that holds it (or the nearest run it fits in, moving it at most maxShift); null if none is wide enough or near enough. */
+export function fitInRuns(runs: [number, number][], t: number, w: number, maxShift = Infinity): number | null {
   let best: number | null = null, bd = Infinity;
   for (const [lo, hi] of runs) {
     if (hi - lo < w - 1e-9) continue;
     const c = Math.max(lo + w / 2, Math.min(hi - w / 2, t));
-    if (Math.abs(c - t) < bd) { bd = Math.abs(c - t); best = c; }
+    if (Math.abs(c - t) <= maxShift && Math.abs(c - t) < bd) { bd = Math.abs(c - t); best = c; }
   }
   return best;
 }
@@ -157,15 +157,35 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
   const lights: { edge: number; t: number }[] = [];
   const bySide = new Map<number, WallSide>();
   sides.forEach((sd) => bySide.set(sd.edge, sd));
-  const autoRuns = new Map<number, [number, number][]>();
-  const runsOf = (sd: WallSide) => {
-    let r = autoRuns.get(sd.edge);
-    if (!r) autoRuns.set(sd.edge, (r = freeRuns(sd, poly, others, CORNER_CLEAR, solids)));
+  // Free runs are computed once per wall and clearance, shared by the automatic and the marked openings.
+  const runCache = new Map<string, [number, number][]>();
+  const runsFor = (sd: WallSide, clear: number) => {
+    const key = `${sd.edge}:${clear}`;
+    let r = runCache.get(key);
+    if (!r) runCache.set(key, (r = freeRuns(sd, poly, others, clear, solids)));
     return r;
   };
-  const winOk = hts.winTop - Math.max(0.02, hts.winBottom) >= 0.5;
-  const doorW = s.kind === 'house' ? 2.4 : 1.0;
-  const doorOk = hts.doorTop >= 1.7;
+  const runsOf = (sd: WallSide) => runsFor(sd, CORNER_CLEAR);
+  // Under a cover, openings stay below its beam or header (its roof underside less the deepest header, and 0.1 m).
+  const covers = nb.filter((o) => o.kind === 'cover');
+  const capAt = (sd: WallSide, t: number, w: number) => {
+    let cap = Infinity;
+    for (const c of covers) {
+      const under = c.height - (c.room || c.walls?.some(Boolean) ? 0.55 : 0.42) - 0.1;
+      for (const tt of [t - w / 2, t, t + w / 2]) {
+        const p: Vec2 = [sd.a[0] + sd.dir[0] * tt + sd.out[0] * 0.3, sd.a[1] + sd.dir[1] * tt + sd.out[1] * 0.3];
+        if (pointInPolygon(p, c.polygon)) { cap = Math.min(cap, under); break; }
+      }
+    }
+    return cap;
+  };
+  const MAX_MARK_SHIFT = 1.0;
+  const MIN_WIN = 0.6, MIN_DOOR = 1.6;
+  /** A window slot at t, lowered under any cover beam; null if it would be too short. */
+  const winSlot = (sd: WallSide, t: number, w: number): Slot | null => {
+    const h1 = Math.min(hts.winTop, capAt(sd, t, w)), h0 = Math.max(0.02, hts.winBottom);
+    return h1 - h0 >= MIN_WIN ? { t, w, h0, h1 } : null;
+  };
 
   // Doors and windows the designer marked: each goes on the wall nearest its mark, if it fits there.
   const marked = new Map<number, Slot[]>();
@@ -182,13 +202,17 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
     const w = Math.min(op.width, sd.len - 2 * MARKED_CLEAR);
     if (w < 0.3) continue;
     const isDoor = op.kind === 'door';
-    if (isDoor ? hts.doorTop < 1.2 : hts.winTop - hts.winBottom < 0.3) continue;
-    const t = fitInRuns(freeRuns(sd, poly, others, MARKED_CLEAR, solids), bt, w);
+    const t = fitInRuns(runsFor(sd, MARKED_CLEAR), bt, w, MAX_MARK_SHIFT);
     if (t === null) continue;
+    const cap = capAt(sd, t, w);
     const list = marked.get(sd.edge) ?? [];
     if (overlaps(list, t, w, 0.05)) continue;
     // A door up to 1.5 m wide is a solid door; wider ones are sliding glass.
-    list.push(isDoor ? { t, w, h0: 0.02, h1: hts.doorTop, solid: w <= 1.5 } : { t, w, h0: Math.max(0.02, hts.winBottom), h1: hts.winTop });
+    const slot: Slot | null = isDoor
+      ? (Math.min(hts.doorTop, cap) >= MIN_DOOR ? { t, w, h0: 0.02, h1: Math.min(hts.doorTop, cap), solid: w <= 1.5 } : null)
+      : winSlot(sd, t, w);
+    if (!slot) continue;
+    list.push(slot);
     marked.set(sd.edge, list);
     if (isDoor && !lit) {
       lit = true;
@@ -197,19 +221,27 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
   }
 
   // The automatic door goes on the wall facing the yard that has room for it.
-  let doorEdge = -1, doorT = 0;
-  if (!s.openings && doorOk) {
-    let best = -Infinity;
-    for (const sd of sides) {
-      const mid: Vec2 = [sd.a[0] + sd.dir[0] * sd.len / 2, sd.a[1] + sd.dir[1] * sd.len / 2];
-      const toSite: Vec2 = [siteCenter[0] - mid[0], siteCenter[1] - mid[1]];
-      const score = toSite[0] * sd.out[0] + toSite[1] * sd.out[1] + sd.len * 0.1;
-      if (score <= best) continue;
-      const t = fitInRuns(runsOf(sd), sd.len / 2, doorW);
-      if (t === null) continue;
-      best = score;
-      doorEdge = sd.edge;
-      doorT = t;
+  // A house that has no run for the full door, or a shed or garage with short walls, gets a narrow door instead.
+  let doorEdge = -1, doorT = 0, doorW = s.kind === 'house' ? 2.4 : 1.0, doorH = hts.doorTop;
+  if (!s.openings && hts.doorTop >= MIN_DOOR) {
+    for (const w of [doorW, 0.9]) {
+      let best = -Infinity;
+      for (const sd of sides) {
+        const mid: Vec2 = [sd.a[0] + sd.dir[0] * sd.len / 2, sd.a[1] + sd.dir[1] * sd.len / 2];
+        const toSite: Vec2 = [siteCenter[0] - mid[0], siteCenter[1] - mid[1]];
+        const score = toSite[0] * sd.out[0] + toSite[1] * sd.out[1] + sd.len * 0.1;
+        if (score <= best) continue;
+        const t = fitInRuns(runsOf(sd), sd.len / 2, w);
+        if (t === null) continue;
+        const h = Math.min(hts.doorTop, capAt(sd, t, w));
+        if (h < MIN_DOOR) continue;
+        best = score;
+        doorEdge = sd.edge;
+        doorT = t;
+        doorW = w;
+        doorH = h;
+      }
+      if (doorEdge >= 0) break;
     }
   }
 
@@ -220,16 +252,17 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
       slots.push(...(marked.get(sd.edge) ?? []));
     } else {
       if (sd.edge === doorEdge) {
-        slots.push({ t: doorT, w: doorW, h0: 0.02, h1: hts.doorTop });
+        slots.push({ t: doorT, w: doorW, h0: 0.02, h1: doorH });
         for (const d of [-1, 1]) lights.push({ edge: sd.edge, t: doorT + d * (doorW / 2 + 0.4) });
       }
-      if ((sd.edge === doorEdge || s.kind === 'house') && winOk) {
+      if (sd.edge === doorEdge || s.kind === 'house') {
         const n = Math.max(1, Math.floor((sd.len - 1.2) / 3.4));
         for (let k = 0; k < n; k++) {
           const w = sd.edge === doorEdge ? 1.5 : 1.4;
           const tt = fitInRuns(runsOf(sd), ((k + 0.5) / n) * sd.len, w);
           if (tt === null || overlaps(slots, tt, w, 0.25)) continue;
-          slots.push({ t: tt, w, h0: Math.max(0.02, hts.winBottom), h1: hts.winTop });
+          const slot = winSlot(sd, tt, w);
+          if (slot) slots.push(slot);
         }
       }
     }
