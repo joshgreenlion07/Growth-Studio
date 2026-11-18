@@ -13,6 +13,8 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { buildWaterRock } from './waterrock';
+import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
@@ -621,6 +623,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
+      case 'mossRock':
+      case 'canyonBoulder': {
+        // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
+        buildWaterRock({ f, spec, add, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
+        break;
+      }
+      case 'flagLip':
+      case 'flagLedge':
+      case 'flagEdge': {
+        // Flagstone pieces for water features (builder/flagstone.ts).
+        buildFlagstone({ f, spec, add, piece: flagstonePiece, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
+        break;
+      }
       case 'blackPlanter': {
         add(mat.black, box(W, 0.6, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.56, 0));
@@ -785,6 +800,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       // What the material pointer reports for a stepping stone: its slab, concrete or flagstone, and color.
       o.userData.part = 'stone';
       o.userData.catalogId = stoneLook(f, spec);
+    }
+    if (spec.kind === 'flagLip' || spec.kind === 'flagLedge' || spec.kind === 'flagEdge') {
+      // The same for a water feature's flagstone piece: the flagstone it is cut from.
+      o.userData.part = 'stone';
+      o.userData.catalogId = flagLookOf(f).id;
     }
     o.name = `feature-${f.id}`;
     group.add(o);

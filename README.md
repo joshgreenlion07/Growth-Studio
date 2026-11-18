@@ -300,6 +300,15 @@ Messages use `window.postMessage`:
   life screen) takes an optional `size: [length, depth, height]` in meters; left out, the catalog's standard size. A
   planter (`plantable`) is drawn with its own planting (counted with the plan's plants) unless `planted: false`.
   Plants placed inside a planter sit on its soil.
+- Rock for water features (group Water, in the Library's Water and spa): moss rock boulders in three shapes
+  (`moss-rock-rounded`, `moss-rock-tall`, `moss-rock-flat-top`), the Canyon Tech boulder (`canyon-tech-boulder`), and
+  flagstone pieces (`flagstone-lip-stone`, `flagstone-ledge`, `flagstone-edge-piece`). Every one comes in sizes: `size`
+  is `[length, depth, height]` in meters, and a boulder's height is what shows above the ground (about a fifth of the rock is
+  buried under that). The boulders offer the option `moss` (default on: moss, lichen and rust; off is clean stone). Each placed
+  boulder is its own shape, seeded by its id. A flagstone piece is cut from one of the three flagstones Green Lion buys: its
+  `materialId` is `flagstone-cold-water-canyon`, `flagstone-az-classic-oak` (the default) or `flagstone-sui-black-slate`, drawn with
+  the same cleft face and broken edges as the flagstone steppers; a piece is as thick as its stone (2 in, or 1 in for the slate), so
+  a lip stone's or edge piece's `size` height is ignored, and a ledge's height is its stack of slabs.
 - The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`

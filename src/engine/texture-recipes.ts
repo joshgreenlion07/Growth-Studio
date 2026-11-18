@@ -4,6 +4,7 @@ import { cortenSet, flagFaceSet, materialTextures, padSet, porcelainPanelSet, sl
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
 import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
+import { rockGrainSet } from './rock-surfaces';
 
 /**
  * The texture worker's side of `textureSet`: rebuild a set from its cache key
@@ -52,6 +53,7 @@ export function runRecipe(key: string): PBRSet | null {
     'pf-stucco': pillarStuccoSet,
     'pf-ledger': ledgerStoneSet,
     'pf-bowl': patinaBowlSet,
+    'rk-grain': rockGrainSet,
   };
   return named[key]?.() ?? null;
 }
