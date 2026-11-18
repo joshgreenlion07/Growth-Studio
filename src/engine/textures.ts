@@ -37,11 +37,16 @@ interface Sample {
 }
 
 let anisotropy = 8;
-/** The renderer's own limit (16 on most GPUs): ground seen at a low angle, as from walk height, stays sharp. */
+let rendererAnisotropy = 8;
 export function setMaxAnisotropy(n: number) {
-  anisotropy = Math.max(1, Math.min(16, n));
+  anisotropy = Math.min(8, n);
+  rendererAnisotropy = Math.max(1, n);
 }
-export const maxAnisotropy = () => anisotropy;
+/**
+ * The renderer's own limit (16 on most GPUs). Only the pattern maps of detailed pavers use it (see paverSet), so a walk
+ * seen at a low angle stays sharp; everything else keeps 8, as the ground splat samples many maps a pixel.
+ */
+export const maxAnisotropy = () => rendererAnisotropy;
 
 /**
  * Keys of the sets the texture worker can paint by itself (texture-recipes.ts

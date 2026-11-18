@@ -9,6 +9,7 @@ import { materialTextures } from '../engine/surfaces';
 import { onTexturesChanged, wantForSwatch } from '../engine/texture-jobs';
 import type * as THREE from 'three';
 import { poolTile, type PBRSet } from '../engine/textures';
+import { detailAlbedo } from '../engine/paver-detail';
 import { wantPicture, wantThumb } from './plantthumbs';
 import { wantFeaturePicture, wantFeatureThumb } from './featurethumbs';
 
@@ -58,7 +59,7 @@ function fromSet(set: PBRSet, size = SIZE): Promise<string | null> {
     const done = () => {
       off?.();
       clearTimeout(timer);
-      idle(() => res(draw(set.map, size)));
+      idle(() => res(draw(set.map, size, set)));
     };
     const ready = () => !set.map.userData.flat;
     if (ready()) return done();
@@ -79,7 +80,7 @@ function idle(fn: () => void) {
  * bytes, rows bottom first, see texture-jobs.ts): the level nearest SIZE is drawn, a few hundred kilobytes at most.
  * Maps painted here are canvases.
  */
-function draw(tex: THREE.Texture, SIZE: number): string | null {
+function draw(tex: THREE.Texture, SIZE: number, set?: PBRSet): string | null {
   const img = tex.image as unknown;
   if (!img) return null;
   const c = document.createElement('canvas');
@@ -102,6 +103,8 @@ function draw(tex: THREE.Texture, SIZE: number): string | null {
     g.translate(0, SIZE);
     g.scale(1, -1);
     g.drawImage(t, 0, 0, w, w, 0, 0, SIZE, SIZE);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    addGrain(g, SIZE, set);
     return c.toDataURL('image/jpeg', 0.86);
   }
   let src: CanvasImageSource | null = null;
@@ -116,7 +119,29 @@ function draw(tex: THREE.Texture, SIZE: number): string | null {
   const w = (src as { width: number }).width;
   if (!w || w < 16) return null;
   g.drawImage(src, 0, 0, w, w, 0, 0, SIZE, SIZE);
+  addGrain(g, SIZE, set);
   return c.toDataURL('image/jpeg', 0.86);
+}
+
+/**
+ * A detailed paver's pattern map is painted without its fine grain (the 3D view adds it in real size, see
+ * engine/paver-detail.ts); a swatch whose pixels are fine enough to show that grain (1.5 mm or less) gets it back.
+ */
+function addGrain(g: CanvasRenderingContext2D, SIZE: number, set?: PBRSet) {
+  const face = set?.detail?.face;
+  if (!face || !set) return;
+  const px = set.tileMeters / SIZE;
+  if (px > 0.0015) return;
+  const img = g.getImageData(0, 0, SIZE, SIZE);
+  const d = img.data;
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+    const k = detailAlbedo(face, (x + 0.5) * px, (y + 0.5) * px);
+    const o = (y * SIZE + x) * 4;
+    d[o] *= k;
+    d[o + 1] *= k;
+    d[o + 2] *= k;
+  }
+  g.putImageData(img, 0, 0);
 }
 
 /* ------------------------------------------------------------------ */

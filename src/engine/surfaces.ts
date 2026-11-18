@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
-import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 import { boardFaceSet } from './deckboards';
@@ -33,8 +33,15 @@ export function photoAlbedo(hex: string): string {
   return '#' + ch.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * True when a look's palette is read from a maker's swatch photo, so it is turned to albedo. A "same as the main
+ * course" border (`border-of-...`) carries its line's photo palette but no maker tag (the tag would list it in the
+ * pickers on its own), so it is matched by its id.
+ */
+const fromPhoto = (spec: MaterialSpec) => !!spec.maker || spec.id.startsWith('border-of-');
+
 function pal(spec: MaterialSpec): RGB[] {
-  return spec.palette.map((h) => hexRGB(spec.maker ? photoAlbedo(h) : h));
+  return spec.palette.map((h) => hexRGB(fromPhoto(spec) ? photoAlbedo(h) : h));
 }
 
 /*
@@ -406,24 +413,31 @@ function cloudTone(colors: RGB[], lx: number, ly: number, id: number, r1: number
 }
 
 /**
- * The lines whose faces take the close-range detail (engine/paver-detail.ts) so far: field, border and every color of
- * Belgard Avalon Slate and Catalina Grana. Any other line opts in by matching here once its look has been checked
- * with the detail on (its face kind must have a detail recipe).
+ * The lines whose faces take the close-range detail (engine/paver-detail.ts) so far: field, border, edging and every
+ * color of Belgard Avalon Slate, Catalina Grana and Antiqued Flat Top. Any other line opts in by matching here once its
+ * look has been checked with the detail on (its face kind must have a detail recipe).
  */
-const DETAIL_LINES = /^(?:border-of-)?(?:avalon-slate|catalina-grana)-/;
+const DETAIL_LINES = /^(?:border-of-|paver-edge-)?(?:avalon-slate|catalina-grana|antiqued-flat-top)-/;
 function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
   if (!DETAIL_LINES.test(spec.id) || p.tumbled) return undefined;
   const f = p.face ?? 'textured';
-  return f === 'slate' || f === 'smooth' || f === 'textured' ? f : undefined;
+  return f === 'slate' || f === 'smooth' || f === 'textured' || f === 'antiqued' ? f : undefined;
 }
 
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
   const face = detailFor(spec, p);
   const out = paverMaps(spec, laying);
-  if (face) out.set.detail = { face, edges: paverEdges(spec, p, out.lay, out.size, laying) };
+  if (face) {
+    out.set.detail = { face, edges: paverEdges(spec, p, out.lay, out.size, laying) };
+    // These maps alone take the renderer's full anisotropic filtering (set before any clone or upload copies it).
+    for (const t of [out.set.map, out.set.normalMap, out.set.roughnessMap]) t.anisotropy = maxAnisotropy();
+  }
   return out.set;
 }
+
+/** True when a catalog look is drawn with the close-range detail (and its border with every texture row, hardscape.ts). */
+export const hasPaverDetail = (id: string) => DETAIL_LINES.test(id);
 
 /** Edge map texel: about 1.2 mm, finer than the narrowest half joint drawn with it (Avalon Slate's, 1.5 mm). */
 const EDGE_TEXEL = 0.0012;
@@ -440,14 +454,20 @@ const EDGE_TEXEL = 0.0012;
  */
 function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: number, laying?: LayingPattern): PaverEdges {
   const T = lay.tile, h = T / size / 2;
-  const bevel = p.face === 'smooth' ? 0.0025 : 0.005;
+  // Antiqued Flat Top has no chamfer: its arris is worn round over about 7 mm, unevenly, with chips broken out of it
+  // (drawn in the shader, `worn`), as the pattern texture draws it.
+  const worn = p.face === 'antiqued';
+  const bevel = worn ? 0.007 : p.face === 'smooth' ? 0.0025 : 0.005;
   const common = {
     joint: (p.joint * IN) / 2,
     bevel,
-    // The paver texture's own joint and chamfer blur over about a texel and a half past the chamfer; nearer the joint
-    // than this its color and relief are read from just inside the piece.
-    push: bevel + (1.5 * T) / size,
-    slope: p.face === 'smooth' ? 4 : 2.5,
+    worn,
+    // The paver texture's own joint and chamfer (and an antiqued edge's wear and chips, up to 16 mm in) blur over about
+    // a texel and a half past them; nearer the joint than this its color and relief are read from just inside the piece.
+    push: bevel + (worn ? 0.016 : 0) + (1.5 * T) / size,
+    // Steepest slope across the edge (normal x, y): the crisp chamfers are steep; the worn round of an antiqued arris
+    // is gentle (about 2.5 mm over its 7 mm), so it shades softly instead of catching a bright line.
+    slope: worn ? 0.5 : p.face === 'smooth' ? 4 : 2.5,
     sand: p.jointSand ? hexRGB(photoAlbedo(p.jointSand)) : mulRGB(JOINT_SAND, 0.9),
   };
   const m = lay.module;
@@ -465,13 +485,13 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
     const cell = Math.max(Math.hypot(m.v1[0], m.v1[1]), Math.hypot(m.v2[0], m.v2[1])) * IN;
     const n = Math.min(1024, Math.ceil(cell / EDGE_TEXEL));
     const key = `mod:${laying}:${m.pieces.length}:${m.P}:${n}`;
-    return { ...common, key, size: n, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
+    return { ...common, key, size: n, mapSize: size, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
   }
   const n = Math.min(2048, Math.ceil(T / EDGE_TEXEL));
   const seeded = p.kind === 'ashlar' || p.kind === 'cobble' || p.kind === 'plank';
-  const key = `lay:${p.kind}:${JSON.stringify(p.sizes)}:${laying ?? ''}:${seeded ? spec.id : ''}:${n}`;
+  const key = `lay:${p.kind}:${JSON.stringify(p.sizes)}:${p.blend ?? ''}:${laying ?? ''}:${seeded ? spec.id : ''}:${T.toFixed(4)}:${n}`;
   return {
-    ...common, key, size: n, e: [1 / T, 0, 0, -1 / T], off: [-h / T, -h / T],
+    ...common, key, size: n, mapSize: size, e: [1 / T, 0, 0, -1 / T], off: [-h / T, -h / T],
     paint: () => {
       const out = new Uint8Array(n * n);
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[j * n + i] = encodeEdge(lay.at(((i + 0.5) / n) * T, ((j + 0.5) / n) * T).edge);
@@ -588,19 +608,20 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
       // a few small dents and pits, worn patches a little lighter and smoother, and chips showing the rougher, lighter
       // broken concrete under the face.
       const und = fbm(u + r2 * 3.3, v + r1 * 2.2, F(0.25), 3, 51);
-      const fine = vnoise(u * F(0.0035), v * F(0.0035), F(0.0035), 53);
+      // With the close-range detail on, the fine paste and pin holes come from the detail texture in real size.
+      const fineG = fine ? vnoise(u * F(0.0035), v * F(0.0035), F(0.0035), 53) : 0.5;
       const vo = voronoi(u, v, F(0.06), 57 + (id % 3));
       // Dents: a few shallow, uneven dings (a noise wobble breaks the round shape), and fewer fine pin holes.
       const dw = (vnoise(u * F(0.008), v * F(0.008), F(0.008), 63) - 0.5) * 0.08;
       const pit = vo.id > 0.9 ? 1 - smooth(0.03, 0.09 + (vo.id - 0.9) * 0.9, vo.f1 + dw) : 0;
       const vo2 = voronoi(u, v, F(0.022), 59);
-      const pin = vo2.id > 0.95 ? 1 - smooth(0.04, 0.13, vo2.f1) : 0;
+      const pin = fine && vo2.id > 0.95 ? 1 - smooth(0.04, 0.13, vo2.f1) : 0;
       const wear = smooth(0.55, 0.8, fbm(u + 7.1, v + 3.3, F(0.09), 4, 61 + (id % 7)));
       const broken = chip * (1 - smooth(0.002, 0.02, rim));
-      c = mulRGB(c, 1.01 + fine * 0.05 - pit * 0.08 - pin * 0.06 + wear * 0.04);
+      c = mulRGB(c, 1.01 + fineG * 0.05 - pit * 0.08 - pin * 0.06 + wear * 0.04);
       c = mixRGB(c, mulRGB(mixRGB(c, [0.62, 0.6, 0.56], 0.25), 1.04), broken * 0.35);
-      h = bev * (0.9 + und * 0.1 + fine * 0.03 - pit * 0.45 - pin * 0.3 - broken * 0.5);
-      rough = 0.64 + fine * 0.06 + pit * 0.12 + pin * 0.08 + broken * 0.18 - wear * 0.07;
+      h = bev * (0.9 + und * 0.1 + fineG * 0.03 - pit * 0.45 - pin * 0.3 - broken * 0.5);
+      rough = 0.64 + fineG * 0.06 + pit * 0.12 + pin * 0.08 + broken * 0.18 - wear * 0.07;
     } else if (p.face === 'slate') {
       // Cleft slate (Avalon Slate): each stone carries its own rippled cleft, ridges a few centimeters apart running
       // roughly along the stone and leaning a little differently on each, broken into a few shallow terraces.

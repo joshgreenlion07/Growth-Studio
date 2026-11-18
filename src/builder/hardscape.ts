@@ -4,7 +4,7 @@ import { materialById, type FenceStyle, type MaterialSpec } from '../siteplan/ca
 import { padLook, padOf, type PadRect } from '../siteplan/pads';
 import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
-import { latticeAlpha, materialTextures, photoAlbedo, slabSet, soldierTileIn, wallCapTextures } from '../engine/surfaces';
+import { hasPaverDetail, latticeAlpha, materialTextures, photoAlbedo, slabSet, soldierTileIn, wallCapTextures } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
@@ -558,7 +558,8 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         // A soldier texture (a along the course, b across) holds L / b rows of L / a pieces; a sailor course runs down
         // its columns instead.
         const [a, b] = pz, L = soldierTileIn(a, b);
-        const cells = bp?.kind !== 'soldier' || pieceIn !== (sailor ? b : a) ? undefined
+        // (Detailed lines only, so every other line's border looks as it did.)
+        const cells = bp?.kind !== 'soldier' || pieceIn !== (sailor ? b : a) || !hasPaverDetail(z.border.catalogId) ? undefined
           : sailor ? { n: Math.round(L / b), m: Math.round(L / a), size: a * 0.0254 } : { n: Math.round(L / a), m: Math.round(L / b), size: b * 0.0254 };
         const bg = borderGeometry(z.polygon, inner, t, -0.06, sailor, pieceIn, cells);
         geos.push(bg);
