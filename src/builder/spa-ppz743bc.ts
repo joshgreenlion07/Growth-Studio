@@ -44,7 +44,7 @@ export interface SpaSink {
    * object sits there and its geometry is given in the spa's space (it is moved to the pivot), so it can turn about it;
    * `own` hands over a geometry the builder made itself (and put into the object) to be disposed with the feature.
    */
-  part?(key: string, pivot?: [number, number, number]): { add(m: THREE.Material, g: THREE.BufferGeometry): void; object: THREE.Object3D; own(g: THREE.BufferGeometry): void };
+  part?(key: string, pivot?: [number, number, number]): { add(m: THREE.Material, g: THREE.BufferGeometry): void; object: THREE.Object3D; own(g: THREE.BufferGeometry, mesh?: THREE.Mesh): void };
   /** A moving effect (the jets' bubbles and steam): added as it is, hidden until the jets run. */
   effect?(m: THREE.Mesh): void;
 }
@@ -588,7 +588,7 @@ export function calSpaTropicalPlus(W: number, D: number, opt: SpaOptions, sink: 
   }
   // The jets' bubbles and steam (made with the water below) show while the jets run and the cover is open.
   let jetsOn = false;
-  let coverFade = 0; // how far the cover has cleared the water (0 on it, 1 well clear): the jets' effects fade with it
+  let coverFade = opt.cover === 'closed' ? 0 : 1; // how far the cover has cleared the water (0 on it, 1 well clear): the jets' effects fade with it
   let effects: SpaEffects | null = null;
   // The cover: with parts to show and hide, both states are built (the closed cover and the folded one) and the hand
   // switches between them; the lifter's brackets stay put.
@@ -1138,7 +1138,7 @@ function coverRig(m: Mats, sink: SpaSink, openNow: boolean, onFade: (level: numb
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     maps[k].group.object.add(mesh);
-    maps[k].group.own(g);
+    maps[k].group.own(g, mesh);
     morphed.push(mesh);
   };
 

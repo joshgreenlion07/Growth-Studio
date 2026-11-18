@@ -414,7 +414,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
             part(key: string, pivot?: [number, number, number]) {
               const h = hinge(...(pivot ?? [0, 0, 0]));
               parts.set(key, h.group);
-              return { add: h.add, object: h.group, own: (g: THREE.BufferGeometry) => void geos.push(g) };
+              return { add: h.add, object: h.group, own: (g: THREE.BufferGeometry, mesh?: THREE.Mesh) => { geos.push(g); if (mesh) surfaces.push(mesh); } };
             },
             effect(m: THREE.Mesh) {
               o.add(m);
