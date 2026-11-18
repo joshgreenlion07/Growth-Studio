@@ -356,6 +356,13 @@ Messages use `window.postMessage`:
   Totals and Every edge show only areas, edges, walls, runs, structures,
   features and `plan.rulers`; Plants shows or hides the plant labels in any of
   them. The switch is remembered on the device.
+- Every edge labels each run as a dimension on the run itself (turned along it
+  when it is near level on screen, else level, with a leader when it has to move
+  off it), names walls, fences, curbs and shared area edges ("Wall 18 in · 35 ft"),
+  puts curved runs' labels on the visible part nearest the middle of the view
+  ("along curve"), and drops labels hidden behind walls and buildings, too far for
+  the camera's height, or under 40 px on screen. Hovering or tapping a label
+  shows its whole run in lime; tapping elsewhere clears it.
 - Quick tools (D-pad): left / right pick the tool (`,` and `.`), up / down use it
   (`=` and `-`; holding down or `-` about a second is a long press; the keys, and
   `N`, act only while the 3D view has the keyboard, not a button or the plan pane). A chip at the

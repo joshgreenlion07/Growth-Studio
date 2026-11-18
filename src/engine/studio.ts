@@ -401,6 +401,7 @@ export class Studio {
       use: () => this.onUse(),
     });
     this.measure = new Measurements(container);
+    this.measure.onRedraw = () => this.invalidate();
     this.tape = new Tape(this.measure);
     this.scene.add(this.marks.group, this.tape.group);
     this.marks.onChange = (m) => {
@@ -422,14 +423,27 @@ export class Studio {
     this.renderer.domElement.addEventListener('wheel', () => this.invalidate(), { passive: true });
     // With the Hand picked, the pointer turns to a hand over anything that can be used.
     this.renderer.domElement.addEventListener('pointermove', (e) => {
+      // A measurement label under the mouse shows its whole run (see Measurements.hover).
+      if (e.pointerType === 'mouse' && !e.buttons && this.measure.visible) {
+        const over = this.measure.hover(e.clientX, e.clientY);
+        if (!this.handActive) this.renderer.domElement.style.cursor = over ? 'pointer' : '';
+      }
       if (!this.handActive || e.buttons || performance.now() - this.hoverAt < 120) return;
       this.hoverAt = performance.now();
       this.renderer.domElement.style.cursor = this.actionAt({ x: e.clientX, y: e.clientY }) ? 'pointer' : '';
     });
+    this.renderer.domElement.addEventListener('pointerleave', () => this.measure.hover(null));
     window.addEventListener('keydown', this.onKey);
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
       if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400)) {
+        // A tap on a measurement label picks its run (and nothing else); a tap anywhere else lets it go. With the Hand
+        // picked, a door, lid, fire, water or light under the label wins over it.
+        const handHit = this.handActive && !!this.actionAt({ x: e.clientX, y: e.clientY });
+        if (!handHit && this.measure.tap(e.clientX, e.clientY)) {
+          down = null;
+          return;
+        }
         this.focusAt(e.clientX, e.clientY);
         // With the Hand picked, a click on a door, lid, fire, water or light uses it.
         if (this.handActive && this.useAction(0, { x: e.clientX, y: e.clientY })) {
