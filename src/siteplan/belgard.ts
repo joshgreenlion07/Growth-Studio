@@ -287,7 +287,7 @@ export const BELGARD_LINES: MakerLine[] = [
   { slug: 'belair-wall', name: "Belair Wall", shelf: 'Garden walls', wall: { face: 'roughHewn', unit: { course: 6, lengths: [8, 16], capIn: 3, capOver: 1.25 } }, colors: [
     ["Ashwood", ['#a99c85', '#948a77', '#82796a', '#6a655c']],
     ["Hickory", ['#827161', '#796859', '#6d5e4f', '#594c3f']],
-    ["Iron Bay", ['#817a71', '#7d766e', '#79736b', '#756e67']],
+    ["Iron Bay", ['#90877a', '#817a6f', '#736c64', '#635d57']],
     ["Newport Gray", ['#9e988f', '#89857d', '#79766f', '#65625c']],
     ["Shaded Gray", ['#8d8b86', '#7c7b77', '#6e6d6b', '#5e5f5e']],
   ] },
@@ -313,7 +313,7 @@ export const BELGARD_LINES: MakerLine[] = [
   // random; tumbled cap 3 x 10 x 12 in, about 1 in over. (Napoli and Slate are also sold untumbled in one region.)
   { slug: 'castlemanor-grana', name: "Castlemanor Grana", shelf: 'Garden walls', wall: { face: 'tumbled', unit: { course: 6, lengths: [6, 12, 16], capIn: 3, capOver: 1 } }, colors: [
     ["Avondale", ['#c1af9b', '#b6a48f', '#a39481', '#73695c']],
-    ["Colonial", ['#b1a295', '#a29081', '#8e847b', '#6a635b']],
+    ["Colonial", ['#927f6b', '#7e6e5e', '#716253', '#42362b']],
     ["Midnight", ['#7d7a76', '#6d6c69', '#62615f', '#43413e']],
     ["Misty Mountain", ['#a79f96', '#968e85', '#888077', '#625c56']],
     ["Napoli", ['#d5cbc7', '#c8b7ac', '#c6a28a', '#624c42']],
@@ -329,7 +329,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Misty Mountain", ['#a69e95', '#958d84', '#878077', '#615b55']],
     ["Napoli", ['#cdc5bb', '#b9b1a7', '#a29990', '#6f6760']],
     ["Potomac", ['#958474', '#807163', '#6d5f53', '#41372f']],
-    ["Slate", ['#b7b7b6', '#a0a2a4', '#858a8f', '#404042']],
+    ["Slate", ['#c8c3be', '#b3aeaa', '#9b9793', '#6c6764']],
   ] },
   // Coventry Wall III: quarried split face, white-flecked two-tone blends, 6 in courses of 8, 10 and 16 in units;
   // its own 3 x 12 x 16 in cap, about 1 in over.

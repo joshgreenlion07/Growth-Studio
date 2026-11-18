@@ -14,6 +14,13 @@ let running = false;
 /** The picture if it is ready yet. */
 export const thumbUrl = (id: string) => cache.get(id);
 
+/** The material panel's large 4:3 plant picture (key `big:<id>` in the same queue and cache), drawn PICTURE_W x PICTURE_H. */
+export const PICTURE_W = 1200, PICTURE_H = 900;
+export const pictureUrl = (id: string) => cache.get(`big:${id}`);
+export function wantPicture(id: string, done: (url: string) => void, fail?: () => void) {
+  wantThumb(`big:${id}`, done, fail);
+}
+
 /** Call back with the picture as soon as it exists, and make sure it is queued. `fail` is called if it cannot be made. */
 export function wantThumb(id: string, done: (url: string) => void, fail?: () => void) {
   const have = cache.get(id);
@@ -50,10 +57,11 @@ async function pump() {
     const r = await import('./plantthumbs-render');
     while (queue.length) {
       const id = queue.shift()!;
-      const spec = plantById.get(id);
+      const big = id.startsWith('big:');
+      const spec = plantById.get(big ? id.slice(4) : id);
       if (!spec || cache.has(id)) continue;
       try {
-        const url = r.renderThumb(spec);
+        const url = await (big ? r.renderThumb(spec, PICTURE_W, PICTURE_H) : r.renderThumb(spec));
         cache.set(id, url);
         for (const f of waiting.get(id) ?? []) f(url);
       } catch (err) {

@@ -88,7 +88,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   "Belair Wall": {
     page: "https://www.belgard.com/product/belair-wall/",
     sizes: ["6 x 8\" / 6 x 11\" / 6 x 16\" / 14 x 11\"", "6 x 8 x 8\" / 6 x 16 x 8\" / 6 x 16 x 8\" (w/micro joint)", "6 x 16 x 8\"", "6 x 8 x 11\"", "3 x 8 x 13 1/2\"", "3 x 8 x 12\""],
-    images: { "Ashwood": "da50401075fb767f4e8fee2bcc14c6f6aa740ad4-2.jpg", "Hickory": "8e113787262feabd6dae03c0aa1ae159699df047.jpg", "Iron Bay": "xwkkxvroyymktjokthg7.jpg", "Newport Gray": "tabloecsqxoiaktuxhqd.jpg", "Shaded Gray": "3b6d19db8f4bf7d8e82f7a18496ffcef7f6e99a6.jpg" },
+    images: { "Ashwood": "da50401075fb767f4e8fee2bcc14c6f6aa740ad4-2.jpg", "Hickory": "8e113787262feabd6dae03c0aa1ae159699df047.jpg", "Iron Bay": "0a808ee946111a300e501632ca20d180c0760fe8.jpg", "Newport Gray": "tabloecsqxoiaktuxhqd.jpg", "Shaded Gray": "3b6d19db8f4bf7d8e82f7a18496ffcef7f6e99a6.jpg" },
   },
   "Belair Wall 2.0": {
     page: "https://www.belgard.com/product/belair-wall-2-0/",
@@ -103,12 +103,12 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   "Castlemanor Grana": {
     page: "https://www.belgard.com/product/castlemanor-grana/",
     sizes: ["6 x 6/4 x 10\" / 6 x 12 / 10 x 10\" / 6 x 16 / 14 x 10\""],
-    images: { "Avondale": "xzl8eosyhe8werwi45gx.jpg", "Colonial": "473b1cb96fb1e1cf1ae785fc837bbab739cf53ab-2.jpg", "Midnight": "kknbxzhurumwzzxexpjp.jpg", "Misty Mountain": "zrx9n4ih7ar2jxd6h6hs-2.jpg", "Napoli": "u0ead6g9yxcjxe6hkuul-2.jpg", "Oxford": "dd1a53dc4c7a3e001dccf956c749ab234910d7b3.jpg", "Potomac": "mgr5ink3xvxaefqb5mdo-2.jpg", "Savannah": "t9isobxffl0dlqrr4xmw.jpg", "Slate": "ldpbbo84hwn0wsim19yu-2.jpg", "Teak": "d43f8285ed31045ad69e38bfb307acb8335fdd66.jpg" },
+    images: { "Avondale": "xzl8eosyhe8werwi45gx.jpg", "Colonial": "1f369ac9bf67dae5d3428add464773a6cf408a7b.jpg", "Midnight": "kknbxzhurumwzzxexpjp.jpg", "Misty Mountain": "zrx9n4ih7ar2jxd6h6hs-2.jpg", "Napoli": "u0ead6g9yxcjxe6hkuul-2.jpg", "Oxford": "dd1a53dc4c7a3e001dccf956c749ab234910d7b3.jpg", "Potomac": "mgr5ink3xvxaefqb5mdo-2.jpg", "Savannah": "t9isobxffl0dlqrr4xmw.jpg", "Slate": "ldpbbo84hwn0wsim19yu-2.jpg", "Teak": "d43f8285ed31045ad69e38bfb307acb8335fdd66.jpg" },
   },
   "Castlemanor Rustic": {
     page: "https://www.belgard.com/product/castlemanor-rustic/",
     sizes: ["6 x 6/4 x 10\" / 6 x 12/10 x 10\" / 6 x 16/14 x 10\""],
-    images: { "Colonial": "gcxitu8uvb62qbvj8du9.jpg", "Misty Mountain": "gvei1ntedz3rjfhsykvi.jpg", "Napoli": "b1b74687f814acb3b46050b70933bceef59c173c.jpg", "Potomac": "qgciu3czemzv1ngwqqau.jpg", "Slate": "a4bb24b9e5b53ff06605a4781f7f5a7a531492ac-1.jpg" },
+    images: { "Colonial": "gcxitu8uvb62qbvj8du9.jpg", "Misty Mountain": "gvei1ntedz3rjfhsykvi.jpg", "Napoli": "b1b74687f814acb3b46050b70933bceef59c173c.jpg", "Potomac": "qgciu3czemzv1ngwqqau.jpg", "Slate": "COASTAL_OCT2019_BEL_SWATCH_CastleManor_SLATE.jpg" },
   },
   "Coventry Wall III": {
     page: "https://www.belgard.com/product/coventry-wall-iii/",
@@ -123,7 +123,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   "Lamina Tandem": {
     page: "https://www.belgard.com/product/lamina-tandem/",
     sizes: ["7 x 13 3/16 x 2 5/8\" / 7 x 15 13/16 x 2 5/8\" / 7 x 18 7/16 x 2 5/8\""],
-    images: { "Pewter": "0f7bfbe327821b51412b23df4709f1542e6a1a71-2.jpg", "Scandina Gray": "z5xcpjsa84fzw3hq7qjs-2.png", "Sienna": "1d0a0b7c1e22ec659ded007c0d5a40fda3e43c5a-2.jpg" },
+    images: { "Pewter": "0f7bfbe327821b51412b23df4709f1542e6a1a71-2.jpg", "Scandina Gray": "1f79551b3eb6c8656b7b03816bed1004dc0816b7.jpg", "Sienna": "1d0a0b7c1e22ec659ded007c0d5a40fda3e43c5a-2.jpg" },
   },
   "Melville Tandem Wall": {
     page: "https://www.belgard.com/product/melville-tandem-wall/",
