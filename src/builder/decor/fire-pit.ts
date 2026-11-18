@@ -2,19 +2,19 @@ import * as THREE from 'three';
 import { featureSize } from '../../siteplan/decor';
 import { rng } from '../../siteplan/geometry';
 import { photoAlbedo } from '../../engine/surfaces';
-import { boxUV, plainMaterial } from '../materials';
-import { box, IN, mat, type DecorContext } from './kit';
+import { boxUV, pbrMaterial, plainMaterial } from '../materials';
+import { box, gfrcCharcoal, IN, mat, type DecorContext } from './kit';
 
 /*
  * The job's custom gas fire pit (plan note: "custom 5' L fire pit, 300,000 BTU"): a low rectangular body of charcoal
  * glass-fiber concrete with softly eased edges, floating on a plinth set in about 3 1/4 in all round. Measured from
- * its photo against the lounge set: 60 x 30 in, 12 1/2 in tall (a 9 1/2 in body on a 3 in plinth). The burner pan
+ * its photo against the lounge set: 60 x 30 in, 12 1/2 in tall (an 8 1/2 in body on a 4 in plinth). The burner pan
  * is about 65% of the length and 41% of the width (39 x 12 1/2 in), 1 3/4 in deep, filled with reflective fire glass
  * over the burner; the flame stands in the middle. At night the glass bed glows and the fire lights the seating.
  * Local x runs along the length.
  */
 
-const PLINTH_H = 3 * IN;
+const PLINTH_H = 4 * IN;
 const PAN_DEPTH = 1.75 * IN;
 
 export function firePitLinear(c: DecorContext) {
@@ -22,8 +22,8 @@ export function firePitLinear(c: DecorContext) {
   const inset = Math.min(3.25 * IN, Wd * 0.11);
   const concrete = mat.gfrc();
   const edge = 0.008;
-  // Plinth, of the same concrete.
-  c.add(concrete, box(L - 2 * inset, PLINTH_H + 0.01, Wd - 2 * inset, 0, 0, 0));
+  // Plinth, of the same concrete, toned down for the shade under the body's overhang (the renderer has no occlusion).
+  c.add(pbrMaterial('decor:gfrc-shade', gfrcCharcoal(), { color: new THREE.Color(0.66, 0.66, 0.66) }), box(L - 2 * inset, PLINTH_H + 0.01, Wd - 2 * inset, 0, 0, 0));
   // Body: one casting with eased edges, open through the top for the burner pan (the pan floor closes it).
   const Lp = L * 0.65, Wp = Wd * 0.41;
   const yTopSolid = H - PAN_DEPTH;
@@ -40,14 +40,10 @@ export function firePitLinear(c: DecorContext) {
   const bedY = yTopSolid + 0.004;
   c.add(ember, box(Lp - 2 * lt, 0.006, Wp - 2 * lt, 0, yTopSolid - 0.002, 0));
   c.add(glassMaterial(), fireGlass(Lp - 2 * lt - 0.006, Wp - 2 * lt - 0.006, bedY, H - bedY - 0.006, `${c.f.id}-glass`));
-  // Flame: one tall flame in the middle (as in the photo), with low licks along the burner either side.
+  // Flame: one tall, narrow flame in the middle of the burner, as in the photo.
   const top = H - 0.012;
-  c.flame(Math.min(0.26, Wp * 0.85), 0.42, 0, top, 0);
-  c.flame(Math.min(0.26, Wp * 0.85), 0.38, 0, top, 0, Math.PI / 2 - 0.0001);
-  for (const s of [-1, 1]) {
-    c.flame(Lp * 0.22, 0.14, s * Lp * 0.24, top, 0);
-    c.flame(Wp * 0.6, 0.12, s * Lp * 0.24, top, 0, Math.PI / 2 - 0.0001);
-  }
+  c.flame(0.15, 0.42, 0, top, 0);
+  c.flame(0.11, 0.38, 0, top, 0, Math.PI / 2 - 0.0001);
   c.light(0, H + 0.45, 0, '#ff9a4a', 6.5, 7.5, true);
 }
 

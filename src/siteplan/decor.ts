@@ -22,8 +22,11 @@ export interface FeatureSize {
 const IN = 0.0254;
 const S = (l: number, d: number, h: number, label = `${l} x ${d} x ${h} in`): FeatureSize => ({ label, size: [l * IN, d * IN, h * IN] });
 
-/** The tall corten planter's sizes (L x D x H, inches). 36 x 16 x 24 is the one along the house in the job photos. */
-export const PLANTER_SIZES: FeatureSize[] = [S(24, 12, 24), S(30, 14, 24), S(36, 16, 24), S(48, 16, 24), S(36, 16, 30), S(48, 18, 30)];
+/**
+ * The tall corten planter's sizes (L x D x H, inches). 36 x 18 x 24 is the one along the house in the job photos: their
+ * ends stand about 1.3 times as tall as they are deep, and about 24 in tall against the house's window sills.
+ */
+export const PLANTER_SIZES: FeatureSize[] = [S(24, 12, 24), S(30, 14, 24), S(36, 16, 24), S(36, 18, 24), S(48, 18, 24), S(36, 18, 30), S(48, 18, 30)];
 /** Fire pit sizes (L x W x H, inches): 60 x 30 is the job's, measured from its photo against the lounge set. */
 export const FIRE_PIT_SIZES: FeatureSize[] = [S(48, 24, 12.5), S(60, 20, 12.5), S(60, 30, 12.5), S(72, 30, 12.5)];
 /** The tree of life screen, 7 ft square as built (three sheets on a steel frame), or 6 ft. */
@@ -32,9 +35,9 @@ export const TREE_PANEL_SIZES: FeatureSize[] = [S(72, 3, 72, '6 x 6 ft'), S(84, 
 const F = (s: Omit<FeatureSpec, 'placeholder'>): FeatureSpec => ({ ...s, placeholder: true });
 
 export const DECOR_FEATURES: FeatureSpec[] = [
-  F({ id: 'corten-planter-tall', name: 'Corten planter, tall rectangle', group: 'Accents', kind: 'cortenPlanterTall', footprint: [36 * IN, 16 * IN], sizes: PLANTER_SIZES, size: 2, plantable: true,
+  F({ id: 'corten-planter-tall', name: 'Corten planter, tall rectangle', group: 'Accents', kind: 'cortenPlanterTall', footprint: [36 * IN, 18 * IN], sizes: PLANTER_SIZES, size: 3, plantable: true,
     about: 'A tall rectangular planter of weathering (corten) steel plate with a folded top lip, set against the house. Planted as on the job: red yucca, blue fescue, red primroses, an echeveria and blue sedum over gray pebble mulch.',
-    facts: ['Standard 36 x 16 x 24 in; also 24 x 12, 30 x 14, 48 x 16 (24 in tall), 36 x 16 and 48 x 18 (30 in tall)', '1/4 in weathering steel plate, 7/8 in folded lip', 'Soil 1 3/4 in below the rim under 1-2 1/2 in gray river pebbles', 'Its plants are counted with the plan\'s plants'] }),
+    facts: ['Standard 36 x 18 x 24 in (as on the job); also 24 x 12, 30 x 14, 36 x 16, 48 x 18 (24 in tall), 36 x 18 and 48 x 18 (30 in tall)', '1/4 in weathering steel plate, 7/8 in folded lip', 'Soil 1 3/4 in below the rim under 1-2 1/2 in gray river pebbles', 'Its plants are counted with the plan\'s plants'] }),
   F({ id: 'corten-screen-tree-of-life', name: 'Corten screen, tree of life', group: 'Accents', kind: 'cortenTreePanel', footprint: [84 * IN, 3 * IN], sizes: TREE_PANEL_SIZES, size: 1,
     about: 'A laser-cut weathering steel screen: a tree with its branches and roots inside a circle, on three sheets bolted to a steel frame, set in front of the fence.',
     facts: ['7 x 7 ft as built (also 6 x 6 ft), 2 in off the ground', 'Three sheets on 2 in steel posts with rails at the thirds'] }),

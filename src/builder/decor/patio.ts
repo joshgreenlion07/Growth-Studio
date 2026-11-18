@@ -23,13 +23,20 @@ export function coverCeiling(structures: ExistingStructure[]): (p: Vec2) => numb
 
 /** Textilene sling: a fine open weave of gray PVC-coated yarn. */
 const slingSet = () => textureSet('decor:sling-mesh', () =>
-  paint(256, 0.05, 1.5, (u, v) => {
-    const wx = Math.abs(Math.sin(u * Math.PI * 2 * 24)), wy = Math.abs(Math.sin(v * Math.PI * 2 * 24));
+  paint(256, 0.06, 1.5, (u, v) => {
+    const wx = Math.abs(Math.sin(u * Math.PI * 2 * 16)), wy = Math.abs(Math.sin(v * Math.PI * 2 * 16));
     const yarn = Math.max(wx, wy);
-    const c = mulRGB([0.24, 0.235, 0.23], 0.65 + yarn * 0.4 + (vnoise(u * 12, v * 12, 12, 51) - 0.5) * 0.04);
+    const c = mulRGB([0.3, 0.29, 0.28], 0.6 + yarn * 0.45 + (vnoise(u * 12, v * 12, 12, 51) - 0.5) * 0.04);
     return { h: yarn, c, r: 0.85 };
   }),
 );
+
+/** A plane's 0..1 UVs scaled to meters, so a texture tiles at its real size. */
+function meterUV(g: THREE.BufferGeometry, w: number, h: number): THREE.BufferGeometry {
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h);
+  return g;
+}
 
 /** One sling chair at (x, z) facing +z turned by ry: dark aluminum tube frame, splayed legs, arms, high sling back. */
 function slingChair(c: DecorContext, x: number, z: number, ry: number, frame: THREE.Material, sling: THREE.Material) {
@@ -48,15 +55,15 @@ function slingChair(c: DecorContext, x: number, z: number, ry: number, frame: TH
   p(frame, bar(V(-w / 2, seatY, d / 2 - 0.06), V(w / 2, seatY, d / 2 - 0.06), t));
   p(frame, bar(V(-w / 2, 36 * IN, -d / 2 - 0.06), V(w / 2, 36 * IN, -d / 2 - 0.06), t));
   // The sling: seat sagging a little, and the back, as thin sheets between the frame tubes.
-  const seat = new THREE.PlaneGeometry(w - t, d - 0.16, 4, 4).rotateX(-Math.PI / 2);
+  const seat = meterUV(new THREE.PlaneGeometry(w - t, d - 0.16, 4, 4), w - t, d - 0.16).rotateX(-Math.PI / 2);
   const sp = seat.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < sp.count; i++) { const sx = sp.getX(i) / (w / 2), sz = sp.getZ(i) / ((d - 0.16) / 2); sp.setY(i, -0.025 * (1 - sx * sx) * (1 - sz * sz)); }
   seat.computeVertexNormals();
   seat.translate(0, seatY + 0.005, 0.02);
   p(sling, seat);
-  const back = new THREE.PlaneGeometry(w - t, 36 * IN - seatY - 0.04, 1, 1);
+  const back = meterUV(new THREE.PlaneGeometry(w - t, 36 * IN - seatY - 0.04, 1, 1), w - t, 36 * IN - seatY - 0.04);
   const lean = Math.atan2(0.16, 36 * IN - seatY);
-  back.rotateX(lean).translate(0, (36 * IN + seatY) / 2, -d / 2 + 0.02);
+  back.rotateX(-lean).translate(0, (36 * IN + seatY) / 2, -d / 2 + 0.02);
   p(sling, back);
   const m = new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z);
   for (const [mm, g] of parts) {
@@ -68,7 +75,7 @@ function slingChair(c: DecorContext, x: number, z: number, ry: number, frame: TH
 
 export function diningSling(c: DecorContext) {
   const [L, D] = c.spec.footprint;
-  const white = plainMaterial('decor:white-powder', { color: '#d6d5d1', roughness: 0.45, metalness: 0.1 });
+  const white = plainMaterial('decor:white-powder', { color: '#c9c8c3', roughness: 0.45, metalness: 0.1 });
   const frame = plainMaterial('decor:chair-frame', { color: '#3a3a3b', roughness: 0.45, metalness: 0.5 });
   const sling = pbrMaterial('decor:sling', slingSet(), { side: THREE.DoubleSide });
   // Table 84 x 40 x 29 1/2 in: a 1 1/2 in top on a skirt and square legs.

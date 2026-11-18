@@ -106,7 +106,7 @@ function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 /* ------------------------------------------------------------------ */
 
 /**
- * The job's planting for a 36 x 16 in planter, from its photos (local x along the length, z toward the open side):
+ * The job's planting for a 36 x 18 in planter, from its photos (local x along the length, z toward the open side):
  * a red yucca in the middle, then at each end a blue fescue, red primroses toward the house, an echeveria and a blue
  * sedum spilling over the open side. Positions scale with the planter; one shorter than 30 in keeps one end's set.
  */
@@ -125,7 +125,7 @@ const PLANTING: { id: string; x: number; z: number; container?: PlantPlacement['
   { id: 'echeveria', x: -0.24, z: 0.12 },
   { id: 'blue-sedum', x: -0.38, z: -0.13 },
 ];
-const BASE_W = 36 * IN, BASE_D = 16 * IN;
+const BASE_W = 36 * IN, BASE_D = 18 * IN;
 
 function planterOf(f: FeaturePlacement) {
   const spec = featureById.get(f.catalogId);
@@ -156,14 +156,14 @@ export function planterPlants(features: FeaturePlacement[]): PlantPlacement[] {
  * Ground height for plants: inside a planter (planted or not, so plants a designer puts in one sit on its soil) the
  * planter's soil, else the ground.
  */
-export function plantGround(features: FeaturePlacement[], height: (p: Vec2) => number): (p: Vec2) => number {
+export function plantGround(features: FeaturePlacement[], height: (p: Vec2) => number, lift: (p: Vec2) => number = () => 0): (p: Vec2) => number {
   const boxes = features.map((f) => ({ f, p: planterOf(f) })).filter((b) => b.p);
   if (!boxes.length) return height;
   return (q: Vec2) => {
     for (const { f, p } of boxes) {
       const dx = q[0] - f.position[0], dz = q[1] - f.position[1];
       const lx = dx * p!.cos - dz * p!.sin, lz = dx * p!.sin + dz * p!.cos;
-      if (Math.abs(lx) < p!.W / 2 - PLATE && Math.abs(lz) < p!.D / 2 - PLATE) return height(f.position) + p!.H - SOIL_DROP + 0.012;
+      if (Math.abs(lx) < p!.W / 2 - PLATE && Math.abs(lz) < p!.D / 2 - PLATE) return height(f.position) + lift(f.position) + p!.H - SOIL_DROP + 0.012;
     }
     return height(q);
   };

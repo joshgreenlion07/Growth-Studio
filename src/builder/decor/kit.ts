@@ -25,6 +25,8 @@ export interface DecorContext {
   glow: (m: THREE.MeshStandardMaterial) => void;
   /** Ceiling height over the feature when it stands under a cover (meters above its ground), for ceiling-hung things. */
   ceiling?: number;
+  /** How far the surface it stands on is above grade: the top of paving it is set on (0 on turf, beds and bare ground). */
+  lift?: number;
 }
 
 export const IN = 0.0254;
@@ -72,7 +74,7 @@ export const cortenPlate = set('corten-plate', () =>
     const blot = fbm(u, v, 9, 3, 12);
     const fine = vnoise(u * 160, v * 160, 160, 3);
     // Faint run-off: a few soft, long, slightly darker drips, not a grain.
-    const streak = Math.max(0, vnoise(u * 26, v * 1.5, 26, 7) - 0.72) * 0.35;
+    const streak = Math.max(0, vnoise(u * 26, v * 1.5, 26, 7) - 0.75) * 0.18;
     let c = mixRGB([0.6, 0.34, 0.19], [0.47, 0.25, 0.14], clamp01(cloud * 1.3 - 0.2));
     c = mixRGB(c, [0.66, 0.4, 0.23], Math.max(0, blot - 0.62) * 1.2);
     c = mulRGB(c, 0.95 + fine * 0.08 - streak);
@@ -98,7 +100,7 @@ export const cushionFabric = set('cushion-fabric', () =>
     const wx = Math.sin(u * Math.PI * 2 * 48), wy = Math.sin(v * Math.PI * 2 * 48);
     const weave = (wx > 0) !== (wy > 0) ? Math.abs(wx) : Math.abs(wy);
     const slub = vnoise(u * 24, v * 96, 24, 2);
-    const c = mulRGB([0.66, 0.655, 0.635], 0.94 + weave * 0.06 + (slub - 0.5) * 0.04);
+    const c = mulRGB([0.55, 0.54, 0.515], 0.94 + weave * 0.06 + (slub - 0.5) * 0.04);
     return { h: weave, c, r: 0.95 };
   }),
 );
@@ -164,7 +166,7 @@ export const mat = {
   painted: () => pbrMaterial('decor:painted-board', paintedBoard()),
   board: () => pbrMaterial('decor:painted-board-face', paintedBoardFace()),
   cedar: () => pbrMaterial('decor:cedar', cedarNatural()),
-  whiteFrame: () => plainMaterial('decor:white-powder', { color: '#d6d5d1', roughness: 0.45, metalness: 0.1 }),
+  whiteFrame: () => plainMaterial('decor:white-powder', { color: '#c9c8c3', roughness: 0.45, metalness: 0.1 }),
   soil: () => plainMaterial('planter-soil', { color: '#2b241f', roughness: 1 }),
   steelDark: () => plainMaterial('decor:steel-dark', { color: '#2d2724', roughness: 0.6, metalness: 0.5 }),
 };

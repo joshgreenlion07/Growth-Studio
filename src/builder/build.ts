@@ -10,7 +10,7 @@ import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBu
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
-import { buildHardscape, stepsFootprint } from './hardscape';
+import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
@@ -322,7 +322,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
-  const features = buildFeatures(plan.features, gm.height, coverCeiling(plan.structures));
+  // Decor set on paving stands on its top (the paving is drawn its thickness above grade).
+  const pavingTop = (p: Vec2) => {
+    const z = gm.zoneAt(p);
+    return z && z.kind === 'hardscape' ? zoneTop(z, plan.zones.indexOf(z)) : 0;
+  };
+  const features = buildFeatures(plan.features, gm.height, coverCeiling(plan.structures), pavingTop);
   const models = buildModels(plan.models ?? [], gm.height, assets);
   yield 'water, features, models';
 
@@ -389,7 +394,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, plantGround(plan.features, gm.height), quality !== 'draft', { lod: true, reflects, shadowTexel });
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, pavingTop), quality !== 'draft', { lod: true, reflects, shadowTexel });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);

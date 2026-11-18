@@ -84,7 +84,7 @@ function stoneMaterial(f: FeaturePlacement): string {
   return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -406,7 +406,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'patioHeater':
       case 'ceilingFan': {
         // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
-        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position) });
+        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
       case 'blackPlanter': {
