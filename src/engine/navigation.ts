@@ -10,17 +10,21 @@ import * as THREE from 'three';
  *   walk   first person at eye height, following the ground.
  *   fly    first person, free to rise and sink.
  *
- * Controller                     Keyboard (walk / fly)
- *   Left stick   move              W A S D or arrows
- *   Right stick  look              drag with the mouse
+ * Controller                     Keyboard
+ *   Left stick   move              W A S D or arrows (walk / fly)
+ *   Right stick  look              drag with the mouse (walk / fly)
  *   RT / LT      walk: zoom lens   wheel
  *                fly/orbit: fly in / out along the view
  *   RB / LB      rise / sink       E / Q (fly)
  *   Hold LS      faster            Shift
  *   A            walk / fly        V
  *   X            measurements      M     (off, totals, every edge)
- *   Y            back to start     Home
- *   D-pad ← →    saved views (orbit only)
+ *   B            plant labels      N     (on their own, apart from the measurements)
+ *   Y            material pointer  P
+ *   RS click     lock its material L
+ *   Menu         back to start     Home (walk / fly)
+ *   D-pad ← →    pick a quick tool  , .   (every mode; see app/quicktools.ts)
+ *   D-pad ↑ ↓    use it             = -   (hold ↓ or - to clear)
  *
  * Mouse wheel, trackpad scroll and trackpad pinch (Safari's gesture events,
  * Chrome's ctrl+wheel) zoom in every mode: the orbit distance, the lens when
@@ -32,10 +36,14 @@ import * as THREE from 'three';
  */
 
 export type NavMode = 'orbit' | 'walk' | 'fly';
+/** A D-pad direction for the quick tools. */
+export type QuickDir = 'left' | 'right' | 'up' | 'down';
+/** How long ↓ is held before it counts as a long press (clear all), ms. */
+export const QUICK_HOLD_MS = 900;
 /** Eye height for walking, meters (about 5 ft 5 in). */
 export const EYE_HEIGHT = 1.65;
 
-const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
+const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, MENU: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 
 /* Feel. Rates are per second and used as 1 - exp(-rate * dt), so the glide is the same at 30, 60 or 120 fps. */
 /** Stick dead zone (radial, so diagonals are not sticky) and the outer edge treated as full tilt. */
@@ -98,6 +106,10 @@ export interface NavHost {
   togglePointer(): void;
   /** Hold the pointer's current material (the panel keeps it while the view moves); again to follow the pointer. */
   togglePointLock(): void;
+  /** Plant labels on or off, apart from the measurements. */
+  togglePlantLabels(): void;
+  /** D-pad for the quick tools: left / right pick one, up / down use it; `held` once ↓ has been held QUICK_HOLD_MS. */
+  quick(dir: QuickDir, held: boolean): void;
 }
 
 export class Navigation {
@@ -129,6 +141,9 @@ export class Navigation {
   /** Safari pinch in progress (its own events), and when it ended: ctrl+wheel then is not a second pinch. */
   private gesture = { on: false, scale: 1, endedAt: 0 };
   private touches = new Set<number>();
+  /** When D-pad ↓ went down (ms), and whether its long press has fired. */
+  private downAt = 0;
+  private downHeld = false;
   onConnect: (name: string) => void = () => {};
   onDisconnect: () => void = () => {};
 
@@ -152,6 +167,7 @@ export class Navigation {
       if (k === 'm') { this.host.toggleMeasure(); return; }
       if (k === 'p') { this.host.togglePointer(); return; }
       if (k === 'l') { this.host.togglePointLock(); return; }
+      if (k === 'n') { this.host.togglePlantLabels(); return; }
       if (!first) return;
       if (k === 'v') { this.host.toggleFly(); return; }
       if (k === 'Home') { this.host.home(); return; }
@@ -318,17 +334,26 @@ export class Navigation {
       lift = (b(BTN.RB) ? 1 : 0) - (b(BTN.LB) ? 1 : 0);
       fast = b(BTN.LS);
       if (tapped(BTN.X)) this.host.toggleMeasure();
-      // Y turns the material pointer on and off; B goes home.
+      // B: plant labels, on their own switch apart from the measurements.
+      if (tapped(BTN.B)) this.host.togglePlantLabels();
+      // Y turns the material pointer on and off.
       if (tapped(BTN.Y)) this.host.togglePointer();
       // Pressing the right stick in holds the pointed material; again lets it follow the pointer.
       if (tapped(BTN.RS)) this.host.togglePointLock();
-      if (first) {
-        if (tapped(BTN.A)) this.host.toggleFly();
-        if (tapped(BTN.B)) this.host.home();
-      } else {
-        if (tapped(BTN.RIGHT)) this.host.stepView(1);
-        if (tapped(BTN.LEFT)) this.host.stepView(-1);
-        if (tapped(BTN.B)) this.host.home();
+      // Menu (Start) goes home: the first saved view, or back to the start point in first person.
+      if (tapped(BTN.MENU)) this.host.home();
+      if (first && tapped(BTN.A)) this.host.toggleFly();
+      // D-pad, in every mode: the quick tools. ← → pick a tool, ↑ ↓ use it, ↓ held clears.
+      if (tapped(BTN.LEFT)) this.host.quick('left', false);
+      if (tapped(BTN.RIGHT)) this.host.quick('right', false);
+      if (tapped(BTN.UP)) this.host.quick('up', false);
+      if (tapped(BTN.DOWN)) {
+        this.host.quick('down', false);
+        this.downAt = performance.now();
+        this.downHeld = false;
+      } else if (b(BTN.DOWN) && !this.downHeld && performance.now() - this.downAt >= QUICK_HOLD_MS) {
+        this.downHeld = true;
+        this.host.quick('down', true);
       }
       for (let i = 0; i < pad.buttons.length; i++) this.prev[i] = pad.buttons[i].pressed;
     }

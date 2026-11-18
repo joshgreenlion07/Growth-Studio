@@ -159,7 +159,7 @@ section.scene-pane { position: relative; min-width: 0; min-height: 0; background
 
 /* Library: a panel over the left of the 3D view; the view itself shows the chosen product. */
 .library { position: absolute; z-index: 6; left: 0; top: 0; bottom: 0; width: min(420px, 100%); display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); color: var(--ink); font-size: 13px; }
-html.library-open .dock, html.library-open #views, html.library-open .scene-tools, html.library-open #stage-card, html.library-open #embed-note, html.library-open #nav-hint, html.library-open #height-meter { display: none !important; }
+html.library-open .dock, html.library-open #views, html.library-open .scene-tools, html.library-open #stage-card, html.library-open #embed-note, html.library-open #nav-hint, html.library-open .quick-hud, html.library-open .quick-aim, html.library-open .tape-label, html.library-open #height-meter { display: none !important; }
 html.library-open section.scene-pane { grid-template-rows: 1fr; }
 html.library-open aside.plan-pane, html.library-open #mobile-tabs { display: none !important; }
 html.library-open main.work { grid-template-columns: minmax(0, 1fr); }
@@ -231,6 +231,20 @@ section.scene-pane.fs #nav-modes { display: flex; }
 #nav-hint { position: absolute; z-index: 3; left: 12px; bottom: 12px; display: none; max-width: calc(100% - 130px); background: rgba(20, 24, 22, 0.72); color: #e7e9e4; font-size: 11px; line-height: 1.5; padding: 5px 9px; border-radius: 3px; pointer-events: none; }
 section.scene-pane.fs #nav-hint { display: block; }
 #nav-hint kbd { font-family: var(--font-mono); font-size: 10px; color: #fff; }
+/* Quick tools (D-pad): a chip at the bottom center naming the tool, what up and down do, and the result. Big enough
+   to read on a TV across the room; shows on each change and fades. */
+.quick-hud { position: absolute; z-index: 4; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px); background: rgba(20, 24, 22, 0.86); color: #f4f3ef; border-left: 3px solid #7dc00f; border-radius: 3px; padding: 8px 16px 9px; text-align: center; pointer-events: none; opacity: 1; transition: opacity 0.4s ease; }
+.quick-hud.fade { opacity: 0; }
+.quick-hud .qh-tool { font: 600 20px/1.25 var(--font-ui); white-space: nowrap; }
+.quick-hud .qh-act { font: 400 13px/1.4 var(--font-ui); color: #c9cec8; white-space: pre; }
+.quick-hud .qh-state { font: 600 15px/1.35 var(--font-mono); color: #ffd24a; margin-top: 2px; }
+/* Where Mark and Tape measure aim: a small cross at the center of the view. */
+.quick-aim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 3; pointer-events: none; }
+.quick-aim::before, .quick-aim::after { content: ''; position: absolute; background: #ff6a13; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.quick-aim::before { left: -9px; top: -1px; width: 18px; height: 2px; }
+.quick-aim::after { left: -1px; top: -9px; width: 2px; height: 18px; }
+.measure-label.tape-label { z-index: 3; font-size: 13px; }
+.measure-label.tape-label span { font-size: 11px; }
 /* Labels over the 3D view: ONE composited layer for all of them, made once and kept (will-change on the layer, never
    on a label, and labels hide by visibility). Per-label layers came and went every frame as labels showed and hid,
    changing the set of layers Chrome composites over the WebGL canvas each frame (on macOS, the CALayer tree); one
@@ -249,6 +263,9 @@ section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label span { display: block; font-size: 10px; color: #4a524c; }
 .measure-label.ml-area, .measure-label.ml-object { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #2f5b3b; }
 .measure-label.ml-area span, .measure-label.ml-object span { font-family: var(--font-mono); font-weight: 400; }
+/* Plant labels (their own switch, apart from the measurements): a lighter green edge so they read as plants. */
+.measure-label.ml-plant { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #7dc00f; }
+.measure-label.ml-plant span { font-family: var(--font-mono); font-weight: 400; }
 .measure-label.ml-lot { background: rgba(255, 233, 168, 0.92); }
 /* Material pointer: a ring at the center of the 3D view, with the name of what it is on. */
 .point-reticle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
@@ -403,11 +420,12 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
               <button type="button" data-mode="totals" aria-pressed="false" title="Area of each surface, total length of each run, wall height">Totals</button>
               <button type="button" data-mode="edges" aria-pressed="false" title="Every edge length as well">Every edge</button>
             </div>
+            <button id="btn-plants" type="button" aria-pressed="false" title="Plant labels: each plant's name, height and spread, on their own apart from the measurements (N or controller B)">Plants</button>
             <label id="stage-pick" title="Build stage: demo, excavation, trenches, backfill, base rock, sand, finished ([ and ] step through them)"><span>Stage</span><select id="stage-select" aria-label="Build stage"></select></label>
             <button id="btn-cutaway" type="button" aria-pressed="false" title="Cut away the near side of the yard at the point you are looking at, to see trenches, pipes and layers from the side (C)">Cut away</button>
             <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F)">Full screen</button>
           </div>
-          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>Esc</kbd> exit</div>
+          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>N</kbd> plant labels · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>,</kbd> <kbd>.</kbd> pick a quick tool · <kbd>=</kbd> <kbd>-</kbd> use it · <kbd>Esc</kbd> exit<br>Controller: <kbd>X</kbd> measurements · <kbd>B</kbd> plant labels · <kbd>Y</kbd> pointer · <kbd>A</kbd> walk / fly · <kbd>Menu</kbd> home · D-pad <kbd>◀ ▶</kbd> quick tool (dig layers, mark, tape, light, growth, views) · <kbd>▲ ▼</kbd> use it</div>
           <div id="height-meter" aria-hidden="true">
             <div class="hm-scale" id="hm-scale"><div class="hm-mark" id="hm-mark"></div></div>
             <div class="hm-read" role="status" aria-live="off"><span>Height</span><b id="hm-value">0 ft</b></div>

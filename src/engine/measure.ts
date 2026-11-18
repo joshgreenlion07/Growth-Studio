@@ -10,9 +10,12 @@ import { OverlayObstacles, insideView } from './overlay';
  * Measurements overlay, in two levels:
  *   totals  the area of each surface, the total length of each wall, fence and
  *           curb run (walls and fences with their height), and the size of
- *           structures, features and hand-placed plants. Outlines, no edge labels.
+ *           structures and features. Outlines, no edge labels.
  *   edges   all of that plus every straight run labeled, end ticks and lot lines.
  * Dimensions the person drew with the ruler show in both views, named and measured, above everything else.
+ *
+ * Plant labels (each hand-placed plant's name, height and spread at the current growth year) are a separate
+ * switch (setPlants), independent of the level: they can show with the measurements off, and stay hidden with them on.
  *
  * Lines are 3D (drawn on top of everything so grass never hides them); labels
  * are HTML placed over the canvas each frame, nearest and most important first,
@@ -64,6 +67,7 @@ export class Measurements {
   private order: Label[] = [];
   private shown = false;
   private detail = false;
+  private plantsOn = false;
   private obstacles: OverlayObstacles;
 
   constructor(container: HTMLElement) {
@@ -77,8 +81,25 @@ export class Measurements {
     this.obstacles = new OverlayObstacles(container, this.layer);
   }
 
+  /** Anything to draw: measurements, plant labels, or both (rebuild() is needed while this is true). */
   get visible() {
-    return this.shown;
+    return this.shown || this.plantsOn;
+  }
+
+  get plants() {
+    return this.plantsOn;
+  }
+
+  /** Show or hide the plant labels, apart from the measurements; call rebuild() after turning them on. */
+  setPlants(on: boolean) {
+    this.plantsOn = on;
+    this.sync();
+  }
+
+  private sync() {
+    this.lastPV.elements[0] = NaN;
+    this.group.visible = this.visible;
+    this.layer.hidden = !this.visible;
   }
 
   get mode(): MeasureMode {
@@ -88,10 +109,8 @@ export class Measurements {
   /** Show or hide the overlay; call rebuild() after changing between totals and edges. */
   setMode(mode: MeasureMode) {
     this.shown = mode !== 'off';
-    this.lastPV.elements[0] = NaN;
     this.detail = mode === 'edges';
-    this.group.visible = this.shown;
-    this.layer.hidden = !this.shown;
+    this.sync();
   }
 
   setVisible(on: boolean) {
@@ -102,6 +121,25 @@ export class Measurements {
   rebuild(plan: SitePlan, build: SceneBuild, years: number) {
     this.clear();
     const gy = (p: Vec2) => Math.max(0, build.gm.height(p));
+    if (this.plantsOn) this.plantLabels(plan, years, gy);
+    if (this.shown) this.measurements(plan, build, gy);
+    for (const o of this.group.children) o.renderOrder = 999;
+  }
+
+  /** Hand-placed plants (not mass-planted fill): name and size at the current growth year. */
+  private plantLabels(plan: SitePlan, years: number, gy: (p: Vec2) => number) {
+    for (const p of plan.plants) {
+      const spec = plantById.get(p.catalogId);
+      if (!spec) continue;
+      const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
+      const k = p.scale ?? 1;
+      const h = sz.height * k, s = sz.spread * k;
+      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'plant');
+    }
+  }
+
+  /** Areas, edges, walls and runs, structures, features and the person's own rulers. */
+  private measurements(plan: SitePlan, build: SceneBuild, gy: (p: Vec2) => number) {
 
     // Dimensions drawn with the ruler: a line with end ticks, named and measured. Shown in both views.
     for (const r of plan.rulers ?? []) this.ruler(r.a, r.b, r.label, gy);
@@ -188,18 +226,6 @@ export class Measurements {
       this.footprint(f.position, spec.footprint, f.rotationDeg, gy);
       this.label(`${spec.name.split(',')[0]}\n${fmtFeet(spec.footprint[0])} × ${fmtFeet(spec.footprint[1])}${tall}`, new THREE.Vector3(f.position[0], top + 0.3, f.position[1]), 'object');
     }
-
-    // Hand-placed plants (not mass-planted fill): size at the current growth year.
-    for (const p of plan.plants) {
-      const spec = plantById.get(p.catalogId);
-      if (!spec) continue;
-      const sz = sizeAt(spec, p.existing ? spec.yearsToMature : years, p.container);
-      const k = p.scale ?? 1;
-      const h = sz.height * k, s = sz.spread * k;
-      this.label(`${spec.name.split(',')[0]}\n${fmtFeet(h)} tall · ${fmtFeet(s)} wide`, new THREE.Vector3(p.position[0], gy(p.position) + h + 0.2, p.position[1]), 'plant');
-    }
-
-    for (const o of this.group.children) o.renderOrder = 999;
   }
 
   /** Draw a polygon or polyline on the ground with a length on each straight run. */
@@ -275,7 +301,7 @@ export class Measurements {
 
   private label(text: string, pos: THREE.Vector3, kind: LabelKind) {
     const el = document.createElement('div');
-    el.className = `measure-label ml-${kind === 'plant' ? 'object' : kind}`;
+    el.className = `measure-label ml-${kind}`;
     const [head, ...rest] = text.split('\n');
     el.append(head);
     for (const r of rest) {
@@ -291,7 +317,7 @@ export class Measurements {
 
   /** Place labels for this frame (only when the view or the labels changed). */
   update(camera: THREE.PerspectiveCamera, width: number, height: number) {
-    if (!this.shown) return;
+    if (!this.visible) return;
     // Controls that moved (a panel opened, the window resized) re-place the labels even with the view still.
     const moved = this.obstacles.refresh();
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);

@@ -14,7 +14,8 @@ import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
 import type { BuildStage, StageLabel } from '../builder/construction';
-import { EYE_HEIGHT, Navigation, type NavMode } from './navigation';
+import { EYE_HEIGHT, Navigation, type NavMode, type QuickDir } from './navigation';
+import { Marks, Tape, ftIn, type MarkPoint } from './marks';
 import { pointName } from '../siteplan/material-info';
 
 /**
@@ -163,6 +164,15 @@ export class Studio {
   readonly nav: Navigation;
   /** Lengths, areas and sizes drawn over the scene. */
   readonly measure: Measurements;
+  /** Quick tools drawn in the world: thrown dirt marks and the tape measure (see marks.ts). */
+  readonly marks = new Marks();
+  readonly tape: Tape;
+  /** The marks changed (one landed, was removed, or all were cleared). */
+  onMarksChanged: (marks: MarkPoint[]) => void = () => {};
+  /** Plant labels were turned on or off (B, N, or setPlantLabels). */
+  onPlantLabelsChanged: (on: boolean) => void = () => {};
+  /** A controller D-pad press for the quick tools (left / right pick the tool, up / down act; `held` after a long press). */
+  onQuick: (dir: QuickDir, held: boolean) => void = () => {};
   private viewIndex = 0;
   private navMode: NavMode = 'orbit';
   onNavModeChanged: (mode: NavMode) => void = () => {};
@@ -353,12 +363,7 @@ export class Studio {
         this.tween = null;
         this.manualFocus = null;
       },
-      stepView: (d) => {
-        if (!this.views.length) return;
-        this.viewIndex = (this.viewIndex + d + this.views.length) % this.views.length;
-        this.goTo(this.views[this.viewIndex].id);
-        this.nav.pulse();
-      },
+      stepView: (d) => this.stepView(d),
       home: () => {
         if (this.navMode === 'orbit') {
           if (!this.views.length) return;
@@ -381,8 +386,17 @@ export class Studio {
       togglePointer: () => this.setPointer(!this.pointerOn),
       // Right stick click or L: hold the pointed material.
       togglePointLock: () => this.setPointLock(!this.pointLocked),
+      // B or N: plant labels, apart from the measurements.
+      togglePlantLabels: () => this.setPlantLabels(!this.measure.plants),
+      quick: (dir, held) => this.onQuick(dir, held),
     });
     this.measure = new Measurements(container);
+    this.tape = new Tape(container);
+    this.scene.add(this.marks.group, this.tape.group);
+    this.marks.onChange = (m) => {
+      this.invalidate();
+      this.onMarksChanged(m);
+    };
     this.stageLabels = new StageLabels(container);
     this.scene.add(this.measure.group);
 
@@ -1058,9 +1072,117 @@ export class Studio {
   setMeasureMode(mode: MeasureMode) {
     if (mode === this.measure.mode) return;
     this.measure.setMode(mode);
-    if (mode !== 'off' && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
+    if (this.measure.visible && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
     this.onMeasureChanged(mode);
     this.invalidate();
+  }
+
+  get plantLabels() {
+    return this.measure.plants;
+  }
+
+  /** Show or hide the plant labels (name, height and spread of each placed plant), apart from the measurements. */
+  setPlantLabels(on: boolean) {
+    if (on === this.measure.plants) return;
+    this.measure.setPlants(on);
+    if (this.measure.visible && this.plan && this.build) this.measure.rebuild(this.plan, this.build, this.state.years);
+    this.onPlantLabelsChanged(on);
+    this.nav.pulse(50, 0.3);
+    this.invalidate();
+  }
+
+  /**
+   * Build the construction views now, while nothing else is happening, so stepping through the stages later only
+   * shows and hides (the Dig layers quick tool asks for this when it is picked). Done once per yard.
+   */
+  prepareStages() {
+    const b = this.build;
+    if (!b || this.prepared === b) return;
+    this.prepared = b;
+    const run = () => {
+      if (this.build !== b || this.disposed) return;
+      const t0 = performance.now();
+      b.prepareStages();
+      b.root.traverse((o) => {
+        if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
+      });
+      this.noteEvent('stages', `built ahead in ${(performance.now() - t0).toFixed(0)} ms`);
+    };
+    const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    if (idle) idle(run, { timeout: 1500 });
+    else window.setTimeout(run, 200);
+  }
+  private prepared: SceneBuild | null = null;
+
+  /** Where the center of the view meets the yard (the ground, paving, walls, water), or null for sky. */
+  aimPoint(): THREE.Vector3 | null {
+    this.raycaster.setFromCamera(this.v2.set(0, 0), this.camera);
+    const ray = this.raycaster.ray;
+    if (this.build) {
+      const hard = this.build.root.getObjectByName('hardscape');
+      const cons = this.build.root.getObjectByName('construction');
+      const hits = this.raycaster.intersectObjects([...this.focusSurfaces, ...(hard ? [hard] : []), ...(cons ? [cons] : []), ...this.build.water.surfaces], true);
+      // Only what is drawn: the paving is hidden during the build stages, the pits are hidden in the finished yard.
+      const shown = (o: THREE.Object3D | null) => {
+        for (; o; o = o.parent) if (!o.visible) return false;
+        return true;
+      };
+      for (const h of hits) if (h.distance < 400 && shown(h.object)) return h.point.clone();
+    }
+    // Nothing built there: the level ground.
+    if (ray.direction.y < -1e-3) {
+      const t = -ray.origin.y / ray.direction.y;
+      if (t > 0 && t < 400) return ray.at(t, new THREE.Vector3());
+    }
+    return null;
+  }
+
+  /** Throw a dirt clod to the center of the view. False when the view is on the sky. */
+  throwMark(): boolean {
+    const to = this.aimPoint();
+    if (!to) return false;
+    const cam = this.camera;
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
+    // From just below and ahead of the eye, so the clod is seen leaving.
+    const from = cam.position.clone().addScaledVector(fwd, 0.7);
+    from.y -= 0.3;
+    this.marks.throw(from, to);
+    this.nav.pulse(40, 0.25);
+    this.invalidate();
+    return true;
+  }
+
+  get markCount() {
+    return this.marks.count;
+  }
+
+  removeMark(): boolean {
+    const r = this.marks.removeLast();
+    this.invalidate();
+    return r;
+  }
+
+  clearMarks(): number {
+    const n = this.marks.clear();
+    if (n) this.nav.pulse(120, 0.5);
+    this.invalidate();
+    return n;
+  }
+
+  /** Tape measure: drop point A, then B (a third press starts again). Null when the view is on the sky. */
+  tapeDrop(): { state: 'a' | 'b'; text: string } | null {
+    const p = this.aimPoint();
+    if (!p) return null;
+    const state = this.tape.drop(p);
+    this.nav.pulse(40, 0.25);
+    this.invalidate();
+    return { state, text: state === 'b' ? this.tape.describe() : '' };
+  }
+
+  tapeClear(): boolean {
+    const r = this.tape.clear();
+    this.invalidate();
+    return r;
   }
 
   /** On shows the totals view. */
@@ -1199,6 +1321,15 @@ export class Studio {
 
   private groundAt(x: number, z: number) {
     return this.build ? Math.max(0, this.build.gm.height([x, z])) : 0;
+  }
+
+  /** The next (1) or previous (-1) saved view. The name of the view it goes to, or '' when there are none. */
+  stepView(d: 1 | -1): string {
+    if (!this.views.length) return '';
+    this.viewIndex = (this.viewIndex + d + this.views.length) % this.views.length;
+    this.goTo(this.views[this.viewIndex].id);
+    this.nav.pulse();
+    return this.views[this.viewIndex].label;
   }
 
   goTo(id: string) {
@@ -1405,6 +1536,8 @@ export class Studio {
     const animate = this.animating();
     if (this.state.motion) GLOBAL.uTime.value += dt;
     this.moveCamera(dt, now);
+    // A thrown clod in the air, or a pile settling: keep drawing.
+    if (this.marks.update(dt, this.camera)) this.dirty = true;
     const focusing = Math.abs(1 / Math.max(0.3, this.focusTarget) - this.focusInv) > this.focusInv * 0.002;
     if (this.camMoved && this.pointerOn) this.pointDue = true;
     // Also keep drawing until the view is back at full resolution with its depth of field after moving.
@@ -1549,6 +1682,7 @@ export class Studio {
     this.gpuTimer?.end();
     b.cpuFrame(performance.now() - cpu0);
     this.measure.update(this.camera, this.container.clientWidth, this.container.clientHeight);
+    this.tape.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     this.stageLabels.update(this.camera, this.container.clientWidth, this.container.clientHeight);
     if (this.pointerOn) this.updatePointer();
     // Yards replaced by a new one are released now that the new one has been drawn (shadow pass included).
@@ -1620,6 +1754,7 @@ export class Studio {
         `last second: resize ${c('resize')}  depth range ${c('depth range')}  shadows ${c('shadows')}  rebuild ${c('rebuild')}  textures ${c('textures')}  pause ${c('pause')}  render scale ${c('render scale')}`,
         this.motionLine(c('not drawn'), c('late')),
         `${this.budget.describe()}  mirror ${this.mirror.status}`,
+        `quick tools: marks ${this.marks.count}  tape ${this.tape.state === 'b' ? ftIn(this.tape.distance) : this.tape.state === 'a' ? 'point A' : 'none'}  plant labels ${this.measure.plants ? 'on' : 'off'}  measure ${this.measure.mode}`,
         ...this.diag.log,
       ].join('\n');
       this.diag.counts.clear();
@@ -1787,6 +1922,8 @@ export class Studio {
     this.pmrem.dispose();
     this.controls.dispose();
     this.measure.dispose();
+    this.marks.dispose();
+    this.tape.dispose();
     this.stageLabels.dispose();
     disposeMaterialCache();
     this.renderer.dispose();
