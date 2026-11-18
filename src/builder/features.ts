@@ -14,7 +14,7 @@ import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
 import { buildWaterRock } from './waterrock';
-import { buildFlagstone } from './flagstone';
+import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
@@ -623,7 +623,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'flagLedge':
       case 'flagEdge': {
         // Flagstone pieces for water features (builder/flagstone.ts).
-        buildFlagstone({ f, spec, add, material: catalogMaterial('slab-24'), lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
+        buildFlagstone({ f, spec, add, piece: flagstonePiece, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
         break;
       }
       case 'blackPlanter': {
@@ -790,6 +790,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       // What the material pointer reports for a stepping stone: its slab, concrete or flagstone, and color.
       o.userData.part = 'stone';
       o.userData.catalogId = stoneLook(f, spec);
+    }
+    if (spec.kind === 'flagLip' || spec.kind === 'flagLedge' || spec.kind === 'flagEdge') {
+      // The same for a water feature's flagstone piece: the flagstone it is cut from.
+      o.userData.part = 'stone';
+      o.userData.catalogId = flagLookOf(f).id;
     }
     o.name = `feature-${f.id}`;
     group.add(o);

@@ -48,13 +48,15 @@ const mossFacts = (sizes: FeatureSize[]) => [
   'Moss and lichen can be switched off for clean stone',
 ];
 
-/** Flagstone pieces (builder/flagstone.ts): the piece's own thickness is the size's height; the stone is the placement's. */
+/**
+ * Flagstone pieces (builder/flagstone.ts): length x depth (a lip stone or an edge piece is as thick as its stone, so its
+ * height here is only the default 2 in); a ledge's height is its stack.
+ */
 const flat = (l: number, d: number, t: number, label?: string): FeatureSize => ({ label: label ?? `${l} x ${d} x ${t} in`, size: [l * IN, d * IN, t * IN] });
-export const FLAG_LIP_SIZES: FeatureSize[] = [flat(18, 9, 2), flat(24, 10, 2), flat(30, 12, 2), flat(36, 12, 2), flat(48, 14, 2)];
+export const FLAG_LIP_SIZES: FeatureSize[] = [18, 24, 30, 36, 48].map((l, i) => flat(l, [9, 10, 12, 12, 14][i], 2, `${l} x ${[9, 10, 12, 12, 14][i]} in`));
 export const FLAG_LEDGE_SIZES: FeatureSize[] = [flat(30, 16, 6), flat(36, 18, 8), flat(48, 20, 10), flat(60, 22, 12), flat(72, 24, 14)];
-export const FLAG_EDGE_SIZES: FeatureSize[] = [flat(12, 9, 2), flat(18, 12, 2), flat(24, 14, 2), flat(30, 16, 2)];
+export const FLAG_EDGE_SIZES: FeatureSize[] = [[12, 9], [18, 12], [24, 14], [30, 16]].map(([l, d]) => flat(l, d, 2, `${l} x ${d} in`));
 
-/** Moss rock and Canyon Tech boulders: offered. */
 export const WATER_ROCK_FEATURES: FeatureSpec[] = [
   F({ id: 'moss-rock-rounded', name: 'Moss rock boulder, rounded', group: 'Water', kind: 'mossRock', footprint: MOSS_ROUNDED_SIZES[MEDIUM].size.slice(0, 2) as [number, number], sizes: MOSS_ROUNDED_SIZES, size: MEDIUM,
     options: [{ key: 'moss', label: 'Moss and lichen', default: true }],
@@ -74,19 +76,15 @@ export const WATER_ROCK_FEATURES: FeatureSpec[] = [
     facts: ['Sizes are length x depth x the height that shows; about a fifth of the rock is set below the ground', `A 22 in boulder is about ${boulderWeightLb(CANYON_SIZES[0].size)} lb, a 4 ft boulder about ${boulderWeightLb(CANYON_SIZES[3].size)} lb (estimated from size)`] }),
 ];
 
-/**
- * Flagstone pieces. Built and drawn (builder/flagstone.ts) but NOT in the catalog yet: each is drawn in one of Green Lion's
- * three flagstones (Cold Water Canyon, AZ Classic Oak, SUI Black Slate), whose looks come with the stepping stones'
- * flagstone looks; they are added to `FEATURES` when those land, so no stand-in stone is ever offered.
- */
+/** Flagstone pieces, each cut from one of Green Lion's three flagstones (the placement's `materialId`; default AZ Classic Oak). */
 export const FLAGSTONE_FEATURES: FeatureSpec[] = [
   F({ id: 'flagstone-lip-stone', name: 'Flagstone spillway lip stone', group: 'Water', kind: 'flagLip', footprint: FLAG_LIP_SIZES[1].size.slice(0, 2) as [number, number], sizes: FLAG_LIP_SIZES, size: 1,
-    about: 'A long flagstone slab with a rounded, slightly drooping front edge: the stone a fall pours over. Set level across the top of a fall, its front edge toward the water (the front of the placement). Pick the flagstone in Look.',
-    facts: ['Length x depth x thickness; AZ Classic Oak is 2 in thick, SUI Black Slate 1 in', 'Pick the stone: Cold Water Canyon, AZ Classic Oak or SUI Black Slate'] }),
+    about: 'A long flagstone slab with a rounded, slightly drooping front edge: the stone a fall pours over. Set level across the top of a fall, its front edge toward the water (the front of the placement). Pick the flagstone in its look.',
+    facts: ['Length x depth; a piece is as thick as its stone: Cold Water Canyon 2 in, AZ Classic Oak 2 in, SUI Black Slate 1 in', 'The stone is the placement\'s look: Cold Water Canyon, AZ Classic Oak (the default) or SUI Black Slate'] }),
   F({ id: 'flagstone-ledge', name: 'Flagstone ledge, stacked slabs', group: 'Water', kind: 'flagLedge', footprint: FLAG_LEDGE_SIZES[1].size.slice(0, 2) as [number, number], sizes: FLAG_LEDGE_SIZES, size: 1,
-    about: 'Flagstone slabs stacked into a ledge a fall steps down, each one set a little back from the one below and a little off square, as a crew stacks them. Pick the flagstone in Look.',
-    facts: ['Length x depth x the height of the stack; each slab is the stone\'s own thickness', 'Pick the stone: Cold Water Canyon, AZ Classic Oak or SUI Black Slate'] }),
+    about: 'Flagstone slabs stacked into a ledge a fall steps down, each one set a little back from the one below and a little off square, as a crew stacks them. Pick the flagstone in its look.',
+    facts: ['Length x depth x the height of the stack; each slab is the stone\'s own thickness (2 in, or 1 in for SUI Black Slate)', 'The stone is the placement\'s look: Cold Water Canyon, AZ Classic Oak (the default) or SUI Black Slate'] }),
   F({ id: 'flagstone-edge-piece', name: 'Flagstone edge piece', group: 'Water', kind: 'flagEdge', footprint: FLAG_EDGE_SIZES[1].size.slice(0, 2) as [number, number], sizes: FLAG_EDGE_SIZES, size: 1,
-    about: 'One irregular flagstone, cut and broken along its sides, to set along the edge of a pond, stream or basin. Pick the flagstone in Look.',
-    facts: ['Length x depth x thickness', 'Pick the stone: Cold Water Canyon, AZ Classic Oak or SUI Black Slate'] }),
+    about: 'One irregular flagstone, cut and broken along its sides, to set along the edge of a pond, stream or basin. Pick the flagstone in its look.',
+    facts: ['Length x depth; as thick as its stone', 'The stone is the placement\'s look: Cold Water Canyon, AZ Classic Oak (the default) or SUI Black Slate'] }),
 ];

@@ -18,7 +18,7 @@ import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
-import { WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
+import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
 
 export type PlantForm =
   | 'shadeTree'
@@ -913,8 +913,9 @@ export const FEATURES: FeatureSpec[] = [
   ...DECOR_FEATURES,
   F({ id: 'black-planter', name: 'Black square planter', group: 'Accents', kind: 'blackPlanter', footprint: [0.5, 0.5] }),
   F({ id: 'boulder', name: 'Boulder', group: 'Accents', kind: 'boulder', footprint: [1.0, 0.8] }),
-  // Moss rock and Canyon Tech boulders for water features (siteplan/waterrocks.ts).
+  // Moss rock, Canyon Tech boulders and flagstone pieces for water features (siteplan/waterrocks.ts).
   ...WATER_ROCK_FEATURES,
+  ...FLAGSTONE_FEATURES,
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
