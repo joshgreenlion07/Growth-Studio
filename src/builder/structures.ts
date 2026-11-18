@@ -5,6 +5,7 @@ import type { ExistingStructure, Vec2 } from '../siteplan/types';
 import { roofTile, stucco } from '../engine/textures';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { insetPolygon, slab } from './hardscape';
+import { openingBoxes, planOpenings } from './openingplan';
 import { COVER_FLOOR_ID, COVER_FLOOR_TOP, floorCuts, floorGeometry, floorPieces, type FloorGround } from './coverfloor';
 
 /** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. Covers: a patio roof on posts, on a concrete floor. */
@@ -80,22 +81,6 @@ function hipRoof(r: { c: Vec2; ax: Vec2; w: number; d: number }, y: number, over
     g.computeVertexNormals();
   }
   return g;
-}
-
-/** Window positions along each wall: every ~3.4 m, skipping the corners. */
-function openings(poly: Vec2[]): { a: Vec2; dir: Vec2; out: Vec2; len: number; edge: number }[] {
-  const out: { a: Vec2; dir: Vec2; out: Vec2; len: number; edge: number }[] = [];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const dir: Vec2 = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
-    // Outward normal: whichever side of the wall's midpoint is outside.
-    let o: Vec2 = [dir[1], -dir[0]];
-    const mid: Vec2 = [(a[0] + b[0]) / 2 + o[0] * 0.05, (a[1] + b[1]) / 2 + o[1] * 0.05];
-    if (pointInPolygon(mid, poly)) o = [-o[0], -o[1]];
-    out.push({ a, dir, out: o, len, edge: i });
-  }
-  return out;
 }
 
 /** `ground`: the plan's zones and water, which replace a cover's concrete floor where drawn over it (coverfloor.ts). */
@@ -282,88 +267,21 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
       }
     }
 
-    // Windows and a sliding door on the wall facing the yard.
-    const sides = openings(poly);
-    let doorEdge = -1, best = -Infinity;
-    sides.forEach((sd, i) => {
-      const mid: Vec2 = [sd.a[0] + sd.dir[0] * sd.len / 2, sd.a[1] + sd.dir[1] * sd.len / 2];
-      const toSite: Vec2 = [siteCenter[0] - mid[0], siteCenter[1] - mid[1]];
-      const score = (toSite[0] * sd.out[0] + toSite[1] * sd.out[1]) + sd.len * 0.1;
-      if (score > best) {
-        best = score;
-        doorEdge = i;
-      }
-    });
+    // Windows and a sliding door on the wall facing the yard, placed by openingplan.ts: each one flush on a wall face,
+    // inside its edge with corner clearance, and never where a cover or another building stands against the wall.
+    const plan = planOpenings(s, structures, siteCenter);
     const frames: THREE.BufferGeometry[] = [];
     const panes: THREE.BufferGeometry[] = [];
     const doors: THREE.BufferGeometry[] = [];
-    // Doors and windows the designer marked: each goes on the wall nearest its mark.
-    const marked = new Map<number, { t: number; w: number; h0: number; h1: number; solid?: boolean }[]>();
-    let lit = false;
-    for (const op of s.openings ?? []) {
-      let bestSide = -1, bd = 3.0, bt = 0;
-      sides.forEach((sd, i) => {
-        const t = Math.max(0, Math.min(sd.len, (op.at[0] - sd.a[0]) * sd.dir[0] + (op.at[1] - sd.a[1]) * sd.dir[1]));
-        const d = Math.hypot(op.at[0] - sd.a[0] - sd.dir[0] * t, op.at[1] - sd.a[1] - sd.dir[1] * t);
-        if (d < bd) {
-          bd = d;
-          bestSide = i;
-          bt = t;
-        }
-      });
-      if (bestSide < 0) continue;
-      const sd = sides[bestSide];
-      const w = Math.min(op.width, sd.len - 0.3);
-      if (w < 0.3) continue;
-      const t = Math.max(w / 2 + 0.15, Math.min(sd.len - w / 2 - 0.15, bt));
-      const top = Math.min(2.15, H - 0.25);
-      const list = marked.get(bestSide) ?? [];
-      // A door up to 1.5 m wide is a solid door; wider ones are sliding glass.
-      list.push(op.kind === 'door' ? { t, w, h0: 0.02, h1: Math.min(2.1, top), solid: w <= 1.5 } : { t, w, h0: Math.min(0.95, top - 0.6), h1: top });
-      marked.set(bestSide, list);
-      if (op.kind === 'door' && !lit) {
-        lit = true;
-        for (const d of [-1, 1]) {
-          const lp: Vec2 = [sd.a[0] + sd.dir[0] * (t + d * (w / 2 + 0.4)) + sd.out[0] * 0.08, sd.a[1] + sd.dir[1] * (t + d * (w / 2 + 0.4)) + sd.out[1] * 0.08];
-          porchLights.push(new THREE.Vector3(lp[0], 2.0, lp[1]));
-        }
-      }
+    const sideOf = new Map(plan.sides.map((sd) => [sd.edge, sd]));
+    for (const l of plan.lights) {
+      const sd = sideOf.get(l.edge)!;
+      porchLights.push(new THREE.Vector3(sd.a[0] + sd.dir[0] * l.t + sd.out[0] * 0.08, 2.0, sd.a[1] + sd.dir[1] * l.t + sd.out[1] * 0.08));
     }
-    for (const sd of sides) {
-      if (!s.openings && s.kind === 'shed' && sd.edge !== doorEdge) continue;
-      const n = Math.max(1, Math.floor((sd.len - 1.2) / 3.4));
-      const slots: { t: number; w: number; h0: number; h1: number; solid?: boolean }[] = [];
-      if (s.openings) {
-        slots.push(...(marked.get(sd.edge) ?? []));
-      } else if (sd.edge === doorEdge) {
-        slots.push({ t: sd.len / 2, w: s.kind === 'house' ? 2.4 : 1.0, h0: 0.02, h1: 2.1 });
-        for (const d of [-1, 1]) {
-          const lp: Vec2 = [sd.a[0] + sd.dir[0] * (sd.len / 2 + d * 1.6) + sd.out[0] * 0.08, sd.a[1] + sd.dir[1] * (sd.len / 2 + d * 1.6) + sd.out[1] * 0.08];
-          porchLights.push(new THREE.Vector3(lp[0], 2.0, lp[1]));
-        }
-        for (let k = 0; k < n; k++) {
-          const t = ((k + 0.5) / n) * sd.len;
-          if (Math.abs(t - sd.len / 2) > 2.2) slots.push({ t, w: 1.5, h0: 0.95, h1: 2.15 });
-        }
-      } else if (s.kind === 'house') {
-        for (let k = 0; k < n; k++) slots.push({ t: ((k + 0.5) / n) * sd.len, w: 1.4, h0: 0.95, h1: 2.15 });
-      }
-      for (const sl of slots) {
-        const p0: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t - sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t - sl.w / 2)];
-        const p1: Vec2 = [sd.a[0] + sd.dir[0] * (sl.t + sl.w / 2), sd.a[1] + sd.dir[1] * (sl.t + sl.w / 2)];
-        const off = (p: Vec2, d: number): Vec2 => [p[0] + sd.out[0] * d, p[1] + sd.out[1] * d];
-        (sl.solid ? doors : panes).push(segmentBox(off(p0, 0.01), off(p1, 0.01), 0.02, sl.h0, sl.h1));
-        // Frame: four bars plus a center mullion.
-        const bar = 0.06;
-        frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h1 - bar, sl.h1, bar));
-        frames.push(segmentBox(off(p0, 0.04), off(p1, 0.04), 0.06, sl.h0, sl.h0 + bar, bar));
-        const mid: Vec2 = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
-        for (const q of sl.solid ? [p0, p1] : [p0, mid, p1]) {
-          const qa: Vec2 = [q[0] - sd.dir[0] * bar / 2, q[1] - sd.dir[1] * bar / 2];
-          const qb: Vec2 = [q[0] + sd.dir[0] * bar / 2, q[1] + sd.dir[1] * bar / 2];
-          frames.push(segmentBox(off(qa, 0.04), off(qb, 0.04), 0.06, sl.h0, sl.h1));
-        }
-        if (sl.h0 > 0.5) frames.push(segmentBox(off(p0, 0.06), off(p1, 0.06), 0.1, sl.h0 - 0.05, sl.h0, 0.08));
+    for (const op of plan.placed) {
+      for (const b of openingBoxes(sideOf.get(op.edge)!, op)) {
+        const g = segmentBox(b.a, b.b, b.thick, b.y0, b.y1, b.extend);
+        (b.kind === 'frame' ? frames : b.kind === 'door' ? doors : panes).push(g);
       }
     }
     // A house can have only doors, only windows, or no openings at all: merge only what exists.
