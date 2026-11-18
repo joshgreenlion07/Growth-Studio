@@ -293,7 +293,7 @@ Messages use `window.postMessage`:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
   (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
-  and `steps: false` to leave the steps out. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
+  and `steps: false` to leave the steps out. The cover folds and lifts as an animation (about 4 s); a spa whose footprint is stretched away from 84 x 84 in falls back to swapping the two poses with no animation. The `catalog` message marks such hot tubs with `cover: true, steps: true`.
 - The three-pillar stucco water feature (`three-pillar-water-feature`) offers the option `bowls` (default on: a patina
   bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
   The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
