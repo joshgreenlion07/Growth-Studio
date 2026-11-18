@@ -73,7 +73,7 @@ Messages use `window.postMessage`:
 | Parent to studio, to cut away the near side of the yard | `{ source: 'area-planner', type: 'cutaway', on }` |
 | Studio to parent, when the cutaway is turned on or off | `{ source: 'growth-studio', type: 'cutaway', on }` |
 | Parent to studio, to ask for the look of a plant or feature it offers as a switch | `{ source: 'area-planner', type: 'look', id, item? }` (`id` is `plant:<catalog id>` or `feature:<catalog id>`; `item` is the placed item it would replace) |
-| Studio to parent, in answer | `{ source: 'growth-studio', type: 'look', id, material }` (`material` is the same Look the pointer sends) |
+| Studio to parent, in answer | `{ source: 'growth-studio', type: 'look', id, item?, material }` (`item` echoes the request's) (`material` is the same Look the pointer sends) |
 | Parent to studio, to make the view read-only or not | `{ source: 'area-planner', type: 'mode', viewer }` (also `viewer=1` on the embed address) |
 
 - **View-only mode** (`viewer: true`, or `?embed=1&viewer=1`): for a parent

@@ -1073,7 +1073,7 @@ function onEmbedMessage(e: MessageEvent) {
     const [lk, lid] = pointKind(id);
     if (!(lk === 'plant' ? plantById.has(lid) : lk === 'feature' && featureById.has(lid))) return;
     const look = lookOfPoint(id, plan, typeof d.item === 'string' ? d.item.slice(0, 40) : '');
-    if (look) window.parent.postMessage({ source: 'growth-studio', type: 'look', id, material: look }, origin);
+    if (look) window.parent.postMessage({ source: 'growth-studio', type: 'look', id, ...(typeof d.item === 'string' && d.item ? { item: d.item.slice(0, 40) } : {}), material: look }, origin);
     return;
   }
   if (d.type === 'approvals') {
