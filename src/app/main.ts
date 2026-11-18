@@ -1119,7 +1119,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint, ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }

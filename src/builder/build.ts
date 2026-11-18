@@ -10,12 +10,16 @@ import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBu
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
-import { buildHardscape, stepsFootprint } from './hardscape';
+import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
+import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { plantGround, planterPlants } from './decor/planters';
+import { coverCeiling } from './decor/patio';
+import { CEILING_KINDS } from '../siteplan/decor';
 import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
@@ -69,7 +73,8 @@ export interface SceneBuild {
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
 export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] {
-  const out: PlantPlacement[] = [...plan.plants];
+  // Planted features (corten planters) bring their own plants.
+  const out: PlantPlacement[] = [...plan.plants, ...planterPlants(plan.features)];
   const bodies = bodyGrid(lineBodies(plan));
   // Placed plants by position, so each candidate checks only its neighbors.
   const taken = new PointGrid(1);
@@ -329,7 +334,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const water = buildWater(plan, gm, mirror, sky, pools);
   // Features and models placed on a composite deck stand on its boards (a hot tub is set into it).
   const standOn = onDecks(plan, gm.height);
-  const features = buildFeatures(plan.features, standOn);
+  // Decor set on paving stands on its top too (paving is drawn its thickness above grade); decks are in standOn.
+  const pavingTop = (p: Vec2) => {
+    const z = gm.zoneAt(p);
+    return z && z.kind === 'hardscape' && !isBoardDeck(z) ? zoneTop(z, plan.zones.indexOf(z)) : 0;
+  };
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop);
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -348,7 +358,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (modelIdx.any(p[0], p[1])) return true;
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
-      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella') continue;
+      if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
       if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl') {
         if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
@@ -402,7 +412,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
