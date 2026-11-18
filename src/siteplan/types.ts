@@ -35,7 +35,7 @@ export interface Zone extends ItemBase {
   /** Hardscape in a paver that offers laying patterns (see LayingPattern and layingsFor in the catalog). Left out, the paver's first. */
   laying?: 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone';
   /**
-   * Hardscape in a paver: a small single rectangle (up to 4 1/2 ft a side) is one solid slab at its drawn size (see
+   * Hardscape in a paver: a single rectangle up to 3 ft x 3 ft (sides within 37 in, or a size a slab is sold in) is by default one solid slab at its drawn size (see
    * siteplan/pads.ts). true makes any such rectangle a pad; false keeps it paving. Left out, the size decides.
    */
   pad?: boolean;

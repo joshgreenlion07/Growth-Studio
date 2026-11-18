@@ -13,7 +13,7 @@ const IN = 0.0254;
 export const PAD_TOL_IN = 1;
 /** The shortest and longest side a pad can have, inches. */
 export const PAD_MIN_IN = 12;
-export const PAD_MAX_IN = 54;
+export const PAD_MAX_IN = 37;
 /** The longest side over the shortest. */
 export const PAD_MAX_ASPECT = 3;
 
@@ -64,15 +64,16 @@ export function rectOf(poly: Vec2[]): PadRect | null {
   };
 }
 
-/** True when a rectangle of these sides (inches) is small enough to be one slab. */
+/** True when a rectangle of these sides (inches) is one slab by default: 3 ft x 3 ft or smaller (sides within 37 in), or a size a catalog slab is really sold in. */
 export function slabSized(wIn: number, dIn: number): boolean {
   const lo = Math.min(wIn, dIn), hi = Math.max(wIn, dIn);
-  return lo >= PAD_MIN_IN && hi <= PAD_MAX_IN && hi / lo <= PAD_MAX_ASPECT;
+  if (lo < PAD_MIN_IN || hi / lo > PAD_MAX_ASPECT) return false;
+  return hi <= PAD_MAX_IN || MATERIALS.some((m) => fitsPad(m, wIn, dIn));
 }
 
 /**
  * The pad a zone is, or null for ordinary paving. A paver (not concrete, porcelain or decking) hardscape zone that is one
- * small rectangle (a one-slab pad has no border, so a border on it is left out); `zone.pad` true makes any such rectangle a pad, false keeps it paving.
+ * small rectangle (a one-slab pad has no border, so a border on it is left out); `zone.pad` true makes any such rectangle a pad, false keeps it paving; without it, only a rectangle 3 ft x 3 ft or smaller (or a size a slab is sold in) is one.
  */
 export function padOf(z: Pick<Zone, 'kind' | 'polygon' | 'catalogId' | 'deck' | 'pad'>): PadRect | null {
   if (z.kind !== 'hardscape' || z.pad === false || z.deck) return null;

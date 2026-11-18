@@ -37,7 +37,7 @@ finished-work photos in `reference/green-lion-style/`.
   are built board by board in `deck.ts` from the layout in `deck-layout.ts`:
   picture frame, straight, diagonal or chevron field, openings for a hot tub,
   fascia; features on a deck stand on its boards (`onDecks`).
-  One-slab pads (`siteplan/pads.ts`): a paver hardscape zone that is one small rectangle (12 in to 4 1/2 ft a side) is
+  One-slab pads (`siteplan/pads.ts`): a paver hardscape zone that is one small rectangle (12 in to 37 in a side) is
   built in `hardscape.ts` as ONE solid slab at its drawn size (no joints, texture one slab across, no border). Its look
   must be a unit sold in that size (`fitsPad`), else the closest that is, else a generic `padSlab` look; `zone.pad`
   forces or forbids it. The plan keeps the saved id.
