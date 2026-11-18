@@ -72,6 +72,8 @@ Messages use `window.postMessage`:
 | Studio to parent, when the person picks a stage in the dock | `{ source: 'growth-studio', type: 'stage', stage }` |
 | Parent to studio, to cut away the near side of the yard | `{ source: 'area-planner', type: 'cutaway', on }` |
 | Studio to parent, when the cutaway is turned on or off | `{ source: 'growth-studio', type: 'cutaway', on }` |
+| Parent to studio, to ask for the look of a plant or feature it offers as a switch | `{ source: 'area-planner', type: 'look', id, item? }` (`id` is `plant:<catalog id>` or `feature:<catalog id>`; `item` is the placed item it would replace) |
+| Studio to parent, in answer | `{ source: 'growth-studio', type: 'look', id, item?, material }` (`item` echoes the request's) (`material` is the same Look the pointer sends) |
 | Parent to studio, to make the view read-only or not | `{ source: 'area-planner', type: 'mode', viewer }` (also `viewer=1` on the embed address) |
 
 - **View-only mode** (`viewer: true`, or `?embed=1&viewer=1`): for a parent
@@ -377,10 +379,17 @@ Messages use `window.postMessage`:
   - Parent to studio: `{ source: 'area-planner', type: 'approvals', approvals: { on: string[], off: string[] } }`
     (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
   - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
-    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint, options?, sizes?, size?,
+    structures }`: approved plant ids, approved placeable features `{ id, name, group, swap, footprint, options?, sizes?, size?,
     plantable?, cover?, steps? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
     `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
     `ready`, now filtered to approved looks.
+  - `swap` is the class a feature switches within (`swapClassOf` in `catalog.ts`: "Pergolas and gazebos", "Fire
+    features", "Outdoor kitchens", "Hot tubs", "Saunas", "Path lights", "Furniture sets"...). The parent's material
+    panel offers a placed feature only other approved features of the same `swap`, and a placed plant only other
+    approved plants of the same group. The `swatch` message also answers for `plant:<id>` and `feature:<id>`
+    (a picture drawn by the studio), and `look` returns the full Look for the panel to show a candidate before the
+    switch is saved. Nothing about a switch is sent from the studio: the parent changes the item in its own plan
+    and sends the plan again.
   - Keys (`src/siteplan/approval.ts`): `line:<maker>|<line>` (a line's paver edge is `line:<maker>|<line> 6 x 9 edge`), `mat:<id>`, `plant:<id>`, `feature:<id>`,
     `structure:cover`, `structure:calroom`. Without an override a maker paver or wall line is approved when
     it is in `OFFERED_LINES`; everything else is approved. The toggle waits for the parent's `approvals` echo

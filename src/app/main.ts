@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, swapClassOf, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -11,6 +11,7 @@ import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
 import { lookOf, lookOfPoint, type Look } from './looks';
 import { pictureFor, pictureNow, swatchNow } from './swatches';
+import { pointKind } from '../siteplan/material-info';
 import { closeLibrary, libraryOpen, openLibrary } from './library';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
@@ -1034,7 +1035,7 @@ function embedReply(ok: boolean, extra: { message?: string; warnings?: string[] 
 
 function onEmbedMessage(e: MessageEvent) {
   if (e.source !== window.parent || !EMBED_ALLOWED_PARENT_ORIGINS.some((re) => re.test(e.origin))) return;
-  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; frame?: unknown; id?: unknown; kind?: unknown; data?: unknown; ids?: unknown } | null;
+  const d = e.data as { source?: unknown; type?: unknown; plan?: unknown; name?: unknown; refit?: unknown; frame?: unknown; id?: unknown; item?: unknown; kind?: unknown; data?: unknown; ids?: unknown } | null;
   if (!d || typeof d !== 'object' || d.source !== 'area-planner') return;
   if (d.type === 'asset') {
     // An uploaded file the plan names, sent in answer to `need-asset`. `data: null` means the parent no longer has it.
@@ -1058,8 +1059,21 @@ function onEmbedMessage(e: MessageEvent) {
     // A swatch for a look the parent shows without pointing at it (a color previewed in its panel): the same picture
     // the pointer sends, as { type: 'swatch', id, url } (url null when there is none).
     const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 120) : '';
-    if (!id || !materialById.has(id)) return;
+    const [sk, sid] = pointKind(id);
+    // A catalog material, or a plant or feature (the planner's switch-within-type cards).
+    if (!id || !(sk === 'material' ? materialById.has(sid) : sk === 'plant' ? plantById.has(sid) : sk === 'feature' && featureById.has(sid))) return;
     void pictureFor(id).then((url) => window.parent.postMessage({ source: 'growth-studio', type: 'swatch', id, url }, origin));
+    return;
+  }
+  if (d.type === 'look') {
+    // The look of a plant or feature the parent offers as a switch for a placed one (so its panel can show it before the
+    // switch is saved): the same Look the pointer sends, as { type: 'look', id, material }. `item` is the placed item
+    // it would replace, for details that come from the placement (a plant's container).
+    const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 120) : '';
+    const [lk, lid] = pointKind(id);
+    if (!(lk === 'plant' ? plantById.has(lid) : lk === 'feature' && featureById.has(lid))) return;
+    const look = lookOfPoint(id, plan, typeof d.item === 'string' ? d.item.slice(0, 40) : '');
+    if (look) window.parent.postMessage({ source: 'growth-studio', type: 'look', id, ...(typeof d.item === 'string' && d.item ? { item: d.item.slice(0, 40) } : {}), material: look }, origin);
     return;
   }
   if (d.type === 'approvals') {
@@ -1173,7 +1187,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}) })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, swap: swapClassOf(f), footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }
