@@ -201,7 +201,7 @@ export interface StructureOpening {
 }
 
 export interface ExistingStructure extends ItemBase {
-  /** A cover is a roofed patio on posts (a California patio). With `walls` it becomes a California room. */
+  /** A cover is a roofed patio on posts (a California patio). With `walls` it becomes a California room. Every cover has a concrete floor. */
   kind: 'house' | 'garage' | 'shed' | 'cover';
   polygon: Vec2[];
   /** Wall height in meters. For a cover, the height of the underside of the roof. */
@@ -215,6 +215,14 @@ export interface ExistingStructure extends ItemBase {
    * on posts. An edge against a house wall is never walled. Left out, the cover is open on every side.
    */
   walls?: boolean[];
+  /**
+   * Covers only: mid-span posts. Left out (or false), each open side is spanned by its header (a room) or beam (a
+   * patio), and only free corners open on both sides keep a column. true adds a post about every 4 m along long
+   * open sides as well.
+   */
+  posts?: boolean;
+  /** Covers only: a California room (the planner's category), even with no wall on any side. */
+  room?: boolean;
 }
 
 export interface SiteInfo {
