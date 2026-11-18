@@ -60,6 +60,9 @@ import { build as spanishLavenderOttoQuast } from './perennials/spanish-lavender
 import { build as bougainvillea } from './shrubs/bougainvillea';
 import { build as maidenGrassMorningLight } from './grasses/maiden-grass-morning-light';
 import { build as roseFlowerCarpetRed } from './shrubs/rose-flower-carpet-red';
+import { build as cyclamenRed } from './perennials/cyclamen-red';
+import { build as primroseRed } from './perennials/primrose-red';
+import { build as lantanaNewGold } from './groundcover/lantana-new-gold';
 import { build as daylilyStellaDeOro } from './perennials/daylily-stella-de-oro';
 import { build as daylilyRed } from './perennials/daylily-red';
 import { build as fortnightLily } from './perennials/fortnight-lily';
@@ -134,4 +137,7 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'bougainvillea': bougainvillea,
   'maiden-grass-morning-light': maidenGrassMorningLight,
   'rose-flower-carpet-red': roseFlowerCarpetRed,
+  'cyclamen-red': cyclamenRed,
+  'primrose-red': primroseRed,
+  'lantana-new-gold': lantanaNewGold,
 };
