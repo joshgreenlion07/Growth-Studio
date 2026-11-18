@@ -260,6 +260,11 @@ Messages use `window.postMessage`:
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
   grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
   looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
+- The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
+  'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
+  steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
+  (folded up on the lifter behind the spa, the default), `'closed'` or `'off'`,
+  and `steps: false` to leave the steps out.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;

@@ -300,6 +300,8 @@ export function cleanPlan(input: unknown): CleanResult {
     if (!id) continue;
     const f: FeaturePlacement = { ...base(it, 'feature'), catalogId: id, position, rotationDeg: num(it.rotationDeg, 0, -360, 360) };
     if (typeof it.materialId === 'string' && materialById.get(it.materialId)?.use === 'hardscape') f.materialId = it.materialId;
+    if (it.cover === 'open' || it.cover === 'closed' || it.cover === 'off') f.cover = it.cover;
+    if (typeof it.steps === 'boolean') f.steps = it.steps;
     const fx = featureById.get(id)?.fixture;
     if (fx && it.fixture && typeof it.fixture === 'object') {
       const setting = cleanFixtureSetting(fx, it.fixture as Record<string, unknown>);
