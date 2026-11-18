@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { materialById, type MaterialSpec } from '../siteplan/catalog';
 import { bounds, pointInPolygon, rng } from '../siteplan/geometry';
-import type { SitePlan, Vec2 } from '../siteplan/types';
+import { featureById } from '../siteplan/catalog';
+import type { FeaturePlacement, SitePlan, Vec2 } from '../siteplan/types';
 import { vnoise } from '../engine/noise';
 import { rockAlbedo } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
@@ -207,7 +208,7 @@ type Form = 'pebble' | 'crushed' | 'chip';
 const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2] };
 const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : pebbleShape(s, detail));
 
-interface Stone {
+export interface Stone {
   x: number;
   y: number;
   z: number;
@@ -248,7 +249,7 @@ export interface PebbleBed {
 }
 
 /** Where one bed's stones go: inside test, surface height and extent. */
-interface BedArea {
+export interface BedArea {
   key: string;
   inside: (p: Vec2) => boolean;
   height: (p: Vec2) => number;
@@ -290,7 +291,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.6;
   for (const { area, catalogId } of areas) {
     const spec = materialById.get(catalogId)!;
-    const stones = placeStones(area, spec);
+    const stones = clearOfSteppingStones(placeStones(area, spec), plan.features);
     const P = spec.pebble!;
     const form: Form = P.form ?? 'pebble';
     const mat = matOf(form);
@@ -370,7 +371,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
  * does), each with its own size from the sold range (more of the middle sizes), shape, turn, tip, color and how deep it
  * sits. Only where this zone is the top one.
  */
-function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
+export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   const P = spec.pebble!;
   const form = P.form ?? 'pebble';
   const r = rng(`pebbles:${z.key}`);
@@ -427,4 +428,34 @@ function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
     }
   }
   return out;
+}
+
+/** Margin kept clear around each stepping stone's slab, meters. */
+const STONE_MARGIN = 0.01;
+
+/**
+ * Drops the pieces that would show above a stepping stone: any whose footprint (a circle of its own reach around its
+ * center, so it holds at any turn or tip) touches a stepping stone's slab or the margin around it. Stones set in a bed
+ * (alone or as a path) sit with their tops a little above the bed's loose stone, so a piece under or against one would
+ * poke through its face. Done after placing, so every other piece keeps exactly its place, size and color.
+ */
+export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacement[]): Stone[] {
+  const slabs = features.flatMap((f) => {
+    const spec = featureById.get(f.catalogId);
+    if (spec?.kind !== 'steppingStone' && spec?.kind !== 'steppingPad') return [];
+    const a = (-f.rotationDeg * Math.PI) / 180;
+    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), hw: spec.footprint[0] / 2, hd: spec.footprint[1] / 2 }];
+  });
+  if (!slabs.length) return stones;
+  return stones.filter((st) => {
+    const reach = Math.max(st.len, st.wid) * 0.55 + STONE_MARGIN;
+    for (const k of slabs) {
+      const dx = st.x - k.at[0], dy = st.z - k.at[1];
+      // Into the slab's own frame (the inverse of features.ts's local -> plan turn).
+      const lx = dx * k.c - dy * k.s, lz = dx * k.s + dy * k.c;
+      const ox = Math.max(Math.abs(lx) - k.hw, 0), oz = Math.max(Math.abs(lz) - k.hd, 0);
+      if (ox * ox + oz * oz < reach * reach) return false;
+    }
+    return true;
+  });
 }
