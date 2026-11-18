@@ -326,8 +326,22 @@ export interface FeatureSpec {
   about?: string;
   facts?: string[];
   /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola). */
-  model?: 'stratus';
+  model?: 'stratus' | 'saunalife-cl5g';
+  /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
+  options?: FeatureOption[];
   placeholder: true;
+}
+
+export interface FeatureOption {
+  key: string;
+  label: string;
+  default: boolean;
+}
+
+/** A placement's choice for one of its feature's options, or the option's default. */
+export function featureOption(spec: FeatureSpec, options: Record<string, boolean> | undefined, key: string): boolean {
+  const o = spec.options?.find((x) => x.key === key);
+  return options?.[key] ?? o?.default ?? false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -687,6 +701,12 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
   F({ id: 'sauna-barrel', name: 'Barrel sauna', group: 'Spa and sauna', kind: 'saunaBarrel', footprint: [2.0, 2.4] }),
   F({ id: 'sauna-cube', name: 'Cube sauna', group: 'Spa and sauna', kind: 'saunaCube', footprint: [2.2, 2.2] }),
+  // SaunaLife Model CL5G Cube Luxury (saunalife.com, installation manual V1.1): outside 80.7 in W x 63 in D x 82.7 in H.
+  F({ id: 'saunalife-cl5g', name: 'SaunaLife CL5G Cube Luxury sauna, 4 person', group: 'Spa and sauna', kind: 'saunaCube', model: 'saunalife-cl5g', footprint: [80.71 * 0.0254, 63 * 0.0254],
+    maker: 'SaunaLife', page: 'https://saunalife.com/saunas/cube-luxury-series-model-cl5g/',
+    about: 'SaunaLife Cube-Series Model CL5G: a rounded-cube outdoor sauna for up to 4 people, thermo-spruce staves with black front details, a full bronze-glass front with a glass door, shingled roof, thermo-aspen benches and LED light bars.',
+    facts: ['Outside 80.7 in W x 63 in D x 82.7 in H; inside 77.2 W x 55.1 D x 74.8 H', 'Thermo-spruce walls (42 mm), front and back walls 28 mm; shingle roof with drip rails', 'Tempered bronze glass front and door (8 mm), door 23.2 x 66.5 in, square wooden handle', 'Thermo-aspen benches: upper 17.7 in deep, lower 31.1 in, side 23.6 in; white LED light bars', 'Heater bought separately'],
+    options: [{ key: 'doorOpen', label: 'Door open', default: false }, { key: 'lightsOn', label: 'Interior lights on', default: true }] }),
   F({ id: 'water-wall-plaster', name: 'Water wall, plaster and ledgestone', group: 'Water', kind: 'waterWallPlaster', footprint: [4.2, 1.2] }),
   F({ id: 'water-wall-porcelain', name: 'Water wall, porcelain panel', group: 'Water', kind: 'waterWallPorcelain', footprint: [2.6, 0.9] }),
   F({ id: 'water-wall-stucco', name: 'Water wall, stucco and dark stone', group: 'Water', kind: 'waterWallStucco', footprint: [3.4, 1.4] }),

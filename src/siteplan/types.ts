@@ -133,6 +133,8 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
   /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
   materialId?: string;
+  /** Choices for the feature's on/off options (its catalog `options`, e.g. a sauna's door and lights). Left out, the defaults. */
+  options?: Record<string, boolean>;
 }
 
 /** A door or window the designer marked on a wall. */
