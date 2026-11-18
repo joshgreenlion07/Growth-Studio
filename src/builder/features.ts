@@ -9,6 +9,7 @@ import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
+import { buildDecor } from './decor';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
@@ -92,7 +93,7 @@ function stoneMaterial(f: FeaturePlacement): string {
   return f.materialId && materialById.has(f.materialId) ? f.materialId : `${SLAB_24_PREFIX}shaded-gray`;
 }
 
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -150,6 +151,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
   const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
   owned.push(lampGlow, spaGlow, ledGlow);
+  // Night glow of the decor builders (fire glass), owned by this build.
+  const decorGlow: THREE.MeshStandardMaterial[] = [];
   // Glowing parts of maker products built in their own files (shared, cached materials: not disposed here).
   const makerGlow = new Set<THREE.MeshStandardMaterial>();
   const flameMat = flameMaterial();
@@ -458,6 +461,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
         break;
       }
+      case 'cortenPlanterTall':
+      case 'cortenTreePanel':
+      case 'firePitLinear':
+      case 'loungeSofa':
+      case 'loungeOttoman':
+      case 'deckBox':
+      case 'diningSling':
+      case 'patioHeater':
+      case 'ceilingFan': {
+        // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
+        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
+        break;
+      }
       case 'blackPlanter': {
         add(mat.black, box(W, 0.6, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.56, 0));
@@ -580,7 +596,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...makerGlow],
+    glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow],
     flames,
     fallMats,
     pebbleBeds,

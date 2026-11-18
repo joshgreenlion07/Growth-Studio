@@ -28,6 +28,7 @@ const FINISH: Record<ConcreteFinish, string> = {
 const FENCE_ABOUT: Record<NonNullable<MaterialSpec['fence']>, string> = {
   boardOnBoard: 'A board-on-board wood fence: boards overlap on both rails, so there are no gaps to see through.',
   grayLattice: 'A solid board fence with a lattice band along the top that lets light through.',
+  grayBoardLattice: 'Gray-painted board-on-board to the fence height, with a 1 ft cedar lattice topper above it between natural cedar posts, under a cedar cap.',
   dogEar: 'A dog-ear picket fence: wood pickets with clipped top corners, the classic backyard privacy fence.',
   horizontal: 'A horizontal slat fence: wood boards run sideways between posts for a clean, modern line.',
   vinyl: 'A vinyl privacy fence: solid panels that never need paint or stain.',
