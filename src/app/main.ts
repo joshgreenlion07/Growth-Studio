@@ -152,7 +152,7 @@ function bootStudio() {
   }
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
-  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, B shows plant labels, Y shows the material pointer, pressing the right stick locks its material, Menu goes home. D-pad: left and right pick a quick tool (dig layers, mark, tape measure, light, growth, views), up and down use it.');
+  studio.nav.onConnect = () => toast(`Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, B shows plant labels, Y shows the material pointer, pressing the right stick locks its material, Menu goes home. D-pad: left and right pick a quick tool (dig layers, ${embedViewer ? '' : 'mark, '}tape measure, light, growth, views), up and down use it.`);
   initQuickTools(studio);
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
