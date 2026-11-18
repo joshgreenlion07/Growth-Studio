@@ -54,10 +54,33 @@ export function wallSides(poly: Vec2[]): WallSide[] {
 const SAMPLE = 0.025;
 
 /**
+ * What stands up from a cover's floor and could meet a house wall: its walls (every walled edge, even one along the
+ * house wall) and a 0.6 m square at every corner (posts, wall ends and header ends). A cover's roof alone blocks nothing.
+ */
+export function coverSolids(c: ExistingStructure): Vec2[][] {
+  const poly = c.polygon, n = poly.length, out: Vec2[][] = [];
+  const ccw = signedArea(poly) >= 0;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (l < 1e-6) continue;
+    const d: Vec2 = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+    const inn: Vec2 = ccw ? [-d[1], d[0]] : [d[1], -d[0]];
+    if (c.walls?.[i]) out.push([a, b, [b[0] + inn[0] * 0.2, b[1] + inn[1] * 0.2], [a[0] + inn[0] * 0.2, a[1] + inn[1] * 0.2]]);
+    if (c.posts) for (let j = 1, k = Math.ceil(l / 4.2); j < k; j++) {
+      const q: Vec2 = [a[0] + d[0] * l * j / k, a[1] + d[1] * l * j / k];
+      out.push([[q[0] - 0.3, q[1] - 0.3], [q[0] + 0.3, q[1] - 0.3], [q[0] + 0.3, q[1] + 0.3], [q[0] - 0.3, q[1] + 0.3]]);
+    }
+    out.push([[a[0] - 0.3, a[1] - 0.3], [a[0] + 0.3, a[1] - 0.3], [a[0] + 0.3, a[1] + 0.3], [a[0] - 0.3, a[1] + 0.3]]);
+  }
+  return out;
+}
+
+/**
  * Stretches [lo, hi] of wall `sd` where an opening may stand: nothing else (another structure, or this house's own
  * wing across a notch) within reach of the wall, and `clear` away from the wall ends and from anything that does.
  */
-export function freeRuns(sd: WallSide, poly: Vec2[], others: Vec2[][], clear: number): [number, number][] {
+export function freeRuns(sd: WallSide, poly: Vec2[], others: Vec2[][], clear: number, solids: Vec2[][] = []): [number, number][] {
   const n = Math.max(1, Math.ceil(sd.len / SAMPLE));
   const blocked: boolean[] = [];
   for (let k = 0; k <= n; k++) {
@@ -79,6 +102,8 @@ export function freeRuns(sd: WallSide, poly: Vec2[], others: Vec2[][], clear: nu
         if (bad) break;
       }
     }
+    // A cover's walls, posts and header ends: keep clear where they touch or come within 0.6 m of the wall.
+    if (!bad) for (const q of solids) if (pointInPolygon(base, q) || distToEdge(base, q) < 0.6) { bad = true; break; }
     blocked.push(bad);
   }
   // Grow every blocked stretch by `clear`, then take the free runs inside the wall ends.
@@ -123,7 +148,10 @@ function heights(H: number) {
 export function planOpenings(s: ExistingStructure, all: ExistingStructure[], siteCenter: Vec2): OpeningPlan {
   const poly = s.polygon, H = s.height;
   const sides = wallSides(poly);
-  const others = all.filter((o) => o !== s && o.polygon !== poly).map((o) => o.polygon);
+  // Other buildings block the wall they stand against; a cover only blocks where its walls and posts are.
+  const nb = all.filter((o) => o !== s && o.polygon !== poly);
+  const others = nb.filter((o) => o.kind !== 'cover').map((o) => o.polygon);
+  const solids = nb.filter((o) => o.kind === 'cover').flatMap(coverSolids);
   const hts = heights(H);
   const placed: PlacedOpening[] = [];
   const lights: { edge: number; t: number }[] = [];
@@ -132,7 +160,7 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
   const autoRuns = new Map<number, [number, number][]>();
   const runsOf = (sd: WallSide) => {
     let r = autoRuns.get(sd.edge);
-    if (!r) autoRuns.set(sd.edge, (r = freeRuns(sd, poly, others, CORNER_CLEAR)));
+    if (!r) autoRuns.set(sd.edge, (r = freeRuns(sd, poly, others, CORNER_CLEAR, solids)));
     return r;
   };
   const winOk = hts.winTop - Math.max(0.02, hts.winBottom) >= 0.5;
@@ -155,7 +183,7 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
     if (w < 0.3) continue;
     const isDoor = op.kind === 'door';
     if (isDoor ? hts.doorTop < 1.2 : hts.winTop - hts.winBottom < 0.3) continue;
-    const t = fitInRuns(freeRuns(sd, poly, others, MARKED_CLEAR), bt, w);
+    const t = fitInRuns(freeRuns(sd, poly, others, MARKED_CLEAR, solids), bt, w);
     if (t === null) continue;
     const list = marked.get(sd.edge) ?? [];
     if (overlaps(list, t, w, 0.05)) continue;

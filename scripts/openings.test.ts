@@ -1,6 +1,6 @@
 // Run: node node_modules/esbuild/bin/esbuild scripts/openings.test.ts --bundle --platform=node --format=esm --external:three --outfile=/tmp/openings.test.mjs && node /tmp/openings.test.mjs
-import { openingBoxes, planOpenings, wallSides, type OpeningBox } from '../src/builder/openingplan';
-import { pointInPolygon } from '../src/siteplan/geometry';
+import { coverSolids, openingBoxes, planOpenings, wallSides, type OpeningBox } from '../src/builder/openingplan';
+import { distToEdge, pointInPolygon } from '../src/siteplan/geometry';
 import type { ExistingStructure, Vec2 } from '../src/siteplan/types';
 
 type Poly = Vec2[];
@@ -49,7 +49,8 @@ const fail = (m: string) => { if (failures.length < 25) failures.push(m); else i
 
 function check(label: string, house: ExistingStructure, all: ExistingStructure[]) {
   const plan = planOpenings(house, all, [4, 3]);
-  const others = all.filter((o) => o !== house).map((o) => o.polygon);
+  const others = all.filter((o) => o !== house && o.kind !== 'cover').map((o) => o.polygon);
+  const solids = all.filter((o) => o.kind === 'cover').flatMap(coverSolids);
   const sideOf = new Map(plan.sides.map((s) => [s.edge, s]));
   const byEdge = new Map<number, typeof plan.placed>();
   for (const op of plan.placed) {
@@ -67,6 +68,9 @@ function check(label: string, house: ExistingStructure, all: ExistingStructure[]
         if (off < 0.01 - 0.01 - 1e-6 || off > 0.12 + 1e-6) fail(`${label}: ${b.kind} off wall plane (${off.toFixed(3)})`);
         // Never inside this or another footprint.
         if (pointInPolygon([c[0] + sd.out[0] * 0.001, c[1] + sd.out[1] * 0.001], house.polygon)) fail(`${label}: ${b.kind} corner inside own walls`);
+        // Clear of every cover wall, post and header end (a cover's roof alone is fine).
+        const need = house.openings ? 0.05 : 0.3;
+        for (const q of solids) if (pointInPolygon(c, q) || distToEdge(c, q) < need) fail(`${label}: ${b.kind} too close to a cover wall/post`);
         for (const o of others) if (pointInPolygon([c[0] + sd.out[0] * 0.001, c[1] + sd.out[1] * 0.001], o)) fail(`${label}: ${b.kind} inside a neighbor structure`);
       }
       if (b.y0 < -1e-9 || b.y1 > house.height - 0.1) fail(`${label}: box above the eave (y1 ${b.y1}, H ${house.height})`);
@@ -111,10 +115,14 @@ const big = mk('h', 'house', shapes.rect);
 const bp = planOpenings(big, [big], [6, 4]);
 const doorsCount = bp.placed.filter((o) => o.h0 < 0.1).length, windows = bp.placed.length - doorsCount;
 if (doorsCount !== 1 || windows < 6) fail(`rect house lost its openings: ${doorsCount} doors, ${windows} windows`);
-// A cover along the whole yard wall moves the door elsewhere.
+// An open patio roofed over the whole yard wall keeps the wall's windows and door.
 const patio = mk('c', 'cover', [[0, 8], [12, 8], [12, 11], [0, 11]], 3);
 const pp = planOpenings(big, [big, patio], [6, 4]);
-if (pp.placed.some((o) => pp.sides.find((s) => s.edge === o.edge)!.out[1] > 0.5)) fail('openings still on the wall under the cover');
+if (pp.placed.length < 7 || !pp.placed.some((o) => pp.sides.find((s) => s.edge === o.edge)!.out[1] > 0.5)) fail('openings under an open patio were removed');
+// A California room whose side wall meets the house: nothing near that wall.
+const room = mk('c', 'cover', [[0, 8], [12, 8], [12, 11], [0, 11]], 3, { walls: [false, true, false, true] });
+const rp = planOpenings(big, [big, room], [6, 4]);
+for (const o of rp.placed) { const sd = rp.sides.find((s) => s.edge === o.edge)!; if (sd.out[1] > 0.5 && (o.t - o.w / 2 < 0.8 || o.t + o.w / 2 > 11.2 + 0)) fail('opening near a room side wall'); }
 
 console.log(`footprint cases checked: ${checked}, openings verified: ${openings}, cases where a cover removed openings: ${skippedByCover}`);
 console.log(`unobstructed 12x8 house: ${doorsCount} door, ${windows} windows`);
