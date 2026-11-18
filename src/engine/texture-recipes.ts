@@ -1,6 +1,6 @@
 import { materialById, type LayingPattern } from '../siteplan/catalog';
 import { rockSet } from '../builder/materials';
-import { cortenSet, materialTextures, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
+import { cortenSet, flagFaceSet, materialTextures, padSet, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
 import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
@@ -17,10 +17,21 @@ export function runRecipe(key: string): PBRSet | null {
     const spec = materialById.get(mat[1]);
     return spec ? materialTextures(spec, mat[2] as LayingPattern | undefined) : null;
   }
-  const slab = /^slab:([^:]+)(?::(\d+(?:\.\d+)?))?$/.exec(key);
+  // slab:<look> (24 x 24), slab:<look>:<side> (a square slab, e.g. a pad), slab:<look>:<w>x<d>
+  const slab = /^slab:([^:]+)(?::(\d+(?:\.\d+)?)(?:x(\d+(?:\.\d+)?))?)?$/.exec(key);
   if (slab) {
     const spec = materialById.get(slab[1]);
-    return spec ? slabSet(spec, slab[2] ? +slab[2] : 24) : null;
+    return spec ? (slab[2] ? slabSet(spec, +slab[2], slab[3] ? +slab[3] : +slab[2]) : slabSet(spec)) : null;
+  }
+  const pad = /^pad:(.+)$/.exec(key);
+  if (pad) {
+    const spec = materialById.get(pad[1]);
+    return spec ? padSet(spec) : null;
+  }
+  const flag = /^flag:(.+)$/.exec(key);
+  if (flag) {
+    const spec = materialById.get(flag[1]);
+    return spec ? flagFaceSet(spec) : null;
   }
   const cap = /^cap:(.+)$/.exec(key);
   if (cap) {

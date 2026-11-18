@@ -166,8 +166,12 @@ export interface FeaturePlacement extends ItemBase {
   catalogId: string;
   position: Vec2;
   rotationDeg: number;
-  /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
+  /** A stepping stone's material: a `dimensions-slab-24-*` color for a slab, a concrete look for a poured pad, a
+   *  `flagstone-*` look for a flagstone stepper. Left out (or not that kind of stone), the stone's default. */
   materialId?: string;
+  /** A flagstone stepper's own outline, meters about its center in its local frame (x across, y along local z), as
+   *  the plan editor drew it. Left out, an outline is made from the placement's id within the stepper's size range. */
+  outline?: Vec2[];
   /** Choices for the feature's on/off options (its catalog `options`, e.g. a sauna's door and lights). Left out, the defaults. */
   options?: Record<string, boolean>;
   /** Features that come in sizes (the catalog's `sizes`): length, depth and height in meters. Left out, the catalog's size. */

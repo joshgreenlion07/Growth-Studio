@@ -277,10 +277,21 @@ Messages use `window.postMessage`:
   1600 px JPEG of the yard from the Overview view, drawn off screen: the live
   view does not move, resize or blink),
   or `{ ..., ok: false, message }` before a plan is built.
-- Stepping stones are `features` with `catalogId: 'stepping-stone-24'` (a Belgard
-  Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
-  grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
-  looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
+- Stepping stones are `features` of kind `steppingStone`, in the sizes usually set (sizes are along the stone's own x,
+  then z; a path turns x along the walk, so a long stone lies across it):
+  - Belgard Dimensions Slabs, 2 3/8 in thick, top about 1/2 in above grade: `stepping-stone-12x24`,
+    `stepping-stone-24`, `stepping-stone-24x36`; `materialId` one of the `dimensions-slab-24-*` looks (18 Dimensions
+    Slabs colors, whatever the size).
+  - Green Lion poured concrete pads, 4 in thick, top 1 in above grade, no saw cuts: `stepping-pad-36` (3 x 3 ft) and
+    `stepping-pad-48` (4 x 4 ft); `materialId` a concrete look (Area Planner offers smooth, broom and exposed aggregate
+    in the six integral colors). No maker sells a precast stepping slab this big; pads this size are poured in place.
+  - Natural flagstone steppers, one piece each, top about 1/2 in above grade: `flagstone-stepper-18-24` and
+    `flagstone-stepper-24-36`; `materialId` one of the flagstones Green Lion buys (`flagstone-cold-water-canyon`,
+    `flagstone-az-classic-oak`, `flagstone-sui-black-slate`), and an optional `outline` (meters about the center, in
+    the stone's own frame) so the 3D stone is the one drawn in the plan; left out, an outline is made from the
+    placement's id within the size range.
+  A `materialId` that does not suit the stone falls back to that stone's default. The pointer reports them as part
+  `stone`. Pebbles are cleared from under each stone by its own outline. The **Stepping stones** sample shows them all.
 - A feature with on/off options (its catalog entry lists `options: { key, label, default }[]`, sent in the
   `catalog` message) takes `options: { [key]: boolean }` on its placement; keys the feature does not offer
   are dropped. The SaunaLife CL5G sauna (`saunalife-cl5g`) offers `doorOpen` (default off) and `lightsOn`

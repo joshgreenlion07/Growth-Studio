@@ -132,6 +132,15 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
       };
     }
     case 'flagstone':
+      if (m.flag) {
+        const what = { rhyolite: 'a porous rhyolite (lava) stone, reddish brown to black, often with lichen on its face', sandstone: 'an Arizona sandstone, pale cream to buff with tan swirls', slate: 'a charcoal to black slate, lightly riven' }[m.flag.stone];
+        const t = m.flag.thicknessIn;
+        return {
+          group: 'Natural stone',
+          about: `${m.matches ?? m.name}: ${what}. Natural flagstone, so every piece has its own outline; used one piece at a time as a stepping stone.`,
+          spec: [`About ${t === 1 ? '1' : t} in thick`, 'Set in 2 to 3 in of compacted DG or sand, top about 1/2 in above the ground around it', 'Picked by size: 18 to 24 in or 24 to 36 in steppers'],
+        };
+      }
       return m.id === 'flagstone-dg'
         ? { group: 'Natural stone', about: 'Natural flagstone pieces set with wide gaps of decomposed granite: a relaxed, natural path or patio.', spec: ['1 1/2 to 2 in thick stones', 'Set in 2 to 3 in compacted DG', 'Gaps 1 to 3 in, filled with DG'] }
         : { group: 'Natural stone', about: 'Natural flagstone set tight in a mortar bed: a solid stone patio with irregular, hand-fit pieces.', spec: ['1 1/2 to 2 in thick stones', 'Mortar bed on a 4 in concrete slab', 'Joints grouted'] };

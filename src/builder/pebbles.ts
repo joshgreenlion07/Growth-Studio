@@ -3,6 +3,7 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { materialById, type MaterialSpec } from '../siteplan/catalog';
 import { bounds, pointInPolygon, rng } from '../siteplan/geometry';
 import { featureById } from '../siteplan/catalog';
+import { steppingOf, stoneOutline, stoneTop } from '../siteplan/stepping';
 import type { FeaturePlacement, SitePlan, Vec2 } from '../siteplan/types';
 import { vnoise } from '../engine/noise';
 import { rockAlbedo } from '../engine/surfaces';
@@ -430,8 +431,8 @@ export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   return out;
 }
 
-/** Slab tops above the ground at the stone's center (features.ts: a stepping stone's 0.06 m slab sunk 0.047 m; a pad is 0.06 m). */
-const SLAB_TOP = { steppingStone: 0.013, steppingPad: 0.06 } as const;
+/** A 24 in stepping pad's top above the ground (features.ts: a 0.06 m concrete pad on the ground). */
+const PAD_TOP = 0.06;
 /** How far in from the slab's edge a piece must reach to count as over its face (a pebble tucked under the edge stays). */
 const FACE_INSET = 0.004;
 /** Pieces centred inside the slab inset this far are always dropped. */
@@ -449,18 +450,37 @@ function pieceTop(st: Stone): number {
   return st.y + F * (st.thick * Math.max(Math.cos(st.tipX) * Math.cos(st.tipZ), 0) + Math.max(st.len, st.wid) * (sx + sz));
 }
 
+/** Signed distance from a point to a closed outline: negative inside. */
+function outlineDistance(x: number, z: number, pts: Vec2[]): number {
+  let d = Infinity, inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [ax, az] = pts[j], [bx, bz] = pts[i];
+    if ((bz > z) !== (az > z) && x < ((ax - bx) * (z - bz)) / (az - bz) + bx) inside = !inside;
+    const ex = bx - ax, ez = bz - az, L = ex * ex + ez * ez;
+    const t = L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L)) : 0;
+    d = Math.min(d, Math.hypot(x - ax - ex * t, z - az - ez * t));
+  }
+  return inside ? -d : d;
+}
+
 /**
- * Drops the pieces that would show through a stepping stone's top: first every piece centred inside the slab face inset 1 cm (hidden under it when low, so dropping them costs nothing); then those whose footprint (a circle of the piece's
- * own reach, so it holds at any turn) overlaps the slab's face, inset a few mm, AND whose top rises above the slab top.
- * Pieces lower than the slab that butt against or tuck under its edge stay, as do pieces centered outside the slab
- * that do not rise over its face. Done after placing, so every kept piece has exactly its place, size and color.
+ * Drops the pieces that would show through a stepping stone's top: first every piece centred inside the stone's face
+ * inset 1 cm (hidden under it when low, so dropping them costs nothing); then those whose footprint (a circle of the
+ * piece's own reach, so it holds at any turn) overlaps the stone's face, inset a few mm, AND whose top rises above the
+ * stone's top. Pieces lower than the stone that butt against or tuck under its edge stay, as do pieces centered outside
+ * it that do not rise over its face. A slab or pad is its rectangle; a flagstone its own outline. Done after placing,
+ * so every kept piece has exactly its place, size and color.
  */
 export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacement[], height: (p: Vec2) => number): Stone[] {
   const slabs = features.flatMap((f) => {
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'steppingStone' && spec?.kind !== 'steppingPad') return [];
     const a = (-f.rotationDeg * Math.PI) / 180;
-    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), hw: spec.footprint[0] / 2 - FACE_INSET, hd: spec.footprint[1] / 2 - FACE_INSET, top: height(f.position) + SLAB_TOP[spec.kind] }];
+    const outline: Vec2[] = spec.kind === 'steppingStone' ? stoneOutline(f, spec) : [[-spec.footprint[0] / 2, -spec.footprint[1] / 2], [spec.footprint[0] / 2, -spec.footprint[1] / 2], [spec.footprint[0] / 2, spec.footprint[1] / 2], [-spec.footprint[0] / 2, spec.footprint[1] / 2]];
+    let far = 0;
+    for (const [x, z] of outline) far = Math.max(far, Math.hypot(x, z));
+    const top = height(f.position) + (spec.kind === 'steppingStone' ? stoneTop(steppingOf(spec).stone) : PAD_TOP);
+    return [{ at: f.position, c: Math.cos(a), s: Math.sin(a), outline, far, top }];
   });
   if (!slabs.length) return stones;
   return stones.filter((st) => {
@@ -468,12 +488,12 @@ export function clearOfSteppingStones(stones: Stone[], features: FeaturePlacemen
     let top: number | undefined;
     for (const k of slabs) {
       const dx = st.x - k.at[0], dy = st.z - k.at[1];
-      if (Math.abs(dx) > 0.5 + reach || Math.abs(dy) > 0.5 + reach) continue;
-      // Into the slab's own frame (the inverse of features.ts's local -> plan turn).
+      if (Math.abs(dx) > k.far + reach || Math.abs(dy) > k.far + reach) continue;
+      // Into the stone's own frame (the inverse of features.ts's local -> plan turn).
       const lx = dx * k.c - dy * k.s, lz = dx * k.s + dy * k.c;
-      if (Math.abs(lx) < k.hw - CENTER_INSET + FACE_INSET && Math.abs(lz) < k.hd - CENTER_INSET + FACE_INSET) return false;
-      const ox = Math.max(Math.abs(lx) - k.hw, 0), oz = Math.max(Math.abs(lz) - k.hd, 0);
-      if (ox * ox + oz * oz >= reach * reach) continue;
+      const d = outlineDistance(lx, lz, k.outline);
+      if (d < -CENTER_INSET) return false;
+      if (d + FACE_INSET >= reach) continue;
       if ((top ??= pieceTop(st)) > k.top) return false;
     }
     return true;
