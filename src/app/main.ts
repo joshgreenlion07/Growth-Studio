@@ -22,6 +22,7 @@ import type { Quality } from '../engine/post';
 import { PlanEditor, type Tool } from './planeditor';
 import { prepareImage, readPlan, type SourceKind } from './reader';
 import { pdfFirstPage } from './pdf';
+import { QuickTools } from './quicktools';
 
 /* ------------------------------------------------------------------ */
 /* Small DOM helpers                                                   */
@@ -133,7 +134,8 @@ function bootStudio() {
   }
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
-  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, Y shows the material pointer, pressing the right stick locks its material, B goes home.');
+  studio.nav.onConnect = () => toast('Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, B shows plant labels, Y shows the material pointer, pressing the right stick locks its material, Menu goes home. D-pad: left and right pick a quick tool (dig layers, mark, tape measure, light, growth, views), up and down use it.');
+  initQuickTools(studio);
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   studio.onCutawayChanged = (on) => {
@@ -145,6 +147,38 @@ function bootStudio() {
   $('#loading').hidden = true;
   // Area Planner has its own second screen; the studio on its own gets this one.
   if (!EMBED) initSecondScreen({ studio, plan: () => plan, title: () => planName || plan.site.name, button: $<HTMLButtonElement>('#btn-second'), floatHost: $('#scene'), toast: (t) => toast(t, 'warn') });
+}
+
+/* ------------------------------------------------------------------ */
+/* Quick tools and plant labels                                         */
+
+const PLANT_LABELS_KEY = 'growth-studio.plant-labels';
+let quick: QuickTools | null = null;
+
+function initQuickTools(s: Studio) {
+  quick = new QuickTools({ studio: () => studio, setStage: (st) => setStage(st), setMood, setYears, enabled: () => !libraryOpen() }, $('#scene'));
+  s.onQuick = (dir, held) => quick?.press(dir, held);
+  // Plant labels: their own switch (B, N, or the Plants button), apart from the measurements, kept between visits.
+  const btn = $<HTMLButtonElement>('#btn-plants');
+  btn.addEventListener('click', () => s.setPlantLabels(!s.plantLabels));
+  s.onPlantLabelsChanged = (on) => {
+    btn.setAttribute('aria-pressed', String(on));
+    try {
+      localStorage.setItem(PLANT_LABELS_KEY, on ? '1' : '0');
+    } catch {
+      /* not kept */
+    }
+  };
+  try {
+    if (localStorage.getItem(PLANT_LABELS_KEY) === '1') s.setPlantLabels(true);
+  } catch {
+    /* no storage */
+  }
+  // Marks thrown with the Mark tool: the parent may keep them (3D world points, meters).
+  s.onMarksChanged = (marks) => {
+    quick?.marksChanged();
+    if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'marks', marks: marks.map((m) => ({ x: +m.x.toFixed(3), z: +m.z.toFixed(3), y: +m.y.toFixed(3) })) }, embedOrigin);
+  };
 }
 
 function scheduleRebuild() {
