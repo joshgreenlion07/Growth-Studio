@@ -42,7 +42,7 @@ export function setMaxAnisotropy(n: number) {
  * Keys of the sets the texture worker can paint by itself (texture-recipes.ts
  * resolves each one). Small or one-off sets stay on the main thread.
  */
-export const WORKER_KEYS = /^(?:mat:|cap:|cl5g-)|^(?:soil|corten|porcelainPanel|rock|stucco|roofTile|bark|asphalt|poolTile|pf-stucco|pf-ledger|pf-bowl)$/;
+export const WORKER_KEYS = /^(?:mat:|cap:|slab:|cl5g-)|^(?:soil|corten|porcelainPanel|rock|stucco|roofTile|bark|asphalt|poolTile|pf-stucco|pf-ledger|pf-bowl)$/;
 
 /** Paints sets off the main thread; registered by texture-jobs.ts on the page. */
 export interface TexturePainter {

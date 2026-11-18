@@ -1,6 +1,6 @@
 import { materialById, type LayingPattern } from '../siteplan/catalog';
 import { rockSet } from '../builder/materials';
-import { cortenSet, materialTextures, porcelainPanelSet, soilTextures, wallCapTextures } from './surfaces';
+import { cortenSet, materialTextures, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
 import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
@@ -16,6 +16,11 @@ export function runRecipe(key: string): PBRSet | null {
   if (mat) {
     const spec = materialById.get(mat[1]);
     return spec ? materialTextures(spec, mat[2] as LayingPattern | undefined) : null;
+  }
+  const slab = /^slab:(.+)$/.exec(key);
+  if (slab) {
+    const spec = materialById.get(slab[1]);
+    return spec ? slabSet(spec) : null;
   }
   const cap = /^cap:(.+)$/.exec(key);
   if (cap) {
