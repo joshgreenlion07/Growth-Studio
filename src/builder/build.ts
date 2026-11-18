@@ -379,7 +379,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
         if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
         continue;
       }
-      if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(...spec.footprint) * 0.55) return true;
+      // A feature set to its own size (a boulder, a planter) clears for that size, not the catalog's default.
+      if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(...(f.size ? [f.size[0], f.size[1]] : spec.footprint)) * 0.55) return true;
     }
     return false;
   };

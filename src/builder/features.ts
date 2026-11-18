@@ -12,6 +12,8 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { buildWaterRock } from './waterrock';
+import { buildFlagstone } from './flagstone';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
@@ -584,6 +586,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'ceilingFan': {
         // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
         buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
+        break;
+      }
+      case 'mossRock':
+      case 'canyonBoulder': {
+        // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
+        buildWaterRock({ f, spec, add, lift: lift?.(f.position) });
+        break;
+      }
+      case 'flagLip':
+      case 'flagLedge':
+      case 'flagEdge': {
+        // Flagstone pieces for water features (builder/flagstone.ts).
+        buildFlagstone({ f, spec, add, material: catalogMaterial('slab-24'), lift: lift?.(f.position) });
         break;
       }
       case 'blackPlanter': {
