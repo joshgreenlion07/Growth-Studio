@@ -1196,6 +1196,20 @@ export class Studio {
     return { action: a, changed: true };
   }
 
+  /** What can be used by hand on a placed feature (the Library item view lists these as buttons). */
+  featureActions(itemId: string): FeatureAction[] {
+    return this.build ? this.build.features.actions.filter((a) => a.itemId === itemId) : [];
+  }
+
+  /** Switch one of a feature's actions by key, animated; returns it (null if there is none). */
+  toggleFeatureAction(itemId: string, key: string): FeatureAction | null {
+    const a = this.featureActions(itemId).find((x) => x.key === key);
+    if (!a) return null;
+    this.setAction(a, !a.on, false);
+    this.onAction(a);
+    return a;
+  }
+
   /** The plan now asks for what was done by hand (it was saved to the plan): keep it as the action's own state. */
   settleAction(a: FeatureAction) {
     a.planOn = a.on;

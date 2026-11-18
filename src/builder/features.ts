@@ -299,8 +299,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           owned.push(led);
           extraGlow.push(led);
           const own = lights.length;
-          stratusPergola(W, D, stratusFrame, led, add, light);
+          const open = featureOption(spec, f.options, 'louversOpen');
+          const louvers = stratusPergola(W, D, stratusFrame, led, add, light, hinge, open);
           const roofLights = lights.slice(own);
+          act({ key: 'louvers', label: 'Louvers', words: ['Open', 'Closed'], anchors: [anchorAt(o, 0, 2.45, 0)], on: open, planOn: open, option: 'louversOpen', ...louvers });
           act({ key: 'lights', label: 'Pergola lights', words: ['On', 'Off'], anchors: [anchorAt(o, 0, 2.3, 0)], on: true, planOn: true, lights: true, set(on) {
             led.userData.off = !on;
             for (const l of roofLights) l.off = !on;
@@ -771,9 +773,12 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
  * published): square posts about 5 in on square base plates about 8 in, flush with the outside of a deep fascia beam
  * band (about 6 1/2 in) that runs round the top; the long beams are made in two lengths with a joint at mid-span.
  * The louvers (about 6 in at a 5.9 in pitch) span the short way between the long beams on pivots just under the beam
- * top, tilted partly open; every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
+ * top, driven by a 20 V battery motor from a post-mounted button panel (flat and sealed shut to vertical); every fourth one carries an LED strip on its underside. An internal gutter rail runs inside
  * each long beam. One warm light under the roof lights the space at night.
  */
+/** The Stratus louvers' open angle. SunVilla does not publish it; motorized louvers of this kind turn to vertical. */
+const STRATUS_OPEN = Math.PI / 2;
+
 function stratusPergola(
   W: number,
   D: number,
@@ -781,7 +786,9 @@ function stratusPergola(
   led: THREE.Material,
   add: (m: THREE.Material, g: THREE.BufferGeometry) => void,
   light: (x: number, y: number, z: number, color: string, intensity: number, distance: number) => void,
-) {
+  hinge: (px: number, py: number, pz: number) => { add: (m: THREE.Material, g: THREE.BufferGeometry) => void; group: THREE.Group },
+  open: boolean,
+): Pick<FeatureAction, 'set' | 'tick'> {
   const H = 98.6 * IN_M;
   const post = 0.127, beamH = 0.165, beamT = 0.095;
   const plate = 0.205, plateH = 0.014;
@@ -809,29 +816,28 @@ function stratusPergola(
   const inner = W - 2 * beamT - 0.02;
   const pitch = 0.15;
   const n = Math.floor(inner / pitch);
-  const blade = 0.16, thick = 0.02, span = D - 2 * beamT - 0.1;
-  const tilt = (22 * Math.PI) / 180;
   const yPivot = H - 0.075;
+  // Closed the blades lie flat and meet along their edges (a 3 mm joint under a drip lip that hangs below it).
+  const blade = 0.147, thick = 0.02, span = D - 2 * beamT - 0.1;
+  const louvers: Pick<FeatureAction, 'set' | 'tick'>[] = [];
   for (let i = 0; i < n; i++) {
     const x = -((n - 1) * pitch) / 2 + i * pitch;
-    const parts: [THREE.Material, THREE.BufferGeometry][] = [];
+    // Each louver is its own hinged group, turning about its centre line (the pivot rod); geometry is in feature space.
+    const h = hinge(x, yPivot, 0);
     // The blade, slightly crowned (a thin rib along its top), and the drip lip on its lower edge.
-    parts.push([frame, new THREE.BoxGeometry(blade, thick, span)]);
-    parts.push([frame, new THREE.BoxGeometry(blade * 0.35, 0.008, span).translate(0, thick / 2 + 0.004, 0)]);
-    parts.push([frame, new THREE.BoxGeometry(0.008, 0.024, span).translate(blade / 2 - 0.004, 0.012, 0)]);
+    h.add(frame, new THREE.BoxGeometry(blade, thick, span).translate(x, yPivot, 0));
+    h.add(frame, new THREE.BoxGeometry(blade * 0.35, 0.006, span).translate(x, yPivot + thick / 2 + 0.003, 0));
+    h.add(frame, new THREE.BoxGeometry(0.006, 0.036, span).translate(x + blade / 2 - 0.001, yPivot - 0.012, 0));
     // The LED strip: a rounded diffuser along the blade's underside, so it shows from any side below.
-    if (i % 4 === 0) parts.push([led, new THREE.CylinderGeometry(0.011, 0.011, span - 0.12, 8).rotateX(Math.PI / 2).translate(0, -thick / 2 - 0.004, 0)]);
-    for (const [m, g] of parts) {
-      g.rotateZ(tilt);
-      g.translate(x, yPivot, 0);
-      add(m, g.toNonIndexed());
-    }
+    if (i % 4 === 0) h.add(led, new THREE.CylinderGeometry(0.011, 0.011, span - 0.12, 8).rotateX(Math.PI / 2).translate(x, yPivot - thick / 2 - 0.004, 0));
+    louvers.push(swing(h.group, 'z', STRATUS_OPEN, open, 2.6));
     // End caps and pivot brackets on the gutter rails.
     for (const sz of [-1, 1]) add(frame, box(0.05, 0.045, 0.03, x, yPivot - 0.035, sz * (span / 2 + 0.015)));
   }
   // The strips' light on the patio and furniture, from well under the roof so the louvers themselves stay dark between
   // them. One light per pergola: the scene's light pool is small (see build.ts), the strips themselves glow regardless.
   light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
+  return swings(louvers);
 }
 
 type GrillMats = Record<'steel' | 'grate' | 'black' | 'inside', THREE.Material>;
