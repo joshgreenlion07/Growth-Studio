@@ -8,6 +8,7 @@ import { cortenSet, porcelainPanelSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
+import { buildDecor } from './decor';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -138,6 +139,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   // SunVilla Stratus frame: aluminum with a matte, finely textured charcoal powder coat.
   const stratusFrame = plainMaterial('stratus-charcoal', { color: '#48494b', roughness: 0.66, metalness: 0.12 });
   owned.push(lampGlow, spaGlow, ledGlow);
+  // Night glow of the decor builders (fire glass), owned by this build.
+  const decorGlow: THREE.MeshStandardMaterial[] = [];
   const flameMat = flameMaterial();
   owned.push(flameMat);
   const falls = fallMaterial();
@@ -393,6 +396,16 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
         break;
       }
+      case 'cortenPlanterTall':
+      case 'cortenTreePanel':
+      case 'firePitLinear':
+      case 'loungeSofa':
+      case 'loungeOttoman':
+      case 'deckBox': {
+        // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
+        buildDecor(kind, { f, spec, add, light, flame, glow: (m) => { owned.push(m); decorGlow.push(m); } });
+        break;
+      }
       case 'blackPlanter': {
         add(mat.black, box(W, 0.6, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.56, 0));
@@ -507,7 +520,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     object: group,
     surfaces,
     lights,
-    glow: [lampGlow, spaGlow, ledGlow],
+    glow: [lampGlow, spaGlow, ledGlow, ...decorGlow],
     flames,
     fallMats,
     dispose() {

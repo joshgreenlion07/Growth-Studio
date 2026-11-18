@@ -133,6 +133,10 @@ export interface FeaturePlacement extends ItemBase {
   rotationDeg: number;
   /** A stepping stone's material (a `dimensions-slab-24-*` look). Left out, the default slab color. */
   materialId?: string;
+  /** Features that come in sizes (the catalog's `sizes`): length, depth and height in meters. Left out, the catalog's size. */
+  size?: [number, number, number];
+  /** A planter's own planting: false draws it empty (soil only). Left out, planted. */
+  planted?: boolean;
 }
 
 /** A door or window the designer marked on a wall. */

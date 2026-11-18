@@ -15,6 +15,7 @@
 import { BELGARD_LINES } from './belgard';
 import { BASALITE_LINES } from './basalite';
 import { approvalOverride } from './approval';
+import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 
 export type PlantForm =
   | 'shadeTree'
@@ -130,7 +131,7 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
   return isAntiqued(spec) && k === 'a' ? '3-piece Pattern A' : LAYING_NAMES[k];
 }
 
-export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
+export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat';
 export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
@@ -299,6 +300,7 @@ export type FeatureKind =
   | 'puttingCup'
   | 'cortenScreen'
   | 'cortenPlanter'
+  | DecorKind
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
@@ -320,6 +322,11 @@ export interface FeatureSpec {
   kind: FeatureKind;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
+  /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
+  sizes?: FeatureSize[];
+  size?: number;
+  /** It holds plants of its own (a planter): drawn planted unless its placement says `planted: false`. */
+  plantable?: boolean;
   /** A maker's product, drawn to its published size: the maker, its product page, and plain facts for the panel. */
   maker?: string;
   page?: string;
@@ -546,6 +553,8 @@ export const MATERIALS: MaterialSpec[] = [
   // Fences
   M({ id: 'fence-board-on-board', name: 'Board-on-board, natural cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#b08a63', '#9a7552', '#86643f'], fence: 'boardOnBoard' }),
   M({ id: 'fence-gray-lattice', name: 'Gray board, cedar lattice top', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7d8083', '#6d7073', '#5d6063'], fence: 'grayLattice' }),
+  // Green Lion's own build (builder/decor/fence-gray-lattice.ts): gray-painted board-on-board to the fence height, a 1 ft cedar lattice topper above it, natural cedar posts and cap.
+  M({ id: 'fence-gray-board-cedar-lattice', name: 'Gray board-on-board, cedar lattice topper', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7c8083', '#74787b', '#6c7073'], fence: 'grayBoardLattice' }),
   M({ id: 'fence-dog-ear', name: 'Dog-ear picket, natural', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#c4a47e', '#b0906a', '#9a7b57'], fence: 'dogEar' }),
   M({ id: 'fence-horizontal', name: 'Horizontal slat, cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#a5714a', '#8a5d3b', '#76502f'], fence: 'horizontal' }),
   M({ id: 'fence-vinyl', name: 'Vinyl privacy, white', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#ecebe6', '#e2e0da'], fence: 'vinyl' }),
@@ -696,6 +705,7 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'copper-bowl', name: 'Copper bowl planter', group: 'Accents', kind: 'copperBowl', footprint: [0.75, 0.75] }),
   F({ id: 'corten-screen', name: 'Corten screen panel', group: 'Accents', kind: 'cortenScreen', footprint: [1.8, 0.1] }),
   F({ id: 'corten-planter', name: 'Corten planter', group: 'Accents', kind: 'cortenPlanter', footprint: [0.6, 0.6] }),
+  ...DECOR_FEATURES,
   F({ id: 'black-planter', name: 'Black square planter', group: 'Accents', kind: 'blackPlanter', footprint: [0.5, 0.5] }),
   F({ id: 'boulder', name: 'Boulder', group: 'Accents', kind: 'boulder', footprint: [1.0, 0.8] }),
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),

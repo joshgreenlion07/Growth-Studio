@@ -226,6 +226,10 @@ Messages use `window.postMessage`:
   Dimensions Slab 24 x 24 x 2 3/8 in, set with its top about 1/2 in above
   grade) and an optional `materialId`: one of the `dimensions-slab-24-*`
   looks (18 Dimensions Slabs colors). The pointer reports them as part `stone`.
+- A feature that comes in sizes (the catalog's `sizes`: the tall corten planter, the concrete fire pit, the tree of
+  life screen) takes an optional `size: [length, depth, height]` in meters; left out, the catalog's standard size. A
+  planter (`plantable`) is drawn with its own planting (counted with the plan's plants) unless `planted: false`.
+  Plants placed inside a planter sit on its soil.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
@@ -260,7 +264,8 @@ Messages use `window.postMessage`:
   - Parent to studio: `{ source: 'area-planner', type: 'approvals', approvals: { on: string[], off: string[] } }`
     (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
   - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
-    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint }` and
+    structures }`: approved plant ids, approved placeable features `{ id, name, group, footprint, sizes?, size?,
+    plantable? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
     `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
     `ready`, now filtered to approved looks.
   - Keys (`src/siteplan/approval.ts`): `line:<maker>|<line>` (a line's paver edge is `line:<maker>|<line> 6 x 9 edge`), `mat:<id>`, `plant:<id>`, `feature:<id>`,

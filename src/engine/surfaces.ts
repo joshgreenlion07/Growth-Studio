@@ -1235,7 +1235,7 @@ function fenceSet(spec: MaterialSpec, style: FenceStyle): PBRSet {
       return { h: edge ? 0.2 : wire ? 1 : 0.6, c, r: wire ? 0.4 : 0.7 };
     });
   }
-  const painted = style === 'grayLattice' || style === 'vinyl';
+  const painted = style === 'grayLattice' || style === 'grayBoardLattice' || style === 'vinyl';
   const horizontal = style === 'horizontal';
   const bw = style === 'horizontal' ? 0.14 : style === 'vinyl' ? 0.15 : 0.14;
   const gap = style === 'horizontal' ? 0.012 : style === 'dogEar' ? 0.006 : style === 'vinyl' ? 0.002 : 0.0035;

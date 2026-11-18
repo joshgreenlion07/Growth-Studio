@@ -15,6 +15,7 @@ import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
 import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { plantGround, planterPlants } from './decor/planters';
 import { poolSteps, type PoolLayout } from './pools';
 import { buildStructures } from './structures';
 import { buildTurf } from './turf';
@@ -63,7 +64,8 @@ export interface SceneBuild {
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
 export function expandPlants(plan: SitePlan, gm: GroundModel): PlantPlacement[] {
-  const out: PlantPlacement[] = [...plan.plants];
+  // Planted features (corten planters) bring their own plants.
+  const out: PlantPlacement[] = [...plan.plants, ...planterPlants(plan.features)];
   const bodies = bodyGrid(lineBodies(plan));
   // Placed plants by position, so each candidate checks only its neighbors.
   const taken = new PointGrid(1);
@@ -380,7 +382,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, gm.height, quality !== 'draft', { lod: true, reflects, shadowTexel });
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height), quality !== 'draft', { lod: true, reflects, shadowTexel });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
