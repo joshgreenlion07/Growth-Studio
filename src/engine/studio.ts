@@ -1638,7 +1638,9 @@ export class Studio {
     const g = this.build.gm.height([p.x, p.z]);
     const min = Math.max(g, 0) + 0.3;
     if (p.y < min) p.y = min;
-    if (this.controls.target.y < -0.5) this.controls.target.y = -0.5;
+    // Orbit only: the orbit pivot stays near the ground. In walk and fly the target is just the look direction,
+    // a few meters ahead, so clamping it would pull a downward look back toward level near the ground.
+    if (this.navMode === 'orbit' && this.controls.target.y < -0.5) this.controls.target.y = -0.5;
   }
 
   /* -------------------------------------------------------------- */
