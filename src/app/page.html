@@ -302,6 +302,16 @@ section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label.ml-plant { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #7dc00f; }
 .measure-label.ml-plant span { font-family: var(--font-mono); font-weight: 400; }
 .measure-label.ml-lot { background: rgba(255, 233, 168, 0.92); }
+/* Every-edge dimensions: the length on its run (turned along it, see measure.ts), a thin frame so it reads as a tag on
+   that line. An area's name (.ml-name) hangs off the left side and shows only when the label moved off its run, at the
+   end of a leader (.ml-leader, a 100 px bar scaled to length). A picked label is lime, and the others step back. */
+.measure-label.ml-dim { padding: 0 4px; line-height: 14px; border: 1px solid rgba(30, 38, 33, 0.45); }
+.measure-label.ml-dim .ml-name { position: absolute; right: 100%; top: -1px; bottom: -1px; box-sizing: border-box; padding: 0 2px 0 5px; border: 1px solid rgba(30, 38, 33, 0.45); border-right: 0; background: rgba(251, 250, 247, 0.92); font: 600 11px/12px var(--font-ui); line-height: 12px; display: flex; align-items: center; color: #1e2621; white-space: nowrap; border-radius: 2px 0 0 2px; }
+.measure-label.ml-dim.ml-lot .ml-name { background: rgba(255, 233, 168, 0.92); }
+.ml-leader { position: absolute; left: 0; top: 0; width: 100px; height: 1.5px; background: rgba(251, 250, 247, 0.95); box-shadow: 0 1px 0 rgba(20, 24, 22, 0.45); transform-origin: 0 50%; }
+.measure-label.ml-sel, .measure-label.ml-sel .ml-name { background: #bfe03a; border-color: #4d6410; color: #1e2621; }
+.measure-label.ml-sel span { color: #2c3a12; }
+.measure-layer.ml-has-sel .measure-label:not(.ml-sel):not(.tape-label), .measure-layer.ml-has-sel .ml-leader { opacity: 0.35; }
 /* Material pointer: a ring at the center of the 3D view, with the name of what it is on. */
 .point-reticle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
 .point-reticle i { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border: 2px solid rgba(255, 255, 255, 0.92); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }

@@ -13,6 +13,9 @@ const REFRESH_MS = 250;
 export class OverlayObstacles {
   /** x, y, w, h of each control, in the label layer's coordinates. */
   rects: number[] = [];
+  /** Where the label layer's top left was on the page at the last read (client coordinates), for taps on labels. */
+  originX = 0;
+  originY = 0;
   private at = -Infinity;
   private key = '';
 
@@ -30,6 +33,8 @@ export class OverlayObstacles {
     this.at = now;
     const base = this.layer.getBoundingClientRect();
     if (!base.width || !base.height) return false;
+    this.originX = base.left;
+    this.originY = base.top;
     const view = base.width * base.height;
     const out: number[] = [];
     const add = (r: DOMRect) => {
