@@ -367,6 +367,7 @@ export interface LinePath {
   move: number;
 }
 
+const MIN_STEP = 0.02; // 3/4 in: the shortest segment a wall or curb body is built with
 const SHARP = Math.cos((30 * Math.PI) / 180); // a turn sharper than 30 degrees is a corner
 const MITER_LIMIT = 2.5; // past this the outer corner is beveled
 const INNER_LIMIT = 6;
@@ -422,10 +423,19 @@ function computeLinePath(l: LineItem, zones: Zone[]): LinePath {
   const pts: Vec2[] = [];
   // A curb is drawn by hand along the edge it separates; it is built on that edge exactly.
   const drawn = l.kind === 'edging' && thick ? snapToSeams(l.points, zones) : l.points;
+  // Points closer than MIN_STEP to the last one kept are dropped (a body's end face and its cap's end are square to
+  // the last segment, so a stub of a few millimeters left at the end of a drawn curve would turn them askew), but the
+  // line still ends on its own last point.
+  const far = (a: Vec2, b: Vec2, min: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) > min;
   for (const p of drawn) {
     const q = pts[pts.length - 1];
-    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4) pts.push([p[0], p[1]]);
+    if (!q || far(p, q, thick ? MIN_STEP : 1e-4)) pts.push([p[0], p[1]]);
   }
+  const end = drawn[drawn.length - 1];
+  if (thick && end && pts.length > 1) {
+    while (pts.length > 2 && !far(pts[pts.length - 2], end, MIN_STEP)) pts.pop();
+    pts[pts.length - 1] = [end[0], end[1]];
+  } else if (thick && end && pts.length === 1 && far(end, pts[0], 1e-4)) pts.push([end[0], end[1]]);
   const n = pts.length;
   const closed = n > 3 && Math.hypot(pts[0][0] - pts[n - 1][0], pts[0][1] - pts[n - 1][1]) < 0.01;
   if (closed) pts[n - 1] = [pts[0][0], pts[0][1]];

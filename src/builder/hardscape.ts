@@ -654,6 +654,18 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
   return plainMaterial(`cap-${capColor}`, { color: capColor, roughness: 0.55 });
 }
 
+/**
+ * How far a wall's cap runs past each face and open end, meters: the maker's own cap overhang where the maker's cap and
+ * block sizes give one (WallUnit.capOver), else 2 1/2 in, the middle of the usual 2 to 3 in. A plaster wall's own cap
+ * is a thin plaster lip.
+ */
+export function capOverhang(spec: MaterialSpec | undefined): number {
+  if (spec?.wall?.face === 'plaster') return 0.02;
+  const own = spec?.wall?.unit?.capOver;
+  return own !== undefined ? own * 0.0254 : CAP_OVER_IN * 0.0254;
+}
+const CAP_OVER_IN = 2.5;
+
 function raisedPlanter(z: Zone, geos: THREE.BufferGeometry[]): THREE.Object3D {
   const r = z.raised!;
   const g = new THREE.Group();
@@ -670,8 +682,9 @@ function raisedPlanter(z: Zone, geos: THREE.BufferGeometry[]): THREE.Object3D {
   wm.userData.part = 'wall';
   wm.userData.catalogId = r.wallCatalogId;
   g.add(wm);
-  const capOuter = insetPolygon(z.polygon, -0.035);
-  const capInner = insetPolygon(z.polygon, 0.235);
+  const over = capOverhang(materialById.get(r.wallCatalogId));
+  const capOuter = insetPolygon(z.polygon, -over);
+  const capInner = insetPolygon(z.polygon, 0.2 + over);
   const cap = slab(capOuter, H - 0.05, H, 0.012, [capInner]);
   geos.push(cap);
   const cm = new THREE.Mesh(cap, capMaterial(r.wallCatalogId));
@@ -838,14 +851,12 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     if (l.kind === 'wall') {
       const face = spec?.wall?.face ?? 'splitFace';
       const unit = spec?.wall?.unit;
-      // A maker's cap has its own thickness and overhang; otherwise the usual 2.4 in cap with a 1.4 in overhang.
-      const over = face === 'plaster' ? 0.02 : unit?.capOver !== undefined ? unit.capOver * 0.0254 : 0.035;
+      const over = capOverhang(spec);
       put('wall', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map(() => l.height)));
-      // The cap overhangs both faces of a centered wall, and the wall's open ends; as the wall
-      // moves off the line its overhang shifts to the far side, so the near edge stays flush.
-      const f = (d: number) => Math.max(-1, Math.min(1, path.move ? d / path.move : 0));
+      // The cap overhangs both faces and the open ends by the same amount, wherever the wall stands
+      // against the line (a wall moved onto the bed side still shows its overhang on the patio side).
       const capTop = l.height + (face === 'plaster' ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : 0.06);
-      const cap = bandGeometry(extendPath(path, over), (d) => d - half - over * (1 - f(d)), (d) => d + half + over * (1 + f(d)), path.pts.map(() => l.height), path.pts.map(() => capTop));
+      const cap = bandGeometry(extendPath(path, over), (d) => d - half - over, (d) => d + half + over, path.pts.map(() => l.height), path.pts.map(() => capTop));
       put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else {
       // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
