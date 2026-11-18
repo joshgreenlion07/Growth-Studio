@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { materialById, type MaterialSpec } from '../siteplan/catalog';
-import { bounds, rng } from '../siteplan/geometry';
-import type { SitePlan, Vec2, Zone } from '../siteplan/types';
+import { bounds, pointInPolygon, rng } from '../siteplan/geometry';
+import type { SitePlan, Vec2 } from '../siteplan/types';
 import { vnoise } from '../engine/noise';
 import { rockAlbedo } from '../engine/surfaces';
 import { paint, textureSet } from '../engine/textures';
@@ -113,6 +113,29 @@ interface Tile {
   farTo: number;
 }
 
+/**
+ * A bed of stones that is part of a feature (a water feature's pebble basin) rather than a plan zone: its outline and
+ * holes in plan coordinates (meters), and the height of the surface the stones lie on.
+ */
+export interface PebbleBed {
+  id: string;
+  catalogId: string;
+  polygon: Vec2[];
+  holes: Vec2[][];
+  y: number;
+  /** Scale on the stones' colors, linear RGB (stone kept wet is darker). */
+  tint?: [number, number, number];
+}
+
+/** Where one bed's stones go: inside test, surface height and extent. */
+interface BedArea {
+  key: string;
+  inside: (p: Vec2) => boolean;
+  height: (p: Vec2) => number;
+  polygon: Vec2[];
+  tint: [number, number, number];
+}
+
 export interface PebbleBuild {
   object: THREE.Object3D | null;
   /** Show each tile's near or far stones, or none, for the camera about to draw. */
@@ -120,20 +143,29 @@ export interface PebbleBuild {
   dispose(): void;
 }
 
-/** Stones over every bed zone whose material has spec.pebble, where that zone is the top one. */
-export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality): PebbleBuild {
+/** Stones over every bed zone whose material has spec.pebble, where that zone is the top one, and over features' `beds`. */
+export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, beds: PebbleBed[] = []): PebbleBuild {
   // Draft quality (the slowest devices) keeps the ground's pebble texture alone.
-  const zones = quality === 'draft' ? [] : plan.zones.filter((z) => materialById.get(z.catalogId)?.pebble);
-  if (!zones.length) return { object: null, update() {}, dispose() {} };
+  const areas: { area: BedArea; catalogId: string }[] = quality === 'draft' ? [] : [
+    ...plan.zones.filter((z) => materialById.get(z.catalogId)?.pebble).map((z) => ({
+      catalogId: z.catalogId,
+      area: { key: z.id, inside: (p: Vec2) => gm.zoneAt(p) === z, height: gm.height, polygon: z.polygon, tint: [1, 1, 1] as [number, number, number] },
+    })),
+    ...beds.filter((b) => materialById.get(b.catalogId)?.pebble).map((b) => ({
+      catalogId: b.catalogId,
+      area: { key: b.id, inside: (p: Vec2) => pointInPolygon(p, b.polygon) && !b.holes.some((h) => pointInPolygon(p, h)), height: () => b.y, polygon: b.polygon, tint: b.tint ?? ([1, 1, 1] as [number, number, number]) },
+    })),
+  ];
+  if (!areas.length) return { object: null, update() {}, dispose() {} };
   const group = new THREE.Group();
   group.name = 'pebbles';
   const mat = pebbleMaterial();
   const tiles: Tile[] = [];
   const owned: THREE.InstancedMesh[] = [];
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.6;
-  for (const z of zones) {
-    const spec = materialById.get(z.catalogId)!;
-    const stones = placeStones(z, spec, gm);
+  for (const { area, catalogId } of areas) {
+    const spec = materialById.get(catalogId)!;
+    const stones = placeStones(area, spec);
     const P = spec.pebble!;
     const avg = ((P.minIn + P.maxIn) / 2) * 0.0254;
     // Small stones get plainer shapes: their facets never show.
@@ -208,9 +240,9 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality):
  * does), each with its own size from the sold range (more of the middle sizes), shape, turn, tip, color and how deep it
  * sits. Only where this zone is the top one.
  */
-function placeStones(z: Zone, spec: MaterialSpec, gm: GroundModel): Stone[] {
+function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   const P = spec.pebble!;
-  const r = rng(`pebbles:${z.id}`);
+  const r = rng(`pebbles:${z.key}`);
   const IN = 0.0254, avg = ((P.minIn + P.maxIn) / 2) * IN;
   const step = avg * 0.7;
   const b = bounds(z.polygon);
@@ -221,22 +253,22 @@ function placeStones(z: Zone, spec: MaterialSpec, gm: GroundModel): Stone[] {
   for (let y = b.minY; y < b.maxY; y += step) {
     for (let x = b.minX; x < b.maxX; x += step) {
       const p: Vec2 = [x + r() * step, y + r() * step];
-      if (gm.zoneAt(p) !== z) continue;
+      if (!z.inside(p)) continue;
       const u = (r() + r()) / 2;
       const len = (P.minIn + (P.maxIn - P.minIn) * u) * IN;
       // The whole stone stays inside the bed (behind its edging), not only its center.
       const reach = len * 0.45;
-      if (gm.zoneAt([p[0] + reach, p[1]]) !== z || gm.zoneAt([p[0] - reach, p[1]]) !== z || gm.zoneAt([p[0], p[1] + reach]) !== z || gm.zoneAt([p[0], p[1] - reach]) !== z) continue;
+      if (!z.inside([p[0] + reach, p[1]]) || !z.inside([p[0] - reach, p[1]]) || !z.inside([p[0], p[1] + reach]) || !z.inside([p[0], p[1] - reach])) continue;
       const wid = len * (P.wide[0] + (P.wide[1] - P.wide[0]) * r());
       const thick = len * (P.thick[0] + (P.thick[1] - P.thick[0]) * r());
       const h = r();
       const ci = Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v));
-      const color = cols[ci].clone().multiplyScalar(0.88 + r() * 0.24);
+      const color = cols[ci].clone().multiplyScalar(0.88 + r() * 0.24).multiply(new THREE.Color(...z.tint));
       // Lying flat-ish, a few stood on edge against their neighbors; sunk between a fifth and a half of their thickness.
       const steep = r() < 0.12;
       out.push({
         x: p[0],
-        y: gm.height(p) + thick * (0.5 - (0.2 + r() * 0.3)),
+        y: z.height(p) + thick * (0.5 - (0.2 + r() * 0.3)),
         z: p[1],
         len,
         wid,
