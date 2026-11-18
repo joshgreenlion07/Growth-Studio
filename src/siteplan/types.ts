@@ -216,11 +216,13 @@ export interface ExistingStructure extends ItemBase {
    */
   walls?: boolean[];
   /**
-   * Covers only: extra posts. Left out (or false), a California room stands on its walls alone, its header spanning
-   * every open side, and a cover with no walls keeps only its corner columns. true adds a post at every free corner
-   * that no wall end covers and one about every 4 m along long open sides.
+   * Covers only: mid-span posts. Left out (or false), each open side is spanned by its header (a room) or beam (a
+   * patio), and only free corners open on both sides keep a column. true adds a post about every 4 m along long
+   * open sides as well.
    */
   posts?: boolean;
+  /** Covers only: a California room (the planner's category), even with no wall on any side. */
+  room?: boolean;
 }
 
 export interface SiteInfo {

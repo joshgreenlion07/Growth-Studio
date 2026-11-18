@@ -229,7 +229,7 @@ export class Measurements {
       if (s.polygon.length < 3) continue;
       this.outline(s.polygon, true, gy, 'edge');
       const c = centroid(s.polygon);
-      const name = s.kind === 'cover' ? (s.walls?.some((w) => w) ? 'California room' : 'Patio cover') : s.kind[0].toUpperCase() + s.kind.slice(1);
+      const name = s.kind === 'cover' ? (s.room === true || s.walls?.some((w) => w) ? 'California room' : 'Patio cover') : s.kind[0].toUpperCase() + s.kind.slice(1);
       this.label(`${name} · ${fmtFeet(s.height)} ${s.kind === 'cover' ? 'clear' : 'walls'}\n${sqft(Math.abs(signedArea(s.polygon)))} sq ft`, new THREE.Vector3(c[0], gy(c) + s.height + 0.6, c[1]), 'object');
     }
 

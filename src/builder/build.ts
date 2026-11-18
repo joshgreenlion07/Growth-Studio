@@ -23,7 +23,8 @@ import { plantGround, planterPlants } from './decor/planters';
 import { coverCeiling } from './decor/patio';
 import { CEILING_KINDS } from '../siteplan/decor';
 import { poolSteps, type PoolLayout } from './pools';
-import { buildStructures, COVER_FLOOR_TOP } from './structures';
+import { buildStructures } from './structures';
+import { COVER_FLOOR_TOP, coverFloorAt } from './coverfloor';
 import { buildTurf } from './turf';
 import { buildPebbles, type PebbleBuild } from './pebbles';
 import { buildHumus, type HumusBuild } from './humus';
@@ -333,20 +334,20 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   let hard = buildHardscape(plan, gm.height, pools);
   yield 'hardscape';
   const siteC = centroid(plan.site.boundary);
-  const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC);
+  const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC, plan);
   yield 'structures';
   const water = buildWater(plan, gm, mirror, sky, pools);
   // Features and models placed on a composite deck stand on its boards (a hot tub is set into it); lighting
   // fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
   const standOn = onDecks(plan, gm.height);
   // Decor set on paving stands on its top too (paving is drawn its thickness above grade); decks are in standOn.
-  // Under a cover with no paving drawn, it stands on the cover's concrete floor.
+  // Where a cover's concrete floor shows (nothing drawn over it), it stands on the floor.
   // Lighting fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
-  const coverIdx = plan.structures.filter((s) => s.kind === 'cover' && s.polygon.length >= 3).map((s) => new PolygonIndex(s.polygon));
+  const onFloor = coverFloorAt(plan.structures, plan);
   const pavingTop = (p: Vec2) => {
     const z = gm.zoneAt(p);
-    if (z && z.kind === 'hardscape' && !isBoardDeck(z)) return zoneTop(z, plan.zones.indexOf(z));
-    return coverIdx.some((c) => c.contains(p[0], p[1])) ? COVER_FLOOR_TOP : 0;
+    if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
+    return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
   const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn));
   const models = buildModels(plan.models ?? [], standOn, assets);
@@ -354,11 +355,14 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
 
   const bodies = bodyGrid(lineBodies(plan));
   // Everything turf blades stay off, indexed once: they are tested for every blade.
-  const structIdx = plan.structures.filter((s) => s.polygon.length >= 3).map((s) => new PolygonIndex(s.polygon));
+  // A cover blocks them only where its posts and walls stand and where its concrete floor shows: turf drawn for
+  // the cover (which replaces the floor) grows under the roof.
+  const structIdx = [...plan.structures.filter((s) => s.kind !== 'cover' && s.polygon.length >= 3).map((s) => s.polygon), ...structs.solids].map((poly) => new PolygonIndex(poly));
   const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones)));
   const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
+    if (onFloor(p)) return true;
     const z = gm.zoneAt(p);
     if (z && z.kind !== 'turf') return true;
     for (const s of structIdx) if (inBounds(s.box, p[0], p[1], 0.05) && (s.contains(p[0], p[1]) || s.dist(p[0], p[1], 0.05) < 0.05)) return true;

@@ -197,7 +197,7 @@ export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: st
     const s = plan?.structures.find((x) => x.id === itemId);
     const name = STRUCTURE_NAMES[id as keyof typeof STRUCTURE_NAMES] ?? 'Structure';
     const spec = s ? [`About ${ft(s.height)} to the ${id === 'cover' ? 'underside of the roof' : 'eaves'}`] : [];
-    const about = id === 'cover' ? (s?.walls?.some(Boolean) ? 'A California room: a roofed room with solid walls on its closed sides.' : 'A roofed patio cover on posts.') : `The ${name.toLowerCase()}, shown for context so the yard reads at its real size.`;
+    const about = id === 'cover' ? (s?.room === true || s?.walls?.some(Boolean) ? 'A California room: a roofed room with solid walls on its closed sides.' : 'A roofed patio cover on posts.') : `The ${name.toLowerCase()}, shown for context so the yard reads at its real size.`;
     return base(name, 'structure', 'Structures', ['#d8cfbf', '#bfb3a0', '#5c5650', '#3f3a36'], about, spec);
   }
   if (kind === 'feature') {

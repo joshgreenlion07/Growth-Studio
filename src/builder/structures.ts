@@ -5,18 +5,9 @@ import type { ExistingStructure, Vec2 } from '../siteplan/types';
 import { roofTile, stucco } from '../engine/textures';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { insetPolygon, slab } from './hardscape';
+import { COVER_FLOOR_ID, COVER_FLOOR_TOP, floorCuts, floorGeometry, floorPieces, type FloorGround } from './coverfloor';
 
 /** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. Covers: a patio roof on posts, on a concrete floor. */
-
-/** The concrete floor every cover stands on. */
-export const COVER_FLOOR_ID = 'concrete-broom';
-/**
- * Top of a cover's floor above grade. Under the thinnest paving (4 cm, plus its elevation) so an area drawn over the
- * floor is always on top, and clear of the lawn at grade so the two never flicker.
- */
-export const COVER_FLOOR_TOP = 0.02;
-/** How far the floor's edge stays inside the cover's outline, so its sides are never coplanar with paving drawn to the same edge. */
-const FLOOR_INSET = 0.01;
 
 export interface StructureBuild {
   object: THREE.Group;
@@ -27,6 +18,8 @@ export interface StructureBuild {
   porchLights: THREE.Vector3[];
   /** The covers' concrete floors: finished work, hidden with the paving in the construction views. */
   floors: THREE.Mesh[];
+  /** Plan footprints of the covers' posts and walls (what stands on the floor), for keeping turf blades off them. */
+  solids: Vec2[][];
   dispose(): void;
 }
 
@@ -105,13 +98,15 @@ function openings(poly: Vec2[]): { a: Vec2; dir: Vec2; out: Vec2; len: number; e
   return out;
 }
 
-export function buildStructures(structures: ExistingStructure[], siteCenter: Vec2): StructureBuild {
+/** `ground`: the plan's zones and water, which replace a cover's concrete floor where drawn over it (coverfloor.ts). */
+export function buildStructures(structures: ExistingStructure[], siteCenter: Vec2, ground: FloorGround = { zones: [], water: [] }): StructureBuild {
   const group = new THREE.Group();
   group.name = 'structures';
   const surfaces: THREE.Mesh[] = [];
   const glassMats: THREE.MeshStandardMaterial[] = [];
   const porchLights: THREE.Vector3[] = [];
   const floors: THREE.Mesh[] = [];
+  const solids: Vec2[][] = [];
   const geos: THREE.BufferGeometry[] = [];
   const wallMat = pbrMaterial('stucco', stucco());
   const roofMat = pbrMaterial('roof', roofTile());
@@ -130,8 +125,8 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     if (s.kind === 'cover') {
       // A California patio: stucco columns at the corners away from the house, beams, and a solid flat roof.
       // With `walls`, a California room: solid stucco walls on the chosen edges, open (a header) on the rest.
-      // Extra posts (`posts`) are optional: without them a room stands on its walls, the header spanning each open
-      // side, and a patio with no walls keeps only its corner columns.
+      // Extra posts (`posts`) are optional. Without them, mid-span posts are left out (the header or beam spans the
+      // open side) and only corners where both sides are open keep a column, so no roof corner is left floating.
       const c = centroid(poly);
       const n = poly.length;
       const free = poly.map((p) => !houses.some((h) => pointInPolygon(p, h.polygon) || distToEdge(p, h.polygon) < 0.45));
@@ -144,7 +139,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         return !isFree(i) && !isFree((i + 1) % n) && houses.some((h) => pointInPolygon(m, h.polygon) || distToEdge(m, h.polygon) < 0.45);
       };
       const wall = (i: number) => !!s.walls?.[((i % n) + n) % n] && !againstHouse(((i % n) + n) % n);
-      const room = poly.some((_, i) => wall(i));
+      const room = s.room === true || poly.some((_, i) => wall(i));
       const openEdgeAt = (i: number) => isFree(((i % n) + n) % n) || isFree((((i + 1) % n) + n) % n);
       // Walls and headers are mitered into whichever neighbor along the outline is one too.
       const hasBand = (i: number) => wall(i) || (room && openEdgeAt(i));
@@ -161,6 +156,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         const l = Math.hypot(d[0], d[1]) || 1;
         const q: Vec2 = [p[0] + (d[0] / l) * 0.22, p[1] + (d[1] / l) * 0.22];
         parts.push(segmentBox([q[0] - 0.15, q[1]], [q[0] + 0.15, q[1]], 0.3, -0.05, H - 0.26));
+        solids.push([[q[0] - 0.15, q[1] - 0.15], [q[0] + 0.15, q[1] - 0.15], [q[0] + 0.15, q[1] + 0.15], [q[0] - 0.15, q[1] + 0.15]]);
       };
       // Room walls and headers sit inside the outline, their outer face on the edge.
       const WT = 0.2;
@@ -178,6 +174,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         const ai: Vec2 = joinPrev ? inner[i] : [a[0] + o[0] * WT, a[1] + o[1] * WT];
         const bi: Vec2 = joinNext ? inner[j] : [b[0] + o[0] * WT, b[1] + o[1] * WT];
         const g = slab([a, b, bi, ai], y0, y1, 0);
+        if (y0 < 0.5) solids.push([a, b, bi, ai]);
         return boxUV(g.index ? g.toNonIndexed() : g);
       };
       for (let i = 0; i < n; i++) {
@@ -188,8 +185,8 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
           parts.push(band(i, hasBand(i - 1), hasBand(i + 1), -0.05, H));
           continue;
         }
-        // A wall end stands in for the column at that corner. A room has corner posts only when posts are on.
-        if (isFree(i) && !wall(i - 1) && (posts || !room)) post(a);
+        // A wall end stands in for the column at that corner; a corner open on both sides always keeps one.
+        if (isFree(i) && !wall(i - 1)) post(a);
         if (!openEdgeAt(i)) continue;
         // A deeper header over the open side of a room, flush with the walls and joined to them. A patio beam with no
         // posts along it gets deeper with its span too.
@@ -211,10 +208,10 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
         group.add(pm);
         surfaces.push(pm);
       }
-      // A plain concrete floor over the whole footprint, just above grade: under the room it reads as a slab, not lawn.
-      // Paving drawn there (an overlay, pavers, a deck) sits on top of it; inside a house it is hidden in the walls.
-      const fp = insetPolygon(poly, FLOOR_INSET);
-      const floorGeo = slab(fp.length >= 3 ? fp : poly, -0.05, COVER_FLOOR_TOP, 0.004);
+      // A plain concrete floor over the footprint, just above grade: under the room it reads as a slab, not lawn.
+      // Paving drawn there (an overlay, pavers, a deck) sits on top of it; beds, water and turf drawn for the cover
+      // replace it (coverfloor.ts). Inside a house it is hidden in the walls.
+      const floorGeo = floorGeometry(floorPieces(poly, floorCuts(poly, ground)), -0.05, COVER_FLOOR_TOP);
       geos.push(floorGeo);
       const floor = new THREE.Mesh(floorGeo, catalogMaterial(COVER_FLOOR_ID));
       floor.receiveShadow = true;
@@ -395,6 +392,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
     glass: glassMats,
     porchLights,
     floors,
+    solids,
     dispose() {
       for (const g of geos) g.dispose();
       glass.dispose();

@@ -8,6 +8,7 @@ import { FIXTURE_FINISHES, fixtureSetting, type FinishId, type FixtureSpec } fro
 import { kelvinColor, type LandLight } from '../engine/landlights';
 import { boxUV } from './materials';
 import { zoneTop } from './hardscape';
+import { COVER_FLOOR_TOP, coverFloorAt } from './coverfloor';
 import { linePath } from './linepath';
 
 /**
@@ -541,7 +542,7 @@ export interface FixtureSite {
 }
 
 export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): FixtureSite {
-  const surface = finishedSurface(plan.zones, height);
+  const surface = finishedSurface(plan.zones, height, coverFloorAt(plan.structures, plan));
   type Face = { a: Vec2; b: Vec2; d0: number; d1: number; half: number; cap: number };
   const faces: Face[] = [];
   for (const l of plan.lines) {
@@ -594,16 +595,18 @@ export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): Fixtur
 }
 
 /**
- * The finished surface at a point: the top of the paving where a paving zone covers it, else the ground. Fixtures
+ * The finished surface at a point: the top of the paving where a paving zone covers it, a cover's floor, else the ground. Fixtures
  * set in the ground (stake, in-grade) stand on it; ones on walls, caps and risers count their height from the
  * ground the wall stands on.
  */
-export function finishedSurface(zones: Zone[], height: (p: Vec2) => number): (p: Vec2) => number {
-  // A composite deck's boards are already in `height` (onDecks), so only paving is added here.
+export function finishedSurface(zones: Zone[], height: (p: Vec2) => number, onFloor: (p: Vec2) => boolean = () => false): (p: Vec2) => number {
+  // A composite deck's boards are already in `height` (onDecks), so only paving is added here. Where a cover's
+  // concrete floor shows (nothing drawn over it, see coverfloor.ts), its top.
   const paving = zones.map((z, i) => ({ z, top: zoneTop(z, i) })).filter(({ z }) => z.kind === 'hardscape' && z.polygon.length > 2 && !isBoardDeck(z));
   return (p) => {
     let top = 0;
     for (const { z, top: t } of paving) if (t > top && pointInPolygon(p, z.polygon)) top = t;
+    if (top === 0 && onFloor(p)) top = COVER_FLOOR_TOP;
     return height(p) + top;
   };
 }

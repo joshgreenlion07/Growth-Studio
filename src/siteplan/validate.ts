@@ -210,6 +210,7 @@ export function cleanPlan(input: unknown): CleanResult {
       }
     }
     if (kind === 'cover' && typeof it.posts === 'boolean') st.posts = it.posts;
+    if (kind === 'cover' && it.room === true) st.room = true;
     plan.structures.push(st);
   }
 
