@@ -22,6 +22,8 @@ export interface FeatureAction {
   planOn: boolean;
   /** The catalog option it mirrors on the placement (`FeaturePlacement.options`), if any. */
   option?: string;
+  /** Several options at once when one switch is not enough (louvers: open, closed, or neither): what to store now. */
+  values?(): Record<string, boolean>;
   /** Switch it; animated unless `instant`. */
   set(on: boolean, instant?: boolean): void;
   /** Advance an animation by dt seconds; true while it is still moving. */

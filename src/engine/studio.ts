@@ -1206,6 +1206,26 @@ export class Studio {
     this.audio.noteAction(itemId, key, on);
   }
 
+  /** What can be used by hand on a placed feature (the Library item view lists these as buttons). */
+  featureActions(itemId: string): FeatureAction[] {
+    return this.build ? this.build.features.actions.filter((a) => a.itemId === itemId) : [];
+  }
+
+  /** Forget what was done by hand to items whose id starts with `prefix` (the Library's sample, when the item changes). */
+  clearHandState(prefix: string) {
+    for (const k of [...this.handState.keys()]) if (k.startsWith(prefix)) this.handState.delete(k);
+  }
+
+  /** Switch one of a feature's actions by key, animated; returns it (null if there is none). */
+  toggleFeatureAction(itemId: string, key: string): FeatureAction | null {
+    const a = this.featureActions(itemId).find((x) => x.key === key);
+    if (!a) return null;
+    this.setAction(a, !a.on, false);
+    this.noteAction(a.itemId, a.key, a.on);
+    this.onAction(a);
+    return a;
+  }
+
   /** The plan now asks for what was done by hand (it was saved to the plan): keep it as the action's own state. */
   settleAction(a: FeatureAction) {
     a.planOn = a.on;

@@ -217,6 +217,8 @@ let state: {
   years: number;
   pose: { eye: THREE.Vector3; target: THREE.Vector3; fov: number } | null;
   token: number;
+  /** A sample is being built: the studio's actions are the previous item's until it resolves. */
+  building?: boolean;
   waiting: Map<string, { on: boolean; timer: number }>;
   note: string;
   off: () => void;
@@ -299,6 +301,10 @@ function show(reframe = true) {
     return;
   }
   const my = ++state.token;
+  state.building = true;
+  if (reframe) host.studio.clearHandState('sample:');
+  const stale = state.root.querySelector<HTMLElement>('#lib-acts');
+  if (stale) stale.innerHTML = '';
   host.studio.setYears(smp.years ?? 3);
   const t = new THREE.Vector3(...smp.target);
   const pose = { eye: t.clone().add(new THREE.Vector3(0.35, 0.62, 1).normalize().multiplyScalar(smp.dist)), target: t, fov: 40 };
@@ -306,7 +312,16 @@ function show(reframe = true) {
   if (!keep) state.pose = pose;
   host.studio.setPlan(smp.plan, keep).then(() => {
     if (state && my === state.token && !keep) host.studio.restorePose(pose);
-  }, (err) => console.error(err));
+    if (state && my === state.token) { state.building = false; fillActions(); }
+  }, (err) => { console.error(err); if (state && my === state.token) state.building = false; });
+}
+
+/** Buttons for what the sample can do by hand (louvers, a door, lights): drawn once the sample is built. */
+function fillActions() {
+  const box = state?.root.querySelector<HTMLElement>('#lib-acts');
+  if (!box || !state?.variant || state.variant.item.kind !== 'feature') return;
+  const list = state.building ? [] : state.host.studio.featureActions('sample');
+  box.innerHTML = list.length ? `<h4>Try it</h4><div class="lib-chips">${list.map((a) => `<button type="button" data-act="useact" data-val="${esc(a.key)}" aria-pressed="${a.on}">${esc(a.label)}: ${esc(a.words[a.on ? 0 : 1])}</button>`).join('')}</div>` : '';
 }
 
 function toggle(p: Product, on: boolean) {
@@ -359,6 +374,7 @@ function onClick(e: Event) {
     case 'remove': { const p = prod() ?? s.product; if (p) toggle(p, false); return; }
     case 'restore': { const p = prod() ?? s.product; if (p) toggle(p, true); return; }
     case 'removed': s.showRemoved = !s.showRemoved; return renderList();
+    case 'useact': s.host.studio.toggleFeatureAction('sample', val); fillActions(); return;
     case 'reset': if (s.pose) s.host.studio.restorePose(s.pose); return;
   }
 }
@@ -381,7 +397,7 @@ function render() {
     <nav class="lib-tabs" aria-label="Library categories">${tabs}</nav>
     <div class="lib-note" role="status" ${s.note ? '' : 'hidden'}>${esc(s.note)}</div>
     <div class="lib-body">${s.product ? detailHtml() : `<input id="lib-q" class="lib-search" type="search" placeholder="Search ${esc(CATEGORIES.find((c) => c.id === s.cat)?.label.toLowerCase() ?? '')}" aria-label="Search this category" autocomplete="off"><div class="lib-grid" id="lib-grid"></div>`}</div>`;
-  if (s.product) fillDetailPictures();
+  if (s.product) { fillDetailPictures(); fillActions(); }
   else {
     const q = s.root.querySelector<HTMLInputElement>('#lib-q');
     if (q) q.value = s.query;
@@ -440,6 +456,7 @@ function detailHtml(): string {
     ${lays.length ? `<h4>Laying pattern</h4>${chips('laying', lays.map((k) => ({ val: k, label: layingName(m, k), on: (s.laying ?? lays[0]) === k })))}` : ''}
     ${scenes.length ? `<h4>Show it</h4>${chips('scene', scenes.map((c) => ({ val: c.id, label: c.label, on: (s.scene ?? scenes[0].id) === c.id })))}` : ''}
     ${p.plant ? `<h4>Age</h4>${chips('age', AGES.map((a) => ({ val: String(a.years), label: a.label, on: s.years === a.years })))}` : ''}
+    <div id="lib-acts"></div>
     <dl class="lib-facts">${facts(p, v).map(([k, x]) => `<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join('')}</dl>
     <p class="muted lib-hint">Drag to turn, scroll or pinch to zoom, right-drag to move.</p>`;
 }
