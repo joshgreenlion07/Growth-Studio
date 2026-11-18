@@ -242,6 +242,8 @@ section.scene-pane.fs #nav-hint { display: block; }
 /* Where Mark and Tape measure aim: a small cross at the center of the view. */
 .quick-aim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 3; pointer-events: none; visibility: hidden; }
 .quick-aim.on { visibility: visible; }
+.quick-aim span { position: absolute; left: 14px; top: 10px; font: 600 13px/1.3 var(--font-ui); color: #f4f3ef; background: rgba(20, 24, 22, 0.8); padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+.quick-aim span:empty { display: none; }
 .quick-aim::before, .quick-aim::after { content: ''; position: absolute; background: #ff6a13; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
 .quick-aim::before { left: -9px; top: -1px; width: 18px; height: 2px; }
 .quick-aim::after { left: -1px; top: -9px; width: 2px; height: 18px; }

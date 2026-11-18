@@ -9,6 +9,7 @@ import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
 import { rockField, type RockSpot } from './rocks';
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
+import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
@@ -29,6 +30,8 @@ export interface NightLight {
   flicker: boolean;
   /** A shade structure's light (pergola, gazebo): ranked after fire, water, porch and path lights for the light pool. */
   shade?: boolean;
+  /** Switched off by hand in the 3D view (see FeatureBuild.actions): it gives up its place in the light pool. */
+  off?: boolean;
 }
 
 export interface FeatureBuild {
@@ -43,6 +46,8 @@ export interface FeatureBuild {
   pebbleBeds: PebbleBed[];
   /** Plants that stand on a feature (an agave in a bowl planter), placed with the yard's plants. */
   plants: RaisedPlacement[];
+  /** What can be used by hand in the 3D view: doors, lids, fires, water, lights (see builder/actions.ts). */
+  actions: FeatureAction[];
   dispose(): void;
 }
 
@@ -106,6 +111,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const pebbleBeds: PebbleBed[] = [];
   const raised: RaisedPlacement[] = [];
   const extraGlow: THREE.MeshStandardMaterial[] = [];
+  const actions: FeatureAction[] = [];
 
   // Shared materials.
   const mat = {
@@ -143,6 +149,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     canvas: plainMaterial('umbrella', { color: '#e6dfd2', roughness: 0.9, side: THREE.DoubleSide }),
     soil: plainMaterial('planter-soil', { color: '#2b241f', roughness: 1 }),
     whiteMetal: plainMaterial('white-metal', { color: '#e9e9e6', roughness: 0.4, metalness: 0.2 }),
+    grate: plainMaterial('grill-grate', { color: '#1a1a1a', roughness: 0.6, metalness: 0.6 }),
+    inside: plainMaterial('cabinet-inside', { color: '#1b1b1c', roughness: 0.9 }),
   };
   const lampGlow = new THREE.MeshStandardMaterial({ color: '#f3e7cf', emissive: new THREE.Color('#ffcf8a'), emissiveIntensity: 0, roughness: 0.4 });
   const spaGlow = new THREE.MeshStandardMaterial({ color: '#7fd0e0', emissive: new THREE.Color('#5ec8ff'), emissiveIntensity: 0, roughness: 0.1, transparent: true, opacity: 0.85 });
@@ -155,8 +163,6 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const decorGlow: THREE.MeshStandardMaterial[] = [];
   // Glowing parts of maker products built in their own files (shared, cached materials: not disposed here).
   const makerGlow = new Set<THREE.MeshStandardMaterial>();
-  const flameMat = flameMaterial();
-  owned.push(flameMat);
   const falls = fallMaterial();
   fallMats.push(falls);
 
@@ -178,8 +184,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     const shade = spec.group === 'Shade';
     const light = (x: number, y: number, z: number, color: string, intensity: number, distance: number, flicker = false) =>
       lights.push({ position: local(x, y, z), color, intensity, distance, flicker, ...(shade ? { shade: true } : {}) });
+    // Each feature's fire has its own flame material, so it can be lit or put out by hand on its own.
+    let ownFlame: THREE.ShaderMaterial | null = null;
     const flame = (w: number, h: number, x: number, y: number, z: number, ry = 0) => {
-      const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0), flameMat);
+      if (!ownFlame) {
+        ownFlame = flameMaterial();
+        owned.push(ownFlame);
+      }
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, h / 2, 0), ownFlame);
       fl.position.set(x, y, z);
       fl.rotation.y = ry;
       fl.renderOrder = 3;
@@ -194,6 +206,29 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       geos.push(s.geometry);
       o.add(s);
     };
+    // Hinged parts (doors, lids): a group turning about its pivot (local point), with its own merged meshes.
+    const hinges: [THREE.Group, Parts][] = [];
+    const hinge = (px: number, py: number, pz: number) => {
+      const g = new THREE.Group();
+      g.position.set(px, py, pz);
+      o.add(g);
+      const hp: Parts = new Map();
+      hinges.push([g, hp]);
+      // Geometry is given in the feature's local space and moved into the hinge's.
+      const hadd = (m: THREE.Material, geo: THREE.BufferGeometry) => {
+        const list = hp.get(m) ?? [];
+        list.push((geo.index ? geo.toNonIndexed() : geo).translate(-px, -py, -pz));
+        hp.set(m, list);
+      };
+      const raw = (m: THREE.Material, geo: THREE.BufferGeometry) => {
+        const list = hp.get(m) ?? [];
+        list.push(geo.index ? geo.toNonIndexed() : geo);
+        hp.set(m, list);
+      };
+      return { group: g, add: hadd, raw };
+    };
+    const act = (a: Omit<FeatureAction, 'itemId'>) => actions.push({ itemId: f.id, ...a });
+    const lights0 = lights.length, flames0 = flames.length, falls0 = fallMats.length, glow0 = extraGlow.length;
     const r = rng(f.id);
     // What the water feature and bowl planter builders (pillarfountain.ts) hand back, in this feature's local space.
     const sink: FountainSink = {
@@ -258,7 +293,16 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'pergolaLouvered': {
         if (spec.model === 'stratus') {
-          stratusPergola(W, D, stratusFrame, ledGlow, add, light);
+          const led = ledGlow.clone();
+          owned.push(led);
+          extraGlow.push(led);
+          const own = lights.length;
+          stratusPergola(W, D, stratusFrame, led, add, light);
+          const roofLights = lights.slice(own);
+          act({ key: 'lights', label: 'Pergola lights', words: ['On', 'Off'], anchors: [anchorAt(o, 0, 2.3, 0)], on: true, planOn: true, lights: true, set(on) {
+            led.userData.off = !on;
+            for (const l of roofLights) l.off = !on;
+          } });
           break;
         }
         const H = 2.75;
@@ -322,12 +366,26 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
           add(mat.granite, box(0.45, 0.04, D - depth + 0.1, W / 2 + 0.06, Hc + 0.29, depth / 2 - 0.05));
         }
         const fz = -(D - depth) / 2 + depth / 2 + 0.005;
-        // Grill, doors, drawers, fridge, sink.
-        add(mat.steel, box(0.85, 0.2, depth * 0.85, -W * 0.18, Hc, -(D - depth) / 2));
-        add(mat.steel, box(0.85, 0.03, depth * 0.6, -W * 0.18, Hc + 0.35, -(D - depth) / 2 - 0.08));
-        add(mat.steel, box(0.8, 0.55, 0.02, -W * 0.18, 0.15, fz));
-        add(mat.steel, box(0.55, 0.65, 0.02, W * 0.12, 0.1, fz));
-        add(mat.steel, box(0.42, 0.55, 0.02, -W * 0.42, 0.15, fz));
+        // Grill: the firebox on the counter, its grate, and the hood hinged along its back top edge (lifts by hand).
+        const gx = -W * 0.18, gz = -(D - depth) / 2, gd = depth * 0.85;
+        add(mat.steel, box(0.85, 0.2, gd, gx, Hc, gz));
+        add(mat.grate, box(0.78, 0.01, gd - 0.06, gx, Hc + 0.2, gz));
+        const hood = hinge(gx, Hc + 0.2, gz - gd / 2);
+        hood.add(mat.steel, box(0.86, 0.18, gd, gx, Hc + 0.2, gz));
+        hood.add(mat.steel, new THREE.CylinderGeometry(0.012, 0.012, 0.6, 8).rotateZ(Math.PI / 2).translate(gx, Hc + 0.3, gz + gd / 2 + 0.05).toNonIndexed());
+        for (const sx of [-0.28, 0.28]) hood.add(mat.steel, box(0.02, 0.02, 0.05, gx + sx, Hc + 0.29, gz + gd / 2 + 0.025));
+        act({ key: 'lid', label: 'Grill lid', words: ['Open', 'Closed'], anchors: [anchorAt(hood.group, 0, 0.1, gd)], on: false, planOn: false, ...swing(hood.group, 'x', -1.3, false) });
+        // Doors: a pair under the grill, a cabinet and the fridge, hinged at their outer edges, opening out; a dark
+        // inside shows behind each one when it is open.
+        const leaf = (w: number, h: number, x0: number, y: number, hingeLeft: boolean) => {
+          const hg = hinge(hingeLeft ? x0 : x0 + w, 0, fz);
+          hg.add(mat.steel, box(w, h, 0.02, x0 + w / 2, y, fz));
+          hg.add(mat.steel, box(0.02, h * 0.5, 0.025, hingeLeft ? x0 + w - 0.05 : x0 + 0.05, y + h * 0.25, fz + 0.02));
+          add(mat.inside, box(w - 0.02, h - 0.02, 0.002, x0 + w / 2, y + 0.01, fz - 0.003));
+          return swing(hg.group, 'y', hingeLeft ? -1.75 : 1.75, false);
+        };
+        const doorList = [leaf(0.4, 0.55, gx - 0.4, 0.15, true), leaf(0.4, 0.55, gx, 0.15, false), leaf(0.55, 0.65, W * 0.12 - 0.275, 0.1, false), leaf(0.42, 0.55, -W * 0.42 - 0.21, 0.15, true)];
+        act({ key: 'doors', label: 'Kitchen doors', words: ['Open', 'Closed'], anchors: [anchorAt(o, gx, 0.42, fz), anchorAt(o, W * 0.12, 0.42, fz), anchorAt(o, -W * 0.42, 0.42, fz)], on: false, planOn: false, ...swings(doorList) });
         add(mat.steel, box(0.42, 0.15, 0.02, W * 0.36, 0.55, fz));
         add(mat.steel, box(0.42, 0.15, 0.02, W * 0.36, 0.35, fz));
         add(mat.steel, box(0.45, 0.03, 0.36, W * 0.25, Hc + 0.01, -(D - depth) / 2));
@@ -348,8 +406,45 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
             const p = local(x, 0, z);
             return height([p.x, p.z]) - y0;
           };
-          const sink = { add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d) };
-          for (const g of calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink)) makerGlow.add(g);
+          const parts = new Map<string, THREE.Group>();
+          const effects: THREE.Mesh[] = [];
+          const sink = {
+            add, water, under, light: (x: number, y: number, z: number, c: string, i: number, d: number) => light(x, y, z, c, i, d),
+            part(key: string) {
+              const h = hinge(0, 0, 0);
+              parts.set(key, h.group);
+              return { add: h.add, object: h.group };
+            },
+            effect(m: THREE.Mesh) {
+              o.add(m);
+              geos.push(m.geometry);
+              effects.push(m);
+              owned.push(m.material as THREE.Material);
+            },
+          };
+          const own = lights.length;
+          const spa = calSpaTropicalPlus(W, D, { cover: f.cover ?? 'open', steps: f.steps !== false }, sink);
+          for (const g of spa.glow) makerGlow.add(g);
+          // By hand: the cover, the jets (bubbles and steam) and the lights.
+          const spaLights = lights.slice(own);
+          const at = (list: [number, number, number][]) => list.map(([x, y, z]) => anchorAt(o, x, y, z));
+          const c = spa.controls;
+          if (c.cover) {
+            const cv = c.cover;
+            const openAt = at(cv.anchors(true)), closedAt = at(cv.anchors(false));
+            const a: FeatureAction = { itemId: f.id, key: 'cover', label: 'Spa cover', words: ['Open', 'Closed'], anchors: cv.open ? openAt : closedAt, on: cv.open, planOn: cv.open, set(on) {
+              cv.set(on);
+              a.anchors = on ? openAt : closedAt;
+            } };
+            actions.push(a);
+          }
+          act({ key: 'jets', label: 'Jets', words: ['On', 'Off'], anchors: at(c.jets.anchors), on: false, planOn: false, set: (on) => c.jets.set(on), frame: (dt) => c.jets.frame(dt) });
+          const lightsSet = (on: boolean) => {
+            c.lights.set(on);
+            for (const l of spaLights) l.off = !on;
+          };
+          lightsSet(true);
+          act({ key: 'lights', label: 'Spa lights', words: ['On', 'Off'], anchors: at(c.lights.anchors), on: true, planOn: true, lights: true, set: lightsSet });
           break;
         }
         const H = 0.92;
@@ -386,8 +481,24 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
             o.add(m);
             surfaces.push(m);
           }
+          const own = lights.length;
           for (const l of s.lights) light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
+          const saunaLights = lights.slice(own);
           owned.push(...s.owned);
+          // The glass door on its hinge, and the LED bars with their switch inside: both can be used by hand.
+          const d = hinge(s.door.pivot.x, s.door.pivot.y, s.door.pivot.z);
+          for (const [m, g] of s.door.parts) d.raw(m, g);
+          d.group.add(s.door.glass);
+          geos.push(s.door.glass.geometry);
+          surfaces.push(s.door.glass);
+          const doorOpen = featureOption(spec, f.options, 'doorOpen'), lightsOn = featureOption(spec, f.options, 'lightsOn');
+          act({ key: 'door', label: 'Sauna door', words: ['Open', 'Closed'], anchors: [s.door.handle, s.door.mid].map((p) => anchorAt(d.group, p.x, p.y, p.z)), on: doorOpen, planOn: doorOpen, option: 'doorOpen', ...swing(d.group, 'y', s.door.openAngle, doorOpen, 1.1) });
+          const lightsSet = (on: boolean) => {
+            s.setLights(on);
+            for (const l of saunaLights) l.off = !on;
+          };
+          lightsSet(lightsOn);
+          act({ key: 'lights', label: 'Sauna lights', words: ['On', 'Off'], anchors: s.lightAnchors.map((p) => anchorAt(o, p.x, p.y, p.z)), on: lightsOn, planOn: lightsOn, option: 'lightsOn', lights: true, set: lightsSet });
           break;
         }
         const Hh = 2.1;
@@ -526,7 +637,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.brass, cyl(0.02, 0.02, 0.55, 0, 0, 0, 10));
         const hat = new THREE.ConeGeometry(0.16, 0.1, 18, 1, true).translate(0, 0.62, 0);
         add(mat.brass, hat.toNonIndexed());
-        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10).translate(0, 0.56, 0), lampGlow);
+        const lampMat = lampGlow.clone();
+        owned.push(lampMat);
+        extraGlow.push(lampMat);
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10).translate(0, 0.56, 0), lampMat);
         geos.push(lamp.geometry);
         o.add(lamp);
         light(0, 0.45, 0, '#ffc98a', 1.4, 3.5);
@@ -568,16 +682,19 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
     }
-    for (const [m, list] of parts) {
-      const merged = mergeGeometries(list, false);
-      list.forEach((g) => g.dispose());
-      if (!merged) continue;
-      geos.push(merged);
-      const mesh = new THREE.Mesh(merged, m);
-      mesh.castShadow = !(m as THREE.MeshStandardMaterial).transparent;
-      mesh.receiveShadow = true;
-      o.add(mesh);
-      surfaces.push(mesh);
+    handActions(f.id, o, spec.group === 'Lighting', lights.slice(lights0), flames.slice(flames0), new Set<THREE.Material>([falls, ...fallMats.slice(falls0)]), extraGlow.slice(glow0), actions);
+    for (const [target, map] of [[o, parts] as const, ...hinges]) {
+      for (const [m, list] of map) {
+        const merged = mergeGeometries(list, false);
+        list.forEach((g) => g.dispose());
+        if (!merged) continue;
+        geos.push(merged);
+        const mesh = new THREE.Mesh(merged, m);
+        mesh.castShadow = !(m as THREE.MeshStandardMaterial).transparent;
+        mesh.receiveShadow = true;
+        target.add(mesh);
+        surfaces.push(mesh);
+      }
     }
     o.position.set(f.position[0], y0, f.position[1]);
     o.rotation.y = (-f.rotationDeg * Math.PI) / 180;
@@ -601,6 +718,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     fallMats,
     pebbleBeds,
     plants: raised,
+    actions,
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of owned) m.dispose();
@@ -678,9 +796,51 @@ function stratusPergola(
   light(0, H - 1.0, 0, '#ffc98f', 2.8, 6);
 }
 
+/**
+ * The fires by the light of day: lit from dusk. A fire put out by hand (userData.force false) stays out; one lit by
+ * hand (true) burns in daylight too.
+ */
 export function setFlames(fb: FeatureBuild, on: number) {
   for (const f of fb.flames) {
-    f.visible = on > 0.02;
-    (f.material as THREE.ShaderMaterial).uniforms.uOn.value = on;
+    const force = f.userData.force as boolean | undefined;
+    const v = force === false ? 0 : force === true ? Math.max(on, 0.9) : on;
+    f.visible = v > 0.02;
+    (f.material as THREE.ShaderMaterial).uniforms.uOn.value = v;
+  }
+}
+
+/**
+ * The hand actions every feature gets from what it was built with: a fire (its flames and their flickering light),
+ * water (the falling sheets, streams and splash of a water wall or fountain), and, for lighting fixtures, the light
+ * (its night lights and lamp glow).
+ */
+function handActions(itemId: string, o: THREE.Object3D, fixture: boolean, own: NightLight[], flames: THREE.Mesh[], falls: Set<THREE.Material>, glow: THREE.MeshStandardMaterial[], out: FeatureAction[]) {
+  if (flames.length) {
+    const fireLights = own.filter((l) => l.flicker);
+    const p = flames[0].position;
+    out.push({ itemId, key: 'fire', label: 'Fire', words: ['On', 'Off'], anchors: [anchorAt(o, p.x, p.y + 0.2, p.z)], on: true, planOn: true, lights: true, set(on) {
+      for (const fl of flames) fl.userData.force = on;
+      for (const l of fireLights) l.off = !on;
+    } });
+  }
+  const water: THREE.Mesh[] = [];
+  o.traverse((m) => {
+    if (m instanceof THREE.Mesh && falls.has(m.material as THREE.Material)) water.push(m);
+  });
+  if (water.length) {
+    const anchors = water.map((m) => {
+      m.geometry.computeBoundingBox();
+      const c = m.geometry.boundingBox!.getCenter(new THREE.Vector3()).add(m.position);
+      return anchorAt(o, c.x, c.y, c.z);
+    });
+    out.push({ itemId, key: 'water', label: 'Water', words: ['On', 'Off'], anchors, on: true, planOn: true, set(on) {
+      for (const m of water) m.visible = on;
+    } });
+  }
+  if (fixture && own.length) {
+    out.push({ itemId, key: 'light', label: 'Light', words: ['On', 'Off'], anchors: [anchorAt(o, 0, 0.45, 0)], on: true, planOn: true, lights: true, set(on) {
+      for (const l of own) l.off = !on;
+      for (const m of glow) m.userData.off = !on;
+    } });
   }
 }

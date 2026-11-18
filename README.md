@@ -284,7 +284,8 @@ Messages use `window.postMessage`:
   faster; X measurements (Off, Totals, Every edge; `M`); B plant labels (`N`, or
   the Plants button next to Measure); Y material pointer (`P`); right stick click
   locks its material (`L`); A walk / fly in first person (`V`); Menu (Start)
-  goes home (`Home` in first person).
+  goes home (`Home` in first person); View (the two-squares button) uses what
+  the view is on (`G`), with any quick tool picked.
 - Plant labels (each hand-placed plant's name, height and spread at the growth
   year shown) are their own switch, apart from the measurements: Measure Off,
   Totals and Every edge show only areas, edges, walls, runs, structures,
@@ -305,6 +306,22 @@ Messages use `window.postMessage`:
   - Tape measure: up drops point A at the center of the view, up again drops B
     and shows the straight distance (feet and inches; level run and rise on a
     slope); down clears.
+  - Hand: up opens or turns on, down closes or turns off what the view is on;
+    a label by the aim cross names it ("Sauna door: Closed"). While the Hand is
+    picked, a click on the thing does the same and the pointer turns to a hand
+    over it. What can be used (`builder/actions.ts`, registered as features are
+    built, switched and animated without a rebuild): the SaunaLife sauna's door
+    and its lights (the LED remote inside by the door); a kitchen's grill lid
+    and its doors; any fire (fire pits and tables, the linear fire pit, a patio
+    heater: out, or lit even by day); a water wall's or fountain's water; path
+    lights and uplights; the Stratus pergola's LED lights; the Cal Spas spa's
+    cover (folded up or closed), jets (bubbles round the seats and steam off the
+    water while the cover is open) and lights. Of several things on one feature,
+    the one nearest the aim point is used. What is set by hand stays through
+    rebuilds until the plan itself changes that thing; the sauna's door and
+    lights are its placement `options`, so the studio's own editor saves them,
+    and in embed mode the studio sends `{ type: 'action', id, key, on, option? }`
+    (`option` names the placement option it mirrors) for the parent to keep.
   - Light: Afternoon, Golden hour, Blue hour, Night. Growth: Install, 1, 3, 5,
     10 years. Views: the saved camera views (formerly D-pad left / right).
 - **Library and approvals.** The Library button (top right of the 3D view) opens a panel listing every product:

@@ -46,6 +46,15 @@ export interface CL5GBuild {
   lights: { x: number; y: number; z: number; color: string; intensity: number; distance: number }[];
   /** Materials made here for this sauna only (disposed with the features). */
   owned: THREE.Material[];
+  /**
+   * The glass door, built closed around its hinge line: `pivot` (local meters) is on the hinge, `parts` and `glass`
+   * are in the hinge's own space. Turning it by `openAngle` about y opens it (out, toward the right seen from outside).
+   */
+  door: { pivot: THREE.Vector3; openAngle: number; parts: [THREE.Material, THREE.BufferGeometry][]; glass: THREE.Mesh; handle: THREE.Vector3; mid: THREE.Vector3 };
+  /** Switch the LED bars and their light on the wood (the night light is the caller's: it is `lights`). */
+  setLights(on: boolean): void;
+  /** The light switch (the LED remote in its cradle, inside by the door), and the middle of the room, local meters. */
+  lightAnchors: THREE.Vector3[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -340,7 +349,7 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
     bucket: plainMaterial('cl5g-bucket', { color: '#1d1d1e', roughness: 0.4, metalness: 0.5, envMapIntensity: 0.3 }),
   };
   const glass = new THREE.MeshStandardMaterial({ color: '#3a2f27', roughness: 0.04, metalness: 0.5, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.6 });
-  const led = new THREE.MeshStandardMaterial({ color: '#ffe6c8', emissive: new THREE.Color('#ffae66'), emissiveIntensity: opts.lightsOn ? 3 : 0, roughness: 0.4 });
+  const led = new THREE.MeshStandardMaterial({ color: '#ffe6c8', emissive: new THREE.Color('#ffae66'), emissiveIntensity: 0, roughness: 0.4 });
   owned.push(glass, led);
 
   /* Foundation beams. */
@@ -444,6 +453,9 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
   /* Front wall: two D-shaped bronze panes in black frames, the door frame, the glass door. */
   const zg0 = Z_WALL_IN, zg1 = Z_WALL_OUT;
   const glassMeshes: THREE.BufferGeometry[] = [];
+  const doorParts: [THREE.Material, THREE.BufferGeometry][] = [];
+  const doorGlass: THREE.BufferGeometry[] = [];
+  const doorPivot = new THREE.Vector3(), doorHandle = new THREE.Vector3(), doorMid = new THREE.Vector3(), switchAt = new THREE.Vector3();
   const GX0 = 33.95, GX1 = 13.9, GY0 = 9.8, GY1 = 74.9, GR = 7.5, COL = 12;
   for (const sx of [-1, 1]) {
     // The panel: the wall outline on the outer side, straight at the middle column.
@@ -495,14 +507,16 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
   {
     const DW = 22.2, DY0 = DF_Y0 + 0.85, DY1 = DF_Y1 - 0.85, T = 0.315;
     const hx = DF_W / 2 - 0.4, hz = DFZ1 + 0.1 + T / 2;
-    const m = new THREE.Matrix4().makeTranslation(hx * IN, 0, hz * IN);
-    if (opts.doorOpen) m.multiply(new THREE.Matrix4().makeRotationY((115 * Math.PI) / 180));
-    const door = (g: THREE.BufferGeometry) => g.applyMatrix4(m);
-    // Local door space: hinge line at x = 0, the glass toward -x.
+    doorPivot.set(hx * IN, 0, hz * IN);
+    const doorAdd = (m: THREE.Material, g: THREE.BufferGeometry) => doorParts.push([m, g.index ? g.toNonIndexed() : g]);
+    const door = (g: THREE.BufferGeometry) => g;
+    // Door space: hinge line at x = 0, the glass toward -x.
     const pane = new THREE.PlaneGeometry(DW * IN, (DY1 - DY0) * IN).translate(-hx * IN, ((DY0 + DY1) / 2) * IN, 0);
-    glassMeshes.push(door(pane));
+    doorGlass.push(pane);
+    doorHandle.set((-hx - DW / 2 + 4.6) * IN, 38 * IN, 0);
+    doorMid.set(-hx * IN, ((DY0 + DY1) / 2) * IN, 0);
     for (const y of [65.6, 15.1]) {
-      add(mat.hinge, door(new THREE.BoxGeometry(1.5 * IN, 3.2 * IN, 0.9 * IN).translate((-hx + DW / 2 - 0.9) * IN, y * IN, 0)));
+      doorAdd(mat.hinge, door(new THREE.BoxGeometry(1.5 * IN, 3.2 * IN, 0.9 * IN).translate((-hx + DW / 2 - 0.9) * IN, y * IN, 0)));
       // The hinge's other leaf on the frame (stays put).
       add(mat.hinge, box(0.9, 3.2, 0.5, DF_W / 2 - M / 2, y - 1.6, DFZ1 + 0.25));
     }
@@ -510,10 +524,19 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
       const hb = new THREE.BoxGeometry(7.2 * IN, 2.7 * IN, 1.25 * IN);
       boxUV(hb);
       hb.translate((-hx - DW / 2 + 4.6) * IN, 38 * IN, side * (T / 2 + 0.85) * IN);
-      add(mat.handle, door(hb.toNonIndexed()));
-      add(mat.hinge, door(new THREE.CylinderGeometry(0.28 * IN, 0.28 * IN, 0.9 * IN, 10).rotateX(Math.PI / 2).translate((-hx - DW / 2 + 4.6) * IN, 38 * IN, side * 0.45 * IN)));
+      doorAdd(mat.handle, door(hb.toNonIndexed()));
+      doorAdd(mat.hinge, door(new THREE.CylinderGeometry(0.28 * IN, 0.28 * IN, 0.9 * IN, 10).rotateX(Math.PI / 2).translate((-hx - DW / 2 + 4.6) * IN, 38 * IN, side * 0.45 * IN)));
     }
+    // The LED bars' wireless remote in its wall cradle: inside, on the door frame's left jamb at shoulder height.
+    const sx = -(DF_W / 2 - M / 2), sz = DFZ0 - 0.35;
+    add(mat.hinge, box(1.6, 5.2, 0.45, sx, 46, sz));
+    add(mat.white, box(1.3, 4.6, 0.35, sx, 46.3, sz - 0.3));
+    add(mat.hinge, box(0.7, 0.7, 0.1, sx, 49.1, sz - 0.5));
+    switchAt.set(sx * IN, 48.6 * IN, (sz - 0.5) * IN);
   }
+  const doorGlassMesh = new THREE.Mesh(mergeAll(doorGlass), glass);
+  doorGlassMesh.renderOrder = 2;
+  doorGlassMesh.castShadow = false;
   const glassGeo = mergeAll(glassMeshes);
   const gm = new THREE.Mesh(glassGeo, glass);
   gm.renderOrder = 2;
@@ -616,8 +639,9 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
     add(mat.aspen, box(1.73, top + 3.55 - FLOOR, 1.73, gx0 + 0.9, FLOOR, zRail + 0.9));
   }
 
-  /* The LED bars' light on the wood: soft washes, only when the lights are on. */
-  if (opts.lightsOn) {
+  /* The LED bars' light on the wood: soft washes, shown while the lights are on. */
+  const washes: THREE.Mesh[] = [];
+  {
     const wallTex = washTexture(0, 0.01, 0.3);
     const w1 = washRects([{ x0: -IW + 0.5, x1: IW - 0.5, a0: LED_A_Y, a1: LED_A_Y + 22 }], (x, a) => [x, a, zBack + 0.06], [-IW + 0.5, IW - 0.5, LED_A_Y, LED_A_Y + 22]);
     const m1 = washMaterial(wallTex, 0.4);
@@ -640,13 +664,27 @@ export function buildSaunaLifeCL5G(opts: CL5GOptions): CL5GBuild {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       extras.push(mesh);
+      washes.push(mesh);
       owned.push(m);
     }
     // At night the bars light the room and spill out through the glass.
     lights.push({ x: 0, y: 30 * IN, z: 6 * IN, color: '#ffb47a', intensity: 1.6, distance: 3.2 });
   }
+  const setLights = (on: boolean) => {
+    led.emissiveIntensity = on ? 3 : 0;
+    for (const w of washes) w.visible = on;
+  };
+  setLights(opts.lightsOn);
 
-  return { parts, extras, lights, owned };
+  return {
+    parts,
+    extras,
+    lights,
+    owned,
+    door: { pivot: doorPivot, openAngle: (115 * Math.PI) / 180, parts: doorParts, glass: doorGlassMesh, handle: doorHandle, mid: doorMid },
+    setLights,
+    lightAnchors: [switchAt, new THREE.Vector3(0, 45 * IN, 0), new THREE.Vector3(0, 50 * IN, zBack * IN)],
+  };
 }
 
 /** x of the inside right wall at height y (the staves curve in at the bottom and top corners). */
