@@ -538,6 +538,8 @@ interface LodSet {
   center: Float32Array;
   /** Each instance's scale (largest axis). */
   scale: Float32Array;
+  /** Each instance's on-screen size factor for choosing its detail (RaisedPlacement.detail; 1 for most). */
+  detail: Float32Array;
   /** In view, by level of detail (full, fewer leaves, fewest): matrices rewritten as the camera moves. */
   view: Band[];
   /** In reflections, by level (fewer leaves, fewest), for the instances near reflecting water only. */
@@ -801,6 +803,16 @@ function band(n: number): Band {
   return { attr: new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage), meshes: [], count: 0 };
 }
 
+/** A plant standing on part of a feature (a bowl planter on a pillar): the height of its base, which the ground does not give. */
+export interface RaisedPlacement extends PlantPlacement {
+  baseY: number;
+  /**
+   * Picks detail as if the plant were this many times its size on screen: a small plant always seen close up as part of
+   * its feature (an agave in a bowl planter) keeps its full rosette, where fewer leaves would show as gaps.
+   */
+  detail?: number;
+}
+
 export interface PlantBuildOptions {
   /**
    * Build with levels of detail for the 3D view: near plants in full detail,
@@ -856,6 +868,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           base: new Float32Array(n * 16),
           center: new Float32Array(n * 3),
           scale: new Float32Array(n),
+          detail: new Float32Array(n).fill(1),
           view: [band(n), band(n), band(n)],
           reflect: [band(n), band(n)],
           reflects: new Uint8Array(n),
@@ -947,7 +960,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
 
     list.forEach((p, i) => {
       const r = rng(p.id);
-      const y = groundHeight(p.position);
+      const y = (p as Partial<RaisedPlacement>).baseY ?? groundHeight(p.position);
       const sc = (p.scale ?? 1) * (look.hedge ? 1 : 0.9 + r() * 0.2);
       t.set(p.position[0], y, p.position[1]);
       let heading = r() * Math.PI * 2;
@@ -976,6 +989,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         set.center[i * 3 + 1] = t.y;
         set.center[i * 3 + 2] = t.z;
         set.scale[i] = sc * Math.max(1, tall);
+        set.detail[i] = (p as Partial<RaisedPlacement>).detail ?? 1;
         for (const im of set.staticMeshes) im.setMatrixAt(i, m4);
         set.reflects[i] = !options.reflects || options.reflects(p.position, spec.matureHeight * sc) ? 1 : 0;
       }
@@ -1063,7 +1077,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
           // A sphere around the plant's base that holds it at any size up to mature, plus wind sway.
           sphere.center.set(set.center[i * 3], set.center[i * 3 + 1], set.center[i * 3 + 2]);
           const d = Math.max(0.1, Math.hypot(cam.x - sphere.center.x, cam.y - sphere.center.y - size * k * 0.5, cam.z - sphere.center.z));
-          const px = (size * k * pxPerM) / d;
+          const px = (size * k * pxPerM * set.detail[i]) / d;
           // A reflection is about as large on screen as the plant, wherever the plant itself is.
           if (set.reflects[i]) {
             // Reflections use the fewer and fewest levels only (0 and 1 here are levels 1 and 2).

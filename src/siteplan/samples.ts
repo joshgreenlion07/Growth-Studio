@@ -1,4 +1,5 @@
 import type { SitePlan, Vec2 } from './types';
+import { samplePillarFountain } from './sample-pillar-fountain';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -401,4 +402,5 @@ export const SAMPLES = [
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
+  { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
 ];
