@@ -6,6 +6,7 @@ import { hash, hexRGB, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type 
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 import { boardFaceSet } from './deckboards';
+import { EDGE_RANGE, type DetailFace, type PaverEdges } from './paver-detail';
 
 /**
  * Surface recipes: pavers in every laying pattern, concrete finishes, mulch,
@@ -94,6 +95,8 @@ interface PieceHit {
 interface Layout {
   tile: number;
   at(x: number, y: number): PieceHit;
+  /** A module layout's module (Belgard's published patterns), whose joints repeat on its lattice. */
+  module?: PieceModule;
 }
 
 /** Pack rectangles on a wrapping unit grid; used for ashlar and herringbone-free random patterns. */
@@ -305,6 +308,7 @@ function moduleLayout(m: PieceModule): Layout {
   const P = m.P;
   const R = Math.SQRT1_2;
   return {
+    module: m,
     tile: P * IN,
     at(x: number, y: number) {
       let X = x / IN, Y = y / IN;
@@ -335,6 +339,17 @@ function moduleLayout(m: PieceModule): Layout {
   };
 }
 
+/**
+ * The repeat (inches) of a soldier course texture of a x b pavers (a along the edge, b across). It must hold whole
+ * pieces both ways, or the band (exactly b wide, from the tile's edge) straddles two rows; so it is a common multiple
+ * of a and b, >= 36 in. It holds L / b rows of L / a pieces.
+ */
+export function soldierTileIn(a: number, b: number): number {
+  const gcd = (x: number, y: number): number => (y ? gcd(y, x % y) : x);
+  const lcm = (a * b) / gcd(Math.round(a * 8), Math.round(b * 8)) * 8;
+  return lcm * Math.max(1, Math.ceil(36 / lcm));
+}
+
 function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layout {
   const [a, b] = p.sizes[0];
   // 1-piece patterns of 6 x 9 (Antiqued Flat Top): half bond, 9 in along the course; or the 45 degree herringbone.
@@ -345,11 +360,7 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
   switch (p.kind) {
     case 'running': return runningLayout(a, b, 0.5, false, 12, 6, seed);
     case 'soldier': {
-      // One course of pavers: a pieces along the edge, b across. The tile must hold whole pieces both ways, or the
-      // band (exactly b wide, from the tile's edge) straddles two rows; so it is a common multiple of a and b, >= 36 in.
-      const gcd = (x: number, y: number): number => (y ? gcd(y, x % y) : x);
-      const lcm = (a * b) / gcd(Math.round(a * 8), Math.round(b * 8)) * 8;
-      const L = lcm * Math.max(1, Math.ceil(36 / lcm));
+      const L = soldierTileIn(a, b);
       return runningLayout(a, b, 0, false, Math.round(L / b), Math.round(L / a), seed);
     }
     case 'plank': return runningLayout(a, b, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
@@ -394,8 +405,116 @@ function cloudTone(colors: RGB[], lx: number, ly: number, id: number, r1: number
   return c;
 }
 
+/**
+ * The lines whose faces take the close-range detail (engine/paver-detail.ts) so far: field, border and every color of
+ * Belgard Avalon Slate and Catalina Grana. Any other line opts in by matching here once its look has been checked
+ * with the detail on (its face kind must have a detail recipe).
+ */
+const DETAIL_LINES = /^(?:border-of-)?(?:avalon-slate|catalina-grana)-/;
+function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
+  if (!DETAIL_LINES.test(spec.id) || p.tumbled) return undefined;
+  const f = p.face ?? 'textured';
+  return f === 'slate' || f === 'smooth' || f === 'textured' ? f : undefined;
+}
+
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
+  const face = detailFor(spec, p);
+  const out = paverMaps(spec, laying);
+  if (face) out.set.detail = { face, edges: paverEdges(spec, p, out.lay, out.size, laying) };
+  return out.set;
+}
+
+/** Edge map texel: about 1.2 mm, finer than the narrowest half joint drawn with it (Avalon Slate's, 1.5 mm). */
+const EDGE_TEXEL = 0.0012;
+
+/**
+ * The joints of a detailed paver for the shader (engine/paver-detail.ts): a map of the distance from each point to its
+ * piece's edge, from which the shader draws joints and chamfers sharp at any distance, plus how geometry UVs (meters)
+ * find it. A module pattern (Belgard's 3-Piece A and B) repeats its joints on the module's lattice, a cell of 6 to 12
+ * sq ft, so its map covers one cell at full detail (one map shared by every color and line laid in it); any other
+ * layout's map covers the paver texture's own repeat.
+ *
+ * The paver texture is painted with rows top first (a canvas, flipped on upload) and samples at texel corners, so a
+ * UV point m (meters) shows the layout at (m.u - h, -m.v - h), h half a texel; the map is placed the same way.
+ */
+function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: number, laying?: LayingPattern): PaverEdges {
+  const T = lay.tile, h = T / size / 2;
+  const bevel = p.face === 'smooth' ? 0.0025 : 0.005;
+  const common = {
+    joint: (p.joint * IN) / 2,
+    bevel,
+    // The paver texture's own joint and chamfer blur over about a texel and a half past the chamfer; nearer the joint
+    // than this its color and relief are read from just inside the piece.
+    push: bevel + (1.5 * T) / size,
+    slope: p.face === 'smooth' ? 4 : 2.5,
+    sand: p.jointSand ? hexRGB(photoAlbedo(p.jointSand)) : mulRGB(JOINT_SAND, 0.9),
+  };
+  const m = lay.module;
+  if (m) {
+    // Pattern position in inches X = (m.u - h, -m.v - h) / IN, turned 45 degrees for a diagonal pattern, then lattice
+    // coordinates (s, t) with X = s v1 + t v2.
+    const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
+    const L = [m.v2[1] / det, -m.v1[1] / det, -m.v2[0] / det, m.v1[0] / det]; // column-major inverse
+    const R = Math.SQRT1_2;
+    const D = m.diagonal ? [R, -R, R, R] : [1, 0, 0, 1]; // (X, Y) -> ((X + Y) R, (Y - X) R), column-major
+    const mul = (a: number[], b: number[]) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3]];
+    const LD = mul(L, D);
+    const M = mul(LD, [1 / IN, 0, 0, -1 / IN]);
+    const o: [number, number] = [-(LD[0] + LD[2]) * (h / IN), -(LD[1] + LD[3]) * (h / IN)];
+    const cell = Math.max(Math.hypot(m.v1[0], m.v1[1]), Math.hypot(m.v2[0], m.v2[1])) * IN;
+    const n = Math.min(1024, Math.ceil(cell / EDGE_TEXEL));
+    const key = `mod:${laying}:${m.pieces.length}:${m.P}:${n}`;
+    return { ...common, key, size: n, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
+  }
+  const n = Math.min(2048, Math.ceil(T / EDGE_TEXEL));
+  const seeded = p.kind === 'ashlar' || p.kind === 'cobble' || p.kind === 'plank';
+  const key = `lay:${p.kind}:${JSON.stringify(p.sizes)}:${laying ?? ''}:${seeded ? spec.id : ''}:${n}`;
+  return {
+    ...common, key, size: n, e: [1 / T, 0, 0, -1 / T], off: [-h / T, -h / T],
+    paint: () => {
+      const out = new Uint8Array(n * n);
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[j * n + i] = encodeEdge(lay.at(((i + 0.5) / n) * T, ((j + 0.5) / n) * T).edge);
+      return out;
+    },
+  };
+}
+
+const encodeEdge = (meters: number) => Math.round(clamp01(meters / EDGE_RANGE) * 255);
+
+/** One lattice cell of a module pattern, n x n: each piece copy is rasterized over the texels it covers. */
+function moduleEdges(m: PieceModule, n: number): Uint8Array {
+  const out = new Uint8Array(n * n);
+  const done = new Uint8Array(n * n);
+  const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
+  const toST = (X: number, Y: number): [number, number] => [(X * m.v2[1] - Y * m.v2[0]) / det, (m.v1[0] * Y - m.v1[1] * X) / det];
+  for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+    const ox = di * m.v1[0] + dj * m.v2[0], oy = di * m.v1[1] + dj * m.v2[1];
+    for (const [px, py, pw, ph] of m.pieces) {
+      const x0 = ox + px, y0 = oy + py;
+      const c = [toST(x0, y0), toST(x0 + pw, y0), toST(x0, y0 + ph), toST(x0 + pw, y0 + ph)];
+      const i0 = Math.max(0, Math.floor(Math.min(...c.map((q) => q[0])) * n - 1)), i1 = Math.min(n - 1, Math.ceil(Math.max(...c.map((q) => q[0])) * n));
+      const j0 = Math.max(0, Math.floor(Math.min(...c.map((q) => q[1])) * n - 1)), j1 = Math.min(n - 1, Math.ceil(Math.max(...c.map((q) => q[1])) * n));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * n + i;
+        if (done[k]) continue;
+        const s = (i + 0.5) / n, t = (j + 0.5) / n;
+        const X = s * m.v1[0] + t * m.v2[0] - x0, Y = s * m.v1[1] + t * m.v2[1] - y0;
+        if (X < 0 || X >= pw || Y < 0 || Y >= ph) continue;
+        done[k] = 1;
+        out[k] = encodeEdge(Math.min(X, pw - X, Y, ph - Y) * IN);
+      }
+    }
+  }
+  return out;
+}
+
+function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; lay: Layout; size: number } {
+  const p = spec.pattern!;
+  // With the close-range detail on, the face's finest grain comes from the detail texture in real size, the same on
+  // every piece; painted here it would be stretched with the pattern (a coarse blotch on a large repeat), so it is
+  // left at its mean.
+  const fine = !detailFor(spec, p);
   const colors = pal(spec);
   // A line's own joint sand (Premier Slab's light, gritty joints), turned to albedo like any maker color.
   const sand: RGB | null = p.jointSand ? hexRGB(photoAlbedo(p.jointSand)) : null;
@@ -410,7 +529,7 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   // The antiqued face's relief is set in real size (1 unit of height is about 4 mm), so a large patio texture and a small
   // border texture shade the same; the other faces keep their per-pixel strengths.
   const relief = antiqued ? (0.004 * size) / T : p.tumbled ? 12 : p.face === 'slate' ? 15 : 9;
-  return paint(size, T, relief, (u, v) => {
+  const set = paint(size, T, relief, (u, v) => {
     const x = u * T, y = v * T;
     const hit = lay.at(x, y);
     const id = hit.id;
@@ -460,7 +579,7 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
       h = bev * (0.92 + g2 * 0.08);
       rough = 0.55;
     } else if (p.face === 'smooth') {
-      const g = vnoise(u * 300, v * 300, 300, 5);
+      const g = fine ? vnoise(u * 300, v * 300, 300, 5) : 0.5;
       c = mulRGB(c, 0.95 + g * 0.08);
       h = bev * (0.97 + g * 0.03);
       rough = 0.7;
@@ -497,14 +616,14 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
       const rip = amt * (wave * 0.8 + wave2 * 0.2);
       const tn = fbm(u + r3 * 2.3, v + r1 * 1.7, Math.max(2, Math.round(T * 2.5)), 3, 23) * 3;
       const step = (Math.floor(tn) + smooth(0.82, 1, tn - Math.floor(tn))) / 3;
-      const g = vnoise(u * 600, v * 600, 600, 13);
+      const g = fine ? vnoise(u * 600, v * 600, 600, 13) : 0.5;
       c = mulRGB(c, 1.05 + rip * 0.04 + step * 0.06 + g * 0.05); // lifted so the rippled face, shaded by its own relief, renders at its swatch color
       h = bev * (0.5 + rip * 0.3 + step * 0.16 + g * 0.04);
       rough = 0.84 - rip * 0.12;
     } else {
       // Textured face: fine aggregate and pores.
-      const g = vnoise(u * 420, v * 420, 420, 7);
-      const pore = vnoise(u * 900, v * 900, 900, 11) > 0.88 ? 1 : 0;
+      const g = fine ? vnoise(u * 420, v * 420, 420, 7) : 0.5;
+      const pore = fine && vnoise(u * 900, v * 900, 900, 11) > 0.88 ? 1 : 0;
       c = mulRGB(c, 0.9 + g * 0.16 - pore * 0.12);
       h = bev * (0.9 + g * 0.1) - pore * 0.05;
       rough = 0.85;
@@ -512,6 +631,7 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
     if (p.tumbled) c = mulRGB(c, 0.85 + 0.15 * smooth(J, J + 0.02, edge));
     return { h, c, r: rough };
   });
+  return { set, lay, size };
 }
 
 /* ------------------------------------------------------------------ */

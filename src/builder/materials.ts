@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { layingOf, materialById, type LayingPattern } from '../siteplan/catalog';
 import { forgetTextureSet, paint, textureSet, type PBRSet } from '../engine/textures';
 import { fbm, vnoise } from '../engine/noise';
+import { applyPaverDetail } from '../engine/paver-detail';
 
 /** Standard materials whose textures are scaled in meters (UVs in meters). */
 
@@ -25,6 +26,7 @@ export function pbrMaterial(key: string, set: PBRSet, extra: THREE.MeshStandardM
     metalness: 0,
     ...extra,
   });
+  if (set.detail) applyPaverDetail(m, set.detail, set.tileMeters);
   cache.set(key, m);
   return m;
 }

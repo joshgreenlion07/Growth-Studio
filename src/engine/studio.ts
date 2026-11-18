@@ -11,7 +11,8 @@ import { disposeMaterialCache } from '../builder/materials';
 import { GLOBAL } from './foliage';
 import { PostPipeline, type LensSettings, type Quality } from './post';
 import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from './sky';
-import { setMaxAnisotropy } from './textures';
+import { maxAnisotropy, setMaxAnisotropy } from './textures';
+import { setDetailAnisotropy } from './paver-detail';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
 import { SceneAudio } from './audio';
@@ -316,6 +317,7 @@ export class Studio {
       }
     }
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
+    setDetailAnisotropy(maxAnisotropy());
     setGroundTextureUnits(this.renderer.capabilities.maxTextures);
     // Before any lit material compiles: the landscape-lighting loop and its uniforms go into three's light pass.
     initLandLights(this.renderer.capabilities.maxFragmentUniforms);

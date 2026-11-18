@@ -3,6 +3,7 @@ import { bounds, signedArea, type Bounds } from '../siteplan/geometry';
 import { PolygonIndex } from '../siteplan/spatial';
 import type { SitePlan, Vec2, WaterFeature } from '../siteplan/types';
 import { outsetPolygon, poolCoping, zoneTop } from './hardscape';
+import { patchDetail } from '../engine/paver-detail';
 
 /**
  * Where each pool sits and what it cuts away. A pool takes its level from the
@@ -173,7 +174,11 @@ export function* poolSteps(plan: SitePlan, waterLevel: number): Generator<string
   const dist = (xz: string, ch: 'r' | 'g') => `((texture2D(uPoolMap, (${xz} - uPoolRect.xy) / uPoolRect.zw).${ch} - 0.5) * ${(RANGE * 2).toFixed(3)})`;
 
   const patch = (m: THREE.Material) => {
-    m.onBeforeCompile = (s) => {
+    // Keep a hook the material already has (a paver's close-range detail, engine/paver-detail.ts).
+    const before = m.onBeforeCompile;
+    const beforeKey = m.userData.paverDetail ? m.customProgramCacheKey.bind(m) : null;
+    m.onBeforeCompile = (s, r) => {
+      before.call(m, s, r);
       Object.assign(s.uniforms, uniforms);
       s.vertexShader = s.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec2 vPoolXZ;')
@@ -182,7 +187,7 @@ export function* poolSteps(plan: SitePlan, waterLevel: number): Generator<string
         .replace('#include <common>', '#include <common>\nvarying vec2 vPoolXZ;\nuniform sampler2D uPoolMap; uniform vec4 uPoolRect;')
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\nif (${dist('vPoolXZ', 'r')} < ${(-TUCK).toFixed(3)}) discard;`);
     };
-    m.customProgramCacheKey = () => 'pool-cut';
+    m.customProgramCacheKey = beforeKey ? () => `pool-cut|${beforeKey()}` : () => 'pool-cut';
     return m;
   };
   const copies = new Map<THREE.Material, THREE.Material>();
@@ -201,7 +206,9 @@ export function* poolSteps(plan: SitePlan, waterLevel: number): Generator<string
       let c = copies.get(mat);
       if (!c) {
         // The copy shares the original's textures; only the copy itself is disposed with the scene.
-        c = patch(mat.clone());
+        c = mat.clone();
+        patchDetail(c, mat);
+        c = patch(c);
         copies.set(mat, c);
       }
       return c;
