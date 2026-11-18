@@ -14,6 +14,7 @@ import { SkyDome, dayOfYear, moodHour, skyState, type Mood, type SkyState } from
 import { setMaxAnisotropy } from './textures';
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
+import { SceneAudio } from './audio';
 import type { BuildStage, StageLabel } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode, type QuickDir } from './navigation';
 import { Marks, Tape, ftIn, type MarkPoint } from './marks';
@@ -166,6 +167,8 @@ export class Studio {
   views: CameraView[] = [];
   /** Controller, keyboard and first-person movement; see navigation.ts for the controls. */
   readonly nav: Navigation;
+  /** Sound for the scene (engine/audio.ts): ambience by time of day, positional water, fire and spa. */
+  readonly audio = new SceneAudio();
   /** Lengths, areas and sizes drawn over the scene. */
   readonly measure: Measurements;
   /** Quick tools drawn in the world: thrown dirt marks and the tape measure (see marks.ts). */
@@ -779,6 +782,7 @@ export class Studio {
     this.shadowDirty = true;
     this.scene.add(next.root);
     this.stageLabels.set(next.construction.labels, this.stage);
+    this.audio.setBuild(plan, next, this.stage);
     this.refreshCutaway();
     this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
@@ -1191,6 +1195,7 @@ export class Studio {
     const next = dir === 0 ? !a.on : dir > 0;
     if (next === a.on) return { action: a, changed: false };
     this.setAction(a, next, false);
+    this.audio.noteAction(a);
     this.nav.pulse(40, 0.25);
     this.onAction(a);
     return { action: a, changed: true };
@@ -1328,6 +1333,7 @@ export class Studio {
   setStage(stage: BuildStage) {
     if (stage === this.stage) return;
     this.stage = stage;
+    this.audio.setStage(stage);
     // Fewer measurement labels while digging (see Measurements.stage).
     this.measure.stage = stage;
     this.pending?.setStage(stage);
@@ -1680,6 +1686,7 @@ export class Studio {
     const animate = this.animating();
     if (this.state.motion) GLOBAL.uTime.value += dt;
     this.moveCamera(dt, now);
+    this.audio.update(this.camera, this.sky.uniforms.uNight.value, this.mode === 'orbit' ? this.controls.target : null);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
     // Something switched on by hand that moves by itself (a spa's bubbles and steam).
@@ -1951,9 +1958,11 @@ export class Studio {
   pause() {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.audio.setPaused(true);
   }
 
   resume() {
+    this.audio.setPaused(false);
     if (!this.raf && !this.disposed) {
       this.lastTs = -1;
       this.invalidate();
@@ -2081,6 +2090,7 @@ export class Studio {
     this.marks.dispose();
     this.tape.dispose();
     this.stageLabels.dispose();
+    this.audio.dispose();
     disposeMaterialCache();
     this.renderer.dispose();
     this.renderer.domElement.remove();

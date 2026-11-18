@@ -2,7 +2,7 @@
 // three.js and pdf.js inlined. Used for the published demo and for any host
 // that wants a single file.
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,7 +20,10 @@ const out = await build({
 const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const worker = readFileSync(join(root, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs'), 'utf8').replace(/<\/script/gi, '<\\/script');
 const page = readFileSync(join(root, 'src/app/page.html'), 'utf8');
-const html = `${page}\n<script id="pdf-worker" type="text/plain">${worker}</script>\n<script>${js}</script>\n`;
+// The sound clips (public/sounds, ElevenLabs sound effects) go in as base64, so the single file needs no other files.
+const sounds = {};
+for (const f of readdirSync(join(root, 'public/sounds')).filter((n) => n.endsWith('.mp3'))) sounds[f.slice(0, -4)] = readFileSync(join(root, 'public/sounds', f)).toString('base64');
+const html = `${page}\n<script id="pdf-worker" type="text/plain">${worker}</script>\n<script id="sound-data" type="application/json">${JSON.stringify(sounds)}</script>\n<script>${js}</script>\n`;
 mkdirSync(join(root, 'dist'), { recursive: true });
 writeFileSync(join(root, 'dist/growth-studio.html'), html);
 // A full document for opening directly in a browser.

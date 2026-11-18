@@ -195,6 +195,25 @@ function initQuickTools(s: Studio) {
       if (editor.selected?.list === 'features' && editor.selected.id === f.id) renderInspector();
     }
   };
+  // Sound (engine/audio.ts): a button over the 3D view and a volume slider, kept between visits. It starts only after
+  // the first click or key, as browsers require.
+  const sound = s.audio;
+  const soundBtn = $<HTMLButtonElement>('#btn-sound'), volume = $<HTMLInputElement>('#volume');
+  if (sound?.available) {
+    const sync = () => {
+      soundBtn.setAttribute('aria-pressed', String(sound.on));
+      soundBtn.textContent = sound.on ? 'Sound' : 'Sound off';
+      volume.value = String(sound.volume);
+      volume.disabled = !sound.on;
+    };
+    sound.onChange = sync;
+    sync();
+    soundBtn.addEventListener('click', () => sound.setOn(!sound.on));
+    volume.addEventListener('input', () => sound.setVolume(+volume.value));
+  } else {
+    soundBtn.hidden = true;
+    $('#sound-group').hidden = true;
+  }
   // Plant labels: their own switch (B, N, or the Plants button), apart from the measurements, kept between visits.
   const btn = $<HTMLButtonElement>('#btn-plants');
   btn.addEventListener('click', () => s.setPlantLabels(!s.plantLabels));
