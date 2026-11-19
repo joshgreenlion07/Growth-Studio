@@ -180,7 +180,7 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
             ? `Basalite Premier Slate 6 x 9 border${m.color ? ` in ${m.color}` : ''}: the line's slate-faced border stone, set as a soldier course along the edge of the field.${m.color === 'Charcoal' ? ' Charcoal is sold as the border only.' : ''}`
             : `Basalite Premier Slate: "a standard face mix design for unmatched colors and a stunning slate finish" (Basalite). Premier Smooth's pavers, sizes and colors with a cleft slate face; ${m.color ?? 'the color'} clouds through every piece. Laid in Basalite's 3 Piece Combo Pattern, or Pattern #4 with the 12 x 18.`,
           spec: m.use === 'border'
-            ? ['6 x 9 x 60 mm (5.83 x 8.78 in face), 280 per pallet, 100 sq ft', 'Spacer nubs set a 1/16 in joint', 'Edge restraint behind the border']
+            ? ['6 x 9 x 60 mm (5.83 x 8.78 in face), 280 per pallet, 120 sq ft', 'Spacer nubs set a 1/16 in joint', 'Edge restraint behind the border']
             : ['60 mm (2 3/8 in): 6 x 12, 9 x 12 and 12 x 12 combo pallet (96, 64, 32; 121.9 sq ft, 3,378 lb), 12 x 18 sold separately (64, 92 sq ft)', 'Faces 5.83, 8.78 and 11.73 in on an 11.79 in module (spacer nubs set a 1/16 in joint)', 'Pedestrian and light-duty vehicular (combo and border); 12 x 18 pedestrian', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
         };
       }
