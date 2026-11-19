@@ -43,6 +43,8 @@ export interface WaterfallGround {
   color: THREE.Color | number | string;
   /** Default 0.95. */
   roughness?: number;
+  /** The host ground's specular intensity (a MeshPhysicalMaterial's specularIntensity, for example 0.45). The soil's sheen fades toward it across the band. Default 1: a standard material's full sheen. */
+  specular?: number;
   /** How far in from the border the blend reaches, feet. Default 2.5. */
   width?: number;
   /** 0 to 1: how much of the bark chip pattern and relief stays in the faded band. The pattern averages 1, so the band averages `color`. 0 fades to the colour flat. Default 1. */

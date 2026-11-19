@@ -87,7 +87,7 @@ export interface SceneBuild {
  * in bark, mulch and stone beds; in a soil fill (humus, compost, dirt: spec.crumb) chips would read as gravel, so it
  * fades to the bed's color flat (texture 0).
  */
-export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; texture: number; chipSize: number } | null {
+export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; specular: number; texture: number; chipSize: number } | null {
   const bed = fourFallBed(f, zoneAt);
   const spec = bed ? materialById.get(bed.catalogId) : undefined;
   if (!spec) return null;

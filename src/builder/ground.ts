@@ -413,6 +413,9 @@ const stageUniforms = (): GroundStageUniforms => ({
   uCutCh: { value: new THREE.Vector2(0, 0) },
 });
 
+/** The ground's specular intensity (its sky reflection, toned down from a standard material's 1). */
+export const GROUND_SPECULAR = 0.45;
+
 /** Roughness of the bare soil layer of the ground shader. */
 const SOIL_ROUGHNESS = 0.97;
 
@@ -427,10 +430,10 @@ export function groundRoughness(spec: MaterialSpec): number {
 }
 
 /**
- * How a material reads on the ground from a few feet away: its painted texture's average albedo (linear) and the
- * roughness its ground layer is drawn with. A four-fall waterfall fades the edge of its soil into this (fourfall.ts).
+ * How a material reads on the ground from a few feet away: its painted texture's average albedo (linear), the
+ * roughness its ground layer is drawn with and the ground's specular intensity. A four-fall waterfall fades the edge of its soil into this (fourfall.ts).
  */
-export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness: number } {
+export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness: number; specular: number } {
   const avg = materialAverage(spec);
   let color: THREE.Color;
   if (avg) color = new THREE.Color(avg.color[0], avg.color[1], avg.color[2]);
@@ -440,7 +443,7 @@ export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness:
     for (const hex of spec.palette) color.add(new THREE.Color(hex));
     color.multiplyScalar(1 / Math.max(1, spec.palette.length));
   }
-  return { color, roughness: groundRoughness(spec) };
+  return { color, roughness: groundRoughness(spec), specular: GROUND_SPECULAR };
 }
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
@@ -459,7 +462,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
   const withNormal = Math.max(0, Math.min(n, maxTextureUnits - fixed - n));
   // Physical material so the ground's sky reflection can be toned down:
   // rough mulch and soil reflect far less than the default 4%.
-  const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: 0.45 });
+  const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: GROUND_SPECULAR });
   mat.onBeforeCompile = (s) => {
     s.uniforms.uSplatA = { value: splats[0] };
     if (splatB) s.uniforms.uSplatB = { value: splats[1] };

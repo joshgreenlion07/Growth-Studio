@@ -419,7 +419,7 @@ export function createWaterfall(options = {}) {
   // how the soil meets the host's ground (setGround): off until a colour is given
   const GU = {
     uEdgeCol: { value: new THREE.Color(0.15, 0.068, 0.034) }, uEdgeRough: { value: 0.95 }, uEdgeAmt: { value: 0 }, uEdgeW: { value: 2.5 },
-    uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 }, uEdgeChip: { value: 0 },
+    uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 }, uEdgeChip: { value: 0 }, uEdgeSpec: { value: 1 },
   };
   const group = new THREE.Group(); group.name = 'four-fall-waterfall';
   const body = new THREE.Group(); group.add(body);
@@ -529,7 +529,7 @@ export function createWaterfall(options = {}) {
       .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW; varying vec3 vGN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vGN = normal; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip, uEdgeSpec; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
         // bark chips are drawn from above on flat soil and from the side on steep banks, and the drawings are blended;
@@ -598,6 +598,11 @@ export function createWaterfall(options = {}) {
           diffuseColor.rgb = gOwn;
         }
         float gHt = mix(gBandHt, gravH * 0.03, vMat.x) * (1.0 - vMat.y) * gFade * (1.0 - gEdge * (1.0 - uEdgeTex));`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+        // the sheen of the soil fades toward the host ground's own across the band (setGround specular); on a dark bed
+        // the standard sheen reflects enough sky to show the band as a bluish strip
+        float gSpecK = mix(1.0, uEdgeSpec, gEdge);
+        material.specularColor *= gSpecK; material.specularF90 *= gSpecK;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(mix(roughnessFactor, 0.3, gWI.x * 0.8), uEdgeRough, gEdge);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -1236,6 +1241,7 @@ export function createWaterfall(options = {}) {
     GU.uEdgeW.value = Math.max(0.2, g?.width ?? 2.5);
     GU.uEdgeTex.value = clamp(g?.texture ?? 1, 0, 1);
     GU.uEdgeChip.value = on && g.chipSize > 0 ? g.chipSize : 0;
+    GU.uEdgeSpec.value = on ? Math.max(0, g.specular ?? 1) : 1;
     const t = on ? clamp(g.tint ?? 0, 0, 1) : 0, c = GU.uEdgeCol.value;
     GU.uTintK.value.set(mix(1, clamp(c.r / MULCH_MEAN[0], 0.2, 5), t), mix(1, clamp(c.g / MULCH_MEAN[1], 0.2, 5), t), mix(1, clamp(c.b / MULCH_MEAN[2], 0.2, 5), t));
   }
@@ -1243,6 +1249,8 @@ export function createWaterfall(options = {}) {
    * Blend the edge of the feature's soil into the host's ground, so no line shows where the two meet. Pass null to switch it off.
    *   color : the host ground's average colour, unlit (THREE.Color in linear space, or a hex number / CSS string)
    *   roughness : the host ground's roughness, default 0.95        width : how far in the blend reaches, feet, default 2.5
+   *   specular : the host ground's specular intensity (the specularIntensity of a MeshPhysicalMaterial, for example 0.45),
+   *             default 1, which is a standard material's full sheen. The soil's sheen fades toward it across the band.
    *   texture : 0..1, how much of the bark chip pattern and relief stays in the faded band, default 1. The pattern averages 1,
    *             so the band averages the colour given. 0 fades to that colour flat, with no chips.
    *   chipSize : spacing of the host's own bark chips, feet (for example 0.096). When given, the host side of the fade is drawn
@@ -1250,7 +1258,7 @@ export function createWaterfall(options = {}) {
    *   tint : 0..1, how far the whole mound's bark is shifted toward that colour (0 keeps the feature's own bark), default 0
    *   sink : how far below the host's ground level the border of the soil sits, feet, default 0.03 (it is 0.3 with no ground set)
    * The first quarter of the width stays fully that colour, then it fades into the feature's own bark.
-   * Colour, roughness, width, texture and tint apply at once. A changed sink, or switching the blend on or off, rebuilds the feature.
+   * Colour, roughness, specular, width, texture, chipSize and tint apply at once. A changed sink, or switching the blend on or off, rebuilds the feature.
    */
   function setGround(g) {
     o.ground = g ? { ...(o.ground || {}), ...g } : null;
