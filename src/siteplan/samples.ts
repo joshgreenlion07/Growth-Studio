@@ -1,4 +1,5 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
+import { sampleWallVeneers } from './sample-wall-veneers';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
@@ -487,6 +488,7 @@ export const SAMPLES = [
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
+  { id: 'wall-veneers', name: 'Wall veneers: stacked stone and stucco, with columns', make: sampleWallVeneers },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'ground-covers', name: 'Ground covers: soil, bark and gravel', make: sampleGroundCovers },

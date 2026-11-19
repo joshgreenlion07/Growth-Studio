@@ -463,6 +463,13 @@ Messages use `window.postMessage`:
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
+- Wall veneers (shelf 'Wall veneer') are wall looks like any other, so a wall changes finish by its look:
+  `msi-arctic-golden-ledger` (MSI Arctic Golden Splitface Panel 6x24, split quartzite, its cap Basalite Sand),
+  `stucco-santa-barbara-warm-gray` and `stucco-sand-finish-warm-gray` (Green Lion's stucco finishes in the
+  three-pillar job's warm gray; a stucco wall's cap is the same stucco). Columns are features, one per finish
+  (`veneer-column-<look id>`): a Basalite 16 in column block core clad in the veneer under a Basalite Column Cap
+  24 x 24 x 2 in, heights in whole 8 in block courses (`sizes`), option `pewterCap`. They share the swap class
+  'Columns', so a placed column switches finish like any feature. Sample: "Wall veneers".
 - A wall's cap overhangs both faces and its open ends by the same amount: the
   maker's own overhang where its cap and block sizes give one (`capOver` on
   the line's wall unit), else 2 1/2 in (the usual 2 to 3 in). Raised planters
