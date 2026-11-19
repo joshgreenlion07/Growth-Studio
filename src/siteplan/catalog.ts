@@ -121,6 +121,11 @@ export interface PaverPattern {
    * inches and scaled by this; left out, 1.
    */
   scale?: number;
+  /**
+   * The sizes the maker sells and lists the pieces as, nominal inches, when `sizes` are the laying module instead
+   * (Premier Slab: sold as 24 x 24, laid on its 23.54 in module). For naming and ordering; the layout uses `sizes`.
+   */
+  sold?: [number, number][];
 }
 
 /**
@@ -478,7 +483,7 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'blue-point-juniper', name: 'Blue point juniper', botanical: 'Juniperus chinensis \'Blue Point\'', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.6, matureHeight: 3.6, matureSpread: 2.4, yearsToMature: 10, foliage: '#5f7d74', foliage2: '#86a297', evergreen: true, spacing: 2, container: '15 gal' }),
   P({ id: 'blue-juniper-column', name: 'Blue juniper, columnar', botanical: 'Juniperus scopulorum \'Blue Arrow\'', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.4, matureHeight: 4.3, matureSpread: 0.7, yearsToMature: 10, foliage: '#7d9aa6', foliage2: '#a3bcc6', evergreen: true, spacing: 0.9, container: '15 gal' }),
   P({ id: 'blue-spruce', name: 'Blue spruce', botanical: 'Picea pungens', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.9, matureHeight: 7.5, matureSpread: 3.6, yearsToMature: 15, foliage: '#6f8c9a', foliage2: '#a4bcc8', evergreen: true, spacing: 3.5, container: '15 gal' }),
-  // Lambert legend plants (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
+  // Plants from a client planting legend (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'photinia-standard', name: 'Photinia, tree standard', botanical: 'Photinia x fraseri', group: 'Trees', form: 'standardTree', installHeight: 1.8, installSpread: 0.7, matureHeight: 4.5, matureSpread: 3.6, yearsToMature: 10, foliage: '#2d4a24', foliage2: '#b02a26', flower: '#f1ecd8', flower2: '#e2dcc0', evergreen: true, spacing: 3.5, container: '15 gal' }),
   P({ id: 'red-maple-autumn-blaze', name: 'Red maple \'Autumn Blaze\'', botanical: 'Acer x freemanii \'Jeffersred\'', group: 'Trees', form: 'shadeTree', installHeight: 2.4, installSpread: 0.9, matureHeight: 12.0, matureSpread: 9.0, yearsToMature: 15, foliage: '#3a6526', foliage2: '#5d8a3a', evergreen: false, spacing: 9, container: '15 gal' }),
   P({ id: 'meyer-lemon', name: 'Meyer lemon, tree', botanical: 'Citrus x meyeri \'Improved Meyer\'', group: 'Trees', form: 'standardTree', installHeight: 1.5, installSpread: 0.75, matureHeight: 3.0, matureSpread: 2.7, yearsToMature: 7, foliage: '#2a5224', foliage2: '#6d9838', flower: '#f2c418', flower2: '#ffffff', evergreen: true, spacing: 3, container: '15 gal' }),
@@ -919,7 +924,7 @@ for (const L of DECK_LINES) {
 }
 for (const L of BASALITE_LINES) {
   for (const [n, palette, mix] of L.colors) {
-    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [0.9, 12], mixEdge: [0.1, 0.2], mixAlong: true, jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], ...(L.sold ? { sold: [L.sold] } : {}), joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [0.9, 12], mixEdge: [0.1, 0.2], mixAlong: true, jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
   }
 }
 
