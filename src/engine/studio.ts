@@ -123,7 +123,7 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /** Double tap to walk (iPad, walk mode): the second tap within this long (ms) of the first one's lift, and this near (px). */
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_PX = 30;
-/** Client mode: the narrowest the default view is, side to side (degrees). */
+/** Client mode: how wide the default view aims to be, side to side (degrees), within a 100 degree tall view. */
 const CLIENT_WIDE_H_DEG = 78;
 /** How far short of a wall, tree, house or water the walk stops (m, about 2 ft), and the longest walk (m). */
 const WALK_STAND_OFF = 0.6;
@@ -216,8 +216,9 @@ export class Studio {
   clientMode = false;
   private beaconAt = 0;
   /**
-   * Client mode's lens: the view is at least WIDE_H_DEG wide (a portrait phone gets a tall, natural view instead of a
-   * narrow slice; landscape and computers keep their 60 degrees when that is already wider), at most 100 degrees tall.
+   * Client mode's lens: CLIENT_WIDE_H_DEG (78 degrees) side to side where a 100 degree tall view allows it (about 58 to
+   * 70 degrees on an upright phone, which gets a tall, natural view instead of a narrow slice); landscape and computers
+   * keep their 60 degrees tall when that is already wider.
    * clientK narrows it (two-finger pinch, the wheel), down to 30 degrees wide; 1 is the wide default. The camera only
    * turns its lens: it never moves. Eased toward its target each frame, so it follows the fingers without jumps.
    */
