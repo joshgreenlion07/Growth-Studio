@@ -379,6 +379,9 @@ export interface MaterialSpec {
   fence?: FenceStyle;
   /** A poured concrete mow curb (recipe 'curb'): the shape of the curb machine's mold (MOW_CURB_SHAPES). */
   mowCurb?: MowCurbShape;
+  /** Steel edging as sold (recipe 'steelEdging'): the strip's thickness and height, how much of it stands above grade
+   * (inches), the length of one piece (feet) and the stakes that come with it. Left out: the older generic look. */
+  edging?: { thickIn: number; heightIn: number; revealIn: number; pieceFt: number; stakes: number };
   /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
   fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
@@ -391,7 +394,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Metal edging' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
@@ -874,6 +877,13 @@ export const MATERIALS: MaterialSpec[] = [
   // Edging
   M({ id: 'curb-charcoal', name: 'Charcoal curb', use: 'edging', group: 'Edging', recipe: 'curb', palette: ['#55534f', '#4a4845'], matches: 'Belgard Melville curb style' }),
   M({ id: 'steel-edging', name: 'Steel edging', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#4a3a2e', '#3a2d24'] }),
+  // The black steel edging Green Lion buys (its supplier bills), both 16 ft pieces 4 in tall with 6 stakes, set 1/2 in
+  // proud of the ground. Thin: Border Concepts BORDER Line BLBLE416, 1/8 x 4 in x 16 ft (SiteOne; its stake pockets are
+  // stamped every 32 in for 15 in tapered steel stakes; California Landscape Supply sells a 1/8 in too). Thick:
+  // California Landscape Supply's 3/16 in black steel edging, 16 ft, 6 stakes included (the bill gives no maker or
+  // height; 4 in is the standard height). Black powder coat.
+  M({ id: 'steel-edging-black-1-8', name: 'Black steel edging, 1/8 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.125, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'Border Concepts', line: 'BORDER Line steel edging, 1/8 in', shelf: 'Metal edging', color: 'Black' }),
+  M({ id: 'steel-edging-black-3-16', name: 'Black steel edging, 3/16 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.1875, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'California Landscape Supply', line: 'Black steel edging, 3/16 in', shelf: 'Metal edging', color: 'Black' }),
   // Poured concrete mow curb: three curb machine shapes in the concrete colors (MOW_CURB_SHAPES).
   ...mowCurbLooks(),
 ];

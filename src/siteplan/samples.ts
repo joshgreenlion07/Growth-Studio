@@ -8,6 +8,7 @@ import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
 import { sampleUrnFountains } from './sample-urn-fountains';
 import { sampleMowCurb } from './sample-mow-curb';
+import { sampleSteelEdging } from './sample-steel-edging';
 import { sampleFourFall } from './sample-four-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
@@ -508,6 +509,7 @@ export const SAMPLES = [
   { id: 'cedar-water-wall', name: 'Cedar slat water wall, Silver Travertine', make: sampleCedarWaterWall },
   { id: 'urn-fountains', name: 'Urn fountains: Blue Thumb aqua-teal and Tuscany vases', make: sampleUrnFountains },
   { id: 'mow-curb', name: 'Poured concrete mow curb: slant, mower and block', make: sampleMowCurb },
+  { id: 'steel-edging', name: 'Black steel edging: 1/8 in and 3/16 in', make: sampleSteelEdging },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },

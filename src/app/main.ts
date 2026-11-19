@@ -1253,8 +1253,8 @@ function applyEmbedPlan() {
 }
 
 /** The looks the parent can offer: approved pavers, borders, walls, fences, curbs, maker turf and bed fills. */
-/** A look the parent's pickers deal in: paving, borders, walls, fences, curbs, maker turf and bed fills. */
-const embedKind = (m: MaterialSpec) => (m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain' || m.group === 'Concrete')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed';
+/** A look the parent's pickers deal in: paving, borders, walls, fences, curbs, steel edging as sold, maker turf and bed fills. */
+const embedKind = (m: MaterialSpec) => (m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain' || m.group === 'Concrete')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && (m.recipe === 'curb' || !!m.edging)) || (m.use === 'turf' && !!m.turf) || m.use === 'bed';
 
 /** Every catalog material id the plan names anywhere (zone, border, line, cap, feature look...). */
 function planMaterialIds(p: SitePlan): Set<string> {

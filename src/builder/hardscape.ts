@@ -915,7 +915,13 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       if (l.kind === 'fence' && spec?.fence === 'grayBoardLattice') grayBoardLattice(l, a, b, y0, put, (yard ??= yardSide(l, zones)), i > 0);
       else if (l.kind === 'fence' && spec?.fence === 'metalPicket') metalPicketFence(l, a, b, height, spec.palette[0], put, i === 0 && !closed, i > 0 || closed, i < l.points.length - 2 || closed);
       else if (l.kind === 'fence') fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
-      else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
+      else if (spec?.edging) {
+        // Steel edging as sold: the strip at its own thickness and height, its top 1/2 in proud of the ground, black
+        // powder coat (a paint: dark, a little glossy, barely metallic).
+        const E = spec.edging, IN = 0.0254, t = E.thickIn * IN;
+        const mat = plainMaterial(`steel-edging-${spec.id}`, { color: spec.palette[0], roughness: 0.42, metalness: 0.15 });
+        put('edge', mat, segmentBox(a, b, t, Math.min(height(a), height(b)) - (E.heightIn - E.revealIn) * IN, Math.max(height(a), height(b)) + E.revealIn * IN, t), false);
+      } else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }
   }
   for (const [key, b] of buckets) {
