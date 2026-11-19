@@ -348,6 +348,23 @@ export function truscapesFeatures(): Omit<FeatureSpec, 'placeholder'>[] {
   }));
 }
 
+/**
+ * The light colors offered for an RGBCW fixture in the editors (Area Planner keeps a copy as TS_LIGHT_COLORS): four
+ * whites and six colors. Any other '#rrggbb' is a custom color.
+ */
+export const LIGHT_COLORS: { label: string; kelvin?: number; color?: string }[] = [
+  { label: 'Warm white 2700 K', kelvin: 2700 },
+  { label: 'Soft white 3000 K', kelvin: 3000 },
+  { label: 'Cool white 4000 K', kelvin: 4000 },
+  { label: 'Daylight 5000 K', kelvin: 5000 },
+  { label: 'Red', color: '#ff2a1a' },
+  { label: 'Amber', color: '#ffa31a' },
+  { label: 'Green', color: '#22e04a' },
+  { label: 'Blue', color: '#2a5cff' },
+  { label: 'Purple', color: '#8a3dff' },
+  { label: 'Pink', color: '#ff2ad0' },
+];
+
 /** A placement's options resolved against what the fixture offers. */
 export function fixtureSetting(fx: FixtureSpec, s?: FixtureSetting): Required<Omit<FixtureSetting, 'mountHeight' | 'color'>> & { finish: FinishId; mountHeight?: number; color?: string } {
   const finish = (s?.finish && fx.finishes.includes(s.finish as FinishId) ? s.finish : fx.finishes[0]) as FinishId;

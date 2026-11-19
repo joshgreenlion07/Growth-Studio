@@ -14,6 +14,7 @@ import { lookOf, lookOfPoint, type Look } from './looks';
 import { pictureFor, pictureNow, swatchNow } from './swatches';
 import { pointKind } from '../siteplan/material-info';
 import { padChoices, padLook, padOf } from '../siteplan/pads';
+import { LIGHT_COLORS, cleanHex, fixtureSetting } from '../siteplan/truscapes';
 import { closeLibrary, libraryCategories, libraryOpen, openLibrary } from './library';
 import { LibraryBook } from './librarybook';
 import { SceneControls } from './scenecontrols';
@@ -471,6 +472,30 @@ function renderToolOptions() {
 /* ------------------------------------------------------------------ */
 /* Inspector                                                            */
 
+/** A color-changing fixture's light: one of the whites or colors, or a custom color from the picker. */
+function lightColorField(f: SitePlan['features'][number], fx: Parameters<typeof fixtureSetting>[0]) {
+  const set = fixtureSetting(fx, f.fixture);
+  const now = set.color ? `c:${set.color}` : `k:${set.kelvin}`;
+  const opts = LIGHT_COLORS.map((o) => ({ value: o.color ? `c:${o.color}` : `k:${o.kelvin}`, label: o.label }));
+  const known = opts.some((o) => o.value === now);
+  if (!known) opts.push({ value: now, label: set.color ? `Custom ${set.color}` : `${set.kelvin} K` });
+  const pick = h('input', { id: 'f-lc-pick', type: 'color', value: set.color ?? '#ffffff', 'aria-label': 'Custom light color' });
+  const apply = (v: string) => {
+    snapshot();
+    const rest = { ...f.fixture };
+    delete rest.color;
+    delete rest.kelvin;
+    if (v.startsWith('c:')) rest.color = cleanHex(v.slice(2)) ?? undefined;
+    else if (+v.slice(2) !== fx.kelvin) rest.kelvin = +v.slice(2);
+    if (Object.keys(rest).length) f.fixture = rest;
+    else delete f.fixture;
+    changed();
+  };
+  const sel = selectEl('f-lc', opts, now, apply, 'Light color');
+  pick.addEventListener('change', () => apply(`c:${pick.value}`));
+  return field('Light color', h('span', { style: 'display:flex;gap:6px;align-items:center' }, sel, pick), 'RGBCW lamp: a white or any color.');
+}
+
 function field(label: string, control: HTMLElement, hint?: string) {
   return h('label', { class: 'field' }, h('span', { class: 'field-label', text: label }), control, hint ? h('span', { class: 'field-hint', text: hint }) : null);
 }
@@ -662,6 +687,7 @@ function renderInspector() {
       field('Turn', rot, 'Or press R on the plan.'),
       ...(spec.options ?? []).map((op) => check(`f-op-${op.key}`, op.label, featureOption(spec, f.options, op.key), (v) => { snapshot(); f.options = { ...f.options, [op.key]: v }; changed(); })),
       ...(spec.plantable ? [check('f-planted', 'Planted', f.planted !== false, (v) => { snapshot(); if (v) delete f.planted; else f.planted = false; changed(); })] : []),
+      ...(spec.fixture?.rgb ? [lightColorField(f, spec.fixture)] : []),
       ...(makerSpa(spec)
         ? [
             field('Cover', selectEl('f-cover', SPA_COVERS, f.cover ?? 'open', (v) => { snapshot(); f.cover = v as typeof f.cover; changed(); }, 'Cover')),
