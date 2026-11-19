@@ -1,19 +1,21 @@
 import * as THREE from 'three';
 import { beginMaterialBuild } from './materials';
 import { featureById, plantById } from '../siteplan/catalog';
-import { bounds, centroid, pointInPolygon, scatterInPolygon } from '../siteplan/geometry';
+import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
-import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
+import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
-import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls } from './fourfall';
+import { buildFeatures, type FeatureBuild, type FourFallBedLook, type NightLight } from './features';
+import { fourFallCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
-import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
+import { GROUND_SPECULAR, groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
+import { materialChipSpacing } from '../engine/surfaces';
+import { FT } from '../siteplan/fourfall';
 import { buildHardscape, housePolys, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
 import { isBoardDeck } from '../siteplan/deckzone';
@@ -76,6 +78,24 @@ export interface SceneBuild {
   restyleHardscape(plan: SitePlan): void;
   setYears(years: number): void;
   dispose(): void;
+}
+
+/**
+ * What a four-fall waterfall takes from the bed it is set in, from its one bed choice (the ground model's fourFalls,
+ * fourfall.ts fourFallBedChoice):
+ * - `mulch`: the bed material its mound's soil cover is recoloured to (fourFallMulch), whenever it has one.
+ * - `ground`: with its soil blended into the bed, the look its soil's edge fades into (setGround): the bed's painted
+ *   texture's average color in linear light and its ground roughness (ground.ts groundLook). The fade keeps the
+ *   module's bark chips (texture 1) in bark, mulch and stone beds, drawn at the bed's own chip size where its chips are
+ *   round (bark mulch); a soil fill (humus, compost, dirt: spec.crumb) fades to its color flat (texture 0), since chips
+ *   there read as gravel, and takes the ground's toned-down sheen. Null without the blend.
+ */
+export function fourFallBedFor(f: FeaturePlacement, gm: GroundModel): FourFallBedLook {
+  const choice = gm.fourFalls.get(f.id);
+  const spec = choice?.blend && choice.bed ? materialById.get(choice.bed.catalogId) : undefined;
+  if (!spec) return { mulch: choice?.mulch, ground: null };
+  const chip = materialChipSpacing(spec);
+  return { mulch: choice!.mulch, ground: { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 } };
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
@@ -352,15 +372,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  // The bed look at a point: the topmost bed zone there (a waterfall's mound takes its soil from it).
-  const bedAt = (p: Vec2) => {
-    for (let i = plan.zones.length - 1; i >= 0; i--) {
-      const z = plan.zones[i];
-      if (z.kind === 'bed' && pointInPolygon(p, z.polygon)) return z.catalogId;
-    }
-    return undefined;
-  };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, bedAt);
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedFor(f, gm));
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -371,6 +383,11 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structIdx = [...plan.structures.filter((s) => s.kind !== 'cover' && s.polygon.length >= 3).map((s) => s.polygon), ...structs.solids].map((poly) => new PolygonIndex(poly));
   const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones, housePolys(plan))));
   const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
+  const bedCuts = new Map<string, GroundCut>();
+  for (const f of plan.features) {
+    const spec = featureById.get(f.catalogId);
+    if (spec?.kind === 'fourFall' && gm.fourFalls.get(f.id)?.blend) bedCuts.set(f.id, fourFallCut(f, spec, 'exact'));
+  }
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
     if (onFloor(p)) return true;
@@ -384,6 +401,13 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
+      // A waterfall blended into its bed clears exactly its soil rectangle (the site ground overlaps the border by
+      // BED_CUT_OVERLAP, but its lawn blades would stand in the waterfall's soil there, fourfall.ts).
+      const bedCut = bedCuts.get(f.id);
+      if (bedCut) {
+        if (inGroundCut([bedCut], p)) return true;
+        continue;
+      }
       if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
@@ -398,7 +422,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   yield 'turf';
   // Inside a four-fall waterfall's soil there is no bed of the yard's own: loose stones and humus pieces are left out
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
-  const fallCuts = fourFallGroundCuts(plan.features);
+  const fallCuts = fourFallGroundCuts(plan.features, gm.fourFalls);
   const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
   const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
   yield 'pebbles';
@@ -548,6 +572,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
+      // A waterfall's bed look (setGround) is not touched here: a restyle only ever changes paving and lines
+      // (hardscapeOnlyChange), and any bed change rebuilds the yard, which gives each waterfall its bed's look anew.
       // A restyle (a new color picked) is a build of its own for the materials' keep-the-last-few rules (stamped looks,
       // paver edge maps): without it nothing picked in a run of restyles would ever be released.
       beginMaterialBuild();

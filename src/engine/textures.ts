@@ -289,6 +289,30 @@ export function paint(size: number, tileMeters: number, normalStrength: number, 
   return IN_WORKER ? pixelSet(px, tileMeters) : canvasSet(px, tileMeters);
 }
 
+/** The last stand-in's average color (linear) and roughness, read by recipeAverage. */
+let averaged: { color: RGB; roughness: number } | null = null;
+
+/**
+ * A recipe's average albedo in linear light and its average roughness channel, sampled as the stand-in is (about a
+ * millisecond, no texture made). With a target mean (matchMean) the color is exactly that. Null if the recipe paints
+ * nothing.
+ */
+export function recipeAverage(make: () => PBRSet): { color: RGB; roughness: number } | null {
+  const was = previewing;
+  previewing = true;
+  averaged = null;
+  try {
+    const set = make();
+    // Dispose the tiny stand-in textures made for the sample.
+    set.map.dispose();
+    set.normalMap.dispose();
+    set.roughnessMap.dispose();
+  } finally {
+    previewing = was;
+  }
+  return averaged;
+}
+
 /** Texels sampled (per side) to find a recipe's average color: 1,024 calls, about a millisecond. */
 const PREVIEW_SAMPLES = 32;
 
@@ -300,6 +324,7 @@ const PREVIEW_SAMPLES = 32;
 function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample, mean?: RGB): PBRSet {
   const N = PREVIEW_SAMPLES;
   let r = 0, g = 0, b = 0, ro = 0;
+  const lin: RGB = [0, 0, 0];
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const s = fn((x + 0.5) / N, (y + 0.5) / N);
@@ -307,8 +332,10 @@ function previewSet(tileMeters: number, fn: (u: number, v: number) => Sample, me
       g += clamp01(s.c[1]);
       b += clamp01(s.c[2]);
       ro += clamp01(s.r);
+      for (let i = 0; i < 3; i++) lin[i] += lutLin(s.c[i]);
     }
   }
+  averaged = { color: mean ? [mean[0], mean[1], mean[2]] : (lin.map((v) => v / (N * N)) as RGB), roughness: ro / (N * N) };
   const k = 255 / (N * N);
   const avg: [number, number, number, number] = [Math.round(r * k), Math.round(g * k), Math.round(b * k), Math.round(ro * k)];
   if (mean) for (let i = 0; i < 3; i++) avg[i] = Math.round(lutSrgb(mean[i]) * 255);

@@ -24,7 +24,16 @@ import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 import { buildFourFall, type FourFallInstance } from './fourfall';
+import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
+
+/** What a four-fall waterfall takes from the bed it is set in (build.ts fourFallBedFor). */
+export interface FourFallBedLook {
+  /** The bed's material id, for its mound's soil cover (fourfall.ts fourFallMulch). */
+  mulch?: string;
+  /** The look its soil's edge fades into (setGround), or null to keep its edges tucked under grade. */
+  ground: WaterfallGround | null;
+}
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -130,7 +139,7 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', bedAt?: (p: Vec2) => string | undefined): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', fourFallBed?: (f: FeaturePlacement) => FourFallBedLook): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -667,14 +676,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'fourFall': {
         // The four-fall rock waterfall (builder/fourfall.ts): its own rock, soil, water and falls, in one module.
-        // Its soil cover takes the bed it stands in: the bed most of its outline's sample points fall in.
-        const votes = new Map<string, number>();
-        for (const [sx, sz] of [[0, 0], [-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) {
-          const w = local(sx * W, 0, sz * D), id = bedAt?.([w.x, w.z]);
-          if (id) votes.set(id, (votes.get(id) ?? 0) + 1);
-        }
-        const bed = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0];
-        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bed);
+        // Its soil takes the bed it is set in (one lookup, build.ts fourFallBedFor): the mound's cover recoloured to the
+        // bed, and, where its whole soil border lies in that bed, the edge of its soil faded into the bed and flush with it.
+        const bed = fourFallBed?.(f);
+        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bed?.mulch, bed?.ground ?? null);
         o.add(ff.group);
         surfaces.push(...ff.surfaces);
         fourFalls.push(ff.inst);
