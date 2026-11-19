@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { GeoBuilder, V, along, barkTexture, clamp, col, leafQuad, leafTexture, lerp, rng, tube, type SpeciesBuilder } from '../kit';
-import { toothedLeafPath } from '../perennials/shared-perennials';
+import { GeoBuilder, V, along, clamp, col, leafQuad, leafTexture, lerp, rng, tube, type SpeciesBuilder } from '../kit';
 import { TAU, domeCard, fitMat, growRunners, heading, inCell, lay, rect, type UV } from './shared-groundcovers';
+import { lantanaBud, lantanaFloret, lantanaLeaf, lantanaShoot, lantanaStemBark } from './shared-lantana';
 
 /**
  * Lantana 'New Gold', Lantana x hybrida 'New Gold' (L. camara x
@@ -47,91 +47,7 @@ const cellUV = (i: number): UV => rect((i % 2) * C, Math.floor(i / 2) * C, C, C,
 const GREENS = ['#24461a', '#2a5020', '#2f5822', '#33601f'];
 const YOUNG = ['#4a7a2c', '#568832'];
 
-/** One ovate lantana leaf: short stalk, round teeth, rough puckered surface between sunken veins. */
-function lantanaLeaf(g: CanvasRenderingContext2D, r: () => number, x: number, y: number, ang: number, len: number, fill: string, dark: number) {
-  g.save();
-  g.translate(x, y);
-  g.rotate(ang);
-  g.strokeStyle = '#4a5e2e';
-  g.lineWidth = len * 0.05;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(len * 0.12, 0);
-  g.stroke();
-  g.translate(len * 0.1, 0);
-  const L = len * 0.9, W = L * (0.56 + r() * 0.06);
-  toothedLeafPath(g, L, W, 0.36, 9, 0.16);
-  g.fillStyle = fill;
-  g.fill();
-  g.save();
-  g.clip();
-  if (dark > 0) {
-    g.fillStyle = `rgba(6,20,6,${dark})`;
-    g.fillRect(-L, -L, L * 3, L * 2);
-  }
-  // Puckered cushions between the veins.
-  for (let i = 0; i < 70; i++) {
-    const px = L * (0.08 + r() * 0.85), py = (r() - 0.5) * W * 0.85, rr = L * (0.025 + r() * 0.035);
-    g.fillStyle = `rgba(10,30,8,${0.1 + r() * 0.1})`;
-    g.beginPath();
-    g.arc(px + rr * 0.3, py + rr * 0.3, rr, 0, TAU);
-    g.fill();
-    g.fillStyle = `rgba(150,190,110,${0.06 + r() * 0.08})`;
-    g.beginPath();
-    g.arc(px - rr * 0.2, py - rr * 0.2, rr * 0.6, 0, TAU);
-    g.fill();
-  }
-  // Sunken veins: midrib and five pairs curving toward the tip.
-  g.strokeStyle = 'rgba(12,30,8,0.6)';
-  g.lineWidth = L * 0.022;
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.lineTo(L * 0.94, 0);
-  for (let k = 1; k <= 5; k++) {
-    const t = k / 6.3;
-    for (const s of [-1, 1]) {
-      g.moveTo(L * t, 0);
-      g.quadraticCurveTo(L * (t + 0.08), s * W * 0.22, L * (t + 0.2), s * W * 0.36 * Math.sin(Math.PI * Math.min(0.95, t + 0.15)));
-    }
-  }
-  g.stroke();
-  g.strokeStyle = 'rgba(140,175,100,0.3)';
-  g.lineWidth = L * 0.012;
-  g.beginPath();
-  g.moveTo(0, -L * 0.012);
-  g.lineTo(L * 0.9, -L * 0.012);
-  g.stroke();
-  g.restore();
-  g.restore();
-}
-
-/** A shoot growing up the cell: opposite pairs, each pair turned a quarter turn from the last. */
-function shoot(g: CanvasRenderingContext2D, r: () => number, w: number, h: number, pairs: number, top: number) {
-  const x0 = w / 2, y0 = h * 0.995, x1 = w / 2 + (r() - 0.5) * w * 0.08, y1 = h * top;
-  const sg = g.createLinearGradient(0, y0, 0, y1);
-  sg.addColorStop(0, '#5e5236');
-  sg.addColorStop(0.5, '#4f6233');
-  sg.addColorStop(1, '#5f8438');
-  g.strokeStyle = sg;
-  g.lineWidth = w * 0.016;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(x0, y0);
-  g.lineTo(x1, y1);
-  g.stroke();
-  for (let i = 0; i < pairs; i++) {
-    const t = pairs === 1 ? 0.5 : 0.07 + (i / pairs) * 0.86;
-    const nx = lerp(x0, x1, t), ny = lerp(y0, y1, t);
-    const flat = i % 2 === 0;
-    for (const s of [-1, 1]) {
-      const a = -Math.PI / 2 + s * (flat ? 1.05 + r() * 0.3 : 0.35 + r() * 0.25);
-      const len = w * (flat ? 0.36 : 0.24) * (0.88 + r() * 0.24) * lerp(1, 0.8, t);
-      lantanaLeaf(g, r, nx, ny, a, len, GREENS[Math.floor(r() * GREENS.length)], !flat ? 0.14 : r() < 0.3 ? 0.1 : 0);
-    }
-  }
-  for (const s of [-1, 1]) lantanaLeaf(g, r, x1, y1, -Math.PI / 2 + s * (0.3 + r() * 0.25), w * 0.17, YOUNG[Math.floor(r() * 2)], 0);
-}
+const shoot = (g: CanvasRenderingContext2D, r: () => number, w: number, h: number, pairs: number, top: number) => lantanaShoot(g, r, w, h, pairs, top, GREENS, YOUNG);
 
 function leafAtlas(): THREE.Texture {
   return leafTexture('gc-lantana-new-gold-leaves', LW, LH, (g) => {
@@ -151,43 +67,15 @@ function leafAtlas(): THREE.Texture {
 const FW = 1024, FH = 1024;
 const fcell = (i: number): UV => rect((i % 2) * C, Math.floor(i / 2) * C, C, C, FW, FH);
 
-/** One salverform floret from above: four rounded lobes, the lower one largest, a deeper gold throat. */
+const ORANGE = new THREE.Color('#f09a00'), DEEP = new THREE.Color('#d06c00'), LIGHT = new THREE.Color('#ffd23a');
+
+/** One floret from above: four rounded lobes, the lower one largest, a deeper gold throat. */
 function floret(g: CanvasRenderingContext2D, r: () => number, x: number, y: number, s: number, gold: THREE.Color, sq = 1, rot = r() * TAU) {
-  g.save();
-  g.translate(x, y);
-  g.scale(1, sq);
-  g.rotate(rot);
-  const css = (c: THREE.Color) => `#${c.getHexString()}`;
-  const tone = gold.clone().lerp(new THREE.Color('#f09a00'), 0.32 + r() * 0.15).multiplyScalar(0.92 + r() * 0.08);
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * TAU;
-    const big = k === 0 ? 1.18 : 1;
-    const pg = g.createRadialGradient(0, 0, s * 0.1, 0, 0, s);
-    pg.addColorStop(0, css(tone.clone().lerp(new THREE.Color('#d06c00'), 0.55)));
-    pg.addColorStop(0.45, css(tone));
-    pg.addColorStop(1, css(tone.clone().lerp(new THREE.Color('#ffd23a'), 0.15)));
-    g.fillStyle = pg;
-    g.beginPath();
-    g.ellipse(Math.cos(a) * s * 0.5 * big, Math.sin(a) * s * 0.5 * big, s * 0.48 * big, s * 0.42 * big, a, 0, TAU);
-    g.fill();
-  }
-  g.fillStyle = '#c47400';
-  g.beginPath();
-  g.arc(0, 0, s * 0.09, 0, TAU);
-  g.fill();
-  g.restore();
+  const tone = gold.clone().lerp(ORANGE, 0.32 + r() * 0.15).multiplyScalar(0.92 + r() * 0.08);
+  lantanaFloret(g, x, y, s, { lobe: tone, deep: tone.clone().lerp(DEEP, 0.55), rim: tone.clone().lerp(LIGHT, 0.15), throat: '#c47400' }, sq, rot);
 }
 
-function bud(g: CanvasRenderingContext2D, r: () => number, x: number, y: number, s: number) {
-  g.fillStyle = r() < 0.5 ? '#e0a418' : '#c99a2a';
-  g.beginPath();
-  g.ellipse(x, y, s * 0.5, s * 0.42, r() * TAU, 0, TAU);
-  g.fill();
-  g.fillStyle = 'rgba(120,130,40,0.7)';
-  g.beginPath();
-  g.arc(x, y, s * 0.16, 0, TAU);
-  g.fill();
-}
+const bud = (g: CanvasRenderingContext2D, r: () => number, x: number, y: number, s: number) => lantanaBud(g, r, x, y, s, '#e0a418', '#c99a2a');
 
 function flowerAtlas(gold: string): THREE.Texture {
   return leafTexture(`gc-lantana-new-gold-flowers-${gold}`, FW, FH, (g) => {
@@ -243,15 +131,6 @@ function flowerAtlas(gold: string): THREE.Texture {
       }
       for (let k = 0; k < 7; k++) bud(g, r, cx + (r() - 0.5) * w * 0.18, base - ry - h * 0.01 + r() * h * 0.05, w * 0.055);
     });
-  });
-}
-
-function stemBark(): THREE.Texture {
-  return barkTexture('gc-lantana-stem', 32, (g, S) => {
-    g.fillStyle = '#5a5638';
-    g.fillRect(0, 0, S, S);
-    g.fillStyle = 'rgba(80,100,50,0.4)';
-    for (let i = 0; i < 4; i++) g.fillRect(i * 8, 0, 3, S);
   });
 }
 
@@ -366,7 +245,7 @@ export const build: SpeciesBuilder = (spec) => {
     wood: wood.build(),
     leafMap: leafAtlas(),
     flowerMap: flowerAtlas(spec.flower ?? '#f6c21a'),
-    bark: { map: stemBark() },
+    bark: { map: lantanaStemBark() },
     look: { leafRoughness: 0.78, translucency: 0.28, bend: 0.025, flutter: 0.004 },
   };
 };

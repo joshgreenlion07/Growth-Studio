@@ -22,7 +22,7 @@ import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
-import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { backToNearest, buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
 import { plantGround, planterPlants } from './decor/planters';
 import { coverCeiling } from './decor/patio';
 import { CEILING_KINDS } from '../siteplan/decor';
@@ -484,7 +484,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel });
+  // Vines trained on a trellis stand with their back to the nearest fence, wall or building wall.
+  const backing = backToNearest([
+    ...plan.lines.filter((l) => l.kind === 'fence' || l.kind === 'wall').flatMap((l) => l.points.slice(1).map((q, i): [Vec2, Vec2] => [l.points[i], q])),
+    ...plan.structures.filter((s) => s.kind !== 'cover').flatMap((s) => s.polygon.map((q, i): [Vec2, Vec2] => [q, s.polygon[(i + 1) % s.polygon.length]])),
+  ]);
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel, backing });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
@@ -527,7 +532,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   let standing: PlantLayer | null = null;
   const ensureStanding = () => {
     if (standing) return;
-    standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel });
+    standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel, backing });
     standing.object.name = 'plants-standing';
     standing.setYears(years);
     standing.object.visible = stage !== 'finished';

@@ -519,6 +519,8 @@ interface Group {
   growth: GrowthUniforms;
   /** Nursery container these were installed from; undefined is the catalog's own. */
   container?: ContainerId;
+  /** A trained vine's (SpeciesLook.trained) own growth uniforms for its model: `growth`'s fullness, its own scale. */
+  frame?: GrowthUniforms;
 }
 
 /** Instances drawn at one level of detail: a shared matrix buffer and a mesh per plant part. */
@@ -825,6 +827,46 @@ export interface PlantBuildOptions {
   reflects?: (p: Vec2, height: number) => boolean;
   /** With lod: shadow map texel size in meters. Plants only a few texels across cast their shadow from the fewest-leaves copy. */
   shadowTexel?: number;
+  /**
+   * For vines trained on a support (SpeciesLook.trained): the heading that turns a plant at `p` to stand with its
+   * back to the nearest fence or wall (see backToNearest), or null when there is none near. Left out, or null, the
+   * plant faces plan +y.
+   */
+  backing?: (p: Vec2) => number | null;
+}
+
+/**
+ * Headings for plants that stand with their back to a fence or wall: for a point, the turn about +Y that points the
+ * plant's front (local +Z) away from the nearest of `segments` within `reach` meters, or null when none is that near.
+ * A point right on a segment faces the side toward plan +y (or +x for a segment that runs along y).
+ */
+export function backToNearest(segments: [Vec2, Vec2][], reach = 1.5): (p: Vec2) => number | null {
+  return (p) => {
+    let best = reach * reach, dx = 0, dy = 0, found = false;
+    for (const [a, b] of segments) {
+      const ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey;
+      const t = l2 > 1e-12 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / l2)) : 0;
+      const qx = a[0] + ex * t, qy = a[1] + ey * t;
+      const d2 = (p[0] - qx) ** 2 + (p[1] - qy) ** 2;
+      if (d2 >= best) continue;
+      best = d2;
+      found = true;
+      if (d2 > 1e-4) {
+        dx = p[0] - qx;
+        dy = p[1] - qy;
+      } else {
+        // On the line: its normal, on the +y side.
+        dx = -ey;
+        dy = ex;
+        if (dy < 0 || (Math.abs(dy) < 1e-9 && dx < 0)) {
+          dx = -dx;
+          dy = -dy;
+        }
+      }
+    }
+    // Local +Z turned by heading h about +Y points along (sin h, cos h) in plan x, y.
+    return found ? Math.atan2(dx, dy) : null;
+  };
 }
 
 export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2) => number, castShadows: boolean, options: PlantBuildOptions = {}): PlantLayer {
@@ -939,16 +981,19 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
 
     const isTree = spec.group === 'Trees';
     const look = geo.look ?? {};
+    // A trained vine's model keeps its support's size: its materials grow by their own uniforms (see setYears).
+    if (look.trained) group.frame = { uGrow: growth.uGrow, uSize: { value: new THREE.Vector2(1, 1) } };
+    const grows = group.frame ?? growth;
     const legacyTextured = spec.form !== 'grass' && spec.form !== 'perennial' && spec.form !== 'agave' && spec.form !== 'tropical';
     const leafMap = geo.leafMap !== undefined ? geo.leafMap : legacyTextured ? leafAtlas() : null;
-    const lm = makeLeafMaterial(spec, growth, 'leaf', leafMap, look);
+    const lm = makeLeafMaterial(spec, grows, 'leaf', leafMap, look);
     addMesh(geo.leaves, lm.m, lm.depth, look.leafShadows ?? (spec.form !== 'groundcover' && spec.form !== 'annuals'), 'leaves', 'leaf');
     if (geo.wood) {
-      const wm = makeWoodMaterial(spec, growth, geo);
+      const wm = makeWoodMaterial(spec, grows, geo);
       addMesh(geo.wood, wm.m, wm.depth, look.woodShadows ?? isTree, 'wood', 'wood');
     }
     if (geo.flowers) {
-      const fm = makeLeafMaterial(spec, growth, 'flower', geo.flowerMap !== undefined ? geo.flowerMap : leafAtlas(), look);
+      const fm = makeLeafMaterial(spec, grows, 'flower', geo.flowerMap !== undefined ? geo.flowerMap : leafAtlas(), look);
       addMesh(geo.flowers, fm.m, fm.depth, false, 'flowers', 'flower');
     }
     const aoGeo = new THREE.PlaneGeometry(spec.matureSpread * 1.25, spec.matureSpread * 1.25).rotateX(-Math.PI / 2);
@@ -961,10 +1006,13 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
     list.forEach((p, i) => {
       const r = rng(p.id);
       const y = (p as Partial<RaisedPlacement>).baseY ?? groundHeight(p.position);
-      const sc = (p.scale ?? 1) * (look.hedge ? 1 : 0.9 + r() * 0.2);
+      const same = look.hedge || look.trained;
+      const sc = (p.scale ?? 1) * (same ? 1 : 0.9 + r() * 0.2);
       t.set(p.position[0], y, p.position[1]);
       let heading = r() * Math.PI * 2;
-      const tall = look.hedge ? 1 : 0.92 + r() * 0.16;
+      const tall = same ? 1 : 0.92 + r() * 0.16;
+      // A trained vine stands with its trellis's flat side to the nearest fence or wall, else facing plan +y.
+      if (look.trained) heading = options.backing?.(p.position) ?? 0;
       if (look.hedge) {
         // Face along the row: toward the nearest placement of the same plant.
         let best = Infinity;
@@ -993,7 +1041,8 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         for (const im of set.staticMeshes) im.setMatrixAt(i, m4);
         set.reflects[i] = !options.reflects || options.reflects(p.position, spec.matureHeight * sc) ? 1 : 0;
       }
-      m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, sc));
+      // A trained vine is a flat screen: its contact shade is a narrow ellipse along it.
+      m4.compose(t.clone().setY(y + 0.012), q, V(sc, 1, look.trained ? sc * 0.3 : sc));
       ao.setMatrixAt(i, m4);
       const proxy = new THREE.Mesh(proxyGeo, proxyMat);
       proxy.userData = { plantId: p.id, spec, growth, scale: sc, part: 'plant', catalogId: `plant:${spec.id}` };
@@ -1042,6 +1091,8 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
         g.growth.uGrow.value = Math.max(0, curveAt(g.spec, yrs, g.container));
         const sz = sizeAt(g.spec, yrs, g.container);
         g.growth.uSize.value.set(sz.spread / g.spec.matureSpread, sz.height / g.spec.matureHeight);
+        // A trained vine's model is full size from the catalog's install size on (it grows by its parts appearing).
+        if (g.frame) g.frame.uSize.value.set(Math.min(1, sz.spread / g.spec.installSpread), Math.min(1, sz.height / g.spec.installHeight));
       }
       sizeVersion++;
       // Keep proxies sized for autofocus.
