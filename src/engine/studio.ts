@@ -208,6 +208,8 @@ export class Studio {
   tapToWalk = false;
   /** The rings that double-tap to walk leaves on the ground. */
   private tapMarks = new TapMarks();
+  /** Forget a first tap still waiting for its second (a mode change, Home). Set in the constructor. */
+  private cancelPendingTap: () => void = () => {};
   /** States set by hand, kept across rebuilds while the plan still asks for what it did when they were set. */
   private handState = new Map<string, { on: boolean; base: boolean }>();
   private handMoving = false;
@@ -438,12 +440,19 @@ export class Studio {
     // Double tap to walk: the first tap, its single-tap action waiting until no second tap can come. Times are the
     // events' own (when the finger moved, not when a busy frame let the handler run).
     let downTs = 0;
-    let firstTap: { x: number; y: number; at: number; timer: number } | null = null;
+    // `live`: its timer is still pending. w, h: the canvas size then (a resize or layout change drops it).
+    let firstTap: { x: number; y: number; at: number; timer: number; live: boolean; w: number; h: number } | null = null;
+    const dropFirst = () => {
+      if (firstTap) window.clearTimeout(firstTap.timer);
+      firstTap = null;
+    };
+    this.cancelPendingTap = dropFirst;
     const runFirst = () => {
       if (!firstTap) return;
       const f = firstTap;
-      firstTap = null;
-      window.clearTimeout(f.timer);
+      dropFirst();
+      const r = this.renderer.domElement.getBoundingClientRect();
+      if (this.navMode !== 'walk' || r.width !== f.w || r.height !== f.h) return;
       tap(f.x, f.y);
     };
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -451,10 +460,14 @@ export class Studio {
       downTs = e.timeStamp;
       // A second finger, or a mode change since: the first tap acts now. A second touch that may be the double tap
       // holds it until that touch lifts.
+      // One held past its time (its timer already stopped) is stale: dropped, never run.
+      if (firstTap && !firstTap.live && downTs - firstTap.at >= DOUBLE_TAP_MS) dropFirst();
       if (firstTap) {
         if (!e.isPrimary || this.navMode !== 'walk') runFirst();
-        else if (downTs - firstTap.at < DOUBLE_TAP_MS) window.clearTimeout(firstTap.timer);
-        else runFirst();
+        else if (downTs - firstTap.at < DOUBLE_TAP_MS) {
+          window.clearTimeout(firstTap.timer);
+          firstTap.live = false;
+        } else runFirst();
       }
       // A second finger makes it a pinch or pan, never a tap.
       down = e.isPrimary ? { x: e.clientX, y: e.clientY } : null;
@@ -505,13 +518,19 @@ export class Studio {
           }
         }
         if (!isTap) return;
-        firstTap = { x, y, at: e.timeStamp, timer: window.setTimeout(runFirst, DOUBLE_TAP_MS) };
+        const r = this.renderer.domElement.getBoundingClientRect();
+        firstTap = { x, y, at: e.timeStamp, timer: window.setTimeout(runFirst, DOUBLE_TAP_MS), live: true, w: r.width, h: r.height };
         const hint = this.walkTargetAt(x, y, true);
         if (hint) this.tapMarks.show(hint, 'hint');
         this.invalidate();
         return;
       }
       if (isTap) tap(e.clientX, e.clientY);
+    });
+    // The system took the touch (a gesture, an alert): no tap waits and no press is left half done.
+    this.renderer.domElement.addEventListener('pointercancel', () => {
+      dropFirst();
+      down = null;
     });
 
     // WebGL can be taken away (Safari under memory pressure, GPU resets): say so, and rebuild when it comes back.
@@ -1223,6 +1242,7 @@ export class Studio {
     const from = this.navMode;
     this.navMode = m;
     this.tween = null;
+    this.cancelPendingTap();
     this.controls.enabled = m === 'orbit';
     if (from === 'orbit' && m !== 'orbit') {
       this.placeWalker();
@@ -1253,6 +1273,10 @@ export class Studio {
 
   /** Stand at ground level at the edge of the yard, looking across it. */
   private placeWalker() {
+    // A glide (double tap to walk) or a view tween still running would pull the camera off the start point.
+    this.tween = null;
+    this.manualFocus = null;
+    this.cancelPendingTap();
     const low = this.views.find((v) => v.id === 'low') ?? this.views[0];
     const eye = low ? low.eye.clone() : this.camera.position.clone();
     const look = low ? low.target.clone().sub(low.eye) : this.controls.target.clone().sub(this.camera.position);
