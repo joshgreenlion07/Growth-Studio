@@ -1313,6 +1313,13 @@ export class Studio {
     // Never start inside a house or shed: step forward until clear of every structure.
     const blocked = (x: number, z: number) => (this.plan?.structures ?? []).some((st) => st.kind !== 'cover' && st.polygon.length > 2 && (pointInPolygon([x, z], st.polygon) || distToEdge([x, z], st.polygon) < 0.8));
     for (let i = 0; i < 200 && blocked(eye.x, eye.z); i++) eye.addScaledVector(look, 0.25);
+    // Client mode faces the main feature (a water feature, fire, pergola, kitchen or spa view), else the house.
+    if (this.clientMode && this.plan) {
+      const fv = this.views.find((v) => /^[wf]-/.test(v.id));
+      const house = this.plan.structures.find((s) => s.kind === 'house' && s.polygon.length > 2);
+      const aim = fv ? { x: fv.target.x, z: fv.target.z } : house ? { x: house.polygon.reduce((a, p) => a + p[0], 0) / house.polygon.length, z: house.polygon.reduce((a, p) => a + p[1], 0) / house.polygon.length } : null;
+      if (aim && Math.hypot(aim.x - eye.x, aim.z - eye.z) > 1) look.set(aim.x - eye.x, 0, aim.z - eye.z).normalize();
+    }
     eye.y = this.groundAt(eye.x, eye.z) + EYE_HEIGHT;
     this.camera.position.copy(eye);
     this.controls.target.copy(eye).addScaledVector(look, 3);

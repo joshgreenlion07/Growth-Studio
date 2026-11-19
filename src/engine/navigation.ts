@@ -537,8 +537,8 @@ export class Navigation {
       mouseYaw = this.look.x * (this.client ? 0.003 : 0.0035);
       mousePitch = this.look.y * (this.client ? 0.003 : 0.0035);
       if (this.client) {
-        // Left and right turn, eased like a stick (about 50 degrees a second at full push); nothing steps sideways.
-        lx += mx * 0.9;
+        // Left and right turn, eased like a stick (about 43 degrees a second at full push); nothing steps sideways.
+        lx += mx * 0.75;
         mx = 0;
         fast = false;
         zoom = 0;
