@@ -10,7 +10,7 @@ import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { plantsOnFourFalls } from './fourfall';
+import { fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
@@ -377,7 +377,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
       if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
-        if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
+        // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
+        if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
         continue;
       }
       // A feature set to its own size (a boulder, a planter) clears for that size, not the catalog's default.
@@ -387,9 +388,13 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   };
   const turf = buildTurf(plan, gm, quality, blocked);
   yield 'turf';
-  const pebbles = buildPebbles(plan, gm, quality, features.pebbleBeds);
+  // Inside a four-fall waterfall's soil there is no bed of the yard's own: loose stones and humus pieces are left out
+  // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
+  const fallCuts = fourFallGroundCuts(plan.features);
+  const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
+  const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
   yield 'pebbles';
-  const humus = buildHumus(plan, gm, ground.surface, quality);
+  const humus = buildHumus(plan, gmBeds, ground.surface, quality);
   yield 'soil fills';
 
   // Plants that stand on features (bowl planters on a water feature's pillars) come with the features.
@@ -458,9 +463,11 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // porch, then shade structures (pergolas, gazebos) last, so a yard of pergolas cannot push the others out. A pergola
   // left without a light still shows its glowing LED strips.
   const nightLights: NightLight[] = [
-    ...features.lights.filter((l) => !l.shade),
+    ...features.lights.filter((l) => !l.shade && !l.extra),
     ...water.lights,
     ...structs.porchLights.slice(0, 2).map((p) => ({ position: p, color: '#ffc27a', intensity: 3.5, distance: 7, flicker: false })),
+    // A four-fall waterfall's two upper-fall lights: after the others, before shade structures.
+    ...features.lights.filter((l) => l.extra),
     ...features.lights.filter((l) => l.shade),
   ];
 

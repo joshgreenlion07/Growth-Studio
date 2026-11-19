@@ -94,4 +94,5 @@ export interface Waterfall {
 export const WATERFALL_DEFAULTS: Required<WaterfallOptions>;
 export function waterfallSize(options?: WaterfallOptions): { width: number; depth: number; height: number; soilBehind: number; soilBeside: number };
 export function createWaterfall(options?: WaterfallOptions): Waterfall;
-export function disposeWaterfallAssets(): void;
+/** Frees one detail level's shared geometry ('full' or 'light'), or every level when none is given. */
+export function disposeWaterfallAssets(detail?: 'full' | 'light'): void;

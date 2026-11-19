@@ -3,8 +3,8 @@ import { featureById, plantById, type FeatureSpec } from '../siteplan/catalog';
 import { FOUR_FALL_BACK_SLOPE, FOUR_FALL_SOIL_BEHIND, FOUR_FALL_SOIL_BESIDE, FOUR_FALL_WIDTH, FT, fourFallDepthFt, fourFallOutlineFt, fourFallParams, type FourFallParams } from '../siteplan/fourfall';
 import type { FeaturePlacement, PlantPlacement, Vec2 } from '../siteplan/types';
 import type { Quality } from '../engine/post';
-import { REFRACTION_LAYER } from '../engine/water';
-import { createWaterfall, waterfallSize, type Waterfall } from './fourfall/waterfall-feature.js';
+import { REFRACTION_LAYER, WATER_LAYER_SKIP } from '../engine/water';
+import { createWaterfall, disposeWaterfallAssets, waterfallSize, type Waterfall } from './fourfall/waterfall-feature.js';
 
 /**
  * The four-fall rock waterfall in a yard: the stand-alone module in fourfall/ (its own rocks, soil, water and falls,
@@ -19,6 +19,8 @@ export interface FourFallInstance {
   wf: Waterfall;
   /** Its under-fall lights are on (the Fall lights switch). */
   lightsOn: boolean;
+  /** It was in the view's frustum when last drawn (the studio keeps drawing every frame only while it is). */
+  inView: boolean;
 }
 
 /** The module draws its water reading a copy of the scene: only Max and Balanced have room for that pass. */
@@ -50,6 +52,11 @@ export function toModule(fr: FourFallFrame, q: Vec2): [number, number] {
   return [lx / FT, (lz - fr.outline[1] / 2) / FT];
 }
 
+/** Margins, feet, inside the module's soil rectangle where its own soil is fully up (its edges tuck under grade there). */
+export const SOIL_MARGIN = 0.78;
+/** The front edge of the ground cut, feet from the rockwork's front: the soil is back at grade by then (no groove). */
+export const CUT_FRONT = 0.12;
+
 /** The module's soil rectangle (its `soil`), feet, without building it. */
 export function soilRect(p: FourFallParams) {
   return { x0: -(FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE), x1: FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE, z0: -fourFallDepthFt(p) - FOUR_FALL_BACK_SLOPE - 0.8, z1: 0.4 };
@@ -73,9 +80,9 @@ export function fourFallGroundCuts(features: FeaturePlacement[]): GroundCut[] {
   for (const f of features) {
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'fourFall') continue;
-    const fr = fourFallFrame(f, spec), s = soilRect(fr.p), m = 0.78;
+    const fr = fourFallFrame(f, spec), s = soilRect(fr.p), m = SOIL_MARGIN;
     const x0 = (s.x0 + m) * FT, x1 = (s.x1 - m) * FT;
-    const z0 = fr.outline[1] / 2 + (s.z0 + m) * FT, z1 = fr.outline[1] / 2 + (s.z1 - 0.05) * FT;
+    const z0 = fr.outline[1] / 2 + (s.z0 + m) * FT, z1 = fr.outline[1] / 2 + CUT_FRONT * FT;
     // Center of the cut in the feature's local frame, then in plan space.
     const lx = (x0 + x1) / 2, lz = (z0 + z1) / 2;
     const cx = f.position[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), cy = f.position[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a);
@@ -83,6 +90,23 @@ export function fourFallGroundCuts(features: FeaturePlacement[]): GroundCut[] {
   }
   return out;
 }
+
+/** True when a plan point is inside one of the cuts: the same turned-rectangle test as the ground shader. */
+export function inGroundCut(cuts: GroundCut[], p: Vec2): boolean {
+  for (const c of cuts) {
+    const dx = p[0] - c.cx, dy = p[1] - c.cy;
+    if (Math.abs(dx * c.cos - dy * c.sin) < c.hx && Math.abs(dx * c.sin + dy * c.cos) < c.hz) return true;
+  }
+  return false;
+}
+
+/** Shared rock and cobble shapes are kept per detail level; a level no built waterfall uses any more is freed. */
+export function releaseFourFallAssets(inUse: Iterable<FourFallInstance>) {
+  const used = new Set<string>();
+  for (const ff of inUse) used.add(ff.wf.options.detail);
+  for (const d of ['full', 'light'] as const) if (!used.has(d)) disposeWaterfallAssets(d);
+}
+export { disposeWaterfallAssets };
 
 /* ------------------------------------------------------------------ */
 /* r186 check                                                           */
@@ -163,15 +187,17 @@ export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Q
   const falls = wf.layout.falls.map((fl) => toLocal(new THREE.Vector3(fl.x, (fl.top + fl.bot) / 2, fl.z + 0.3)));
   const surfaces: THREE.Mesh[] = [];
   // Its rock, soil and cobbles are what its water looks through (the studio's refraction pass draws only this layer).
+  // Its water is left out of the yard's pool reflections: drawn there it would show its look-through copy scrambled.
   wf.body.traverse((o) => {
     let w: THREE.Object3D | null = o;
     while (w && w !== wf.water) w = w.parent;
     if (!w) o.layers.enable(REFRACTION_LAYER);
+    else o.layers.set(WATER_LAYER_SKIP);
   });
   wf.body.traverse((o) => {
     if (o instanceof THREE.Mesh && !(o instanceof THREE.InstancedMesh) && o.geometry.getAttribute('aMat')) surfaces.push(o);
   });
-  return { inst: { itemId: f.id, wf, lightsOn: true }, group: wf.group, lights, falls, surfaces, originY, frame };
+  return { inst: { itemId: f.id, wf, lightsOn: true, inView: true }, group: wf.group, lights, falls, surfaces, originY, frame };
 }
 
 /* ------------------------------------------------------------------ */
@@ -199,7 +225,7 @@ export function plantsOnFourFalls<P extends PlantPlacement>(placements: P[], fea
     }
     const hit = falls.find((w) => {
       const [x, z] = toModule(w.fr, pl.position);
-      return x > w.soil.x0 + 0.3 && x < w.soil.x1 - 0.3 && z > w.soil.z0 + 0.3 && z < w.soil.z1;
+      return x > w.soil.x0 + SOIL_MARGIN && x < w.soil.x1 - SOIL_MARGIN && z > w.soil.z0 + SOIL_MARGIN && z < CUT_FRONT;
     });
     if (!hit) {
       out.push(pl);
@@ -214,7 +240,7 @@ export function plantsOnFourFalls<P extends PlantPlacement>(placements: P[], fea
       for (let d = 0.25; d <= 6 && !found; d += 0.25) {
         for (let k = 0; k < 16; k++) {
           const t = (k / 16) * Math.PI * 2, nx = x + Math.cos(t) * d, nz = z + Math.sin(t) * d;
-          if (nx > hit.soil.x0 + 0.3 && nx < hit.soil.x1 - 0.3 && nz > hit.soil.z0 + 0.3 && nz < -0.25 && hit.wf.canPlant(nx, nz, r)) {
+          if (nx > hit.soil.x0 + SOIL_MARGIN && nx < hit.soil.x1 - SOIL_MARGIN && nz > hit.soil.z0 + SOIL_MARGIN && nz < -0.25 && hit.wf.canPlant(nx, nz, r)) {
             found = [nx, nz];
             break;
           }

@@ -337,9 +337,10 @@ function assets(detail = 'full') {
   ASSET_SETS[detail] = { waterNrm, KINDS, COBBLE_HI, COBBLE_LO, PLANTS };
   return ASSET_SETS[detail];
 }
-/** Free the shared rock, cobble and plant geometry. Only call when no waterfall is left in any scene. */
-export function disposeWaterfallAssets() {
+/** Free the shared rock, cobble and plant geometry (one detail level, or all). Only when no waterfall left uses it. */
+export function disposeWaterfallAssets(detail) {
   for (const d in ASSET_SETS) {
+    if (detail && d !== detail) continue;
     const A = ASSET_SETS[d];
     A.waterNrm.dispose();
     for (const k in A.KINDS) for (const g of A.KINDS[k]) g.dispose();

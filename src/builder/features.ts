@@ -40,6 +40,8 @@ export interface NightLight {
   shade?: boolean;
   /** Switched off by hand in the 3D view (see FeatureBuild.actions): it gives up its place in the light pool. */
   off?: boolean;
+  /** A four-fall waterfall's upper-fall light: ranked after fire, water and porch lights (each waterfall's two lowest come first). */
+  extra?: boolean;
 }
 
 export interface FeatureBuild {
@@ -196,6 +198,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const makerGlow = new Set<THREE.MeshStandardMaterial>();
   const falls = fallMaterial();
   fallMats.push(falls);
+  // Whether any water wall sheet uses the shared fall material (only then does it keep the view drawing every frame).
+  let fallsUsed = false;
 
   for (let f of features) {
     const spec = featureById.get(f.catalogId);
@@ -233,6 +237,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       flames.push(fl);
     };
     const sheet = (w: number, h: number, x: number, y: number, z: number) => {
+      fallsUsed = true;
       const s = new THREE.Mesh(new THREE.PlaneGeometry(w, h).translate(0, -h / 2, 0), falls);
       s.position.set(x, y, z);
       s.renderOrder = 3;
@@ -660,9 +665,13 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         surfaces.push(...ff.surfaces);
         fourFalls.push(ff.inst);
         const wf = ff.inst.wf;
-        const own = ff.lights.map((l) => {
+        // The two lowest falls' lights, nearest the patio, rank with the other feature lights; the two upper ones after
+        // fire, water and porch lights, so a waterfall takes at most two places in a contested light pool (build.ts).
+        const own = ff.lights.map((l, i) => {
           light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
-          return lights[lights.length - 1];
+          const n = lights[lights.length - 1];
+          if (i < ff.lights.length - 2) n.extra = true;
+          return n;
         });
         // The pump: the falls and their spray stop, the pools go still (the pools keep their water).
         act({ key: 'water', label: 'Water', words: ['On', 'Off'], anchors: ff.falls.map((p) => anchorAt(o, p.x, p.y, p.z)), on: true, planOn: true, set(on) {
@@ -847,7 +856,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     landLights,
     glow: [lampGlow, spaGlow, ledGlow, ...extraGlow, ...decorGlow, ...makerGlow, ...fixtureMats.glow],
     flames,
-    fallMats,
+    // The shared fall material unused (no water wall) is no moving water: left out, a yard of furniture can rest.
+    fallMats: fallMats.filter((m) => m !== falls || fallsUsed),
     pebbleBeds,
     plants: raised,
     actions,
