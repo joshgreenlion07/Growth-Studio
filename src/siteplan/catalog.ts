@@ -241,6 +241,43 @@ export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 export type StampPattern = 'ashlar' | 'cobble' | 'plank';
 
 /**
+ * Poured concrete mow curb: a continuous curb slip-formed in place by a curb machine (Lil' Bubba, The Concrete Edge
+ * Company), in Green Lion's integral concrete colors. The three most common landscape shapes, each a Lil' Bubba mold
+ * (lilbubbashop.com, Molds & Trowels):
+ *
+ *   slant   Slant Edge Mold, 6 in wide x 4 1/2 in high: the top slopes from the tall back (bed side) down to a low front
+ *           (lawn side), so a mower runs along it and the bed's soil is held.
+ *   mower   Super Edge Mold, 6 in wide x 4 in high: a raised back on the bed side and a flat lip on the lawn side, a step
+ *           lower, that the mower's wheel rides on.
+ *   block   Block Edge Mold, 5 1/2 in wide x 4 in high: square, its top corners rounded.
+ *
+ * The profile is [across from the lawn-side face, up from the base] in inches, its corners to round with their radii
+ * (read from the molds' and trowels' photos; the makers give only the overall size). The curb sits in a shallow trench,
+ * 1 1/2 in below grade (`sinkIn`), so the slant's front and the mower lip stand about 1/2 in above the lawn. Control
+ * joints are tooled across it every 3 ft (`jointIn`), the usual spacing for landscape curbing.
+ */
+export type MowCurbShape = 'slant' | 'mower' | 'block';
+export interface MowCurbProfile { name: string; mold: string; widthIn: number; heightIn: number; pts: [number, number, number][]; sinkIn: number; jointIn: number }
+export const MOW_CURB_SHAPES: Record<MowCurbShape, MowCurbProfile> = {
+  slant: { name: 'Slant', mold: "Lil' Bubba Slant Edge Mold, 6 x 4 1/2 in", widthIn: 6, heightIn: 4.5, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 2, 0.6], [6, 4.5, 0.75], [6, 0, 0]] },
+  mower: { name: 'Mower', mold: "Lil' Bubba Super Edge Mold, 6 x 4 in", widthIn: 6, heightIn: 4, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 2, 0.4], [2.6, 2, 0.5], [3.5, 4, 0.5], [6, 4, 0.75], [6, 0, 0]] },
+  block: { name: 'Block', mold: "Lil' Bubba Block Edge Mold, 5 1/2 x 4 in", widthIn: 5.5, heightIn: 4, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 4, 0.75], [5.5, 4, 0.75], [5.5, 0, 0]] },
+};
+function mowCurbLooks(): MaterialSpec[] {
+  const out: MaterialSpec[] = [];
+  for (const shape of ['slant', 'mower', 'block'] as MowCurbShape[]) {
+    const S = MOW_CURB_SHAPES[shape];
+    for (const c of CONCRETE_COLORS) {
+      out.push(M({
+        id: `mow-curb-${shape}-${c.id}`, name: `Mow curb, ${S.name.toLowerCase()}, ${c.name.toLowerCase()}`, use: 'edging', group: 'Edging', recipe: 'curb',
+        palette: c.palette.slice(), mowCurb: shape, maker: 'Green Lion', line: `Mow curb, ${S.name.toLowerCase()}`, shelf: 'Curb', color: c.name,
+      }));
+    }
+  }
+  return out;
+}
+
+/**
  * Loose stone sold by size (1/2-1 in, 1-2 in, ...), drawn as individual 3D stones over a matching ground texture. Sizes
  * are a stone's long side in inches. `wide` and `thick` are the other two sides as shares of the long side (ranges): beach
  * pebbles are flattened ovals. `colors` are sRGB as photographed, with how often each shows (`share`, summing to 1).
@@ -340,6 +377,8 @@ export interface MaterialSpec {
   /** Antiquing release (sRGB): the darker powder tossed on before stamping, which stays in the joints and low spots. */
   antique?: string;
   fence?: FenceStyle;
+  /** A poured concrete mow curb (recipe 'curb'): the shape of the curb machine's mold (MOW_CURB_SHAPES). */
+  mowCurb?: MowCurbShape;
   /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
   fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
@@ -835,6 +874,8 @@ export const MATERIALS: MaterialSpec[] = [
   // Edging
   M({ id: 'curb-charcoal', name: 'Charcoal curb', use: 'edging', group: 'Edging', recipe: 'curb', palette: ['#55534f', '#4a4845'], matches: 'Belgard Melville curb style' }),
   M({ id: 'steel-edging', name: 'Steel edging', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#4a3a2e', '#3a2d24'] }),
+  // Poured concrete mow curb: three curb machine shapes in the concrete colors (MOW_CURB_SHAPES).
+  ...mowCurbLooks(),
 ];
 
 /* ------------------------------------------------------------------ */

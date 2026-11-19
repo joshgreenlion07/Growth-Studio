@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { materialById, isStuccoFace } from '../siteplan/catalog';
+import { materialById, isStuccoFace, MOW_CURB_SHAPES } from '../siteplan/catalog';
 import { pointInPolygon } from '../siteplan/geometry';
 import type { LineItem, Vec2, Zone } from '../siteplan/types';
 
@@ -20,8 +20,8 @@ export const CURB_REVEAL = 0.0762;
 export function lineThickness(l: LineItem): number {
   const spec = materialById.get(l.catalogId);
   if (l.kind === 'wall') return spec?.veneer?.wallIn ? spec.veneer.wallIn * 0.0254 : isStuccoFace(spec?.wall?.face) ? 0.25 : 0.3;
-  // Curbs are Belgard Melville Curb units: 4 in thick (24 in long, 6 1/2 in tall).
-  if (l.kind === 'edging' && spec?.recipe === 'curb') return CURB_THICK;
+  // A poured mow curb is its mold's width; other curbs are Belgard Melville Curb units: 4 in thick (24 in long, 6 1/2 in tall).
+  if (l.kind === 'edging' && spec?.recipe === 'curb') return spec.mowCurb ? MOW_CURB_SHAPES[spec.mowCurb].widthIn * 0.0254 : CURB_THICK;
   return 0;
 }
 

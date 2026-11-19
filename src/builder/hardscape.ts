@@ -9,6 +9,7 @@ import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
+import { mowCurbOutline, mowCurbSink, profileGeometry } from './mowcurb';
 import type { PoolLayout } from './pools';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
 import { metalPicketFence } from './decor/fence-metal-picket';
@@ -880,6 +881,11 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       // the cap across instead of a joint running down its middle.
       if (spec?.veneer?.cap && !l.cap) startAcrossAtEdge(cap);
       put('cap', isStuccoFace(face) ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
+    } else if (spec?.mowCurb) {
+      // A poured mow curb: its mold's section along the path, its base in a shallow trench (or as deep as leaves the
+      // plan's `reveal` of its top above grade), the low side toward the lawn.
+      const sink = mowCurbSink(spec.mowCurb, l.reveal);
+      put('curb', catalogMaterial(l.catalogId), profileGeometry(path, mowCurbOutline(spec.mowCurb), path.pts.map((p) => height(p) - sink)));
     } else {
       // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
       const rev = Math.max(0.004, Math.min(CURB_TALL, l.reveal ?? CURB_REVEAL));
