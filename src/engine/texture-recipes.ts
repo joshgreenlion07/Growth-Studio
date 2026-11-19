@@ -3,7 +3,7 @@ import { rockSet } from '../builder/materials';
 import { cortenSet, flagFaceSet, materialTextures, padSet, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
-import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
+import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet, silverTravertineLedgerSet } from './fountain-surfaces';
 import { rockGrainSet } from './rock-surfaces';
 
 /**
@@ -52,6 +52,7 @@ export function runRecipe(key: string): PBRSet | null {
     poolTile,
     'pf-stucco': pillarStuccoSet,
     'pf-ledger': ledgerStoneSet,
+    'ww-ledger-silver': silverTravertineLedgerSet,
     'pf-bowl': patinaBowlSet,
     'rk-grain': rockGrainSet,
   };

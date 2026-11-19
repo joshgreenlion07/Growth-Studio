@@ -66,7 +66,7 @@ const P = {
 /* ------------------------------------------------------------------ */
 
 /** Aged copper: the spillways, scupper pipes and flanges. */
-const agedCopper = () => plainMaterial('pf-aged-copper', { color: '#5a4636', roughness: 0.4, metalness: 0.7 });
+export const agedCopper = () => plainMaterial('pf-aged-copper', { color: '#5a4636', roughness: 0.4, metalness: 0.7 });
 
 /* ------------------------------------------------------------------ */
 /* Water                                                                */
@@ -187,7 +187,7 @@ export function sheetGeometry(top: THREE.Vector3, bottomY: number, w0: number, w
  * A rope of water from a pipe mouth at `p0` leaving along `dir` at `speed` m/s and falling to `bottomY`: a thin tube
  * along the parabola, a little thicker as it slows at the top and frayed near the bottom.
  */
-function streamGeometry(p0: THREE.Vector3, dir: THREE.Vector3, speed: number, bottomY: number, radius: number): THREE.BufferGeometry {
+export function streamGeometry(p0: THREE.Vector3, dir: THREE.Vector3, speed: number, bottomY: number, radius: number): THREE.BufferGeometry {
   const v = dir.clone().normalize().multiplyScalar(speed);
   // Time to fall to bottomY: p0.y + v.y t - g t^2 / 2 = bottomY.
   const g = 9.81, a = -g / 2, b = v.y, c = p0.y - bottomY;
@@ -228,7 +228,7 @@ function streamGeometry(p0: THREE.Vector3, dir: THREE.Vector3, speed: number, bo
 /* ------------------------------------------------------------------ */
 
 /** Box from inches: size w x h x d, x and z its center, y0 its bottom; UVs in meters shifted by (du, dv) meters. */
-function boxIn(w: number, h: number, d: number, x: number, y0: number, z: number, du = 0, dv = 0, round = 0): THREE.BufferGeometry {
+export function boxIn(w: number, h: number, d: number, x: number, y0: number, z: number, du = 0, dv = 0, round = 0): THREE.BufferGeometry {
   const g = round > 0 ? new RoundedBoxGeometry(w * IN, h * IN, d * IN, 2, round * IN) : new THREE.BoxGeometry(w * IN, h * IN, d * IN);
   const p = g.getAttribute('position'), n = g.getAttribute('normal');
   const uv = new Float32Array(p.count * 2);
@@ -377,7 +377,7 @@ export interface FountainSink {
 }
 
 /** A warm LED strip material whose night glow also lights the water it is linked to (see linkGlow). */
-function ledMaterial(): THREE.MeshStandardMaterial {
+export function ledMaterial(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color: '#f1e4cc', emissive: new THREE.Color('#ffb466'), emissiveIntensity: 0, roughness: 0.4 });
 }
 
@@ -385,7 +385,7 @@ function ledMaterial(): THREE.MeshStandardMaterial {
  * The studio turns night accents up by setting each glow material's emissiveIntensity (to 7 at full night for a light
  * colored one). The water lit by this LED follows it through its uGlow uniform.
  */
-function linkGlow(led: THREE.MeshStandardMaterial, water: THREE.ShaderMaterial) {
+export function linkGlow(led: THREE.MeshStandardMaterial, water: THREE.ShaderMaterial) {
   let v = led.emissiveIntensity;
   Object.defineProperty(led, 'emissiveIntensity', {
     configurable: true,
