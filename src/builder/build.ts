@@ -427,7 +427,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
         }
         continue;
       }
-      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall' || spec.kind === 'slatScreen' || spec.kind === 'gardenBench' || spec.kind === 'shedResin' || spec.kind === 'raisedBedCedar') {
+      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'pillarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall' || spec.kind === 'slatScreen' || spec.kind === 'gardenBench' || spec.kind === 'shedResin' || spec.kind === 'raisedBedCedar') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
         continue;
