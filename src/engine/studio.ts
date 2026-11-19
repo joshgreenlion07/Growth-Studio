@@ -2044,11 +2044,12 @@ export class Studio {
    * Render one high-resolution still with the full camera look, from the current view or from `pose`. It is drawn
    * off screen with a camera of its own, so the live view never moves, changes size or blinks while it is made.
    */
-  async exportStill(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }): Promise<Blob> {
+  async exportStill(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }, aspect?: number): Promise<Blob> {
     await this.built();
     if (this.contextLost) throw new Error('The 3D view is restarting; try again in a moment.');
     const w0 = Math.max(1, this.container.clientWidth), h0 = Math.max(1, this.container.clientHeight);
-    const W = Math.max(16, Math.round(width)), H = Math.max(16, Math.round(width / (w0 / h0)));
+    // `aspect` (width / height) fixes the picture's shape; without it the still has the live view's shape.
+    const W = Math.max(16, Math.round(width)), H = Math.max(16, Math.round(width / (aspect && aspect > 0.2 && aspect < 5 ? aspect : w0 / h0)));
     const cam = this.camera.clone();
     const target = this.controls.target.clone();
     let focus = this.post.focus;
@@ -2124,6 +2125,36 @@ export class Studio {
     await this.built();
     const v = this.views[0];
     return this.exportStill(width, 'image/jpeg', 0.88, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined);
+  }
+
+  /** Stills made one after another (each changes the light for a moment, see shot). */
+  private shotQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * A still for a client page: one generated view (by id: 'overview', 'low', 'plan', 'house', 'street' or a feature's
+   * view; an unknown id is the Overview) under one light mood, at a fixed shape, as a JPEG. Drawn off screen like the
+   * cover; the light is put back right after, so the live view shows the mood it had. Calls wait for each other.
+   */
+  shot(opts: { view?: string; mood?: Mood; width?: number; aspect?: number; quality?: number }): Promise<Blob> {
+    const run = async () => {
+      await this.built();
+      const v = this.views.find((x) => x.id === opts.view) ?? this.views[0];
+      const width = Math.min(2400, Math.max(320, Math.round(opts.width ?? 1600)));
+      const prev = { mood: this.state.mood, hour: this.state.hour };
+      const change = !!opts.mood && opts.mood !== prev.mood;
+      if (change) this.setMood(opts.mood!);
+      try {
+        return await this.exportStill(width, 'image/jpeg', opts.quality ?? 0.86, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined, opts.aspect ?? 1.5);
+      } finally {
+        if (change) {
+          if (prev.mood === 'custom') this.setHour(prev.hour);
+          else this.setMood(prev.mood);
+        }
+      }
+    };
+    const p = this.shotQueue.then(run, run);
+    this.shotQueue = p.catch(() => undefined);
+    return p;
   }
 
   dispose() {

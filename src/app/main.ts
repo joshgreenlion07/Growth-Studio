@@ -1275,6 +1275,20 @@ function onEmbedMessage(e: MessageEvent) {
     );
     return;
   }
+  if (d.type === 'shot') {
+    // A rendering for a client page: one generated view under one light mood, 3:2 unless `aspect` says otherwise.
+    // { view, mood, w, aspect, id } -> { type: 'shot', id, ok, data: Blob (JPEG) } or { ..., ok: false, message }.
+    const origin = e.origin, q = d as { view?: unknown; mood?: unknown; w?: unknown; aspect?: unknown; id?: unknown };
+    const id = typeof q.id === 'string' ? q.id.slice(0, 40) : '';
+    const fail = (message: string) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: false, message }, origin);
+    if (!studio || !embedBuilt) return fail('The 3D view is not ready yet.');
+    const mood = MOODS.some((m) => m.id === q.mood) ? (q.mood as Mood) : undefined;
+    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' ? q.w : 1600, aspect: typeof q.aspect === 'number' ? q.aspect : 1.5 }).then(
+      (data) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: true, data }, origin),
+      (err) => fail(err instanceof Error ? err.message : String(err)),
+    );
+    return;
+  }
   // The parent hides the 3D tab: stop drawing (plant thumbnails still render), and start again when it is shown.
   if (d.type === 'pause') { studio?.pause(); touchUI?.reset(); return; }
   if (d.type === 'resume') { studio?.resume(); return; }

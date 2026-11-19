@@ -357,6 +357,12 @@ Messages use `window.postMessage`:
   1600 px JPEG of the yard from the Overview view, drawn off screen: the live
   view does not move, resize or blink),
   or `{ ..., ok: false, message }` before a plan is built.
+- Renderings (Area Planner's client link): the parent sends `{ source: 'area-planner', type: 'shot', id, view, mood, w, aspect }`
+  and gets `{ source: 'growth-studio', type: 'shot', id, ok: true, data: Blob }`, a JPEG `w` px wide (320 to 2400,
+  default 1600) and `aspect` (width / height, default 1.5) from one generated view (`view`: `'overview'`, `'low'`
+  for Ground level, `'plan'` for Top down, `'house'`, `'street'` or a feature's view id; unknown is the Overview) under
+  one mood (`'afternoon'`, `'golden'`, `'blue'`, `'night'`; left out, the current one). Drawn off screen; the light is
+  put back after, and several requests are made one after another. `{ ..., ok: false, message }` before a plan is built.
 - Stepping stones are `features` of kind `steppingStone`, in the sizes usually set (sizes are along the stone's own x,
   then z; a path turns x along the walk, so a long stone lies across it):
   - Belgard Dimensions Slabs, 2 3/8 in thick, top about 1/2 in above grade: `stepping-stone-12x24`,
