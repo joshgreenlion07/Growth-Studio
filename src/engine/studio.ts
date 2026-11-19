@@ -1741,6 +1741,8 @@ export class Studio {
    * so the next input is drawn in the very next frame.
    */
   private tick(dt: number, now: number) {
+    // A shot has the light changed for a moment: keep the last live frame on screen (a build in progress still runs).
+    if (this.holdLive && !this.pending) { this.dirty = true; return; }
     const animate = this.animating();
     if (this.state.motion) GLOBAL.uTime.value += dt;
     this.moveCamera(dt, now);
@@ -2044,12 +2046,29 @@ export class Studio {
    * Render one high-resolution still with the full camera look, from the current view or from `pose`. It is drawn
    * off screen with a camera of its own, so the live view never moves, changes size or blinks while it is made.
    */
-  async exportStill(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }, aspect?: number): Promise<Blob> {
+  exportStill(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }, aspect?: number): Promise<Blob> {
+    return this.queued(() => this.stillNow(width, type, quality, pose, aspect));
+  }
+
+  /** Stills (Save image, cover, shot) are made one after another, so a shot's light never reaches another still. */
+  private stillQueue: Promise<unknown> = Promise.resolve();
+  private queued<T>(fn: () => Promise<T>): Promise<T> {
+    const p = this.stillQueue.then(fn, fn);
+    this.stillQueue = p.catch(() => undefined);
+    return p;
+  }
+
+  /** Set while a shot has the light changed: the live view is not drawn then (it would flash the shot's mood). */
+  private holdLive = false;
+
+  private async stillNow(width: number, type = 'image/png', quality?: number, pose?: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }, aspect?: number): Promise<Blob> {
     await this.built();
     if (this.contextLost) throw new Error('The 3D view is restarting; try again in a moment.');
     const w0 = Math.max(1, this.container.clientWidth), h0 = Math.max(1, this.container.clientHeight);
-    // `aspect` (width / height) fixes the picture's shape; without it the still has the live view's shape.
-    const W = Math.max(16, Math.round(width)), H = Math.max(16, Math.round(width / (aspect && aspect > 0.2 && aspect < 5 ? aspect : w0 / h0)));
+    // `aspect` (width / height) fixes the picture's shape, 0.5 to 3; without it the still has the live view's shape.
+    const a = typeof aspect === 'number' && Number.isFinite(aspect) && aspect > 0 ? Math.min(3, Math.max(0.5, aspect)) : w0 / h0;
+    const wn = Number.isFinite(width) ? width : 1600;
+    const W = Math.max(16, Math.round(wn)), H = Math.max(16, Math.round(wn / a));
     const cam = this.camera.clone();
     const target = this.controls.target.clone();
     let focus = this.post.focus;
@@ -2121,14 +2140,13 @@ export class Studio {
    * A cover picture of the yard from its first generated view (the Overview), for a second screen, as a JPEG. It is
    * drawn off screen from that view, so whoever is looking around does not notice.
    */
-  async coverImage(width = 1600): Promise<Blob> {
-    await this.built();
-    const v = this.views[0];
-    return this.exportStill(width, 'image/jpeg', 0.88, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined);
+  coverImage(width = 1600): Promise<Blob> {
+    return this.queued(async () => {
+      await this.built();
+      const v = this.views[0];
+      return this.stillNow(width, 'image/jpeg', 0.88, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined);
+    });
   }
-
-  /** Stills made one after another (each changes the light for a moment, see shot). */
-  private shotQueue: Promise<unknown> = Promise.resolve();
 
   /**
    * A still for a client page: one generated view (by id: 'overview', 'low', 'plan', 'house', 'street' or a feature's
@@ -2136,25 +2154,27 @@ export class Studio {
    * cover; the light is put back right after, so the live view shows the mood it had. Calls wait for each other.
    */
   shot(opts: { view?: string; mood?: Mood; width?: number; aspect?: number; quality?: number }): Promise<Blob> {
-    const run = async () => {
+    return this.queued(async () => {
       await this.built();
       const v = this.views.find((x) => x.id === opts.view) ?? this.views[0];
-      const width = Math.min(2400, Math.max(320, Math.round(opts.width ?? 1600)));
+      const aspect = Number.isFinite(opts.aspect) ? Math.min(3, Math.max(0.5, opts.aspect!)) : 1.5;
+      // At most 2400 px either way.
+      const width = Math.min(2400, Math.round(2400 * aspect), Math.max(320, Math.round(Number.isFinite(opts.width) ? opts.width! : 1600)));
       const prev = { mood: this.state.mood, hour: this.state.hour };
       const change = !!opts.mood && opts.mood !== prev.mood;
+      this.holdLive = change;
       if (change) this.setMood(opts.mood!);
       try {
-        return await this.exportStill(width, 'image/jpeg', opts.quality ?? 0.86, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined, opts.aspect ?? 1.5);
+        return await this.stillNow(width, 'image/jpeg', opts.quality ?? 0.86, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined, aspect);
       } finally {
         if (change) {
           if (prev.mood === 'custom') this.setHour(prev.hour);
           else this.setMood(prev.mood);
         }
+        this.holdLive = false;
+        this.invalidate();
       }
-    };
-    const p = this.shotQueue.then(run, run);
-    this.shotQueue = p.catch(() => undefined);
-    return p;
+    });
   }
 
   dispose() {
