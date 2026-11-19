@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { GeoBuilder, V, along, barkTexture, clamp, col, leafPath, leafQuad, leafTexture, lerp, rng, tube, type SpeciesBuilder } from '../kit';
+import { GeoBuilder, V, along, clamp, col, leafPath, leafQuad, leafTexture, lerp, rng, tube, type SpeciesBuilder } from '../kit';
 import { TAU, domeCard, fitMat, growRunners, heading, inCell, lay, rect, type UV } from './shared-groundcovers';
+import { verbenaFlowerAtlas, verbenaFlowerCell, verbenaSprig, verbenaStemBark, type VerbenaPalette } from './shared-verbena';
 
 /**
  * Purple verbena, modeled on Verbena canadensis 'Homestead Purple': a low,
@@ -89,34 +90,7 @@ function lobedLeaf(g: CanvasRenderingContext2D, r: () => number, x: number, y: n
   g.restore();
 }
 
-/** A trailing shoot growing up the cell: opposite pairs, each pair turned a quarter turn from the last. */
-function sprig(g: CanvasRenderingContext2D, r: () => number, w: number, h: number, pairs: number, top: number) {
-  const x0 = w / 2, y0 = h * 0.995, x1 = w / 2 + (r() - 0.5) * w * 0.1, y1 = h * top;
-  const sg = g.createLinearGradient(0, y0, 0, y1);
-  sg.addColorStop(0, '#5a4a3c');
-  sg.addColorStop(0.5, '#4f6a34');
-  sg.addColorStop(1, '#6a8a40');
-  g.strokeStyle = sg;
-  g.lineWidth = w * 0.014;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(x0, y0);
-  g.lineTo(x1, y1);
-  g.stroke();
-  for (let i = 0; i < pairs; i++) {
-    const t = pairs === 1 ? 0.5 : 0.08 + (i / pairs) * 0.86;
-    const nx = lerp(x0, x1, t), ny = lerp(y0, y1, t);
-    const flatPair = i % 2 === 0;
-    for (const s of [-1, 1]) {
-      // Pairs lying to the sides show full length; the pairs between them point up and down and look short.
-      const a = -Math.PI / 2 + s * (flatPair ? 0.95 + r() * 0.3 : 0.35 + r() * 0.3);
-      const len = w * (flatPair ? 0.33 : 0.22) * (0.88 + r() * 0.24) * lerp(1, 0.75, t);
-      lobedLeaf(g, r, nx, ny, a, len, GREENS[Math.floor(r() * GREENS.length)], !flatPair ? 0.15 : r() < 0.3 ? 0.12 : 0);
-    }
-  }
-  // Young leaves folded around the tip.
-  for (const s of [-1, 1]) lobedLeaf(g, r, x1, y1, -Math.PI / 2 + s * (0.3 + r() * 0.25), w * 0.17, YOUNG[Math.floor(r() * 2)], 0);
-}
+const sprig = (g: CanvasRenderingContext2D, r: () => number, w: number, h: number, pairs: number, top: number) => verbenaSprig(g, r, w, h, pairs, top, lobedLeaf, GREENS, YOUNG);
 
 function leafAtlas(): THREE.Texture {
   return leafTexture('gc-verbena-leaves', LW, LH, (g) => {
@@ -133,124 +107,18 @@ function leafAtlas(): THREE.Texture {
   });
 }
 
-const FW = 1024, FH = 1024;
-const fcell = (i: number): UV => rect((i % 2) * C, Math.floor(i / 2) * C, C, C, FW, FH);
-const PURPLES = ['#5c1aa4', '#6520b0', '#6e27ba', '#561898'];
-
-/** One salverform flower from above: five notched lobes, pale eye, dark throat. `sq` flattens it for side views. */
-function floret(g: CanvasRenderingContext2D, r: () => number, x: number, y: number, s: number, sq = 1, rot = r() * TAU) {
-  g.save();
-  g.translate(x, y);
-  g.scale(1, sq);
-  g.rotate(rot);
-  const base = PURPLES[Math.floor(r() * PURPLES.length)];
-  for (let k = 0; k < 5; k++) {
-    g.save();
-    g.rotate((k / 5) * TAU);
-    const pg = g.createLinearGradient(0, 0, s, 0);
-    pg.addColorStop(0, '#4a1486');
-    pg.addColorStop(0.45, base);
-    pg.addColorStop(1, '#742ec2');
-    g.fillStyle = pg;
-    // Each lobe is notched: two overlapping rounded halves.
-    for (const q of [-1, 1]) {
-      g.beginPath();
-      g.ellipse(s * 0.56, q * s * 0.13, s * 0.44, s * 0.24, q * 0.28, 0, TAU);
-      g.fill();
-    }
-    g.strokeStyle = 'rgba(50,10,100,0.55)';
-    g.lineWidth = Math.max(1, s * 0.035);
-    g.beginPath();
-    g.moveTo(s * 0.2, 0);
-    g.lineTo(s * 0.86, 0);
-    g.stroke();
-    g.restore();
-  }
-  g.fillStyle = 'rgba(232,214,250,0.95)';
-  g.beginPath();
-  g.arc(0, 0, s * 0.12, 0, TAU);
-  g.fill();
-  g.fillStyle = '#35105f';
-  g.beginPath();
-  g.arc(0, 0, s * 0.07, 0, TAU);
-  g.fill();
-  g.restore();
-}
-
-function bud(g: CanvasRenderingContext2D, r: () => number, x: number, y: number, s: number) {
-  g.fillStyle = r() < 0.5 ? '#4f1a8c' : '#5d2a78';
-  g.beginPath();
-  g.ellipse(x, y, s * 0.5, s * 0.34, r() * TAU, 0, TAU);
-  g.fill();
-  g.fillStyle = 'rgba(70,100,50,0.8)';
-  g.beginPath();
-  g.arc(x, y, s * 0.16, 0, TAU);
-  g.fill();
-}
-
-function flowerAtlas(): THREE.Texture {
-  return leafTexture('gc-verbena-flowers', FW, FH, (g) => {
-    const r = rng('gc-verbena-flowers');
-    // Cells 0, 1: a full head from above. Cell 3: a younger head, half in bud.
-    for (const c of [0, 1, 3]) {
-      inCell(g, (c % 2) * C, Math.floor(c / 2) * C, C, C, (w, h) => {
-        const cx = w / 2, cy = h / 2, young = c === 3;
-        const n0 = young ? 8 : 10 + c;
-        for (let k = 0; k < n0; k++) {
-          const a = (k / n0) * TAU + r() * 0.2, d = w * (young ? 0.3 : 0.335) * (0.94 + r() * 0.1);
-          floret(g, r, cx + Math.cos(a) * d, cy + Math.sin(a) * d, w * (0.125 + r() * 0.02));
-        }
-        const n1 = young ? 0 : 6;
-        for (let k = 0; k < n1; k++) {
-          const a = (k / n1) * TAU + 0.4 + r() * 0.3, d = w * 0.17 * (0.9 + r() * 0.2);
-          floret(g, r, cx + Math.cos(a) * d, cy + Math.sin(a) * d, w * (0.115 + r() * 0.02));
-        }
-        const nb = young ? 22 : 7;
-        for (let k = 0; k < nb; k++) {
-          const a = r() * TAU, d = Math.sqrt(r()) * w * (young ? 0.19 : 0.06);
-          bud(g, r, cx + Math.cos(a) * d, cy + Math.sin(a) * d, w * 0.07);
-        }
-        if (!young) floret(g, r, cx + w * 0.02, cy - h * 0.01, w * 0.1);
-      });
-    }
-    // Cell 2: the head from the side on its stalk: a low dome of flowers on slender purple-green tubes.
-    inCell(g, 0, C, C, C, (w, h) => {
-      const cx = w / 2, hub = h * 0.62;
-      g.strokeStyle = '#4c6a36';
-      g.lineWidth = w * 0.022;
-      g.lineCap = 'round';
-      g.beginPath();
-      g.moveTo(cx, h);
-      g.lineTo(cx, hub);
-      g.stroke();
-      // A pair of small leaves below the head.
-      for (const s of [-1, 1]) lobedLeaf(g, r, cx, h * 0.88, -Math.PI / 2 + s * 1.15, w * 0.3, GREENS[2], 0);
-      const rows = [{ n: 6, y: 0.2, sp: 0.36, sq: 0.5 }, { n: 7, y: 0.31, sp: 0.42, sq: 0.62 }, { n: 6, y: 0.43, sp: 0.4, sq: 0.8 }];
-      for (const row of rows) {
-        for (let k = 0; k < row.n; k++) {
-          const u = (k + 0.5) / row.n - 0.5;
-          const fx = cx + u * 2 * row.sp * w, fy = h * (row.y + Math.abs(u) * Math.abs(u) * 0.5);
-          g.strokeStyle = 'rgba(92,60,110,0.95)';
-          g.lineWidth = w * 0.012;
-          g.beginPath();
-          g.moveTo(cx + u * w * 0.12, hub);
-          g.lineTo(fx, fy);
-          g.stroke();
-          floret(g, r, fx, fy, w * 0.12, row.sq);
-        }
-      }
-    });
-  });
-}
-
-function stemBark(): THREE.Texture {
-  return barkTexture('gc-verbena-stem', 32, (g, S) => {
-    g.fillStyle = '#3c5428';
-    g.fillRect(0, 0, S, S);
-    g.fillStyle = 'rgba(110,70,80,0.35)';
-    for (let i = 0; i < 4; i++) g.fillRect(i * 8, 0, 3, S);
-  });
-}
+const fcell = verbenaFlowerCell;
+const PURPLE: VerbenaPalette = {
+  lobes: ['#5c1aa4', '#6520b0', '#6e27ba', '#561898'],
+  deep: '#4a1486',
+  light: '#742ec2',
+  vein: 'rgba(50,10,100,0.55)',
+  eye: 'rgba(232,214,250,0.95)',
+  eyeR: 0.12,
+  throat: '#35105f',
+  buds: ['#4f1a8c', '#5d2a78'],
+};
+const flowerAtlas = () => verbenaFlowerAtlas('gc-verbena-flowers', PURPLE, (g, r, x, y, ang, len) => lobedLeaf(g, r, x, y, ang, len, GREENS[2], 0));
 
 export const build: SpeciesBuilder = (spec) => {
   const H = spec.matureHeight, Sp = spec.matureSpread, R = Sp / 2;
@@ -356,7 +224,7 @@ export const build: SpeciesBuilder = (spec) => {
     wood: wood.build(),
     leafMap: leafAtlas(),
     flowerMap: flowerAtlas(),
-    bark: { map: stemBark() },
+    bark: { map: verbenaStemBark() },
     look: { leafRoughness: 0.72, translucency: 0.3, bend: 0.03, flutter: 0.005 },
   };
 };

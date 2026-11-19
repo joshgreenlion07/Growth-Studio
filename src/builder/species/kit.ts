@@ -42,6 +42,14 @@ export interface SpeciesLook {
    * neighbor of the same plant, so a row reads as one clean hedge.
    */
   hedge?: boolean;
+  /**
+   * A vine trained on a support that is part of its model (a nursery trellis). The support keeps its own size, so
+   * the model is not scaled up as the plant grows: it is shown at full size from the catalog's install size on and
+   * grows only by its parts appearing at their birth (stems lengthening along the trellis, then past it). Below the
+   * install size (a smaller container) it is scaled down. Every placement is the same size and stands with its back
+   * (local -Z) to the nearest fence, wall or building wall (PlantBuildOptions.backing), else facing plan +y.
+   */
+  trained?: boolean;
 }
 
 export interface SpeciesGeo {
