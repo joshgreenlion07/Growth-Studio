@@ -8,6 +8,8 @@ import { BASALITE_MEDIA, basaliteImage } from '../siteplan/basalite-media';
 import { deckMedia } from '../siteplan/decking';
 import { STRUCTURE_NAMES, WATER_NAMES, materialInfo, pointKind } from '../siteplan/material-info';
 import type { SitePlan, WaterKind } from '../siteplan/types';
+import { palletsFor, type Pallet } from '../siteplan/pallets';
+import { layingMix } from '../engine/surfaces';
 
 export interface Look {
   id: string;
@@ -42,8 +44,18 @@ export interface Look {
   laying?: true;
   /** A generic large-format cast slab: the look a one-slab pad takes when no maker's unit is its size. For pads only. */
   padSlab?: true;
-  /** The laying patterns the paver offers, the default first. */
-  layings?: { id: string; name: string }[];
+  /**
+   * The laying patterns the paver offers, the default first. `mix`: the share of the area each piece size covers in that
+   * pattern, [short side, long side, share] in nominal inches (left out where the pallet's own mix applies: random ashlar).
+   */
+  layings?: { id: string; name: string; mix?: [number, number, number][] }[];
+  /**
+   * The share of the area each piece size covers when the paver is laid one way only (no `layings`): a one-size paver is
+   * all of its size; a plain multi-size line is left out (laid as the pallet comes).
+   */
+  mix?: [number, number, number][];
+  /** How the maker palletizes it (siteplan/pallets.ts), when its cut sheet gives it: for ordering. */
+  pallets?: Pallet[];
   /** Four colors, light to dark, averaged from the maker's swatch. */
   palette: string[];
   /** Bed fills: 'bark', 'humus' (humus, compost, dirt), 'rock' (rock, gravel, pebble) or 'dg'. */
@@ -93,7 +105,8 @@ export function lookOf(m: MaterialSpec): Look {
   // A line made from part of a Belgard line (the 24 x 24 slab of Dimensions Slabs) shares that line's page and photos.
   const mediaLine = MEDIA_LINE[line] ?? line;
   const media = maker === 'Belgard' ? BELGARD_MEDIA[mediaLine] : maker === 'Basalite' ? BASALITE_MEDIA[mediaLine] : undefined;
-  const sizes = m.pattern?.sizes;
+  // The sizes as sold (Premier Slab 24 x 24), not the module it is laid on (23.54 in).
+  const sizes = m.pattern?.sold ?? m.pattern?.sizes;
   const border = m.use === 'border';
   // Belgard lists every set of a line together (the main set, a small set, the border stone); keep the listing whose
   // pieces are exactly this material's pieces, compared without order.
@@ -125,7 +138,14 @@ export function lookOf(m: MaterialSpec): Look {
   const lays = layingsFor(m);
   if (lays.length) {
     look.laying = true;
-    look.layings = lays.map((k) => ({ id: k, name: layingName(m, k) }));
+    look.layings = lays.map((k) => { const mix = layingMix(m, k); return mix ? { id: k, name: layingName(m, k), mix } : { id: k, name: layingName(m, k) }; });
+  } else if (m.recipe === 'paver' && m.pattern && !m.padSlab) {
+    const mix = layingMix(m);
+    if (mix) look.mix = mix;
+  }
+  if (m.recipe === 'paver' && !m.padSlab) {
+    const pal = palletsFor(m, maker, line);
+    if (pal.length) look.pallets = pal;
   }
   if (m.padSlab) look.padSlab = true;
   if (sizes?.length && !m.padSlab) look.sizes = sizes.map(([a, b]) => [a, b]);

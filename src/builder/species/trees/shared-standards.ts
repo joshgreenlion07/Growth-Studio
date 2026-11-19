@@ -7,7 +7,7 @@ import { ball, speckle, tubeVar } from './shared-trees-b';
 import { WOOD_BEND, emitWood, fitBuilders, growTree, limbAt, type LevelDef, type Limb } from './shared-trees-a';
 
 /**
- * Helpers for the trees sold trained as standards in the Lambert legend
+ * Helpers for the trees sold trained as standards in a client planting legend
  * (Meyer lemon, Mexican lime, photinia): one clean trunk and a head of
  * scaffold limbs grown inside a rounded envelope. The head is built at its
  * mature size; the trunk stays clean below it at install, and as the tree
