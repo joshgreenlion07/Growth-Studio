@@ -387,6 +387,23 @@ Messages use `window.postMessage`:
   `materialId` is `flagstone-cold-water-canyon`, `flagstone-az-classic-oak` (the default) or `flagstone-sui-black-slate`, drawn with
   the same cleft face and broken edges as the flagstone steppers; a piece is as thick as its stone (2 in, or 1 in for the slate), so
   a lip stone's or edge piece's `size` height is ignored, and a ledge's height is its stack of slabs.
+- Side-yard pieces (`siteplan/yard.ts`, built by `builder/yard/`; the sample **Side yard with shed, raised bed and urn
+  fountain** shows them all). Each stands on the top of paving it is set on, like decor:
+  - `suncast-bms7481-brown`: Suncast Modern 7 x 4 ft resin shed BMS7481, Brown option (85.5 x 49.25 x 78.5 in; doors
+    on its +y side before `rotationDeg`). Option `doorsOpen` (default off); the doors swing by hand (action `doors`).
+  - `garden-bench-wood-5ft`: a 5 ft hardwood bench with back and arms, seat 18 in; sizes 5 ft and 4 ft (24 in deep).
+  - `raised-bed-cedar`: a custom cedar raised bed, sizes 6 x 3 ft and 8 x 4 ft, 18 in tall; no planting of its own:
+    plants placed inside it stand on its soil.
+  - `pot-trellis-star-jasmine`: a 24 in tall brown tapered pot with a star jasmine on its 48 in metal trellis
+    (`plantable`; `planted: false` leaves the pot empty). The vine faces the placement's front. The same vine in the
+    ground is the plant `star-jasmine-metal-trellis`: it stands with its back to the nearest fence or wall.
+  - `ac-screen-cedar-slat`: a cedar slat screen, 4 ft tall, sizes 4, 5 1/2 and 6 ft long.
+  - `urn-fountain-bubbler-24-<glaze>` (`rust`, `charcoal`, `cobalt`, `celadon`): a 24 in glazed urn bubbling over
+    into a 7 ft circle of black Mexican beach pebble over a hidden 4 ft vault (footprint 8 1/2 ft). Options `ring`
+    (default off: a soldier ring of Catalina Grana Scandina Gray 6 x 9 pavers round the pebbles, for when no paving
+    borders it), `boulders` and `uplight` (default on). Water and its sound switch by hand like the other fountains.
+  - Ground: MSI Caldera Blanca porcelain, `msi-caldera-blanca-plank-8x47` (3/8 in plank) and
+    `msi-caldera-blanca-paver-16x47` (2 cm outdoor paver), both laid staggered by a third.
 - The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`

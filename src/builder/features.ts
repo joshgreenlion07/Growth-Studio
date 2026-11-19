@@ -13,6 +13,7 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { buildYard } from './yard';
 import { veneerColumn } from './veneercolumn';
 import { buildWaterRock } from './waterrock';
 import { buildFlagstone, flagLookOf } from './flagstone';
@@ -650,6 +651,31 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
+      case 'shedResin':
+      case 'gardenBench':
+      case 'raisedBedCedar':
+      case 'potTrellis':
+      case 'slatScreen': {
+        // Side-yard pieces (siteplan/yard.ts, builder/yard/): on paving they stand on its top.
+        const turn = (-f.rotationDeg * Math.PI) / 180;
+        buildYard(kind, {
+          f, spec, add,
+          light: (x, y, z, color, intensity, distance) => light(x, y, z, color, intensity, distance),
+          glow: (m) => { owned.push(m); decorGlow.push(m); },
+          hinge: (px, py, pz) => {
+            const h = hinge(px, py, pz);
+            return { group: h.group, add: h.add, anchor: (x, y, z) => anchorAt(h.group, x - px, y - py, z - pz) };
+          },
+          act,
+          anchor: (x, y, z) => anchorAt(o, x, y, z),
+          plant(catalogId, x, y, z, heading = 0) {
+            const w = local(x, y, z);
+            raised.push({ id: `${f.id}-plant-${raised.length}`, source: f.source, catalogId, position: [w.x, w.z], baseY: w.y, heading: turn + heading });
+          },
+          option: (key) => featureOption(spec, f.options, key),
+        }, lift?.(f.position) ?? 0);
+        break;
+      }
       case 'mossRock':
       case 'canyonBoulder': {
         // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
@@ -715,7 +741,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'urnFountain': {
-        urnFountain(sink, spec.urn ?? 'glazed', f.id);
+        urnFountain(sink, spec.urn ?? 'glazed', f.id, { glaze: spec.glaze, ring: featureOption(spec, f.options, 'ring'), boulders: featureOption(spec, f.options, 'boulders'), uplight: featureOption(spec, f.options, 'uplight') });
         break;
       }
       case 'fireWaterBowl': {

@@ -300,7 +300,7 @@ const UV4 = (i: number): UV => {
  * A rectangular board from `a` to `b` (its center line), `w` wide and `t` thick, its broad face toward `front`. Its
  * vertices anchor to themselves, so it is there at every growth stage and never moves.
  */
-function board(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, w: number, t: number, front: THREE.Vector3, c: THREE.Color, uvScale = 1) {
+export function board(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, w: number, t: number, front: THREE.Vector3, c: THREE.Color, uvScale = 1) {
   const d = b.clone().sub(a);
   const len = d.length();
   d.normalize();
@@ -342,26 +342,63 @@ interface Node {
   free: boolean;
 }
 
-export const build: SpeciesBuilder = (spec) => {
+/**
+ * What the vine is trained on, in its local frame (x along it, y up from the soil, +z the front, away from the fence):
+ * the plane it stands in just behind the crown (ZT), an upright's width and thickness (LW, LT: the canes twine round
+ * it), the uprights the canes climb, the heights the laterals are trained along, its top and half width, and how it is
+ * drawn (into the wood, anchored, so it is there at every growth stage). `k` scales the vine's own reach (where the
+ * canes meet the uprights, the heights of the arms, the dome of the mature screen) to its catalog height: 1 for the
+ * 7 ft screen on the nursery lath panel.
+ */
+export interface JasmineSupport {
+  ZT: number;
+  LW: number;
+  LT: number;
+  ups: number[];
+  rails: number[];
+  TOP: number;
+  HALF: number;
+  k: number;
+  /** Share of the screen's shoots grown (left out, all: a full screen) and the number of loose shoots past its edge (46). */
+  fill?: number;
+  loose?: number;
+  /** Share of the cane nodes with a flat spray of shoots against the support (0.7). */
+  spray?: number;
+  draw(wood: GeoBuilder, r: () => number): void;
+}
+
+/** The nursery's cedar lath panel (see the notes at the top). */
+const LATH: JasmineSupport = {
+  ZT: -0.06, LW: 0.038, LT: 0.0095,
+  ups: [-0.315, -0.105, 0.105, 0.315],
+  rails: [0.16, 0.37, 0.58, 0.79, 1.0, 1.21],
+  TOP: 1.235, HALF: 0.355, k: 1,
+  draw(wood, r) {
+    const { ZT, LW, LT, ups, rails, TOP, HALF } = LATH;
+    const FRONT = V(0, 0, 1);
+    const cedar = col('#c79466');
+    ups.forEach((x) => board(wood, V(x, -0.12, ZT), V(x + (r() - 0.5) * 0.004, TOP, ZT), LW, LT, FRONT, jitter(cedar, r, 0.01, 0.04, 0.05), 1));
+    // Cross pieces nailed over the uprights' front faces.
+    for (const y of rails) board(wood, V(-HALF, y, ZT + LT), V(HALF, y + (r() - 0.5) * 0.006, ZT + LT), LW, LT, FRONT, jitter(cedar, r, 0.01, 0.04, 0.05), 1);
+  },
+};
+
+export const build: SpeciesBuilder = (spec) => buildStarJasmine(spec, LATH);
+
+/** Star jasmine trained on a support: the canes, laterals, leaves and flower clusters grown over and past it. */
+export function buildStarJasmine(spec: Parameters<SpeciesBuilder>[0], S: JasmineSupport): ReturnType<SpeciesBuilder> {
   const H = spec.matureHeight, Sp = spec.matureSpread;
   const r = rng(spec.id);
   const wood = new GeoBuilder(), leaves = new GeoBuilder(), flowers = new GeoBuilder();
   const at = leafAtlas();
 
   /* ---------------------------------------------------------------- */
-  /* The nursery trellis                                                */
+  /* The support                                                        */
   /* ---------------------------------------------------------------- */
 
-  // Local frame: x along the trellis, y up, +z the front (away from the fence). The trellis stands just behind the crown.
-  const ZT = -0.06, LW = 0.038, LT = 0.0095;
-  const ups = [-0.315, -0.105, 0.105, 0.315];
-  const rails = [0.16, 0.37, 0.58, 0.79, 1.0, 1.21];
-  const TOP = 1.235, HALF = 0.355;
+  const { ZT, LW, LT, ups, rails, TOP, k: K } = S;
   const FRONT = V(0, 0, 1);
-  const cedar = col('#c79466');
-  ups.forEach((x) => board(wood, V(x, -0.12, ZT), V(x + (r() - 0.5) * 0.004, TOP, ZT), LW, LT, FRONT, jitter(cedar, r, 0.01, 0.04, 0.05), 1));
-  // Cross pieces nailed over the uprights' front faces.
-  for (const y of rails) board(wood, V(-HALF, y, ZT + LT), V(HALF, y + (r() - 0.5) * 0.006, ZT + LT), LW, LT, FRONT, jitter(cedar, r, 0.01, 0.04, 0.05), 1);
+  S.draw(wood, r);
   const tieC = col('#4f8f3a');
 
   /* ---------------------------------------------------------------- */
@@ -373,7 +410,7 @@ export const build: SpeciesBuilder = (spec) => {
   /** Half width of the mature screen at height y: a little narrower at the ground, a flattened dome on top. */
   const halfW = (y: number) => {
     const foot = lerp(0.8, 1, smoothstep(0, 0.4, y));
-    const top = y > 1.5 ? Math.cbrt(Math.max(0, 1 - Math.pow(clamp((y - 1.5) / (H - 1.5)), 3))) : 1;
+    const top = y > 1.5 * K ? Math.cbrt(Math.max(0, 1 - Math.pow(clamp((y - 1.5 * K) / (H - 1.5 * K)), 3))) : 1;
     // Its sides bulge and dip where canes ran out farther or shorter.
     return WM * foot * top * (0.95 + 0.04 * Math.sin(y * 4.3 + bulge[0]) + 0.025 * Math.sin(y * 9.1 + bulge[1]));
   };
@@ -431,7 +468,7 @@ export const build: SpeciesBuilder = (spec) => {
   canes.forEach((u, k) => {
     const x = ups[u];
     const base = crown.clone().add(V((r() - 0.5) * 0.05, 0, (r() - 0.5) * 0.03));
-    const meet = 0.16 + r() * 0.12;
+    const meet = (0.16 + r() * 0.12) * K;
     const pts: THREE.Vector3[] = [base];
     // From the crown out to the upright, rising.
     for (let i = 1; i <= 5; i++) {
@@ -451,7 +488,7 @@ export const build: SpeciesBuilder = (spec) => {
     for (let i = 1; i <= 4; i++) pts.push(last.clone().addScaledVector(lean, i * 0.025).add(V(0, 0, -0.003 * i * i)));
     cane(pts, 0.0052, 0.0016, false);
     // Green tie tape where the cane is tied to the upright.
-    for (const y of [0.3, 0.62, 0.95]) {
+    for (const y of [0.3 * K, 0.62 * K, 0.95 * K]) {
       const yy = y + (r() - 0.5) * 0.06;
       if (yy < meet + 0.03) continue;
       board(wood, V(x, yy - 0.007, ZT + 0.003), V(x, yy + 0.007, ZT + 0.003), LW + 0.008, LT + 0.022, FRONT, tieC);
@@ -494,7 +531,7 @@ export const build: SpeciesBuilder = (spec) => {
   };
   for (const sd of [-1, 1]) {
     // Arms along the fence from the outer uprights, at several heights, some rising as they go.
-    for (const y of [0.22, 0.5, 0.82, 1.12]) {
+    for (const y of [0.22 * K, 0.5 * K, 0.82 * K, 1.12 * K]) {
       const a = V(sd * ups[3], y + (r() - 0.5) * 0.05, ZT + 0.012);
       const reach = halfW(y) * (0.84 + r() * 0.1);
       const b = V(sd * reach, y + (r() - 0.2) * 0.25, ZT + 0.02);
@@ -503,8 +540,8 @@ export const build: SpeciesBuilder = (spec) => {
       for (let k = 0; k < 2; k++) {
         const t = 0.3 + k * 0.35 + r() * 0.1;
         const s0 = a.clone().lerp(b, t);
-        const yb = Math.min(H - 0.15, s0.y + 0.35 + r() * 0.45);
-        const s1 = V(s0.x + sd * (0.1 + r() * 0.25), yb, ZT + 0.03);
+        const yb = Math.min(H - 0.15 * K, s0.y + (0.35 + r() * 0.45) * K);
+        const s1 = V(s0.x + sd * (0.1 + r() * 0.25) * K, yb, ZT + 0.03);
         s1.x = sd * Math.min(Math.abs(s1.x), halfW(yb) * 0.9);
         runner(s0, s1, 0.0026, 1);
       }
@@ -515,7 +552,7 @@ export const build: SpeciesBuilder = (spec) => {
     const x0 = ups[k % 4] + (r() - 0.5) * 0.05;
     const a = V(x0, TOP - 0.04, ZT + 0.01);
     const ang = lerp(-1.05, 1.05, (k + r() * 0.6) / 9);
-    const len = 0.55 + r() * 0.35;
+    const len = (0.55 + r() * 0.35) * K;
     const b = V(x0 + Math.sin(ang) * len, TOP + Math.cos(ang) * len * 0.95, ZT + 0.035);
     b.y = Math.min(b.y, H - 0.08);
     b.x = Math.sign(b.x) * Math.min(Math.abs(b.x), halfW(b.y) * 0.92);
@@ -578,7 +615,7 @@ export const build: SpeciesBuilder = (spec) => {
     pairAt(nd.p, nd.dir, 0.05 + r() * 0.012, nd.g, nd.free, nd.rad < 0.0019);
     if (nd.rad < 0.0024 && r() < 0.22) cymeAt(nd.p, nd.g, 0.9);
     // Along the canes out on the fence, short shoots lie flat against it: the dark inner layer of the screen.
-    if (nd.g > 0 && r() < 0.7) {
+    if (nd.g > 0 && r() < (S.spray ?? 0.7)) {
       const d = nd.dir.clone().add(V((r() - 0.5) * 1.2, 0.5 + r() * 0.5, 0.1)).normalize();
       sprayAt(nd.p, d, 0.17 + r() * 0.05, 6 + Math.floor(r() * 2), shadeAt(nd.p, 0.85), nd.g, false);
     }
@@ -625,13 +662,14 @@ export const build: SpeciesBuilder = (spec) => {
     for (let x = -WM; x <= WM; x += step) {
       const px = x + (r() - 0.5) * step * 0.9, py = y + (r() - 0.5) * step * 0.8;
       if (Math.abs(px) > halfW(py) * (0.94 + r() * 0.08) || py < 0.04) continue;
+      if (S.fill !== undefined && r() > S.fill) continue;
       // Front shoots stand out to the light; a sparser back layer hides the fence behind.
       lateral(V(px, py, ZT + 0.07 + Math.sqrt(r()) * 0.2), false);
       if (r() < 0.8) lateral(V(px + (r() - 0.5) * step, py + (r() - 0.5) * step, ZT + 0.015 + r() * 0.06), true);
     }
   }
   // Loose shoots waving out past the edge of the screen and over the top, ending in young leaves.
-  for (let k = 0; k < 46; k++) {
+  for (let k = 0; k < (S.loose ?? 46); k++) {
     const y = 0.2 + r() * (H - 0.3);
     const sd = r() < 0.5 ? -1 : 1;
     const edgeTop = r() < 0.35;
@@ -664,4 +702,4 @@ export const build: SpeciesBuilder = (spec) => {
     bark: { map: stemBark('star-jasmine', 0.22) },
     look: { trained: true, leafRoughness: 0.5, translucency: 0.22, bend: 0.045, flutter: 0.006, woodShadows: true },
   };
-};
+}
