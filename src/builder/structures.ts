@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { centroid, distToEdge, pointInPolygon } from '../siteplan/geometry';
 import type { ExistingStructure, Vec2 } from '../siteplan/types';
-import { roofTile, stucco } from '../engine/textures';
-import { boxUV, catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
+import { resolveLook } from '../siteplan/houselooks';
+import { houseRoof, houseStucco } from '../engine/house-surfaces';
+import { boxUV, catalogMaterial, pbrMaterial, segmentBox } from './materials';
 import { insetPolygon, slab } from './hardscape';
-import { openingBoxes, planOpenings } from './openingplan';
+import { buildHouse, houseGlass, type HouseGround, type HouseOut } from './house';
 import { COVER_FLOOR_ID, COVER_FLOOR_TOP, floorCuts, floorGeometry, floorPieces, type FloorGround } from './coverfloor';
 
-/** Houses, garages and sheds: stucco walls, windows, doors and a tile roof. Covers: a patio roof on posts, on a concrete floor. */
+/** Houses, garages and sheds (house.ts): stucco walls, windows, doors and a roof in their look. Covers: a patio roof on posts, on a concrete floor. */
 
 export interface StructureBuild {
   object: THREE.Group;
@@ -24,67 +25,8 @@ export interface StructureBuild {
   dispose(): void;
 }
 
-/** Oriented rectangle if the polygon is (close to) one. */
-function asRect(poly: Vec2[]): { c: Vec2; ax: Vec2; w: number; d: number } | null {
-  if (poly.length !== 4) return null;
-  const e = (i: number): Vec2 => [poly[(i + 1) % 4][0] - poly[i][0], poly[(i + 1) % 4][1] - poly[i][1]];
-  for (let i = 0; i < 4; i++) {
-    const a = e(i), b = e((i + 1) % 4);
-    const cos = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(...a) * Math.hypot(...b));
-    if (Math.abs(cos) > 0.05) return null;
-  }
-  const a = e(0), b = e(1);
-  const la = Math.hypot(...a), lb = Math.hypot(...b);
-  const c = centroid(poly);
-  return la >= lb ? { c, ax: [a[0] / la, a[1] / la], w: la, d: lb } : { c, ax: [b[0] / lb, b[1] / lb], w: lb, d: la };
-}
-
-/** Hip roof over an oriented rectangle, UVs in meters along the slope. */
-function hipRoof(r: { c: Vec2; ax: Vec2; w: number; d: number }, y: number, overhang: number, pitch: number): THREE.BufferGeometry {
-  const W = r.w / 2 + overhang, D = r.d / 2 + overhang;
-  const rise = D * pitch;
-  const ridge = Math.max(0, W - D);
-  const P = (u: number, v: number, h: number) => new THREE.Vector3(r.c[0] + r.ax[0] * u - r.ax[1] * v, y + h, r.c[1] + r.ax[1] * u + r.ax[0] * v);
-  const e = [P(-W, -D, 0), P(W, -D, 0), P(W, D, 0), P(-W, D, 0)];
-  const k = [P(-ridge, 0, rise), P(ridge, 0, rise)];
-  const pos: number[] = [], uv: number[] = [];
-  const slope = Math.hypot(D, rise);
-  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, ua: [number, number], ub: [number, number], uc: [number, number]) => {
-    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-    uv.push(...ua, ...ub, ...uc);
-  };
-  // Long faces (two triangles each), short faces (one triangle each).
-  tri(e[0], k[0], e[1], [0, 0], [W - ridge, slope], [2 * W, 0]);
-  tri(e[1], k[0], k[1], [2 * W, 0], [W - ridge, slope], [W + ridge, slope]);
-  tri(e[2], k[1], e[3], [0, 0], [W - ridge, slope], [2 * W, 0]);
-  tri(e[3], k[1], k[0], [2 * W, 0], [W - ridge, slope], [W + ridge, slope]);
-  const sl2 = Math.hypot(W - ridge, rise);
-  tri(e[1], k[1], e[2], [0, 0], [D, sl2], [2 * D, 0]);
-  tri(e[3], k[0], e[0], [0, 0], [D, sl2], [2 * D, 0]);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.computeVertexNormals();
-  // Make every face point up.
-  const n = g.getAttribute('normal');
-  if (n.getY(0) < 0) {
-    const p = g.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i < p.count; i += 3) {
-      const x = p.getX(i + 1), yy = p.getY(i + 1), z = p.getZ(i + 1);
-      p.setXYZ(i + 1, p.getX(i + 2), p.getY(i + 2), p.getZ(i + 2));
-      p.setXYZ(i + 2, x, yy, z);
-      const uvA = g.getAttribute('uv') as THREE.BufferAttribute;
-      const u1 = uvA.getX(i + 1), v1 = uvA.getY(i + 1);
-      uvA.setXY(i + 1, uvA.getX(i + 2), uvA.getY(i + 2));
-      uvA.setXY(i + 2, u1, v1);
-    }
-    g.computeVertexNormals();
-  }
-  return g;
-}
-
 /** `ground`: the plan's zones and water, which replace a cover's concrete floor where drawn over it (coverfloor.ts). */
-export function buildStructures(structures: ExistingStructure[], siteCenter: Vec2, ground: FloorGround = { zones: [], water: [] }): StructureBuild {
+export function buildStructures(structures: ExistingStructure[], siteCenter: Vec2, ground: FloorGround & Partial<HouseGround> = { zones: [], water: [] }): StructureBuild {
   const group = new THREE.Group();
   group.name = 'structures';
   const surfaces: THREE.Mesh[] = [];
@@ -93,15 +35,13 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
   const floors: THREE.Mesh[] = [];
   const solids: Vec2[][] = [];
   const geos: THREE.BufferGeometry[] = [];
-  const wallMat = pbrMaterial('stucco', stucco());
-  const roofMat = pbrMaterial('roof', roofTile());
-  // Painted fascia and soffit: flat paint, no whiter than the stucco. A near-white satin trim went past the bloom
-  // threshold in full sun and read as a glowing bar along the eaves.
-  const trimMat = plainMaterial('trim-matte', { color: '#d9d3c8', roughness: 0.92 });
-  const frameMat = plainMaterial('frame', { color: '#2d2c2a', roughness: 0.5, metalness: 0.3 });
-  const doorMat = plainMaterial('door', { color: '#4a3524', roughness: 0.55 });
-  const glass = new THREE.MeshStandardMaterial({ color: '#1b2226', roughness: 0.04, metalness: 0.0, envMapIntensity: 1.4, emissive: new THREE.Color('#ffb46a'), emissiveIntensity: 0 });
+  // A cover takes the stucco and the roof of the house it is drawn with (the first one), so the two match.
+  const host = resolveLook(structures.find((x) => x.kind === 'house')?.look);
+  const wallMat = pbrMaterial(`house-wall:${host.wall.sw}`, houseStucco(), { color: host.wall.sw });
+  const roofMat = pbrMaterial(`house-roof:${host.roof.id}:${host.roofColor.id}`, houseRoof(host.roof.id, host.roofColor.id), host.roof.id === 'metal' ? { metalness: host.roofColor.id === 'galvalume' ? 0.75 : 0.45 } : {});
+  const glass = houseGlass();
   glassMats.push(glass);
+  const houseOut: HouseOut = { group, surfaces, geos, porchLights, solids, glass };
 
   const houses = structures.filter((x) => x.kind !== 'cover');
   for (const s of structures) {
@@ -229,79 +169,7 @@ export function buildStructures(structures: ExistingStructure[], siteCenter: Vec
       }
       continue;
     }
-    const walls = slab(poly, -0.1, H, 0);
-    geos.push(walls);
-    const wm = new THREE.Mesh(walls, wallMat);
-    wm.castShadow = true;
-    wm.receiveShadow = true;
-    wm.userData.itemId = s.id;
-    group.add(wm);
-    surfaces.push(wm);
-
-    // Roof.
-    const rect = asRect(poly);
-    let roof: THREE.BufferGeometry;
-    if (rect && s.roof === 'hip') roof = hipRoof(rect, H, 0.55, s.kind === 'shed' ? 0.4 : 0.36);
-    else roof = slab(poly, H, H + 0.25, 0);
-    geos.push(roof);
-    // Every roof is tiled, flat ones too: a pale flat roof glares in full sun and washes out the view.
-    const rm = new THREE.Mesh(roof, roofMat);
-    rm.castShadow = true;
-    rm.receiveShadow = true;
-    group.add(rm);
-    if (rect && s.roof === 'hip') {
-      // Fascia and soffit.
-      const W = rect.w / 2 + 0.55, D = rect.d / 2 + 0.55;
-      const P = (u: number, v: number): Vec2 => [rect.c[0] + rect.ax[0] * u - rect.ax[1] * v, rect.c[1] + rect.ax[1] * u + rect.ax[0] * v];
-      const ring = [P(-W, -D), P(W, -D), P(W, D), P(-W, D)];
-      const fascia: THREE.BufferGeometry[] = [];
-      for (let i = 0; i < 4; i++) fascia.push(segmentBox(ring[i], ring[(i + 1) % 4], 0.05, H - 0.2, H + 0.02, 0.03));
-      const soffit = slab(ring, H - 0.2, H - 0.18, 0);
-      fascia.push(soffit.toNonIndexed());
-      const fg = mergeGeometries(fascia.map((g) => g.toNonIndexed()), false);
-      if (fg) {
-        geos.push(fg);
-        const fm = new THREE.Mesh(fg, trimMat);
-        fm.castShadow = true;
-        group.add(fm);
-      }
-    }
-
-    // Windows and a sliding door on the wall facing the yard, placed by openingplan.ts: each one flush on a wall face,
-    // inside its edge with corner clearance, and never where a cover or another building stands against the wall.
-    const plan = planOpenings(s, structures, siteCenter);
-    const frames: THREE.BufferGeometry[] = [];
-    const panes: THREE.BufferGeometry[] = [];
-    const doors: THREE.BufferGeometry[] = [];
-    const sideOf = new Map(plan.sides.map((sd) => [sd.edge, sd]));
-    for (const l of plan.lights) {
-      const sd = sideOf.get(l.edge)!;
-      porchLights.push(new THREE.Vector3(sd.a[0] + sd.dir[0] * l.t + sd.out[0] * 0.08, 2.0, sd.a[1] + sd.dir[1] * l.t + sd.out[1] * 0.08));
-    }
-    for (const op of plan.placed) {
-      for (const b of openingBoxes(sideOf.get(op.edge)!, op)) {
-        const g = segmentBox(b.a, b.b, b.thick, b.y0, b.y1, b.extend);
-        (b.kind === 'frame' ? frames : b.kind === 'door' ? doors : panes).push(g);
-      }
-    }
-    // A house can have only doors, only windows, or no openings at all: merge only what exists.
-    const fg = frames.length ? mergeGeometries(frames, false) : null;
-    if (fg) {
-      geos.push(fg);
-      const fm = new THREE.Mesh(fg, frameMat);
-      fm.castShadow = true;
-      group.add(fm);
-    }
-    const pg = panes.length ? mergeGeometries(panes, false) : null;
-    if (pg) {
-      geos.push(pg);
-      group.add(new THREE.Mesh(pg, glass));
-    }
-    const dg = doors.length ? mergeGeometries(doors, false) : null;
-    if (dg) {
-      geos.push(dg);
-      group.add(new THREE.Mesh(dg, doorMat));
-    }
+    buildHouse(s, structures, siteCenter, { zones: ground.zones, lines: ground.lines }, glass, houseOut);
   }
 
   return {

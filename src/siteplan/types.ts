@@ -207,6 +207,42 @@ export interface StructureOpening {
   at: Vec2;
   /** Width in meters. */
   width: number;
+  /**
+   * What it is (all optional; see siteplan/houselooks.ts). A door: `entry` (the front door: a dark door with glass
+   * inserts in a frame, tall narrow sidelights beside it and two concrete steps up to it), `slider` (a sliding glass
+   * patio door), `garage` (a garage door) or `door` (a plain solid door). Left out, a door up to 1.5 m wide is a solid
+   * door and a wider one a sliding glass door. A window: `slider` (a horizontal slider, the default) or `picture`.
+   */
+  style?: 'entry' | 'slider' | 'garage' | 'door' | 'picture';
+  /** Height in meters: a sliding door 2.03 (6 ft 8 in, the default) or 2.44 (8 ft); a garage door 2.13 (7 ft) or 2.44. */
+  height?: number;
+  /** A sliding glass door's panels: 2 (one fixed, one sliding, the default) or 3 (the middle one slides). */
+  panels?: 2 | 3;
+}
+
+/**
+ * How a house, garage or shed looks: its colors and finishes, each a preset id from siteplan/houselooks.ts. Every key
+ * is optional (left out, the preset's default) and an unknown id is dropped.
+ */
+export interface HouseLook {
+  /** Stucco color. */
+  wall?: string;
+  /** Fascia, soffit and door trim. */
+  trim?: string;
+  /** Window and sliding door frames. */
+  window?: string;
+  /** Roof covering: flat concrete tile, S-tile, architectural shingle or standing-seam metal. */
+  roof?: string;
+  /** The color blend of that roof covering. */
+  roofColor?: string;
+  /** Front (entry) door. */
+  door?: string;
+  /** Garage door color. */
+  garage?: string;
+  /** Garage door style. */
+  garageStyle?: string;
+  /** Interior blinds behind some of the windows and the sliding doors (default on). */
+  blinds?: boolean;
 }
 
 export interface ExistingStructure extends ItemBase {
@@ -215,7 +251,27 @@ export interface ExistingStructure extends ItemBase {
   polygon: Vec2[];
   /** Wall height in meters. For a cover, the height of the underside of the roof. */
   height: number;
-  roof: 'hip' | 'flat';
+  /**
+   * The roof over the footprint: `hip` is a straight-skeleton hip roof over any footprint (L, T, U and many wings, bays
+   * with faceted hips, hips and valleys where wings meet), `gable` the same with gable ends on the wings' end walls,
+   * `flat` a flat tiled roof. Covers are always flat.
+   */
+  roof: 'hip' | 'flat' | 'gable';
+  /** Roof pitch, rise in 12 (4, 5, 6 or 8; others are rounded to the nearest). Left out, 5. */
+  pitch?: number;
+  /** Eave overhang past the walls in meters (0.15 to 0.9). Left out, 0.5 (about 20 in). */
+  eave?: number;
+  /** A raised entry crown: a taller hip over the front entry door (a marked `entry` door, else the automatic one). */
+  crown?: boolean;
+  /** A stucco chimney chase with a cap, on a side wall. */
+  chimney?: boolean;
+  /** Colors and finishes (siteplan/houselooks.ts). Left out, the defaults. */
+  look?: HouseLook;
+  /**
+   * Houses: where a step or a small raised landing meets this house's wall, a sliding glass door is put there at the
+   * step's top (centered on it, sized to its width). false turns that off. A marked door there takes its place.
+   */
+  stepDoors?: boolean;
   /** Marked doors and windows. When present, no automatic ones are added. */
   openings?: StructureOpening[];
   /**

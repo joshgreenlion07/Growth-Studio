@@ -7,7 +7,8 @@ import { BELGARD_MEDIA, makerImage } from '../siteplan/belgard-media';
 import { BASALITE_MEDIA, basaliteImage } from '../siteplan/basalite-media';
 import { deckMedia } from '../siteplan/decking';
 import { STRUCTURE_NAMES, WATER_NAMES, materialInfo, pointKind } from '../siteplan/material-info';
-import type { SitePlan, WaterKind } from '../siteplan/types';
+import type { HouseLook, SitePlan, WaterKind } from '../siteplan/types';
+import { resolveLook, roofText } from '../siteplan/houselooks';
 import { palletsFor, type Pallet } from '../siteplan/pallets';
 import { layingMix } from '../engine/surfaces';
 
@@ -36,6 +37,8 @@ export interface Look {
   spec: string[];
   /** Botanical name, for a plant. */
   botanical?: string;
+  /** A house, garage or shed: the part pointed at and its whole look, every key filled in (siteplan/houselooks.ts). */
+  house?: { sub: string; look: Required<HouseLook> };
   maker: string;
   line: string;
   shelf: string;
@@ -190,7 +193,7 @@ const ft = (m: number) => {
  * structure, feature or uploaded model), or null when it is not known. `itemId` finds the item in the plan for
  * details such as a pool's depth.
  */
-export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: string): Look | null {
+export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: string, sub?: string): Look | null {
   const [kind, id] = pointKind(catalogId);
   if (kind === 'material') {
     const m = materialById.get(id);
@@ -233,6 +236,22 @@ export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: st
     const name = STRUCTURE_NAMES[id as keyof typeof STRUCTURE_NAMES] ?? 'Structure';
     const spec = s ? [`About ${ft(s.height)} to the ${id === 'cover' ? 'underside of the roof' : 'eaves'}`] : [];
     const about = id === 'cover' ? (s?.room === true || s?.walls?.some(Boolean) ? 'A California room: a roofed room with solid walls on its closed sides.' : 'A roofed patio cover on posts.') : `The ${name.toLowerCase()}, shown for context so the yard reads at its real size.`;
+    if (s && id !== 'cover') {
+      // A house's look: its colors and roof, with the part pointed at first (sub).
+      const r = resolveLook(s.look);
+      spec.unshift(roofText(s));
+      spec.push(`Walls: ${r.wall.name} stucco`, `Trim: ${r.trim.name}`, `Window frames: ${r.window.name}`, `Front door: ${r.door.name}`, `Garage door: ${r.garage.name}, ${r.garageStyle.name.toLowerCase()}`);
+      if (s.crown) spec.push('Raised crown over the entry');
+      if (s.chimney) spec.push('Stucco chimney with a cap');
+      const palette = [r.wall.sw, r.roofColor.sw, r.trimSw, r.window.sw];
+      const look = base(name, 'structure', 'Structures', palette, about, spec);
+      const part = sub === 'roof' ? `${r.roof.short}, ${r.roofColor.name}` : sub === 'trim' ? `${r.trim.name} trim` : sub === 'windows' ? `${r.window.name} window frames`
+        : sub === 'door' ? `${r.door.name} front door` : sub === 'garage' ? `${r.garage.name} garage door` : `${r.wall.name} stucco`;
+      look.color = part;
+      look.sw = sub === 'roof' ? r.roofColor.sw : sub === 'trim' ? r.trimSw : sub === 'windows' ? r.window.sw : sub === 'door' ? r.door.sw : sub === 'garage' ? r.garageSw : r.wall.sw;
+      look.house = { sub: sub ?? 'walls', look: { wall: r.wall.id, trim: r.trim.id, window: r.window.id, roof: r.roof.id, roofColor: r.roofColor.id, door: r.door.id, garage: r.garage.id, garageStyle: r.garageStyle.id, blinds: r.blinds } };
+      return look;
+    }
     return base(name, 'structure', 'Structures', ['#d8cfbf', '#bfb3a0', '#5c5650', '#3f3a36'], about, spec);
   }
   if (kind === 'feature') {

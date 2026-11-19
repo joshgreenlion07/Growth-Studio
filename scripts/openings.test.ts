@@ -1,5 +1,5 @@
 // Run: node node_modules/esbuild/bin/esbuild scripts/openings.test.ts --bundle --platform=node --format=esm --external:three --outfile=/tmp/openings.test.mjs && node /tmp/openings.test.mjs
-import { coverSolids, openingBoxes, planOpenings, wallSides, type OpeningBox } from '../src/builder/openingplan';
+import { coverSolids, openingBoxes, planOpenings, recessOf, wallSides, type OpeningBox } from '../src/builder/openingplan';
 import { distToEdge, pointInPolygon } from '../src/siteplan/geometry';
 import type { ExistingStructure, Vec2 } from '../src/siteplan/types';
 
@@ -125,8 +125,43 @@ for (const [name, base] of Object.entries(shapes)) {
 // Sanity: an unobstructed generous house still gets its door and windows (the fix must not strip everything).
 const big = mk('h', 'house', shapes.rect);
 const bp = planOpenings(big, [big], [6, 4]);
-const doorsCount = bp.placed.filter((o) => o.h0 < 0.1).length, windows = bp.placed.length - doorsCount;
+const doorsCount = bp.placed.filter((o) => o.type === 'slider' || o.type === 'door').length, windows = bp.placed.filter((o) => o.type === 'window' || o.type === 'picture').length;
 if (doorsCount !== 1 || windows < 6) fail(`rect house lost its openings: ${doorsCount} doors, ${windows} windows`);
+// The front entry faces away from the yard, with a sidelight each side and two steps' rise.
+const yard = planOpenings(big, [big], [6, 20]);
+const ent = yard.placed.filter((o) => o.type === 'entry'), sides2 = yard.placed.filter((o) => o.type === 'sidelight');
+if (ent.length !== 1 || sides2.length !== 2 || Math.abs(ent[0].h0 - 0.3) > 1e-6 || !yard.entry) fail(`rect house entry: ${ent.length} doors, ${sides2.length} sidelights`);
+if (yard.entry && yard.sides.find((s) => s.edge === yard.entry!.edge)!.out[1] > -0.5) fail('entry not on the wall facing away from the yard');
+if (yard.sides.find((s) => s.edge === yard.doorEdge)!.out[1] < 0.5) fail('patio door not on the yard side');
+// A step against the back wall: a sliding door centered on it, sized to it, on its top.
+const stepped = planOpenings(big, [big], [6, 4], [{ a: [4.6, 8.05], b: [7.34, 8.05], top: 0.3 }]);
+const sl = stepped.placed.filter((o) => o.type === 'slider');
+if (sl.length !== 1 || Math.abs(sl[0].t - 5.97) > 0.05 && Math.abs(sl[0].t - (12 - 5.97)) > 0.05 || Math.abs(sl[0].w - 2.74) > 1e-6 || Math.abs(sl[0].h0 - 0.3) > 1e-6) fail(`step slider: ${JSON.stringify(sl)}`);
+// A marked door on that step takes it, standing on the step.
+const markedStep = mk('h', 'house', shapes.rect, 3, { openings: [{ kind: 'door', at: [6, 8], width: 2.44, style: 'slider', panels: 2 }] });
+const ms = planOpenings(markedStep, [markedStep], [6, 4], [{ a: [4.6, 8.05], b: [7.34, 8.05], top: 0.3 }]);
+const msl = ms.placed.filter((o) => o.type === 'slider' || o.type === 'door' || o.type === 'entry');
+if (msl.length !== 1 || Math.abs(msl[0].h0 - 0.3) > 1e-6 || Math.abs(msl[0].w - 2.44) > 1e-6) fail(`marked step door: ${JSON.stringify(msl)}`);
+// A recess is found whichever way the outline runs; the entry goes in it.
+for (const rev of [false, true]) {
+  const p = rev ? [...shapes.notched].reverse() : shapes.notched;
+  const sds = wallSides(p);
+  const back = sds.find((x) => Math.abs(x.a[1] - 1.2) < 1e-9 && Math.abs(x.dir[1]) < 1e-9)!;
+  if (Math.abs(recessOf(back, sds) - 1.2) > 1e-9) fail(`recess not found (${rev ? 'reversed' : 'forward'})`);
+  if (sds.filter((x) => recessOf(x, sds) > 0).length !== 1) fail('more than one recess');
+  const hn = mk('h', 'house', p);
+  const en = planOpenings(hn, [hn], [6, 30]).entry;
+  if (!en || en.edge !== back.edge) fail(`entry not in the recess (${rev ? 'reversed' : 'forward'}): ${JSON.stringify(en)}`);
+}
+// A marked garage door alone keeps the automatic windows and doors.
+const gm = mk('h', 'house', shapes.rect, 3, { openings: [{ kind: 'door', at: [6, 0], width: 4.88, style: 'garage' }] });
+const gp = planOpenings(gm, [gm], [6, 20]);
+if (!gp.placed.some((o) => o.type === 'garage') || !gp.placed.some((o) => o.type === 'window') || !gp.placed.some((o) => o.type === 'slider')) fail(`garage door only: ${gp.placed.map((o) => o.type).join(',')}`);
+// A chimney keeps its wall clear.
+const ch = mk('h', 'house', shapes.rect, 3, { chimney: true });
+const cp = planOpenings(ch, [ch], [6, 4]);
+if (!cp.chimney) fail('no chimney spot');
+else for (const o of cp.placed) if (o.edge === cp.chimney.edge && Math.abs(o.t - cp.chimney.t) < o.w / 2 + 0.75) fail('opening in the chimney');
 // Sheds and garages with short walls still get a (narrow) door; low covers lower the windows.
 const shed = mk('s', 'shed', rect(0, 0, 2.2, 2), 2.4);
 const sp = planOpenings(shed, [shed], [5, 5]);
@@ -146,6 +181,6 @@ const rp = planOpenings(big, [big, room], [6, 4]);
 for (const o of rp.placed) { const sd = rp.sides.find((s) => s.edge === o.edge)!; if (sd.out[1] > 0.5 && (o.t - o.w / 2 < 0.8 || o.t + o.w / 2 > 11.2 + 0)) fail('opening near a room side wall'); }
 
 console.log(`footprint cases checked: ${checked}, openings verified: ${openings}, cases where a cover removed openings: ${skippedByCover}`);
-console.log(`unobstructed 12x8 house: ${doorsCount} door, ${windows} windows`);
+console.log(`unobstructed 12x8 house: ${doorsCount} door, ${windows} windows, entry ${JSON.stringify(bp.entry)}, step slider ${JSON.stringify(sl[0])}`);
 if (failures.length) { console.log('FAILURES:\n' + failures.join('\n')); process.exit(1); }
 console.log('PASS');

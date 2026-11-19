@@ -14,7 +14,7 @@ import { fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls } fro
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
-import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
+import { buildHardscape, housePolys, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
 import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
@@ -369,7 +369,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // A cover blocks them only where its posts and walls stand and where its concrete floor shows: turf drawn for
   // the cover (which replaces the floor) grows under the roof.
   const structIdx = [...plan.structures.filter((s) => s.kind !== 'cover' && s.polygon.length >= 3).map((s) => s.polygon), ...structs.solids].map((poly) => new PolygonIndex(poly));
-  const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones)));
+  const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones, housePolys(plan))));
   const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;

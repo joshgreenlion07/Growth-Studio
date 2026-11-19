@@ -26,10 +26,15 @@ import { pointName } from '../siteplan/material-info';
  * border, edge, wall, cap, curb, fence, steps, stone (catalog materials), turf and bed (a lawn or bed zone on the
  * ground, its material), plant, water, structure, feature and model (catalogId `<kind>:<id>`, see pointKind).
  */
+/** How the reticle names a part of a house. */
+const SUB_NAMES: Record<string, string> = { walls: 'walls', roof: 'roof', trim: 'trim', windows: 'windows', door: 'front door', garage: 'garage door', chimney: 'chimney', steps: 'entry steps' };
+
 export interface PointHit {
   id: string;
   part: string;
   catalogId: string;
+  /** For a house: which part of it (walls, roof, trim, windows, door, garage, chimney, steps). */
+  sub?: string;
 }
 import { GpuFrameTimer, LONG_GPU_MS } from './gputimer';
 import { LandLightPool, initLandLights } from './landlights';
@@ -1688,12 +1693,12 @@ export class Studio {
     this.pointDue = this.camMoved;
     this.pointT = now;
     const hit = this.pointAtCenter();
-    const key = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '';
+    const key = hit ? `${hit.id}|${hit.part}|${hit.catalogId}|${hit.sub ?? ''}` : '';
     if (key === this.pointKey) return;
     this.pointKey = key;
     const label = this.reticle?.querySelector('span');
     if (label) {
-      label.textContent = hit ? pointName(hit.catalogId) : '';
+      label.textContent = hit ? pointName(hit.catalogId) + (hit.sub ? `: ${SUB_NAMES[hit.sub] ?? hit.sub}` : '') : '';
     }
     this.reticle?.classList.toggle('on', !!hit);
     this.onPoint(hit);
@@ -1720,14 +1725,15 @@ export class Studio {
       return null;
     }
     if (!hit) return null;
-    let part = '', catalogId = '';
+    let part = '', catalogId = '', sub = '';
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
       if (!part && typeof o.userData?.part === 'string') { part = o.userData.part; catalogId = String(o.userData.catalogId ?? ''); }
+      if (!sub && typeof o.userData?.sub === 'string') sub = o.userData.sub;
       // A plant's proxy names its placement; a mass-planted bed's plants (<bed id>-fill-<n>) report the bed.
       const plant = o.userData?.plantId;
       if (typeof plant === 'string') return part && catalogId ? { id: plant.replace(/-fill-\d+$/, ''), part, catalogId } : null;
       const id = o.userData?.itemId;
-      if (typeof id === 'string') return part && catalogId ? { id, part, catalogId } : null;
+      if (typeof id === 'string') return part && catalogId ? { id, part, catalogId, ...(sub ? { sub } : {}) } : null;
     }
     return null;
   }
