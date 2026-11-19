@@ -319,6 +319,9 @@ Messages use `window.postMessage`:
   bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
   The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
   `options: { bowls: false }` and `planted: false`.
+- The cedar slat water wall (`cedar-slat-travertine-water-wall`, 12 x 2 1/2 ft footprint, its back on the footprint's
+  back edge) offers the option `pots` (default on: a potted Gardenia 'Veitchii' in front of each cedar wing). Its stone
+  panel is MSI Silver Travertine ledger (`ww-ledger-silver` texture), its sconces Tru-Scapes Traditional Up/Down.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
@@ -424,6 +427,12 @@ Messages use `window.postMessage`:
     `structure:cover`, `structure:calroom`. Without an override a maker paver or wall line is approved when
     it is in `OFFERED_LINES`; everything else is approved. The toggle waits for the parent's `approvals` echo
     and goes back if none comes. On the studio's own site the Library is view-only.
+  - Out of area: a Belgard color not sold in Northern California (Belgard's Pacific Stockton region, listed per line
+    in `src/siteplan/belgard-regions.ts`, read from belgard.com and checked against Green Lion's supplier bills) is
+    approved apart from its line, under `line:Belgard|<line>|out-of-area`, which is off unless turned on. The Library
+    lists those colors as their own row, "<line> (out of area)", and every look of one carries `notice`, a bold
+    "Out of area product: ..." line shown above its description in the Library, the second screen and Area Planner's
+    material panel.
 - `name` is used for the saved image's file name.
 - `refit: true` re-frames the camera on the new plan. `refit: false` keeps the
   camera where it is as long as `site.boundary` is unchanged. If the boundary

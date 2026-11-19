@@ -1,9 +1,9 @@
 import { materialById, type LayingPattern } from '../siteplan/catalog';
 import { rockSet } from '../builder/materials';
-import { cortenSet, flagFaceSet, materialTextures, padSet, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
+import { cortenSet, flagFaceSet, materialTextures, padSet, paverEdgePixels, porcelainPanelSet, slabSet, soilTextures, wallCapTextures } from './surfaces';
 import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textures';
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
-import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from './fountain-surfaces';
+import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet, silverTravertineLedgerSet } from './fountain-surfaces';
 import { rockGrainSet } from './rock-surfaces';
 
 /**
@@ -52,8 +52,19 @@ export function runRecipe(key: string): PBRSet | null {
     poolTile,
     'pf-stucco': pillarStuccoSet,
     'pf-ledger': ledgerStoneSet,
+    'ww-ledger-silver': silverTravertineLedgerSet,
     'pf-bowl': patinaBowlSet,
     'rk-grain': rockGrainSet,
   };
   return named[key]?.() ?? null;
+}
+
+/**
+ * The worker's side of a detailed paver's edge map (engine/paver-detail.ts): `src` is PaverEdges.src, the look's
+ * catalog id and laying pattern ("id|laying"). Null when the look has no edge map.
+ */
+export function runEdgeRecipe(src: string): Uint8Array | null {
+  const [id, laying] = src.split('|');
+  const spec = materialById.get(id);
+  return spec ? paverEdgePixels(spec, (laying || undefined) as LayingPattern | undefined) : null;
 }

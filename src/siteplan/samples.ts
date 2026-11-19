@@ -1,6 +1,7 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
+import { sampleCedarWaterWall } from './sample-cedar-water-wall';
 import { sampleFourFall } from './sample-four-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
@@ -493,6 +494,7 @@ export const SAMPLES = [
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
+  { id: 'cedar-water-wall', name: 'Cedar slat water wall, Silver Travertine', make: sampleCedarWaterWall },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },

@@ -78,21 +78,56 @@ export function pillarStuccoSet(): PBRSet {
  * lines and tight joints in shadow. Beige, tan, honey and taupe gray, a few cream and brown pieces. One 24 in repeat.
  */
 export function ledgerStoneSet(): PBRSet {
-  return textureSet('pf-ledger', () => {
+  return ledgerSet('pf-ledger', LEDGER_TONES, LEDGER_MEAN);
+}
+
+/** The golden travertine's tones (the three-pillar feature's panels): beige, tan, honey, taupe gray, a few cream and brown. */
+type LedgerLook = { tones: string[]; weights: number[]; rowIn: [number, number]; tallRow?: number; pieceIn: [number, number]; rust?: number };
+const LEDGER_TONES: LedgerLook = {
+  tones: ['#c9b8a2', '#c0a88c', '#b39a7e', '#aaa092', '#d3cbbf', '#a39282', '#94806c', '#bcab98'],
+  weights: [0.2, 0.18, 0.13, 0.13, 0.08, 0.1, 0.06, 0.12],
+  rowIn: [1.3, 2.5],
+  pieceIn: [2.5, 7.5],
+};
+
+/**
+ * MSI Silver Travertine ledger panels (Silver Travertine Panel 6x24, LPNLTSIL624, split face, 1/2 to 3/4 in), as Green
+ * Lion buys them from California Landscape Supply: about four 1 1/2 in courses to a 6 in panel with now and then a 3 in
+ * one, strips 4 to 12 in long, soft warm gray with beige and tan areas and a few rust-brown spots (MSI's panel photo).
+ * Its average is set lighter and cooler than the golden stone.
+ */
+export function silverTravertineLedgerSet(): PBRSet {
+  return ledgerSet('ww-ledger-silver', SILVER_TONES, SILVER_MEAN);
+}
+const SILVER_TONES: LedgerLook = {
+  tones: ['#c4c1ba', '#b6b2aa', '#d2cec6', '#a9a59e', '#c8bfb0', '#bdb3a2', '#9d9890', '#dcd8d0'],
+  weights: [0.2, 0.17, 0.13, 0.13, 0.11, 0.1, 0.08, 0.08],
+  rowIn: [1.45, 1.6],
+  tallRow: 0.14,
+  pieceIn: [4, 12],
+  rust: 0.5,
+};
+const SILVER_MEAN: RGB = [0.232, 0.212, 0.182];
+const RUST_STAIN = hexRGB('#b08a68'), RUST_SPOT = hexRGB('#7c5236');
+
+function ledgerSet(key: string, look: LedgerLook, mean: RGB): PBRSet {
+  return textureSet(key, () => {
     const T = 24 * IN, N = 1024;
-    const r = rng('pf-ledger');
+    const r = rng(key);
     // Courses: heights in inches summing to the 24 in repeat.
     const rows: { y0: number; y1: number; off: number; pieces: { x0: number; len: number; id: number }[] }[] = [];
     let y = 0;
     while (y < 24 - 0.5) {
-      let h = 1.3 + r() * 1.2;
-      if (24 - (y + h) < 1.3) h = 24 - y;
+      const [h0, h1] = look.rowIn;
+      let h = look.tallRow && r() < look.tallRow ? h0 * 2 : h0 + r() * (h1 - h0);
+      if (24 - (y + h) < h0) h = 24 - y;
       // Pieces around the 24 in repeat from a random start, the last one cut to close the loop.
       const pieces: { x0: number; len: number; id: number }[] = [];
       let x = 0;
       while (x < 24) {
-        let len = 2.5 + r() * 5;
-        if (24 - (x + len) < 2) len = 24 - x;
+        const [l0, l1] = look.pieceIn;
+        let len = l0 + r() * (l1 - l0);
+        if (24 - (x + len) < l0 * 0.8) len = 24 - x;
         pieces.push({ x0: x, len, id: r() });
         x += len;
       }
@@ -100,8 +135,8 @@ export function ledgerStoneSet(): PBRSet {
       y += h;
     }
     // Tones only (the average is LEDGER_MEAN): beige, tan, honey, taupe gray, a few cream and a few brown pieces.
-    const tones = ['#c9b8a2', '#c0a88c', '#b39a7e', '#aaa092', '#d3cbbf', '#a39282', '#94806c', '#bcab98'].map(hexRGB);
-    const weights = [0.2, 0.18, 0.13, 0.13, 0.08, 0.1, 0.06, 0.12];
+    const tones = look.tones.map(hexRGB);
+    const weights = look.weights;
     const pick = (q: number) => {
       let s = 0;
       for (let i = 0; i < weights.length; i++) if ((s += weights[i]) >= q) return tones[i];
@@ -134,13 +169,20 @@ export function ledgerStoneSet(): PBRSet {
       // Travertine shades within a piece as much as between pieces: honey and gray clouds, bedding streaks, pits.
       const swirl = fbm(u + piece.id, v, 8, 3, 66);
       c = mixRGB(c, pick(hashQ(piece.id * 7.3)), 0.5 * smooth(0.3, 0.75, swirl));
+      if (look.rust) {
+        // Iron in the stone: a soft tan-rust stain across some strips and a few small rust-brown spots.
+        const stained = hashQ(piece.id * 3.1) < 0.16 * look.rust;
+        if (stained) c = mixRGB(c, RUST_STAIN, 0.32 * smooth(0.35, 0.8, fbm(u + piece.id * 2, v, 6, 3, 72)));
+        const spot = vnoise(u * 110 + piece.id * 9, v * 110, 110, 73);
+        c = mixRGB(c, RUST_SPOT, smooth(1 - 0.05 * look.rust, 1 - 0.02 * look.rust, spot) * 0.8);
+      }
       c = mulRGB(c, 0.88 + (cl - 0.5) * 0.24 + (bed - 0.5) * 0.12 + Math.max(-0.14, Math.min(0.14, slope)) - (pit > 0.88 ? 0.25 * smooth(0.88, 0.94, pit) : 0));
       // Each strip's top edge catches the sky, its underside is in shade; joints are dark.
       c = mulRGB(c, 0.96 + smooth(0.6, 0.95, ly) * 0.07 - smooth(0.2, 0, ly) * 0.14);
       c = mixRGB(c, mulRGB([0.36, 0.32, 0.29], c[1] / 0.6), gap * 0.6);
       const h = (piece.id * 0.75 + cl * 0.6) * (1 - gap) + 0.02 - (pit > 0.88 ? 0.12 : 0);
       return { h, c, r: 0.88 - cl * 0.08 };
-    }, LEDGER_MEAN);
+    }, mean);
   });
 }
 

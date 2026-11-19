@@ -6,7 +6,7 @@
  * Also the names of things the material pointer can land on that are not catalog materials: plants, water features,
  * structures, features and uploaded models. The pointer reports those as `<kind>:<id>` (see `pointKind`).
  */
-import { featureById, materialById, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
+import { featureById, materialById, outOfAreaNote, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
 import type { ExistingStructure, WaterKind } from './types';
 
 export interface MaterialInfo {
@@ -16,6 +16,8 @@ export interface MaterialInfo {
   about: string;
   /** Typical install, one line each. */
   spec: string[];
+  /** A warning shown in bold above the description: a Belgard color not sold in Northern California. */
+  notice?: string;
 }
 
 const STAMP: Record<string, string> = {
@@ -97,7 +99,14 @@ const BED: Record<string, Omit<MaterialInfo, 'group'>> = {
 const IN = 0.0254;
 
 /** Notes for a catalog material: the bed and rock notes above by id, the rest by what it is. */
+/** What the panel says about a material, with the out-of-area warning when Belgard does not sell it here. */
 export function materialInfo(m: MaterialSpec): MaterialInfo {
+  const info = baseInfo(m);
+  const notice = outOfAreaNote(m);
+  return notice ? { ...info, notice } : info;
+}
+
+function baseInfo(m: MaterialSpec): MaterialInfo {
   const bed = BED[m.id];
   if (bed) return { group: m.group, ...bed };
   if (m.use === 'bed') return { group: m.group, about: `${m.name}: a bed cover.`, spec: ['3 in deep over weed fabric'] };

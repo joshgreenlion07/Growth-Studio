@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PendingTexture, setTexturePainter, type PBRSet } from './textures';
+import { setEdgePainter } from './paver-detail';
 
 /**
  * Page side of the texture worker (textures.worker.ts). Importing this module
@@ -152,6 +153,8 @@ const stats = {
   previews: 0,
   fromCache: 0,
   fallback: 0,
+  /** Edge maps painted by a worker. */
+  edges: 0,
   applied: 0,
   /** Sets fully painted and on screen. */
   finals: 0,
@@ -231,10 +234,21 @@ function cmp(a: Job, b: Job): number {
   return a.id - b.id;
 }
 
-function onMessage(slot: Slot, d: { type: string; id?: number; frames?: Frame[]; fromCache?: boolean; message?: string; full?: number }) {
+function onMessage(slot: Slot, d: { type: string; id?: number; frames?: Frame[]; fromCache?: boolean; message?: string; full?: number; data?: ArrayBuffer | null }) {
   if (d.type === 'ready') {
     slot.ready = true;
     pump();
+    pumpEdges();
+    return;
+  }
+  if (d.type === 'edges') {
+    const k = edgeReqs.findIndex((r) => r.id === d.id);
+    if (k < 0) return;
+    const r = edgeReqs.splice(k, 1)[0];
+    stats.edges++;
+    r.done(d.data ? new Uint8Array(d.data) : null);
+    // The view draws on demand: the overlay turns on with the next frame.
+    for (const fn of listeners) fn();
     return;
   }
   const job = slot.job;
@@ -267,6 +281,7 @@ function workerDied(slot: Slot) {
   slot.w.terminate();
   if (slot.job && slot.job.state === 'running') slot.job.state = 'waiting';
   slot.job = null;
+  requeueEdges(slot);
   // The quick-copy worker takes any set once it is the only one left.
   if (!slots.some((s) => !s.dead && !s.quick)) for (const s of slots) s.quick = false;
   if (slots.every((s) => s.dead)) {
@@ -279,7 +294,12 @@ function workerDied(slot: Slot) {
       job.state = 'done';
       queueApply(job, null, true, 'full');
     }
-  } else pump();
+    // Edge maps still waiting are painted here.
+    for (const r of edgeReqs.splice(0)) r.done(null);
+  } else {
+    pump();
+    pumpEdges();
+  }
 }
 
 /** Stop a worker painting a set nobody wants any more, so a wanted one can start now. */
@@ -293,7 +313,51 @@ function replace(slot: Slot) {
   slot.job = null;
   slots[i] = fresh;
   stats.stopped++;
+  requeueEdges(slot);
+  pumpEdges();
 }
+
+/* ------------------------------------------------------------------ */
+/* Edge maps of detailed pavers (engine/paver-detail.ts)                */
+
+interface EdgeReq {
+  id: number;
+  src: string;
+  done: (data: Uint8Array | null) => void;
+  /** The worker painting it (null: waiting for one). */
+  slot: Slot | null;
+}
+const edgeReqs: EdgeReq[] = [];
+
+/**
+ * Hand waiting edge maps to workers: an idle full-size worker first, then the one with the least queued; the worker
+ * kept for quick copies only when it is the only one, so a color just picked still shows in well under a second.
+ */
+function pumpEdges() {
+  for (const r of edgeReqs) {
+    if (r.slot) continue;
+    const live = slots.filter((s) => s.ready && !s.dead);
+    const pool = live.some((s) => !s.quick) ? live.filter((s) => !s.quick) : live;
+    if (!pool.length) return;
+    const load = (s: Slot) => edgeReqs.filter((q) => q.slot === s).length + (s.job ? 2 : 0);
+    const s = pool.reduce((a, b) => (load(b) < load(a) ? b : a));
+    r.slot = s;
+    s.w.postMessage({ type: 'edges', id: r.id, src: r.src });
+  }
+}
+
+/** A worker went away: its edge maps go to another one. */
+function requeueEdges(slot: Slot) {
+  for (const r of edgeReqs) if (r.slot === slot) r.slot = null;
+}
+
+setEdgePainter((src, done) => {
+  if (state === 'unknown') state = start() ? 'on' : 'off';
+  if (state !== 'on') return false;
+  edgeReqs.push({ id: nextId++, src, done, slot: null });
+  pumpEdges();
+  return true;
+});
 
 function pump() {
   const waiting = jobs.filter((j) => j.state === 'waiting').sort(cmp);

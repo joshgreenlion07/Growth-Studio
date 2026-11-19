@@ -54,7 +54,11 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Tan Brown Charcoal", ['#836c59', '#77665a', '#6f6158', '#665c56']],
     ["Tan Red Charcoal", ['#906d59', '#86614e', '#7c5a47', '#6d4f3e']],
   ] },
-  { slug: 'dimensions-6', name: "Dimensions 6", shelf: 'Pavers', sizes: [[3, 6], [6, 6], [6, 9]], colors: [
+  // The Dimensions lines (6, 12 60mm, 12 80mm, 18, Single Units, Slabs): Belgard lists a smooth finish with clean lines
+  // (Single Units: a 3 mm micro-chamfer), and the swatch photos show smooth faces with the tones clouded through each
+  // piece. Dimensions Antiqued instead has a weathered, gently distressed surface with antiqued (worn, rounded) edges,
+  // drawn with the Antiqued Flat Top face. (belgard.com product pages, read 2026-11-18.)
+  { slug: 'dimensions-6', name: "Dimensions 6", shelf: 'Pavers', sizes: [[3, 6], [6, 6], [6, 9]], face: 'smooth', colors: [
     ["Anthracite", ['#5d5957', '#565250', '#524e4c', '#4d4947']],
     ["Aspen", ['#e2d3be', '#d9c9b3', '#d0c0a9', '#b9a992']],
     ["Avondale", ['#c8b5a2', '#b6a492', '#a08f80', '#85766b']],
@@ -80,7 +84,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Sonoran Gray", ['#a9a2a0', '#9b9291', '#8f8786', '#7b7574']],
     ["Victorian", ['#847a6d', '#7f7467', '#786d60', '#6c6256']],
   ] },
-  { slug: 'dimensions-12-60mm', name: "Dimensions 12 60mm", shelf: 'Pavers', sizes: [[6, 12], [12, 12], [12, 18]], colors: [
+  { slug: 'dimensions-12-60mm', name: "Dimensions 12 60mm", shelf: 'Pavers', sizes: [[6, 12], [12, 12], [12, 18]], face: 'smooth', colors: [
     ["Amber Beige", ['#cbb18f', '#c7ad8b', '#c4a987', '#bca27f']],
     ["Anthracite", ['#5a5655', '#534f4e', '#504c4b', '#4c4847']],
     ["Ashwood", ['#797067', '#70675e', '#6b625a', '#655c54']],
@@ -114,7 +118,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#88725d', '#816c58', '#7d6955', '#786450']],
     ["Victorian", ['#c1b49f', '#b8aa96', '#ada18d', '#a09481']],
   ] },
-  { slug: 'dimensions-12-80mm', name: "Dimensions 12 80mm", shelf: 'Pavers', sizes: [[6, 12], [12, 12], [12, 18]], colors: [
+  { slug: 'dimensions-12-80mm', name: "Dimensions 12 80mm", shelf: 'Pavers', sizes: [[6, 12], [12, 12], [12, 18]], face: 'smooth', colors: [
     ["Anthracite", ['#61625f', '#585956', '#555654', '#515250']],
     ["Aspen", ['#b3a288', '#a7967c', '#a09075', '#97876d']],
     ["Cheswick", ['#9f9b91', '#969288', '#908c82', '#878379']],
@@ -126,7 +130,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Shaded Gray", ['#a1a5a2', '#949794', '#8a8d89', '#7d7f7b']],
     ["Victorian", ['#867968', '#827665', '#7f7363', '#796e5e']],
   ] },
-  { slug: 'dimensions-18', name: "Dimensions 18", shelf: 'Pavers', sizes: [[9, 18], [18, 18], [18, 27]], colors: [
+  { slug: 'dimensions-18', name: "Dimensions 18", shelf: 'Pavers', sizes: [[9, 18], [18, 18], [18, 27]], face: 'smooth', colors: [
     ["Amber Beige", ['#cbb18e', '#c8ad8a', '#c4a987', '#bba07e']],
     ["Anthracite", ['#7a7b78', '#747572', '#6e6f6c', '#676865']],
     ["Aspen", ['#b09f85', '#a09076', '#998a70', '#918369']],
@@ -154,7 +158,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#b29778', '#a1886d', '#937d66', '#86705c']],
     ["Victorian", ['#c1b49f', '#b8aa96', '#ada18d', '#a09481']],
   ] },
-  { slug: 'dimensions-antiqued', name: "Dimensions Antiqued", shelf: 'Pavers', sizes: [[3, 6], [6, 6], [6, 9]], colors: [
+  { slug: 'dimensions-antiqued', name: "Dimensions Antiqued", shelf: 'Pavers', sizes: [[3, 6], [6, 6], [6, 9]], face: 'antiqued', colors: [
     ["Anthracite", ['#635f5d', '#5b5755', '#565250', '#4f4b4a']],
     ["Ashwood", ['#857d74', '#776f67', '#706860', '#686058']],
     ["Avondale", ['#b8a792', '#a89783', '#988977', '#857769']],
@@ -175,7 +179,9 @@ export const BELGARD_LINES: MakerLine[] = [
   ] },
   // Dimensions Single Units: the colors Belgard lists for the Pacific Stockton region (the 6 x 9 x 2 3/8 in unit is sold
   // there) were re-read from each swatch photo as four clustered tones; the rest are still thumbnail averages.
-  { slug: 'dimensions-single-units', name: "Dimensions Single Units", shelf: 'Pavers', sizes: [[6, 9]], colors: [
+  // Scandina Gray (here and in Dimensions Slabs) and Slabs Hickory: the darkest cluster was the photo's joint lines (2 to
+  // 4% of the photo) drawn as a quarter of the pieces; re-clustered without them (2026-11-18).
+  { slug: 'dimensions-single-units', name: "Dimensions Single Units", shelf: 'Pavers', sizes: [[6, 9]], face: 'smooth', colors: [
     ["Anthracite", ['#5e5c58', '#575451', '#514f4c', '#4c4a48']],
     ["Aspen", ['#d2cbc7', '#bbb5b2', '#a09c98', '#686563']],
     ["Autumn", ['#b39a87', '#9f8675', '#8e7667', '#786155']],
@@ -202,7 +208,7 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Rio", ['#756f69', '#706a64', '#6d6761', '#69645e']],
     ["Riviera", ['#9f9990', '#928b84', '#847e78', '#746e68']],
     ["Rosewood", ['#5f4e47', '#5a4942', '#594841', '#54453e']],
-    ["Scandina Gray", ['#bdbfc3', '#b8b7ba', '#b1afaf', '#757474']],
+    ["Scandina Gray", ['#bec0c4', '#bababd', '#b5b4b6', '#aeacac']],
     ["Sepia", ['#ad9c83', '#a49279', '#9b8970', '#917f68']],
     ["Shaded Gray", ['#807e77', '#76746e', '#6f6d67', '#686560']],
     ["Shaded Grey", ['#62615f', '#5d5c5a', '#5a5957', '#565553']],
@@ -214,20 +220,20 @@ export const BELGARD_LINES: MakerLine[] = [
     ["Toscana", ['#8e7660', '#846f5d', '#7c695a', '#706257']],
     ["Victorian", ['#a49177', '#948c7e', '#837a6d', '#68625a']],
   ] },
-  { slug: 'dimensions-slabs', name: "Dimensions Slabs", shelf: 'Pavers', sizes: [[12, 24], [24, 24], [24, 36]], colors: [
+  { slug: 'dimensions-slabs', name: "Dimensions Slabs", shelf: 'Pavers', sizes: [[12, 24], [24, 24], [24, 36]], face: 'smooth', colors: [
     ["Anthracite", ['#5f5c58', '#575451', '#504e4c', '#4b4847']],
     ["Aspen", ['#e2d2bd', '#d6c5ae', '#c5b39c', '#a89782']],
     ["Bella", ['#ac846b', '#967362', '#816458', '#675149']],
     ["Cheswick", ['#a39e92', '#99948a', '#8f8a81', '#817d76']],
     ["Fog", ['#7b7871', '#78756d', '#757169', '#716d64']],
-    ["Hickory", ['#ada595', '#a69d8d', '#9d9483', '#50483e']],
+    ["Hickory", ['#aea696', '#a89f8f', '#a19787', '#938a7b']],
     ["Iron Bay", ['#746e66', '#6e685f', '#68625a', '#5e5952']],
     ["Linen", ['#9f8e7c', '#998977', '#938473', '#796e60']],
     ["Midnight", ['#4a4a48', '#474644', '#444341', '#42413f']],
     ["Pearl", ['#b5afa3', '#b1ac9f', '#ada79a', '#a6a194']],
     ["Rio", ['#979491', '#858482', '#706f6f', '#59595a']],
     ["Riviera", ['#9b9588', '#928b80', '#868077', '#79726b']],
-    ["Scandina Gray", ['#cdccce', '#bebec1', '#afafb2', '#7c7c7e']],
+    ["Scandina Gray", ['#d1d0d2', '#c6c5c7', '#b9b9bc', '#acacaf']],
     ["Sepia", ['#cbced0', '#c6c6c6', '#c1bebc', '#aaa8a6']],
     ["Shaded Gray", ['#8c8781', '#847f78', '#7f7a73', '#77726c']],
     ["Sonoran Gray", ['#aea7a4', '#9c9392', '#898181', '#696262']],

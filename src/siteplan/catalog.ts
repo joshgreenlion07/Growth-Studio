@@ -13,6 +13,7 @@
  * the app draws its own look-alike textures, not manufacturer images.
  */
 import { BELGARD_LINES } from './belgard';
+import { NORCAL_REGION, PACIFIC_STOCKTON } from './belgard-regions';
 import { BASALITE_LINES } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
@@ -322,6 +323,7 @@ export type FeatureKind =
   | 'waterWallStucco'
   | 'copperBowl'
   | 'pillarFountain'
+  | 'cedarWaterWall'
   | 'patinaBowl'
   | 'fireWaterBowl'
   | 'fourFall'
@@ -938,6 +940,14 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water feature: three smooth-troweled stucco pillars with golden split-face ledger stone panels between them, a 12 in copper sheer spillway in each panel, copper scuppers pouring from the outer pillars, and a black Mexican beach pebble basin edged with a charcoal curb. A patina bowl planter with a blue agave sits on each pillar (an option).',
     facts: ['Basin 14 ft x 4 ft 2 in, Belgard Melville Curb, Anthracite, showing 5 1/2 in, black Mexican beach pebble 1-2 in, no open water', 'Pillars 2 ft 8 in wide x 2 ft deep x 5 ft 6 in tall, Santa Barbara smooth trowel stucco, warm gray', 'Panels 2 ft wide x 5 ft tall, set back 1 ft 8 in, split-face travertine ledger stone', 'Two 12 in copper sheer spillways (lip 31 in up, LED lit) and two 1 in copper scuppers', 'Option: three 23 in patina bowl planters with blue agave (Agave tequilana)'],
   }),
+  // Cedar slat water wall with a Silver Travertine stone panel, from the owner's design for a customer job, at the sizes
+  // the owner gave (builder/cedarwaterwall.ts). The potted gardenias at its sides are an option.
+  F({
+    id: 'cedar-slat-travertine-water-wall', name: 'Cedar slat water wall, Silver Travertine', group: 'Water', kind: 'cedarWaterWall', footprint: [144 * 0.0254, 30 * 0.0254],
+    options: [{ key: 'pots', label: 'Potted gardenias at the sides', default: true }],
+    about: 'A pondless water wall: a 6 x 6 ft panel of MSI Silver Travertine ledger stone framed by horizontal cedar slats that run 3 ft out on each side under a cedar cap beam. A copper box scupper pours a lit sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble. A Tru-Scapes up and down sconce lights each cedar wing, and a gardenia in a PMD cement egg pot stands in front of each (an option).',
+    facts: ['12 ft long x 6 ft 8 in tall, 2 ft 6 in from the back of the wall to the front of the pebbles (a 6 in wall and a 24 in pebble strip)', 'Stone panel 6 x 6 ft: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), split face', 'Clear cedar 1x4 slats, 5/8 in gaps, dark backer, cedar returns and a 4 in cedar cap beam', '12 in copper box scupper, lip 49 in up, LED lit; two 1 in copper spouts 36 in up, 24 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 60 in up: 10 W, 802 lm', 'Black Mexican beach pebble 1-2 in, no open water; LED pucks where the water lands', 'PMD 24 x 22 in Cement Egg Pot, White, with a Gardenia \'Veitchii\', one each side (option)'],
+  }),
   F({
     id: 'patina-bowl-planter', name: 'Patina bowl planter, 23 in', group: 'Accents', kind: 'patinaBowl', plantable: true, footprint: [23 * 0.0254, 23 * 0.0254],
     about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, gray gravel top dressing, planted with a blue agave (or left empty).',
@@ -1012,7 +1022,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
@@ -1092,12 +1102,59 @@ export function isTester(m: MaterialSpec): boolean {
   return !m.maker && !m.auto && !m.id.startsWith('border-of-') && TESTER_GROUPS.has(m.group);
 }
 
-/** The approval key of a look: its maker's line, or the look itself. A `border-of-<paver>` follows its paver. */
+/* ------------------------------------------------------------------ */
+/* Out of area (Belgard colors not sold in Northern California)          */
+/* ------------------------------------------------------------------ */
+
+const colorKey = (c: string) => c.toLowerCase().replace(/grey/g, 'gray').replace(/[^a-z0-9]/g, '');
+const stocktonSets = new Map(Object.entries(PACIFIC_STOCKTON).map(([line, cs]) => [line, new Set(cs.map(colorKey))]));
+
+/**
+ * True when Belgard does not sell this look's color in Northern California, where Green Lion works (its Pacific
+ * Stockton region; see belgard-regions.ts). A `border-of-<paver>` follows its paver. Looks of other makers, and of
+ * Belgard lines not in that list, are never out of area.
+ */
+export function isOutOfArea(m: MaterialSpec): boolean {
+  if (m.id.startsWith('border-of-')) {
+    const base = materialById.get(m.id.slice('border-of-'.length));
+    if (base) return isOutOfArea(base);
+  }
+  if (m.maker !== 'Belgard' || !m.line) return false;
+  const set = stocktonSets.get(m.line);
+  return !!set && !set.has(colorKey(m.color ?? ''));
+}
+
+/** True when Belgard sells none of this line in Northern California. */
+export function lineOutOfArea(line: string): boolean {
+  return stocktonSets.get(line)?.size === 0;
+}
+
+/** The bold note an out-of-area look carries on its description, or undefined when it is sold here. */
+export function outOfAreaNote(m: MaterialSpec): string | undefined {
+  if (m.id.startsWith('border-of-')) {
+    const base = materialById.get(m.id.slice('border-of-'.length));
+    if (base) return outOfAreaNote(base);
+  }
+  if (!isOutOfArea(m)) return undefined;
+  const line = m.line ?? '';
+  return lineOutOfArea(line)
+    ? `Out of area product: Belgard does not sell ${line} in Northern California (its ${NORCAL_REGION} region).`
+    : `Out of area product: Belgard does not sell ${line} in ${m.color} in Northern California (its ${NORCAL_REGION} region).`;
+}
+
+/** The suffix of the approval key that holds a line's out-of-area colors (off unless the Library turns it on). */
+export const OUT_OF_AREA_KEY = '|out-of-area';
+
+/**
+ * The approval key of a look: its maker's line, or the look itself. A `border-of-<paver>` follows its paver. A Belgard
+ * color not sold in Northern California is approved apart from the rest of its line, under `line:<maker>|<line>|out-of-area`.
+ */
 export function approvalKeyOf(m: MaterialSpec): string {
   if (m.id.startsWith('border-of-')) {
     const base = materialById.get(m.id.slice('border-of-'.length));
     if (base) return approvalKeyOf(base);
   }
+  if (m.maker && m.line && isOutOfArea(m)) return `line:${m.maker}|${m.line}${OUT_OF_AREA_KEY}`;
   // A line's 6 x 9 paver edge is approved on its own: it is often offered where the line's pavers are not.
   if (m.maker && m.line && m.shelf === 'Paver edge') return `line:${m.maker}|${m.line} 6 x 9 edge`;
   return m.maker && m.line ? `line:${m.maker}|${m.line}` : `mat:${m.id}`;
@@ -1107,6 +1164,8 @@ let gatedLines: Set<string> | null = null;
 /** Approved when nothing overrides it. */
 function approvedByDefault(key: string): boolean {
   if (!key.startsWith('line:')) return true;
+  // A line's colors Belgard does not sell in Northern California start off.
+  if (key.endsWith(OUT_OF_AREA_KEY)) return false;
   gatedLines ??= new Set(MATERIALS.filter((m) => m.maker && m.line && GATED_SHELVES.has(m.shelf ?? '')).map((m) => approvalKeyOf(m)));
   if (!gatedLines.has(key)) return true;
   return OFFERED_LINES.has(key.slice(key.indexOf('|') + 1));

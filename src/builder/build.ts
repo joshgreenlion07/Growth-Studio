@@ -375,8 +375,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
-      // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
-      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
+      // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
+      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
         continue;
@@ -540,6 +540,9 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
+      // A restyle (a new color picked) is a build of its own for the materials' keep-the-last-few rules (stamped looks,
+      // paver edge maps): without it nothing picked in a run of restyles would ever be released.
+      beginMaterialBuild();
       newTextureGeneration();
       const old = hard;
       hard = buildHardscape(next, gm.height, pools);
