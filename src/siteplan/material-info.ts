@@ -9,10 +9,13 @@
 import { featureById, materialById, MOW_CURB_SHAPES, outOfAreaNote, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
 import type { ExistingStructure, WaterKind } from './types';
 
-/** Inches as a builder writes them, to the quarter: 4.5 → "4 1/2 in". */
+/** Inches as a builder writes them, to the sixteenth: 4.5 → "4 1/2 in", 0.1875 → "3/16 in". */
 function fmtIn(x: number): string {
-  const q = Math.round(x * 4), w = Math.floor(q / 4), f = ['', '1/4', '1/2', '3/4'][q % 4];
-  return `${w && f ? `${w} ${f}` : w ? w : f} in`;
+  const q = Math.round(x * 16), w = Math.floor(q / 16);
+  let n = q % 16, d = 16;
+  while (n && n % 2 === 0) { n /= 2; d /= 2; }
+  const f = n ? `${n}/${d}` : '';
+  return `${w && f ? `${w} ${f}` : w ? w : f || 0} in`;
 }
 
 export interface MaterialInfo {
@@ -258,6 +261,14 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       }
       return { group: 'Curb', about: m.maker ? `${m.maker} ${m.line}: a solid concrete curb unit that edges beds, lawn and paving.` : 'A concrete curb that edges beds, lawn and paving.', spec: ['Set on compacted base', 'Shows about 3 in above grade unless set otherwise'] };
     case 'steelEdging':
+      if (m.edging) {
+        const E = m.edging;
+        return {
+          group: 'Edging',
+          about: `${m.maker === 'Border Concepts' ? 'Border Concepts BORDER Line' : 'Black'} steel edging, ${fmtIn(E.thickIn)}: a thin, clean black line between lawn, beds and rock that keeps each in its place${E.thickIn > 0.15 ? '; the heavier strip, stiffer on long straight runs and against gravel' : '; it bends to tight curves by hand'}.`,
+          spec: [`${fmtIn(E.thickIn)} x ${fmtIn(E.heightIn)} steel, ${E.pieceFt} ft pieces, black powder coat`, `${E.stakes} steel stakes a piece${m.maker === 'Border Concepts' ? ' (15 in tapered, in pockets every 32 in)' : ''}`, `Set ${fmtIn(E.heightIn - E.revealIn)} deep, its top ${fmtIn(E.revealIn)} above grade`, m.maker === 'Border Concepts' ? 'Bought at SiteOne (BLBLE416)' : 'Bought at California Landscape Supply'],
+        };
+      }
       return { group: 'Edging', about: 'Steel edging: a thin, clean line between lawn, beds and rock that keeps each in its place.', spec: ['3/16 in steel strip', 'Staked about every 30 in, top flush with grade'] };
     case 'mulch': case 'dg': case 'riverRock': case 'blackPebble': case 'cobble':
       return { group: m.group, about: `${m.name}.`, spec: [] };
