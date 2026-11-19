@@ -48,7 +48,10 @@ export class SceneControls {
     document.addEventListener('pointerover', (e) => {
       if (e.pointerType !== 'touch') this.hover = e.target instanceof Element && !!e.target.closest(PARTS);
     }, { passive: true });
-    document.addEventListener('pointerleave', () => (this.hover = false));
+    // Out of the window (no element to go to): nothing is under the pointer any more.
+    document.addEventListener('pointerout', (e) => {
+      if (!e.relatedTarget) this.hover = false;
+    }, { passive: true });
     window.addEventListener('blur', () => (this.hover = false));
     this.schedule(IDLE_MS);
   }
@@ -64,11 +67,6 @@ export class SceneControls {
     this.holdUntil = performance.now() + ms;
     this.root.classList.remove('ui-idle');
     this.schedule(ms);
-  }
-
-  /** Hide them now, unless something keeps them (used after the Library's book closes for a controller user). */
-  hide() {
-    if (!this.busy()) this.root.classList.add('ui-idle');
   }
 
   private busy() {

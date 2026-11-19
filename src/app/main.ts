@@ -81,6 +81,8 @@ function setViewer(on: boolean) {
   embedViewer = EMBED && on;
   document.documentElement.classList.toggle('viewer', embedViewer);
   if (embedViewer && libraryOpen()) closeLibrary();
+  // View-only: no Library, so a held View is a plain tap (use).
+  if (studio) studio.nav.onLibrary = embedViewer ? null : libraryHold;
   quick?.setSkip(embedViewer ? ['mark'] : []);
 }
 if (embedViewer) document.documentElement.classList.add('viewer');
@@ -206,7 +208,7 @@ function bootStudio() {
   // The controller never brings the on-screen buttons back by itself: holding Menu does, and holding View opens or
   // closes the Library (engine/navigation.ts).
   studio.nav.onShowControls = () => sceneControls?.showFor();
-  studio.nav.onLibrary = () => setLibrary(!libraryOpen());
+  studio.nav.onLibrary = embedViewer ? null : libraryHold;
   studio.onNavModeChanged = (m) => {
     document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     touchUI?.setMode(m);
@@ -1030,10 +1032,11 @@ function initFullscreen() {
   const set = (v: boolean) => {
     if (v === on) return;
     on = v;
+    // The Library's book animation belongs to full screen: switching ends it at once, while fsOn still says where
+    // it was playing (a skipped close then restores the camera for that layout).
+    if (libraryBook.busy()) libraryBook.skip();
     fsOn = on;
     pane.classList.toggle('fs', on);
-    // The Library's book animation belongs to full screen: switching ends it at once.
-    if (libraryBook.busy()) libraryBook.skip();
     // Full screen opens in first person at eye height; leaving it puts the camera back where it was.
     if (studio && libraryOpen()) {
       // Left with the Library open (Esc in the browser's own full screen): the Library keeps its sample on screen,
@@ -1051,6 +1054,7 @@ function initFullscreen() {
       }
     }
     btn.querySelector('.lbl')!.textContent = on ? 'Exit full screen' : 'Full screen';
+    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Enter full screen');
     btn.setAttribute('aria-pressed', String(on));
     cancelAnimationFrame(raf);
     last = -1;
@@ -1348,8 +1352,13 @@ function postCatalog(withMaterials: boolean) {
 }
 
 /** The camera, movement mode and growth year to go back to when the Library closes. */
-let libraryReturn: { pose: ReturnType<Studio['savePose']>; years: number; mode: Studio['mode'] } | null = null;
+type LibraryReturn = { pose: ReturnType<Studio['savePose']>; years: number; mode: Studio['mode'] };
+let libraryReturn: LibraryReturn | null = null;
 let sceneControls: SceneControls | null = null;
+/** A closed Library's way back while the yard is still being rebuilt (reused if the Library opens again meanwhile). */
+let pendingReturn: LibraryReturn | null = null;
+/** Controller View held: open or close the Library. */
+const libraryHold = () => setLibrary(!libraryOpen());
 /** Full screen is on (the scene pane's `fs` layout). */
 let fsOn = false;
 const reducedMotion = () => {
@@ -1382,7 +1391,9 @@ function setLibrary(open: boolean, force = false) {
     else closeLibrary();
     return;
   }
-  libraryReturn = { pose: s.savePose(), years: s.state.years, mode: s.mode };
+  // Reopened before the yard came back from the last close: go back to that view later, not to the sample's.
+  libraryReturn = pendingReturn ?? { pose: s.savePose(), years: s.state.years, mode: s.mode };
+  pendingReturn = null;
   s.setPointer(false);
   const show = () => {
     // The Library frames its samples with the orbit camera (walking would pull the camera down to eye height).
@@ -1398,10 +1409,15 @@ function setLibrary(open: boolean, force = false) {
         if (isOpen) return;
         const back = libraryReturn;
         libraryReturn = null;
+        pendingReturn = back;
         if (back) setYears(back.years);
+        else libraryBook.skip();
         // Full screen switched meanwhile (the browser's Esc): it has put the camera back itself.
         const fsAt = fsOn;
         s.setPlan(plan, false).then(() => {
+          // Opened again while the yard was being rebuilt: the Library's sample is on screen, leave the camera.
+          if (libraryOpen()) return;
+          if (pendingReturn === back) pendingReturn = null;
           if (back && fsOn === fsAt) {
             // Back to the movement mode it was in (walk in full screen), then the camera: tilted up from the ground
             // by the book in full screen, put straight back otherwise.
@@ -1409,7 +1425,11 @@ function setLibrary(open: boolean, force = false) {
             if (!libraryBook.cameraBack(back.pose)) s.restorePose(back.pose);
           }
           showStageNote();
-        }, () => {});
+        }, () => {
+          if (pendingReturn === back) pendingReturn = null;
+          // The yard could not be rebuilt: do not leave the closed book and its scrim waiting on screen.
+          libraryBook.skip();
+        });
       },
     }, $('#library'));
   };
@@ -1420,6 +1440,10 @@ function setLibrary(open: boolean, force = false) {
 /** Esc skips the Library's animation, or closes the Library (before full screen sees it). */
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
+  // Only an Esc meant for the 3D view or the Library: never a dialog's, nor one typed elsewhere on the page.
+  if (document.querySelector('dialog[open]')) return;
+  const t = e.target;
+  if (t instanceof Element && t !== document.body && t !== document.documentElement && !t.closest('#library, #scene')) return;
   if (libraryBook.busy()) libraryBook.skip();
   else if (libraryOpen()) setLibrary(false);
   else return;
