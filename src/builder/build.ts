@@ -146,6 +146,16 @@ function lineBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
   });
 }
 
+/** The curbs' bodies (edging lines built as a solid body: Melville curb, poured mow curb), as lineBodies gives them. */
+function curbBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
+  return plan.lines.flatMap((l) => {
+    const half = l.kind === 'edging' ? lineThickness(l) / 2 : 0;
+    if (!half) return [];
+    const c = lineCenter(l, plan.zones);
+    return c.slice(1).map((b, i) => ({ a: c[i], b, half }));
+  });
+}
+
 /**
  * True when `next` differs from `prev` only in materials that change nothing outside the
  * paving and lines themselves: a paving area's material or border (same thickness), a wall,
@@ -424,7 +434,10 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
   const fallCuts = fourFallGroundCuts(plan.features, gm.fourFalls);
   const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
-  const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
+  // Bed pieces stay off the curbs: a piece whose center is within its curb's body by more than 60% of its own size.
+  const curbs = bodyGrid(curbBodies(plan));
+  const onCurb = curbs.list.length ? (x: number, z: number, r: number) => curbs.grid.someWithin(x, z, curbs.maxHalf + r, (k, d) => d < curbs.list[k].half + r * 0.4) : undefined;
+  const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds, onCurb);
   yield 'pebbles';
   const humus = buildHumus(plan, gmBeds, ground.surface, quality);
   yield 'soil fills';
