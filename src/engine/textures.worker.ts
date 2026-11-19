@@ -66,14 +66,20 @@ interface EdgeJob {
 
 /** An edge map, painted here so a line with an edge map per color (a random ashlar) never paints it on the page. */
 function runEdges(job: EdgeJob) {
-  let data: Uint8Array | null = null;
+  // Never throws: a rejected job would stall the shared queue (and this worker) for good. On any error the page gets
+  // null and paints the map itself.
   try {
-    data = runEdgeRecipe(job.src);
+    const data = runEdgeRecipe(job.src);
+    clearTextureSets();
+    port.postMessage({ type: 'edges', id: job.id, data: data ? data.buffer : null }, data ? [data.buffer as ArrayBuffer] : []);
   } catch {
-    // The page paints it itself (null).
+    try {
+      clearTextureSets();
+    } catch {
+      // Nothing held.
+    }
+    port.postMessage({ type: 'edges', id: job.id, data: null });
   }
-  clearTextureSets();
-  port.postMessage({ type: 'edges', id: job.id, data: data ? data.buffer : null }, data ? [data.buffer as ArrayBuffer] : []);
 }
 port.postMessage({ type: 'ready' });
 

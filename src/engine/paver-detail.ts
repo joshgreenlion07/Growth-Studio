@@ -187,13 +187,20 @@ const edgeMaps = new Map<string, EdgeEntry>();
 function fillEdges(entry: EdgeEntry) {
   const g = ++entry.gen;
   entry.ready = false;
+  // Still the map's latest request (not released or asked again meanwhile).
+  const current = () => edgeMaps.get(entry.E.key) === entry && entry.gen === g;
   const put = (data: Uint8Array) => {
-    if (edgeMaps.get(entry.E.key) !== entry || entry.gen !== g) return;
+    if (!current()) return;
     entry.tex.image.data = data;
     entry.tex.needsUpdate = true;
     entry.ready = true;
   };
-  if (edgePainter?.(entry.E.src, (d) => put(d && d.length === entry.E.size * entry.E.size ? d : entry.E.paint()))) return;
+  const fromWorker = (d: Uint8Array | null) => {
+    // A late answer for a map released or repainted since is dropped before anything is painted here.
+    if (!current()) return;
+    put(d && d.length === entry.E.size * entry.E.size ? d : entry.E.paint());
+  };
+  if (edgePainter?.(entry.E.src, fromWorker)) return;
   put(entry.E.paint());
 }
 

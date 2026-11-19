@@ -62,7 +62,7 @@ export const BELGARD_MEDIA: Record<string, MakerMedia> = {
   },
   "Dimensions Slabs": {
     page: "https://www.belgard.com/product/dimensions-slabs/",
-    sizes: ["12 x 24 x 2 3/8\"", "15 x 30 x 2 3/8\"", "24 x 24 x 2 3/8\"", "24 x 36 x 2 3/8\""],
+    sizes: ["12 x 24 x 2 3/8\" / 24 x 24 x 2 3/8\" / 24 x 36 x 2 3/8\"", "24 x 24 x 2 3/8\"", "15 x 30 x 2 3/8\""],
     images: { "Anthracite": "edb4d8f47225b9991e47e521f9800cb88fd7d49a.jpg", "Aspen": "fe9a1d8d754f6d4d1b85522ee947fea23e14bc39.jpg", "Bella": "3e0a80b639bbe61062750e52bc4d298ac0b5fd38.jpg", "Cheswick": "ymgcuvzdrpszlsrt6r5z-2.jpg", "Fog": "v4e0r5wl2hupxe1a6in7-2.jpg", "Hickory": "6a15ac77cbf4906730273657ecc4418f2e15d864.jpg", "Iron Bay": "uff9py925ssnw8zqk3c4-2.jpg", "Linen": "shcyjta4tnbbzre0idq4-2.jpg", "Midnight": "vhqvh57a1asf3zrmgcn8.jpg", "Pearl": "mne0pfgfjzmycyrfv9pf-2.jpg", "Rio": "1ff4ce0da9900dfad06cd9d65b9ba9f2f007785a.jpg", "Riviera": "e6kt7ugjbplt93cfbgvn-2.jpg", "Scandina Gray": "7c2c3d4a0a3a2b964dddd7fa33317bd1fb29c685.jpg", "Sepia": "9a213f49c116933a41096c148957e3aa0857504b.jpg", "Shaded Gray": "403_NC_Shaded_Gray_DF_D12x24_Half_Running_Bond_Web.jpg", "Sonoran Gray": "3619ba1092383cad18911189e297f145cbe2d1f5.jpg", "Suede": "oqtirhjiyhlpdmmkkxoq-2.jpg", "Victorian": "6f0770353d0c826c0174e6d082acef98a5027135.jpg" },
   },
   "AB Classic": {
