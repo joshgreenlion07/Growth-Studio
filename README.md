@@ -256,7 +256,18 @@ Messages use `window.postMessage`:
   parent can send `{ source: 'area-planner', type: 'point-lock', locked }`.
 - Looks (in `ready` and `point`) are `{ id, name, kind, use, group, about,
   spec, maker, line, shelf, color, sw, palette, sizes?, sizeText?,
-  thicknessIn?, face?, image?, page?, laying?, botanical?, swatch? }`:
+  thicknessIn?, face?, image?, page?, laying?, layings?, mix?, pallets?,
+  botanical?, swatch? }`. For ordering pavers: each of `layings` (`{ id, name,
+  mix? }`) and a paver laid one way only (`mix`) give the share of the area
+  each piece size covers, `[short side, long side, share]` in nominal inches,
+  read from the pattern's own drawn module (`layingMix` in
+  `src/engine/surfaces.ts`; left out for random ashlar and plain multi-size
+  lines, which are laid as the pallet comes); `pallets` (`{ label, sqft,
+  pieces: [short, long, count][], lb?, source }`) is how the maker
+  palletizes it, from its cut sheet, for the lines listed in
+  `src/siteplan/pallets.ts` (Avalon Slate, Catalina Grana and their 6 x 9
+  borders, Dimensions 12 60mm, Premier Slab, Premier Smooth). Area Planner
+  counts pieces and pallets from these. The other fields:
   `kind` is `material`, `plant`, `water`, `structure`, `feature` or `model`
   (the last five have ids `<kind>:<id>`, such as `plant:lavender` or
   `water:pool`); `group` is what the panel shows above the name (Concrete,

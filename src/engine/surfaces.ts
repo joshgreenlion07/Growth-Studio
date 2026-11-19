@@ -343,6 +343,33 @@ const BASALITE_MODULES: Record<'combo3' | 'combo4', PieceModule> = {
   },
 };
 
+/**
+ * The share of the paved area each piece size covers in a laying pattern, read from the pattern's own module (the pieces
+ * Belgard and Basalite draw), as [short side, long side, share] in nominal inches, largest share first. A one-piece
+ * pattern is all of its one size. Undefined where the mix is not set by a drawn pattern (random ashlar and the plain
+ * multi-size lines, laid as the pallet comes): the pallet's own mix applies there. Used by the parent page (Area
+ * Planner) to count the pieces of each size for an order.
+ */
+export function layingMix(spec: MaterialSpec | undefined, laying?: LayingPattern): [number, number, number][] | undefined {
+  const p = spec?.pattern;
+  if (!p || !p.sizes.length) return undefined;
+  const k = layingOf(spec, laying);
+  const norm = (a: number, b: number): [number, number] => [Math.min(a, b), Math.max(a, b)];
+  const one = (a: number, b: number): [number, number, number][] => [[...norm(a, b), 1]];
+  let m: PieceModule | undefined;
+  if (k === 'combo3' || k === 'combo4') m = BASALITE_MODULES[k];
+  else if (k === 'stack' || k === 'halfBond' || k === 'halfBond45') return one(p.sizes[0][0], p.sizes[0][1]);
+  else if (k === 'running' || k === 'herringbone') return one(6, 9);
+  else if (k === 'running3' || (k === 'a' && p.face === 'antiqued')) m = ANTIQUED[k];
+  else if ((k === 'a' || k === 'b') && p.kind === 'ashlar') m = THREE_PIECE[k];
+  else if (p.sizes.length === 1) return one(p.sizes[0][0], p.sizes[0][1]);
+  if (!m) return undefined;
+  const by = new Map<string, number>();
+  let total = 0;
+  for (const [, , w, h] of m.pieces) { const [a, b] = norm(w, h); by.set(`${a}x${b}`, (by.get(`${a}x${b}`) ?? 0) + w * h); total += w * h; }
+  return [...by.entries()].map(([key, area]): [number, number, number] => { const [a, b] = key.split('x').map(Number); return [a, b, Math.round((area / total) * 10000) / 10000]; }).sort((x, y) => y[2] - x[2] || x[0] * x[1] - y[0] * y[1]);
+}
+
 function moduleLayout(m: PieceModule): Layout {
   const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
   const P = m.P;
