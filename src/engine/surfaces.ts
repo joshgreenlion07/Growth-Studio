@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
+import { layingOf, MOW_CURB_SHAPES, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, recipeAverage, textureSet, type PBRSet, type RGB } from './textures';
@@ -915,6 +915,37 @@ function curbSet(spec: MaterialSpec): PBRSet {
     c = mulRGB(c, 0.97 + fbm(u, v, 18, 3, 5) * 0.05);
     if (joint) c = mulRGB(c, 0.42);
     return { h: joint ? 0 : 0.6 + mott * 0.04, c, r: joint ? 0.95 : 0.6 };
+  });
+}
+
+/*
+ * A poured mow curb (builder/mowcurb.ts): concrete slip-formed by the curb machine's mold, so its faces are dense and
+ * troweled smooth, with faint streaks drawn along its length by the mold and finishing trowel, a few small air pockets,
+ * and the slab's mottle. A control joint is tooled across it every 3 ft: a narrow groove with rounded shoulders. u runs
+ * along the curb (the joints sit on the tile's edge, which also hides the streaks' seam), v round its section. The
+ * colors are Green Lion's concrete colors, used as they are (as concreteSet does), so a curb matches a slab poured with it.
+ */
+function mowCurbSet(spec: MaterialSpec): PBRSet {
+  const [a, b] = spec.palette.map(hexRGB);
+  const T = (spec.mowCurb ? MOW_CURB_SHAPES[spec.mowCurb].jointIn : 36) * 0.0254;
+  return paint(1024, T, 6, (u, v) => {
+    const x = u * T;
+    const j = Math.min(x, T - x);
+    // The groove: 1/8 in at the bottom, its shoulders tooled round over another 1/8 in each side.
+    const groove = 1 - smooth(0.0016, 0.0048, j);
+    const mott = fbm(u, v, 5, 5, 31);
+    let c = mixRGB(a, b, mott * 0.9);
+    const streak = vnoise(u * 10, v * 420, 420, 33) * 0.6 + vnoise(u * 3, v * 140, 140, 35) * 0.4;
+    c = mulRGB(c, 0.955 + streak * 0.07);
+    const fine = fbm(u, v, 64, 3, 37);
+    c = mulRGB(c, 0.97 + fine * 0.05);
+    // Air pockets: a few pinholes, a little darker, where the mold's face pulled away from the mix.
+    const cell = voronoi(u, v, 90, 39, 1);
+    const pit = cell.id > 0.86 ? 1 - smooth(0.04, 0.12, cell.f1) : 0;
+    if (pit) c = mulRGB(c, 1 - pit * 0.25);
+    c = mulRGB(c, 1 - groove * 0.45);
+    const h = 0.6 + streak * 0.035 + fine * 0.02 - pit * 0.25 - groove * 0.55;
+    return { h, c, r: 0.66 + streak * 0.06 + groove * 0.2 };
   });
 }
 
@@ -1994,7 +2025,7 @@ function materialRecipe(spec: MaterialSpec, lay: LayingPattern | undefined): () 
       case 'deck': return deckSet(spec);
       case 'wall': return wallSet(spec, spec.wall?.face ?? 'splitFace');
       case 'fence': return fenceSet(spec, spec.fence ?? 'boardOnBoard');
-      case 'curb': return curbSet(spec);
+      case 'curb': return spec.mowCurb ? mowCurbSet(spec) : curbSet(spec);
       case 'steelEdging': return steelSet(spec);
     }
   };
