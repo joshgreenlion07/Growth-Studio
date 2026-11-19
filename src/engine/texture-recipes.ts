@@ -5,6 +5,7 @@ import { asphalt, bark, poolTile, roofTile, stucco, type PBRSet } from './textur
 import { cl5gRecipe } from '../builder/saunalife-cl5g-textures';
 import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet, silverTravertineLedgerSet } from './fountain-surfaces';
 import { rockGrainSet } from './rock-surfaces';
+import { houseStucco, roofRecipe } from './house-surfaces';
 
 /**
  * The texture worker's side of `textureSet`: rebuild a set from its cache key
@@ -40,6 +41,7 @@ export function runRecipe(key: string): PBRSet | null {
     return spec ? wallCapTextures(spec) : null;
   }
   if (key.startsWith('cl5g-')) return cl5gRecipe(key);
+  if (key.startsWith('house-roof:')) return roofRecipe(key.slice('house-roof:'.length));
   const named: Record<string, () => PBRSet> = {
     soil: soilTextures,
     corten: cortenSet,
@@ -55,6 +57,7 @@ export function runRecipe(key: string): PBRSet | null {
     'ww-ledger-silver': silverTravertineLedgerSet,
     'pf-bowl': patinaBowlSet,
     'rk-grain': rockGrainSet,
+    'house-stucco': houseStucco,
   };
   return named[key]?.() ?? null;
 }

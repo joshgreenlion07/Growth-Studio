@@ -19,6 +19,12 @@ night lighting, and a camera with focus blur.
   features (fire tables, louvered pergolas, L-shaped kitchens, hot tubs,
   saunas, three water wall styles, corten, copper bowls, brass path lights,
   uplights).
+- **Houses:** a straight-skeleton hip or gable roof over any footprint with
+  eaves, fascia, soffit and caps; flat concrete tile, S-tile, architectural
+  shingle or standing-seam metal in color blends; stucco, trim, window, door
+  and garage door colors; a raised entry crown and a chimney; detailed windows,
+  entry, sliding and garage doors. The sample "Single-story ranch with hip roof"
+  shows them.
 - **Water:** ponds, pools with a tanning ledge, fountains, streams and
   pondless waterfalls with lit falls.
 - **Fire:** gas flames drawn as many flickering flame tongues standing on each
@@ -92,6 +98,59 @@ Messages use `window.postMessage`:
   `warnings: string[]`. `site.streetEdge` and `structures` can be left out.
 - Area Planner sends a drawn house as a `structures` item with `openings`
   (the doors and windows marked on it; each is moved onto the nearest wall).
+  Marked windows replace the automatic windows; marked doors replace the
+  automatic doors (a marked garage door alone keeps both). An opening can carry
+  `style`: for a door `entry` (the front door: a framed door with a glass insert
+  and raised panels, a lever and deadbolt, tall sidelights each side when the
+  mark is wide enough, two concrete steps up to it), `slider` (a sliding glass
+  door: frame, threshold and two rails, 2 or 3 panels, the fixed ones on the
+  outer track and the sliding one on the inner track overlapping at the
+  interlock, a pull, glass with the room and blinds behind it), `garage` (a
+  four-section garage door in the look's style) or `door` (a plain door); for
+  a window `slider` (the default) or `picture`. Left out, a door up to 1.5 m is
+  a plain door and a wider one a slider. `height` (a slider 2.03 or 2.44 m, a
+  garage door 2.13 or 2.44 m) and `panels` (2 or 3) are optional.
+- A house, garage or shed can also carry (all optional, `src/siteplan/types.ts`):
+  `roof: 'hip' | 'gable' | 'flat'` (hip and gable are a straight-skeleton roof
+  over any footprint, `src/builder/roofskeleton.ts`: hips over convex corners,
+  valleys over reflex ones, ridges, faceted hips over bay windows; `gable`
+  puts gable ends on the wings' end walls), `pitch` (rise in 12: 4, 5, 6 or 8;
+  default 5), `eave` (overhang in meters, 0.15 to 0.9; default 0.5) with fascia,
+  a soffit under the overhang and ridge and hip caps, `crown: true` (a taller
+  hip over the front entry, over its whole recess when it is set back in one),
+  `chimney: true` (a stucco chase with a cap and spark arrestor on a side wall),
+  `stepDoors: false` (see below) and `look` (colors and finishes, every key
+  optional, ids from `src/siteplan/houselooks.ts`: `wall`, `trim`, `window`,
+  `roof` (`concrete-flat`, `concrete-s`, `shingle`, `metal`), `roofColor` (a
+  blend of that roof), `door`, `garage`, `garageStyle`, `blinds`). Unknown ids
+  are dropped. The `ready` message carries `houseLooks`, every list with ids,
+  names and swatches. A cover takes the walls and roof of the plan's first house.
+- A house with no marked windows gets them by itself (`src/builder/openingplan.ts`):
+  white thin-framed sliders and picture windows 5 to 6 ft wide on a 2 1/2 ft sill
+  on the yard and street sides, 3 to 4 ft bedroom windows on a 3 1/2 ft sill on
+  the sides, one window on each bay facet, interior blinds behind about half of
+  them, a sliding door on the yard side and the entry (in a recess when there is
+  one) on the wall facing away from the yard, always clear of wall ends, other
+  buildings and cover walls and posts.
+- Where a flight of `steps` is drawn along a house wall (the house floor is then
+  its top: it goes down away from the house), a door is put there by itself: a
+  sliding glass door centered on the step, the widest of 12, 9, 8, 6 or 5 ft that
+  the step and the wall allow, its threshold on the step's top, or a 3 ft plain
+  door when no sliding door fits. Collinear pieces on one wall at the same top are
+  one run, and one plan item gets at most one door per wall. A small raised paving
+  stoop does the same (not a deck; 4 in to 2 1/2 ft up, no bigger than about 130
+  sq ft, an edge up to 5.2 m), but only while no door is marked on the house; a
+  raised patio or deck along the house gets no door of its own. A marked door
+  there takes its place and stands on the step; `stepDoors: false` turns it off.
+  The entry stands on a landing or drawn steps it meets (no steps of its own), and
+  at grade under a cover or where a zone is drawn in front of it.
+- Deploy order: Growth Studio must be deployed before an Area Planner that sends
+  house looks, door styles or steps against a house (older studios ignore the new
+  fields; Area Planner holds back the steps it rose to a house wall until the
+  studio's `ready` carries `houseLooks`).
+- The pointer's `point` message carries `sub` for a house: the part pointed at
+  (`walls`, `roof`, `trim`, `windows`, `door`, `garage`, `chimney`, `steps`), and
+  the look carries `house: { sub, look }` with every look key filled in.
   A structure of kind `cover` is a roofed patio on posts. A cover can carry
   `walls: boolean[]` to make it a California room: one entry per polygon edge,
   edge `i` running from `polygon[i]` to `polygon[(i + 1) % n]`. `true` is a

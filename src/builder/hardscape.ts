@@ -630,7 +630,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
   }
 
   for (const l of plan.lines) {
-    const o = l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos) : buildLine(l, plan.zones, height, geos);
+    const o = l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos, housePolys(plan)) : buildLine(l, plan.zones, height, geos);
     // The build stages keep fences standing (see applyStage in build.ts).
     o.userData.lineKind = l.kind;
     group.add(o);
@@ -784,22 +784,28 @@ export function stepCount(rise: number, riser = 0.1524): { n: number; r: number;
   return { n, r, full, last: full ? last : rise };
 }
 
-/** Which way a flight goes down: the unit normal of its first edge that points away from a raised zone. */
-function stepsDown(l: LineItem, zones: Zone[]): Vec2 {
+/** The footprints of the plan's houses, garages and sheds (what a flight of steps can come down from). */
+export const housePolys = (plan: SitePlan): Vec2[][] => (plan.structures ?? []).filter((s) => s.kind !== 'cover').map((s) => s.polygon);
+
+/**
+ * Which way a flight goes down: the unit normal of its first edge that points away from a raised zone, or from a house
+ * it is drawn against (the house's floor is then its top: the door there stands on it, see builder/house.ts).
+ */
+function stepsDown(l: LineItem, zones: Zone[], houses: Vec2[][] = []): Vec2 {
   const a = l.points[0], b = l.points[1];
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
   const n: Vec2 = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
   const mid: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  const up = (p: Vec2) => zones.some((z) => (z.elevation ?? 0) > 0 && pointInPolygon(p, z.polygon));
+  const up = (p: Vec2) => zones.some((z) => (z.elevation ?? 0) > 0 && pointInPolygon(p, z.polygon)) || houses.some((h) => pointInPolygon(p, h));
   const probe = (s: number): Vec2 => [mid[0] + n[0] * 0.3 * s, mid[1] + n[1] * 0.3 * s];
   return up(probe(1)) && !up(probe(-1)) ? [-n[0], -n[1]] : n;
 }
 
 /** The ground footprint of a flight of steps (each segment of the line, carried down and out). */
-export function stepsFootprint(l: LineItem, zones: Zone[]): Vec2[][] {
+export function stepsFootprint(l: LineItem, zones: Zone[], houses: Vec2[][] = []): Vec2[][] {
   if (l.kind !== 'steps' || l.points.length < 2) return [];
   const { n } = stepCount(l.height, l.riser);
-  const d = stepsDown(l, zones), run = (n - 1) * (l.tread ?? 0.3) + 0.02;
+  const d = stepsDown(l, zones, houses), run = (n - 1) * (l.tread ?? 0.3) + 0.02;
   const out: Vec2[][] = [];
   for (let i = 0; i < l.points.length - 1; i++) {
     const a = l.points[i], b = l.points[i + 1];
@@ -810,12 +816,12 @@ export function stepsFootprint(l: LineItem, zones: Zone[]): Vec2[][] {
 
 /** A flight of steps: its top edge is the line, at `height` above grade, and each step drops one riser
     and steps out one tread, away from the raised area. Built of the line's hardscape material. */
-function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[]): THREE.Object3D {
+function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[], houses: Vec2[][] = []): THREE.Object3D {
   const g = new THREE.Group();
   g.name = `steps-${l.id}`;
   if (l.points.length < 2) return g;
   const { n, r } = stepCount(l.height, l.riser);
-  const T = l.tread ?? 0.3, d = stepsDown(l, zones);
+  const T = l.tread ?? 0.3, d = stepsDown(l, zones, houses);
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < l.points.length - 1; i++) {
     const a = l.points[i], b = l.points[i + 1];

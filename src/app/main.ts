@@ -1,3 +1,4 @@
+import { houseLookLists } from '../siteplan/houselooks';
 import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, swapClassOf, type FeatureGroup, type LayingPattern, type MaterialSpec, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
@@ -1369,7 +1370,7 @@ function initEmbed() {
     // Tell the parent it can send a plan. Nothing private is in this message.
     // The paver looks the parent can offer for a clicked paver area, so its list always matches the catalog.
     // Only offered looks: a maker paver or wall line is listed once it is mapped in depth (OFFERED_LINES in the catalog).
-    window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: embedLooks() }, '*');
+    window.parent.postMessage({ source: 'growth-studio', type: 'ready', materials: embedLooks(), houseLooks: houseLookLists() }, '*');
     postCatalog(false);
     if (studio) studio.onNeedAsset = (id) => {
       if (!embedOrigin || embedAsked.has(id)) return;
@@ -1400,9 +1401,9 @@ function initEmbed() {
         const origin = embedOrigin;
         const zone = hit ? plan.zones.find((z) => z.id === hit.id) : undefined;
         const laying = hit?.part === 'main' && zone ? layingOf(materialById.get(hit.catalogId), zone.laying) : undefined;
-        const look = hit ? lookOfPoint(hit.catalogId, plan, hit.id) : null;
-        const send = (material: Look | null) => window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, material }, origin);
-        const now = (pointNow = hit ? `${hit.id}|${hit.part}|${hit.catalogId}` : '');
+        const look = hit ? lookOfPoint(hit.catalogId, plan, hit.id, hit.sub) : null;
+        const send = (material: Look | null) => window.parent.postMessage({ source: 'growth-studio', type: 'point', id: hit?.id ?? null, part: hit?.part ?? null, ...(hit?.sub ? { sub: hit.sub } : {}), material }, origin);
+        const now = (pointNow = hit ? `${hit.id}|${hit.part}|${hit.catalogId}|${hit.sub ?? ''}` : '');
         if (!look || !hit) return send(look);
         // The panel's large picture when it is made; meanwhile the small swatch if that is, and the large one follows.
         const big = pictureNow(hit.catalogId, laying);

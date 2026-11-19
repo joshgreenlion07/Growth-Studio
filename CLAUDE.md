@@ -27,7 +27,13 @@ finished-work photos in `reference/green-lion-style/`.
   walls and fences, water features and waterfalls, structures, features,
   uploaded models (`models.ts`: a designer's own .glb or picture placed on a
   drawn footprint; the file arrives apart from the SitePlan),
-  procedural plants, and the neighborhood context. Every catalog plant has
+  procedural plants, and the neighborhood context. Houses, garages and sheds are
+  `house.ts`: the roof is the straight skeleton of the eave outline (`roofskeleton.ts`,
+  pure and testable: wavefront events recomputed after each one, pinches for facing
+  edges, speed 0 for gable ends), windows and doors are placed by `openingplan.ts`
+  (tested by `scripts/openings.test.ts`), the looks are `siteplan/houselooks.ts`
+  (Area Planner keeps a copy as HOUSE_OPTS) and the roof and stucco textures
+  `engine/house-surfaces.ts`. Every catalog plant has
   its own builder file under `src/builder/species/<group>/<catalog-id>.ts`,
   listed in `species/registry.ts` and built on the shared toolkit in
   `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and

@@ -10,6 +10,7 @@ import { sampleUrnFountains } from './sample-urn-fountains';
 import { sampleFourFall } from './sample-four-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
+import { sampleRanch } from './sample-ranch';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -508,4 +509,5 @@ export const SAMPLES = [
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
+  { id: 'ranch', name: 'Single-story ranch with hip roof', make: sampleRanch },
 ];

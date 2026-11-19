@@ -2,9 +2,10 @@ import { cleanFixtureSetting } from './truscapes';
 import { FEATURES, LAYING_PATTERNS, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById, type LayingPattern } from './catalog';
 import { area, uid } from './geometry';
 import type {
-  ExistingStructure, FeaturePlacement, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, UtilityKind, UtilityLine,
+  ExistingStructure, FeaturePlacement, StructureOpening, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, UtilityKind, UtilityLine,
   UtilityPoint, UtilityPointKind, UtilityRun, Vec2, WaterFeature, Zone,
 } from './types';
+import { DEFAULT_EAVE, DEFAULT_PITCH, cleanLook, snapPitch } from './houselooks';
 import { UTILITY_DEFAULT_COVER, UTILITY_KIND_NAME, UTILITY_POINT_NAME } from './utilities';
 
 export interface CleanResult {
@@ -182,15 +183,30 @@ export function cleanPlan(input: unknown): CleanResult {
     const st: ExistingStructure = {
       ...base(it, kind), kind, polygon,
       height: num(it.height, kind === 'shed' ? 2.4 : kind === 'cover' ? 2.7 : 3.0, 2, 9),
-      roof: kind === 'cover' || it.roof === 'flat' ? 'flat' : 'hip',
+      roof: kind === 'cover' || it.roof === 'flat' ? 'flat' : it.roof === 'gable' ? 'gable' : 'hip',
     };
+    if (kind !== 'cover') {
+      if (it.pitch !== undefined && it.pitch !== null && Number.isFinite(num(it.pitch, NaN))) st.pitch = snapPitch(num(it.pitch, DEFAULT_PITCH, 1, 14));
+      if (it.eave !== undefined && it.eave !== null && Number.isFinite(num(it.eave, NaN))) st.eave = num(it.eave, DEFAULT_EAVE, 0.15, 0.9);
+      if (it.crown === true) st.crown = true;
+      if (it.chimney === true) st.chimney = true;
+      if (it.stepDoors === false) st.stepDoors = false;
+      const look = cleanLook(it.look);
+      if (look) st.look = look;
+      else if (it.look !== undefined && it.look !== null) warnings.push(`Structure "${st.id}": its look named no known color or finish, so the default look is shown.`);
+    }
     if (kind !== 'cover' && Array.isArray(it.openings)) {
       st.openings = [];
       for (const op of arr(it.openings).slice(0, 80)) {
         const at = vec(op.at);
         if (!at) continue;
         const ok = op.kind === 'door' ? 'door' : 'window';
-        st.openings.push({ kind: ok, at, width: num(op.width, ok === 'door' ? 0.9 : 1.2, 0.3, 8) });
+        const o: StructureOpening = { kind: ok, at, width: num(op.width, ok === 'door' ? 0.9 : 1.2, 0.3, 8) };
+        const doorStyles = ['entry', 'slider', 'garage', 'door'], winStyles = ['slider', 'picture'];
+        if (typeof op.style === 'string' && (ok === 'door' ? doorStyles : winStyles).includes(op.style)) o.style = op.style as StructureOpening['style'];
+        if (ok === 'door' && op.height !== undefined && op.height !== null && Number.isFinite(num(op.height, NaN))) o.height = num(op.height, 2.03, 1.8, 3);
+        if (ok === 'door' && (op.panels === 2 || op.panels === 3)) o.panels = op.panels;
+        st.openings.push(o);
       }
     }
     if (kind === 'cover' && it.walls !== undefined && it.walls !== null) {
