@@ -25,6 +25,8 @@ export interface BasaliteLine {
   name: string;
   /** The slab's module (its face plus the spacer joint) and the joint, inches. */
   size: [number, number];
+  /** The size it is sold and listed as, nominal inches (24 x 24), when the module differs. */
+  sold?: [number, number];
   joint: number;
   /** The chamfer on the face's edges, meters. */
   chamfer: number;
@@ -37,7 +39,7 @@ export interface BasaliteLine {
 }
 
 export const BASALITE_LINES: BasaliteLine[] = [
-  { slug: 'premier-slab', name: 'Premier Slab', size: [23.54, 23.54], joint: 0.15, chamfer: 0.003, jointSand: '#cfc8be', thickness: 0.06, colors: [
+  { slug: 'premier-slab', name: 'Premier Slab', size: [23.54, 23.54], sold: [24, 24], joint: 0.15, chamfer: 0.003, jointSand: '#cfc8be', thickness: 0.06, colors: [
     ['Midnight Terrace', ['#b4b1a9', '#a59d92', '#938678', '#7c7b77', '#93908a'], [0.269, 0.263, 0.251, 0.111, 0.107]],
     ['Bodega Dunes', ['#c6c8d0', '#c1bcbc', '#b9bcc5', '#a6abb7', '#9096a3'], [0.369, 0.257, 0.191, 0.111, 0.073]],
     ['Oceanside', ['#e6ebf2', '#dfe6eb', '#ecf1f8', '#d5dee4', '#f4fbff'], [0.3, 0.253, 0.224, 0.116, 0.108]],
