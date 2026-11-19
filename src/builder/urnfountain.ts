@@ -229,7 +229,7 @@ function offsetOutline(pts: [number, number][], off: number, from = 0): [number,
  * A film of water over a lathe surface (inches outline, from the top down), over angles a0..a0+len: its uv.y in meters
  * run down from the top, aEnd 0 at the top to 1 at the foot (the clear-water shader whitens it as it breaks up below).
  */
-function filmGeometry(down: [number, number][], a0 = 0, len = Math.PI * 2, seg = 72): THREE.BufferGeometry {
+export function filmGeometry(down: [number, number][], a0 = 0, len = Math.PI * 2, seg = 72): THREE.BufferGeometry {
   const g = new THREE.LatheGeometry(down.map(([r, y]) => new THREE.Vector2(r * IN, y * IN)), seg, a0, len);
   const pos = g.getAttribute('position'), uv = g.getAttribute('uv') as THREE.BufferAttribute;
   const along: number[] = [0];
@@ -252,7 +252,7 @@ function filmGeometry(down: [number, number][], a0 = 0, len = Math.PI * 2, seg =
  * A thin film of water running down a surface: nearly clear, so the urn shows through, with fine moving ripples that
  * catch the sky (fresnel) and the sun, a few brighter runnels, and a little white where it breaks up at the foot.
  */
-function filmMaterial(strength = 1): THREE.ShaderMaterial {
+export function filmMaterial(strength = 1): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { uTime: GLOBAL.uTime, uSunColor: GLOBAL.uSunColor, uK: { value: strength } },
     transparent: true,
@@ -294,7 +294,7 @@ function filmMaterial(strength = 1): THREE.ShaderMaterial {
 }
 
 /** A mound of water welling up over the bubbler hole: a low dome, flowing out from the middle. */
-function domeGeometry(r: number, h: number, y: number): THREE.BufferGeometry {
+export function domeGeometry(r: number, h: number, y: number): THREE.BufferGeometry {
   const pts: [number, number][] = [];
   for (let i = 0; i <= 10; i++) {
     const t = i / 10;

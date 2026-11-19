@@ -43,6 +43,8 @@ export interface Zone extends ItemBase {
   borderLights?: boolean;
   /** Hardscape: top of the surface this far above grade (m), on solid sides. */
   elevation?: number;
+  /** Raised hardscape: its exposed sides clad in a wall veneer with a coping along the edge (see Clad). Left out, the sides are the paving's own. */
+  clad?: Clad;
   /** Beds: a raised planter with walls of this material and height (m). */
   raised?: { wallCatalogId: string; height: number };
   /**
@@ -82,6 +84,18 @@ export interface DeckLayout {
   holes?: Vec2[][];
 }
 
+/**
+ * The face of a raised landing or a flight of steps (builder/landing.ts): its exposed sides clad in a wall veneer over
+ * the block riser, and its edge capped with a coping whose top is flush with the paving and whose front runs past the
+ * veneer (the coping maker's overhang). Sides along a house, or against higher paving, are left plain. `veneer` is a
+ * wall veneer look (shelf 'Wall veneer'); `coping` a coping look (siteplan/coronado.ts COPING_PROFILES); left out, the
+ * veneer's own edge coping (WallVeneer.edge), else none.
+ */
+export interface Clad {
+  veneer: string;
+  coping?: string;
+}
+
 /** steps: a flight of stairs whose top edge is the line, going down away from a raised zone. */
 export type LineKind = 'wall' | 'fence' | 'edging' | 'steps';
 
@@ -99,6 +113,8 @@ export interface LineItem extends ItemBase {
   /** Steps: riser height and tread depth, meters. `height` is the total rise. */
   riser?: number;
   tread?: number;
+  /** Steps: their risers clad and their nosing a coping, as a clad landing's (see Clad). Left out, plain. */
+  clad?: Clad;
   /** Curbs: how much of the curb shows above grade, meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. */
   reveal?: number;
   /**

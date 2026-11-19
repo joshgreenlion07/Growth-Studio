@@ -45,8 +45,8 @@ finished-work photos in `reference/green-lion-style/`.
   offered in a plan: they are in `featureById` but not in FEATURES) and islands assembled from
   them as bays left to right (`KitchenIsland`, kind `kitchenIsland`), drawn by `builder/kitchen/`
   (layout test `scripts/kitchen.test.ts`).
-  Lighting fixtures (Tru-Scapes, `siteplan/truscapes.ts`) are built by
-  `landscapelights.ts` and lit through `engine/landlights.ts`.
+  Lighting fixtures (Tru-Scapes, `siteplan/truscapes.ts`; Vista, `siteplan/vista.ts` drawn by `vistalights.ts`) are
+  built by `landscapelights.ts` and lit through `engine/landlights.ts`.
   Composite decks (a hardscape zone in a maker's deck board, `siteplan/decking.ts`)
   are built board by board in `deck.ts` from the layout in `deck-layout.ts`:
   picture frame, straight, diagonal or chevron field, openings for a hot tub,

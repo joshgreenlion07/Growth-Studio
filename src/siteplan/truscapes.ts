@@ -46,10 +46,14 @@ export type FixtureFamily =
   | 'dot'
   | 'puck'
   | 'walkwayWash'
-  | 'transformer';
+  | 'transformer'
+  // Vista Professional (siteplan/vista.ts, builder/vistalights.ts).
+  | 'vistaBollard'
+  | 'vistaUplight'
+  | 'vistaTransformer';
 
 export interface FixtureSpec {
-  maker: 'Tru-Scapes';
+  maker: 'Tru-Scapes' | 'Vista';
   /** Model number without the finish suffix, e.g. 'TS-B301'. */
   model: string;
   /** The maker's product name. */
@@ -85,6 +89,8 @@ export interface FixtureSpec {
   facts: string[];
   /** Footprint for the plan editor, meters. */
   footprint: [number, number];
+  /** Mount height (m above grade) when the placement gives none, where the maker sets one (a transformer's minimum). */
+  mountDefault?: number;
 }
 
 const PAGE = 'https://tru-scapes.com/product/';

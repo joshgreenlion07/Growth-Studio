@@ -3,19 +3,27 @@ import { samplePremierSlab } from './sample-premier-slab';
 import { samplePremierSmooth } from './sample-premier-smooth';
 import { samplePremierSlate } from './sample-premier-slate';
 import { sampleWallVeneers } from './sample-wall-veneers';
+import { sampleBedsLanding } from './sample-beds-landing';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
 import { samplePillarWaterWall } from './sample-pillar-water-wall';
 import { sampleUrnFountains } from './sample-urn-fountains';
 import { sampleSideYard } from './sample-side-yard';
+import { sampleVista } from './sample-vista';
 import { sampleMowCurb } from './sample-mow-curb';
 import { sampleSteelEdging } from './sample-steel-edging';
+import { sampleStrappyPlants } from './sample-strappy-plants';
 import { sampleFourFall } from './sample-four-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
+import { sampleWaterFire } from './sample-water-fire';
 import { sampleKitchenIsland } from './sample-kitchen-island';
 import { sampleRanch } from './sample-ranch';
+import { sampleSoftPlants } from './sample-soft-plants';
+import { sampleDryCreek } from './sample-dry-creek';
+import { sampleLargeTrees } from './sample-large-trees';
+import { sampleMirador } from './sample-mirador';
 
 /**
  * Example yards in Green Lion's style, built from its finished-work photos.
@@ -500,24 +508,32 @@ export const SAMPLES = [
   { id: 'premier-slate', name: 'Basalite Premier Slate: six colors, two patterns', make: samplePremierSlate },
   { id: 'premier-slab', name: 'Basalite Premier Slab: five colors, three patterns', make: samplePremierSlab },
   { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
+  { id: 'mirador', name: 'Mirador louvered pergolas, 10 x 20 and 10 x 10, café lights', make: sampleMirador },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'wall-veneers', name: 'Wall veneers: stacked stone and stucco, with columns', make: sampleWallVeneers },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },
   { id: 'humus', name: 'Soil fills: black humus, compost, dirt', make: sampleHumus },
   { id: 'ground-covers', name: 'Ground covers: soil, bark and gravel', make: sampleGroundCovers },
+  { id: 'dry-creek', name: 'Dry creek bed: cobble, moss rock border, boulders, pebble and bark', make: sampleDryCreek },
   { id: 'utilities', name: 'Build stages: trenches and layers', make: sampleUtilities },
   { id: 'truscapes', name: 'Night lighting: Tru-Scapes', make: sampleTruscapes },
+  { id: 'vista', name: 'Night lighting: Vista bollards and up lights', make: sampleVista },
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
   { id: 'cedar-water-wall', name: 'Cedar slat water wall, Silver Travertine', make: sampleCedarWaterWall },
   { id: 'pillar-water-wall', name: 'Two-pillar stucco water wall, Silver Travertine', make: samplePillarWaterWall },
   { id: 'urn-fountains', name: 'Urn fountains: Blue Thumb aqua-teal and Tuscany vases', make: sampleUrnFountains },
   { id: 'side-yard', name: 'Side yard with shed, raised bed and urn fountain', make: sampleSideYard },
+  { id: 'beds-landing', name: 'Vego raised beds, deck planters and a clad entry landing', make: sampleBedsLanding },
   { id: 'mow-curb', name: 'Poured concrete mow curb: slant, mower and block', make: sampleMowCurb },
   { id: 'steel-edging', name: 'Black steel edging: 1/8 in and 3/16 in', make: sampleSteelEdging },
+  { id: 'strappy-plants', name: 'Strap-leaf accents: cordyline, agaves, lomandras, dwarf fountain grass', make: sampleStrappyPlants },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
+  { id: 'water-fire', name: 'Water and fire: basalt fountain, glazed birdbaths, Florence fire pit', make: sampleWaterFire },
   { id: 'kitchen-island', name: 'Outdoor kitchen: ledgerstone griddle island', make: sampleKitchenIsland },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
   { id: 'ranch', name: 'Single-story ranch with hip roof', make: sampleRanch },
+  { id: 'soft-plants', name: 'Front-yard soft plants: verbena, lantana, sedum, pittosporum, box honeysuckle', make: sampleSoftPlants },
+  { id: 'large-trees', name: 'Large trees: coast redwood, ginkgo, flowering pear', make: sampleLargeTrees },
 ];

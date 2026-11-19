@@ -1,8 +1,9 @@
 import { cleanFixtureSetting } from './truscapes';
 import { FEATURES, LAYING_PATTERNS, LEGACY_IDS, MATERIALS, PLANTS, featureById, isOffered, materialById, plantById, type LayingPattern } from './catalog';
 import { area, uid } from './geometry';
+import { COPING_PROFILES } from './coronado';
 import type {
-  ExistingStructure, FeaturePlacement, StructureOpening, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, UtilityKind, UtilityLine,
+  Clad, ExistingStructure, FeaturePlacement, StructureOpening, ItemSource, LineItem, ModelPlacement, PlantPlacement, Ruler, SitePlan, UtilityKind, UtilityLine,
   UtilityPoint, UtilityPointKind, UtilityRun, Vec2, WaterFeature, Zone,
 } from './types';
 import { DEFAULT_EAVE, DEFAULT_PITCH, cleanLook, snapPitch } from './houselooks';
@@ -46,6 +47,17 @@ function pts(v: unknown, min: number, closedRun = false): Vec2[] | null {
     if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) out.pop();
   }
   return out.length >= min ? out : null;
+}
+
+/** A clad landing's or flight's face: a wall veneer look and, if given, a coping look (siteplan/coronado.ts). */
+function readClad(c: unknown): Clad | null {
+  if (!c || typeof c !== 'object') return null;
+  const o = c as Record<string, unknown>;
+  const v = materialById.get(String(o.veneer ?? ''));
+  if (!v || v.use !== 'wall' || !v.veneer) return null;
+  const out: Clad = { veneer: v.id };
+  if (typeof o.coping === 'string' && COPING_PROFILES[o.coping] && materialById.has(o.coping)) out.coping = o.coping;
+  return out;
 }
 
 /** A deck zone's layout (see DeckLayout): only the known keys, in range. */
@@ -251,6 +263,7 @@ export function cleanPlan(input: unknown): CleanResult {
       if (e > 0.005) z.elevation = e;
     }
     if (kind === 'hardscape' && typeof it.pad === 'boolean') z.pad = it.pad;
+    if (kind === 'hardscape' && z.elevation) { const c = readClad(it.clad); if (c) z.clad = c; }
     if (LAYING_PATTERNS.includes(it.laying as LayingPattern)) z.laying = it.laying as LayingPattern;
     const ly = it.layers as Record<string, unknown> | undefined;
     if (kind !== 'bed' && ly && typeof ly === 'object') {
@@ -291,6 +304,8 @@ export function cleanPlan(input: unknown): CleanResult {
     if (kind === 'steps') {
       l.riser = num(it.riser, 0.1524, 0.08, 0.2);
       l.tread = num(it.tread, 0.3, 0.2, 0.6);
+      const c = readClad(it.clad);
+      if (c) l.clad = c;
     }
     if (kind === 'wall' && (it.cap === 'same' || it.cap === 'midnight')) l.cap = it.cap;
     if (kind === 'fence' && (it.topper === 'lattice' || it.topper === 'cap')) l.topper = it.topper;

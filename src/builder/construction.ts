@@ -7,6 +7,7 @@ import {
   IN, UTILITY_KIND_NAME, UTILITY_PAINT, UTILITY_PIPE, UTILITY_POINT_NAME, cuyd, inches, trenchName, trenchSpec, zoneSection,
   type SectionLayerKind, type TrenchSpec, type ZoneSection,
 } from '../siteplan/utilities';
+import type { JoinedLine } from '../siteplan/outletjoin';
 import { buildLayerTextures, type BuildLayer } from '../engine/surfaces';
 import type { Quality } from '../engine/post';
 import { lineCenter, lineThickness } from './linepath';
@@ -745,7 +746,8 @@ export function buildConstruction(plan: SitePlan, ground: (p: Vec2) => number, q
       return b;
     };
     for (const { line, spec } of trenches) {
-      const route = densify(line.points, 0.3);
+      // A run joined to an outlet's stub-up (siteplan/outletjoin.ts) stops inside its elbow's tail; its trench goes on.
+      const route = densify((line as JoinedLine).pipe ?? line.points, 0.3);
       for (const pr of spec.runs) {
         const path = route.map(([x, z]) => new THREE.Vector3(x, H(x, z) - pr.center, z));
         tubeAlong(bufFor(pr.run.kind), path, pr.run.od / 2, pr.run.od > 0.02 ? 10 : 6);

@@ -3,6 +3,7 @@ import type { YardContext } from './kit';
 import { suncastShed } from './shed';
 import { gardenBench } from './bench';
 import { cedarRaisedBed } from './raisedbed';
+import { vegoModernBed } from './vegobed';
 import { potTrellis } from './pottrellis';
 import { slatScreen } from './screen';
 
@@ -28,6 +29,7 @@ export function buildYard(kind: YardKind, c0: YardContext, lift = 0) {
     case 'shedResin': return suncastShed(c);
     case 'gardenBench': return gardenBench(c);
     case 'raisedBedCedar': return cedarRaisedBed(c);
+    case 'vegoModernBed': return vegoModernBed(c);
     case 'potTrellis': return potTrellis(c);
     case 'slatScreen': return slatScreen(c);
   }

@@ -18,11 +18,17 @@ import { BASALITE_LINES, PREMIER_SLATE, PREMIER_SMOOTH } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
+import { vistaFeatures } from './vista';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
+import { GROUND_ROCK_FEATURES, GROUND_ROCK_MATERIALS, ROCK_BORDER_MATERIALS, type RockBorderSpec } from './groundrock';
 import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
 import { KITCHEN_ISLAND_FEATURES, KITCHEN_PART_FEATURES, type KitchenIsland } from './kitchen';
 import { YARD_FEATURES, YARD_SWAP, type UrnGlaze, type YardKind } from './yard';
+import { CORONADO_LOOKS } from './coronado';
+import { PLANTER_BED_FEATURES } from './planterbeds';
+import { ELECTRIC_SWAP, MIRADOR_FEATURES, type ElectricKind } from './mirador';
+import { WATER_FIRE_FEATURES, WATER_FIRE_SWAP, type WaterFireKind } from './waterfire';
 
 export type PlantForm =
   | 'shadeTree'
@@ -197,10 +203,14 @@ export interface WallVeneer {
   weights?: number[];
   rowIn?: [number, number];
   tallRow?: number;
+  /** A tall course's height, inches (left out, twice the shortest course). */
+  tallIn?: number;
   pieceIn?: [number, number];
   rust?: number;
   /** Split quartzite (flatter, crisper strips with a fine sparkle), not travertine. */
   quartz?: boolean;
+  /** Manufactured (cast) stone: each piece one even tone over a soft cleft, no travertine pits or bedding. */
+  cast?: boolean;
   albedo?: [number, number, number];
   /** Thickness of the veneer with its setting bed (stone and mortar, or the stucco coats), inches. */
   thicknessIn: number;
@@ -210,6 +220,8 @@ export interface WallVeneer {
   cap?: string;
   capIn?: number;
   capOverIn?: number;
+  /** The coping it takes where it clads one face only, along that face's top (a raised landing's riser): a coping look's id (siteplan/coronado.ts COPING_PROFILES). */
+  edge?: string;
 }
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
@@ -295,9 +307,17 @@ export interface PebbleSpec {
   /**
    * The pieces' form (builder/pebbles.ts): 'pebble' (default: a smooth, wave-worn beach pebble), 'crushed' (crushed
    * stone: angular, with flat broken faces and sharp edges) or 'chip' (bark and wood chips: flat, splintery, a little
-   * curled, with the grain running their length).
+   * curled, with the grain running their length), 'river' (river rock and cobble: rounded, egg-shaped, fuller than a beach
+   * pebble) or 'nugget' (bark nuggets: flat, angular plates of bark with a corky, fissured top).
    */
-  form?: 'pebble' | 'crushed' | 'chip';
+  form?: 'pebble' | 'crushed' | 'chip' | 'river' | 'nugget';
+  /**
+   * Sizes mixed in one bed (a dry creek's 2 x 4 and 4 x 8 in cobble): each band's size range and the share of the bed's
+   * area it covers. Left out, one size range (minIn to maxIn).
+   */
+  mix?: { minIn: number; maxIn: number; share: number }[];
+  /** Bark: the share of pieces that are long, thin splinters of wood rather than nuggets. */
+  splinters?: number;
 }
 
 /**
@@ -398,11 +418,13 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Metal edging' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Metal edging' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Rock border' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
   pebble?: PebbleSpec;
+  /** An edging look laid as a row of stones along the line (siteplan/groundrock.ts, builder/rockborder.ts). */
+  rockBorder?: RockBorderSpec;
   /** Soft fill drawn as a bed of clods (black humus, compost, dirt): its soil, fiber and speck colors, relief and mound. */
   crumb?: CrumbSpec;
   /** Bed fills: what kind of fill it is, the depth it is usually spread (in), and for rock, DG and gravel its weight (tons per cubic yard). */
@@ -458,6 +480,8 @@ export type FeatureKind =
   | DecorKind
   | WaterRockKind
   | YardKind
+  | ElectricKind
+  | WaterFireKind
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
@@ -500,8 +524,8 @@ export interface FeatureSpec {
   page?: string;
   about?: string;
   facts?: string[];
-  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola; 'ppz-743bc': Cal Spas Tropical Plus; 'saunalife-cl5g': SaunaLife CL5G sauna). */
-  model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g';
+  /** The builder's model for a maker's product of this kind ('stratus': SunVilla Stratus louvered pergola; 'ppz-743bc': Cal Spas Tropical Plus; 'saunalife-cl5g': SaunaLife CL5G sauna; 'mirador-111': Mirador 111 louvered pergola, siteplan/mirador.ts). */
+  model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g' | 'mirador-111';
   /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
   options?: FeatureOption[];
   /** A lighting fixture's maker spec (kind 'landscapeLight', siteplan/truscapes.ts). */
@@ -562,6 +586,15 @@ export const PLANTS: PlantSpec[] = [
   // Plants from a project's plant list (2026-11-19). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'feijoa-standard', name: 'Pineapple guava, tree standard', botanical: 'Feijoa sellowiana', group: 'Trees', form: 'standardTree', installHeight: 1.2, installSpread: 0.5, matureHeight: 2.7, matureSpread: 1.8, yearsToMature: 8, foliage: '#56684d', foliage2: '#c4cbbf', flower: '#b3142a', flower2: '#f3dfe2', evergreen: true, spacing: 2.4, container: '5 gal',
     about: 'Pineapple guava (feijoa) trained as a standard: one clean trunk under a rounded head of gray-green leaves with silvery-white undersides. In late spring it carries fleshy white petals blushed purple-red inside around a brush of crimson stamens tipped yellow.' }),
+  // Large trees for existing yard trees and new plantings (2026-11-19). Sizes from the references in each builder file.
+  P({ id: 'coast-redwood', name: 'Coast redwood', botanical: 'Sequoia sempervirens', group: 'Trees', form: 'conifer', installHeight: 2.1, installSpread: 0.9, matureHeight: 21.3, matureSpread: 9.1, yearsToMature: 30, foliage: '#2f4a26', foliage2: '#6f8c3c', evergreen: true, spacing: 6, container: '15 gal',
+    about: 'Coast redwood: one straight, buttressed trunk in thick, fibrous, cinnamon red-brown bark, and a dense cone of slender branches that droop and turn up at the tips, carrying flat sprays of dark green needles. Shown about 70 ft tall and 30 ft wide, as an established yard tree.' }),
+  P({ id: 'ginkgo-princeton-sentry', name: 'Ginkgo \'Princeton Sentry\'', botanical: 'Ginkgo biloba \'Princeton Sentry\'', group: 'Trees', form: 'columnarTree', installHeight: 2.4, installSpread: 0.75, matureHeight: 12.0, matureSpread: 5.2, yearsToMature: 30, foliage: '#356820', foliage2: '#5f9234', evergreen: false, spacing: 4.5, container: '15 gal',
+    about: 'Ginkgo \'Princeton Sentry\', the narrow, fruitless male ginkgo: a straight central leader and steep side limbs in a tall, narrow pyramid. Fan-shaped leaves 2 to 3 in across sit in tufts on short spurs along the branches, bright green in summer and butter yellow in fall.' }),
+  P({ id: 'callery-pear-bradford', name: 'Flowering pear \'Bradford\', in bloom', botanical: 'Pyrus calleryana \'Bradford\'', group: 'Trees', form: 'shadeTree', installHeight: 2.4, installSpread: 0.9, matureHeight: 10.7, matureSpread: 8.5, yearsToMature: 20, foliage: '#2b531e', foliage2: '#86a84a', flower: '#fbfaf4', flower2: '#7b2636', evergreen: false, spacing: 7, container: '15 gal',
+    about: 'Bradford flowering pear in early spring: a short trunk and many upright limbs in a dense, broad oval crown, covered in clusters of small white five-petaled flowers with purple-red anthers as the first pale leaves unfold.' }),
+  P({ id: 'callery-pear-bradford-leaf', name: 'Flowering pear \'Bradford\', in leaf', botanical: 'Pyrus calleryana \'Bradford\'', group: 'Trees', form: 'shadeTree', installHeight: 2.4, installSpread: 0.9, matureHeight: 10.7, matureSpread: 8.5, yearsToMature: 20, foliage: '#2b531e', foliage2: '#3e6c29', evergreen: false, spacing: 7, container: '15 gal',
+    about: 'Bradford flowering pear in summer: a short trunk and many upright limbs in a dense, broad oval crown of glossy dark green, broadly ovate leaves with wavy edges, turning red-purple in fall.' }),
   // Shrubs
   P({ id: 'boxwood', name: 'Boxwood', botanical: 'Buxus microphylla var. japonica \'Winter Gem\'', group: 'Shrubs', form: 'shrub', installHeight: 0.4, installSpread: 0.4, matureHeight: 1.2, matureSpread: 1.2, yearsToMature: 6, foliage: '#3f7029', foliage2: '#6f9a35', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'westringia', name: 'Coast rosemary (westringia)', botanical: 'Westringia fruticosa', group: 'Shrubs', form: 'shrub', installHeight: 0.5, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.8, yearsToMature: 4, foliage: '#6f8468', foliage2: '#a3b09a', flower: '#f4f2ee', evergreen: true, spacing: 1.5, container: '5 gal' }),
@@ -594,6 +627,18 @@ export const PLANTS: PlantSpec[] = [
   // The same vine as a 2 gal staked plant trained on a 48 in metal pot trellis (siteplan/yard.ts POT_TRELLIS), in a tall
   // pot or in the ground at a fence; kept pruned to about 6 in over the trellis.
   P({ id: 'star-jasmine-metal-trellis', name: 'Star jasmine, on a metal trellis', botanical: 'Trachelospermum jasminoides', group: 'Shrubs', form: 'floweringShrub', installHeight: 0.7, installSpread: 0.3, matureHeight: 1.0, matureSpread: 0.5, yearsToMature: 3, foliage: '#1f4a1c', foliage2: '#4c7a2a', flower: '#fbfaf2', flower2: '#f0e2a0', evergreen: true, spacing: 0.6, container: '2 gal' }),
+  // Plants for a customer job's front yard (2026-11-19): soft perennials, groundcovers and shrubs. Sizes and colors from
+  // the nursery, patent and extension references cited in each builder file.
+  P({ id: 'verbena-tapien-purple', name: 'Verbena \'Tapien Purple\'', botanical: 'Verbena \'Suntapipa\' (Tapien Purple)', group: 'Groundcover', form: 'groundcover', installHeight: 0.08, installSpread: 0.25, matureHeight: 0.15, matureSpread: 0.75, yearsToMature: 1, foliage: '#3d6a2a', foliage2: '#5a8a3a', flower: '#86289c', flower2: '#a85cc4', evergreen: true, spacing: 0.5, container: '1 gal',
+    about: 'A low, fast trailing verbena: a dense mat of finely cut, fern-like green leaves covered spring to frost in rounded heads of vivid purple flowers.' }),
+  P({ id: 'lantana-spreading-white', name: 'Lantana \'Spreading White\'', botanical: 'Lantana montevidensis \'Spreading White\'', group: 'Groundcover', form: 'groundcover', installHeight: 0.1, installSpread: 0.36, matureHeight: 0.35, matureSpread: 1.4, yearsToMature: 2, foliage: '#27481c', foliage2: '#44702a', flower: '#f3f2ea', flower2: '#ecc63a', evergreen: true, spacing: 1.0, container: '1 gal',
+    about: 'White trailing lantana: long stems make a low, wide mat of small, toothed, dark green aromatic leaves, dotted all season with small heads of white flowers with a yellow eye.' }),
+  P({ id: 'sedum-lemon-ball', name: 'Stonecrop \'Lemon Ball\'', botanical: 'Sedum \'Lemon Ball\'', group: 'Succulents', form: 'groundcover', installHeight: 0.08, installSpread: 0.28, matureHeight: 0.15, matureSpread: 0.6, yearsToMature: 2, foliage: '#a6c224', foliage2: '#d2d640', flower: '#f2d21a', evergreen: true, spacing: 0.35, container: '1 gal',
+    about: 'A low, tight dome of tiny, fleshy needle leaves in bright lemon-chartreuse, spreading on rooting stems; small yellow star flowers in late spring. Bronzes a little in winter.' }),
+  P({ id: 'pittosporum-creme-de-mint', name: 'Pittosporum \'Creme de Mint\'', botanical: 'Pittosporum tobira \'Shima\' (Cream de Mint)', group: 'Shrubs', form: 'shrub', installHeight: 0.25, installSpread: 0.28, matureHeight: 0.6, matureSpread: 0.75, yearsToMature: 5, foliage: '#5c7042', foliage2: '#c2c49c', evergreen: true, spacing: 0.75, container: '1 gal',
+    about: 'A slow, tight, rounded dwarf tobira: whorls of small spoon-shaped leaves, mint green edged in cream, with chartreuse new growth in spring.' }),
+  P({ id: 'lonicera-baggesens-gold', name: 'Box honeysuckle \'Baggesen\'s Gold\'', botanical: 'Lonicera nitida \'Baggesen\'s Gold\'', group: 'Shrubs', form: 'shrub', installHeight: 0.45, installSpread: 0.5, matureHeight: 1.0, matureSpread: 1.5, yearsToMature: 5, foliage: '#8c9a16', foliage2: '#bcac16', evergreen: true, spacing: 1.2, container: '5 gal',
+    about: 'A loose, billowing mound of long arching shoots set with tiny oval leaves in flat, feathery sprays, golden yellow to chartreuse in sun and lime green in shade.' }),
   // Grasses
   P({ id: 'blue-fescue', name: 'Blue fescue', botanical: 'Festuca glauca', group: 'Grasses', form: 'grass', installHeight: 0.15, installSpread: 0.15, matureHeight: 0.3, matureSpread: 0.35, yearsToMature: 2, foliage: '#7f9fb2', foliage2: '#98b4c2', flower: '#c9b27c', evergreen: true, spacing: 0.35, container: '1 gal' }),
   P({ id: 'ornamental-grass', name: 'Ornamental grass', botanical: 'Calamagrostis x acutiflora \'Karl Foerster\'', group: 'Grasses', form: 'grass', installHeight: 0.4, installSpread: 0.3, matureHeight: 1.5, matureSpread: 0.75, yearsToMature: 2, foliage: '#628e3a', foliage2: '#7fa648', flower: '#d2b676', evergreen: false, spacing: 0.7, container: '5 gal' }),
@@ -607,6 +652,14 @@ export const PLANTS: PlantSpec[] = [
   // Plants from a finished job's photos (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'lomandra-platinum-beauty', name: 'Lomandra \'Platinum Beauty\'', botanical: 'Lomandra longifolia \'Platinum Beauty\'', group: 'Grasses', form: 'grass', installHeight: 0.55, installSpread: 0.75, matureHeight: 0.75, matureSpread: 1.0, yearsToMature: 3, foliage: '#5f8a3e', foliage2: '#e4e2b8', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'liriope-silvery-sunproof', name: 'Liriope \'Silvery Sunproof\'', botanical: 'Liriope muscari \'Silvery Sunproof\'', group: 'Grasses', form: 'grass', installHeight: 0.2, installSpread: 0.3, matureHeight: 0.38, matureSpread: 0.45, yearsToMature: 3, foliage: '#3f6a2e', foliage2: '#e8e6c4', flower: '#a98fd6', flower2: '#7a5fb4', evergreen: true, spacing: 0.4, container: '1 gal' }),
+  // Strap-leaf, rosette and grass plants from a customer job's supplier bills (2026-11-19). Sizes and colors from the
+  // nursery, grower and patent references cited in each builder file.
+  P({ id: 'lomandra-leading-lime', name: 'Lomandra \'Leading Lime Tight\'', botanical: 'Lomandra confertifolia \'Limtigra\' (Leading Lime Tight)', group: 'Grasses', form: 'grass', installHeight: 0.23, installSpread: 0.28, matureHeight: 0.45, matureSpread: 0.6, yearsToMature: 3, foliage: '#58961f', foliage2: '#8cc234', evergreen: true, spacing: 0.55, container: '1 gal',
+    about: 'A compact, tight tuft of very fine, stiff, bright lime-green blades that stand upright and arch over only at the tips. Evergreen; its small flowers stay hidden down in the base.' }),
+  P({ id: 'lomandra-miners-gold', name: 'Lomandra \'Miner\'s Gold\'', botanical: 'Lomandra longifolia \'KM-MG24\' (Miner\'s Gold)', group: 'Grasses', form: 'grass', installHeight: 0.25, installSpread: 0.3, matureHeight: 0.55, matureSpread: 0.8, yearsToMature: 2, foliage: '#c4b818', foliage2: '#8a9a1c', evergreen: true, spacing: 0.75, container: '1 gal',
+    about: 'A weeping mound of narrow, smooth, bright golden-yellow to chartreuse blades that rise from the center and spill out to the ground. Evergreen and tough in sun or part shade.' }),
+  P({ id: 'fountain-grass-little-bunny', name: 'Dwarf fountain grass \'Little Bunny\'', botanical: 'Pennisetum alopecuroides \'Little Bunny\'', group: 'Grasses', form: 'grass', installHeight: 0.2, installSpread: 0.22, matureHeight: 0.38, matureSpread: 0.45, yearsToMature: 2, foliage: '#467a2c', foliage2: '#5e8e36', flower: '#ece2c8', flower2: '#c9b495', evergreen: false, spacing: 0.45, container: '1 gal',
+    about: 'A true dwarf fountain grass: a low, rounded tuft of fine deep green blades with short, fuzzy, creamy-beige bottlebrush plumes held just above it from late summer. Turns golden in fall.' }),
   // Perennials and color
   P({ id: 'lavender', name: 'Lavender', botanical: 'Lavandula x intermedia', group: 'Perennials and color', form: 'perennial', installHeight: 0.25, installSpread: 0.3, matureHeight: 0.6, matureSpread: 0.9, yearsToMature: 3, foliage: '#7f9076', foliage2: '#a3b09a', flower: '#7a63b8', flower2: '#4f3c94', evergreen: true, spacing: 0.75, container: '1 gal' }),
   P({ id: 'veronica-white', name: 'White veronica', botanical: 'Veronica spicata', group: 'Perennials and color', form: 'perennial', installHeight: 0.2, installSpread: 0.25, matureHeight: 0.45, matureSpread: 0.45, yearsToMature: 2, foliage: '#4c7a34', foliage2: '#669645', flower: '#f4f4ee', flower2: '#a9c77c', evergreen: false, spacing: 0.4, container: '1 gal' }),
@@ -638,10 +691,20 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'blue-agave', name: 'Blue agave', botanical: 'Agave tequilana \'Weber Azul\'', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.8, yearsToMature: 8, foliage: '#7d99a2', foliage2: '#a7bcc0', evergreen: true, spacing: 1.8, container: '5 gal' }),
   P({ id: 'red-yucca', name: 'Red yucca', botanical: 'Hesperaloe parviflora', group: 'Succulents', form: 'agave', installHeight: 1.3, installSpread: 0.85, matureHeight: 1.5, matureSpread: 1.25, yearsToMature: 4, foliage: '#5f7868', foliage2: '#7d9184', flower: '#c9493f', flower2: '#e48a6a', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'echeveria', name: 'Echeveria', botanical: 'Echeveria \'Lola\'', group: 'Succulents', form: 'agave', installHeight: 0.065, installSpread: 0.12, matureHeight: 0.08, matureSpread: 0.16, yearsToMature: 2, foliage: '#a8a2b3', foliage2: '#c9bfc6', flower: '#e9895a', evergreen: true, spacing: 0.2, container: '4" pot' }),
+  // Strap-leaf, rosette and grass plants from a customer job's supplier bills (2026-11-19). Sizes and colors from the
+  // nursery, grower and patent references cited in each builder file.
+  P({ id: 'agave-blue-flame', name: 'Agave \'Blue Flame\'', botanical: 'Agave shawii x attenuata \'Blue Flame\'', group: 'Succulents', form: 'agave', installHeight: 0.22, installSpread: 0.28, matureHeight: 0.75, matureSpread: 1.1, yearsToMature: 6, foliage: '#5f8a7c', foliage2: '#8fb0a8', evergreen: true, spacing: 1.0, container: '1 gal',
+    about: 'A clumping agave of broad, smooth, powdery blue-green leaves that sweep out and curl up at the tips like flames, each with a thin red-brown edge and a dark tip spine. Pups freely into a clump.' }),
+  P({ id: 'agave-snow-glow', name: 'Agave \'Snow Glow\'', botanical: 'Agave \'Snow Glow\' (variegated \'Blue Glow\')', group: 'Succulents', form: 'agave', installHeight: 0.33, installSpread: 0.45, matureHeight: 0.6, matureSpread: 0.9, yearsToMature: 6, foliage: '#4a6a62', foliage2: '#d9cf92', evergreen: true, spacing: 0.9, container: '5 gal',
+    about: 'A variegated sport of \'Blue Glow\': a neat, solitary ball of stiff, lance-shaped blue-green leaves with broad creamy-yellow margins and a thin mahogany-red edge that glows in backlight.' }),
   // Tropicals
   P({ id: 'banana', name: 'Banana', botanical: 'Musa basjoo', group: 'Tropicals', form: 'tropical', installHeight: 1.5, installSpread: 1.0, matureHeight: 4.0, matureSpread: 3.0, yearsToMature: 3, foliage: '#58982e', foliage2: '#6fae3c', evergreen: false, spacing: 2.5, container: '15 gal' }),
   P({ id: 'elephant-ear', name: 'Elephant ear', botanical: 'Colocasia esculenta', group: 'Tropicals', form: 'tropical', installHeight: 0.5, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.5, yearsToMature: 2, foliage: '#3b722f', foliage2: '#5c9442', evergreen: false, spacing: 1.2, container: '5 gal' }),
   P({ id: 'canna-tropicanna', name: 'Canna \'Tropicanna\'', botanical: 'Canna \'Phasion\' (Tropicanna, Tropicana)', group: 'Tropicals', form: 'tropical', installHeight: 0.45, installSpread: 0.35, matureHeight: 1.7, matureSpread: 1.0, yearsToMature: 2, foliage: '#5a2a2a', foliage2: '#c8762a', flower: '#f26a1b', flower2: '#f39a2a', evergreen: false, spacing: 0.6, container: '1 gal' }),
+  // Strap-leaf, rosette and grass plants from a customer job's supplier bills (2026-11-19). Sizes and colors from the
+  // nursery, grower and patent references cited in each builder file.
+  P({ id: 'cordyline-torbay-dazzler', name: 'Cordyline \'Torbay Dazzler\'', botanical: 'Cordyline australis \'Torbay Dazzler\'', group: 'Tropicals', form: 'tropical', installHeight: 0.9, installSpread: 0.8, matureHeight: 2.3, matureSpread: 1.7, yearsToMature: 10, foliage: '#4a762c', foliage2: '#e6dca0', evergreen: true, spacing: 1.5, container: '5 gal',
+    about: 'A slow, palm-like accent: a head of long, narrow sword leaves, green with broad creamy-yellow margins and a pink flush at the base, that becomes a corky gray trunk over the years. Fragrant white summer flowers on old plants.' }),
   // Groundcover
   P({ id: 'ajuga', name: 'Ajuga, bronze', botanical: 'Ajuga reptans \'Bronze Beauty\'', group: 'Groundcover', form: 'groundcover', installHeight: 0.06, installSpread: 0.2, matureHeight: 0.12, matureSpread: 0.6, yearsToMature: 2, foliage: '#4a2e3a', foliage2: '#34422c', flower: '#5a52cc', flower2: '#4338b0', evergreen: true, spacing: 0.35, container: 'Flat' }),
   P({ id: 'spreading-juniper', name: 'Spreading juniper', botanical: 'Juniperus sabina \'Tamariscifolia\'', group: 'Groundcover', form: 'groundcover', installHeight: 0.2, installSpread: 0.6, matureHeight: 0.45, matureSpread: 2.4, yearsToMature: 6, foliage: '#3f6347', foliage2: '#5a8062', evergreen: true, spacing: 1.5, container: '5 gal' }),
@@ -836,6 +899,8 @@ export const MATERIALS: MaterialSpec[] = [
     ] },
     matches: buys, maker: 'Natural stone', line: 'Crushed gravel', shelf: 'Rock', color: label,
   })),
+  // Bark, Noiya cobble, Noiyo and Salt & Pepper pebble from a customer job (siteplan/groundrock.ts).
+  ...GROUND_ROCK_MATERIALS,
   M({ id: 'white-cobble', name: 'White and tan cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#e3ddd1', '#cfc5b4', '#b5a993'] }),
   M({ id: 'cobble', name: 'River cobble', use: 'bed', group: 'Mulch and rock', recipe: 'cobble', palette: ['#c2b8a6', '#8f8679', '#6d675e'] }),
   // Pavers
@@ -936,6 +1001,8 @@ export const MATERIALS: MaterialSpec[] = [
   // height; 4 in is the standard height). Black powder coat.
   M({ id: 'steel-edging-black-1-8', name: 'Black steel edging, 1/8 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.125, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'Border Concepts', line: 'BORDER Line steel edging, 1/8 in', shelf: 'Metal edging', color: 'Black' }),
   M({ id: 'steel-edging-black-3-16', name: 'Black steel edging, 3/16 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.1875, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'California Landscape Supply', line: 'Black steel edging, 3/16 in', shelf: 'Metal edging', color: 'Black' }),
+  // Double-head moss rock laid along a line (siteplan/groundrock.ts).
+  ...ROCK_BORDER_MATERIALS,
   // Poured concrete mow curb: three curb machine shapes in the concrete colors (MOW_CURB_SHAPES).
   ...mowCurbLooks(),
 ];
@@ -1003,6 +1070,8 @@ const BELGARD: MaterialSpec[] = [
   })),
 ];
 MATERIALS.push(...BELGARD);
+// Coronado Stone Honey Ledge veneer and the Chiseled Stone Sill coping (siteplan/coronado.ts).
+MATERIALS.push(...CORONADO_LOOKS);
 
 /*
  * Belgard Dimensions Slabs, 2 3/8 in thick, used one at a time as stepping stones in the line's three sizes (12 x 24,
@@ -1131,6 +1200,8 @@ export const FEATURES: FeatureSpec[] = [
     about: 'SunVilla Stratus: a freestanding aluminum pergola with a motorized louvered roof that turns from open sky to full cover, an integrated gutter, and LED lighting built into the roof.',
     facts: ['Overall 157.3 in L x 118.7 in W x 98.6 in H (about 13 x 10 ft, 8 ft 2 in tall)', 'Aluminum frame, charcoal finish; square posts on base plates', 'Louvers driven by a 20 V battery motor (two batteries and charger included)', 'Integrated gutter; LED lighting in the roof'],
     options: [{ key: 'louversOpen', label: 'Louvers fully open', default: false }, { key: 'louversClosed', label: 'Louvers closed (flat)', default: false }] }),
+  // Mirador 111 louvered pergolas, 10 x 10 and 10 x 20, with café lights and post outlets, and an outlet post (siteplan/mirador.ts).
+  ...MIRADOR_FEATURES,
   F({ id: 'pergola-wood', name: 'Wood pergola', group: 'Shade', kind: 'pergolaWood', footprint: [3.6, 3.0] }),
   F({ id: 'gazebo', name: 'Hardtop gazebo', group: 'Shade', kind: 'gazebo', footprint: [3.6, 3.6] }),
   F({ id: 'umbrella', name: 'Market umbrella', group: 'Shade', kind: 'umbrella', footprint: [2.7, 2.7] }),
@@ -1236,9 +1307,16 @@ export const FEATURES: FeatureSpec[] = [
   // Moss rock, Canyon Tech boulders and flagstone pieces for water features (siteplan/waterrocks.ts).
   ...WATER_ROCK_FEATURES,
   ...FLAGSTONE_FEATURES,
+  // Moss rock by weight: double-head border stones, garden and showpiece boulders (siteplan/groundrock.ts).
+  ...GROUND_ROCK_FEATURES,
   // Side-yard pieces from a client job (siteplan/yard.ts): resin shed, garden bench, cedar raised bed, pot with trellis
   // and jasmine, A/C screen, and the 24 in bubbling urn in its glazes.
   ...YARD_FEATURES,
+  // Vego Garden metal raised beds and the built cedar deck planters (siteplan/planterbeds.ts).
+  ...PLANTER_BED_FEATURES,
+  // Homeowner water and fire pieces matched to maker products (siteplan/waterfire.ts): Stone Forest basalt fountain,
+  // Campania glazed birdbath, The Outdoor Plus Florence fire pit.
+  ...WATER_FIRE_FEATURES,
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
@@ -1261,6 +1339,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'spot-light', name: 'Uplight, bronze', group: 'Lighting', kind: 'spotLight', footprint: [0.12, 0.12] }),
   // Tru-Scapes low-voltage LED fixtures and transformers, drawn and lit to the maker's specs (siteplan/truscapes.ts).
   ...truscapesFeatures().map(F),
+  // Vista Professional bollard, up light and WiFi transformer, drawn and lit to Vista's spec sheets (siteplan/vista.ts).
+  ...vistaFeatures().map(F),
   F({ id: 'bench', name: 'Bench', group: 'Furniture', kind: 'bench', footprint: [1.5, 0.45] }),
   F({ id: 'lounge-set', name: 'Lounge set', group: 'Furniture', kind: 'loungeSet', footprint: [3.2, 2.6] }),
   F({ id: 'bistro-set', name: 'Bistro set', group: 'Furniture', kind: 'bistroSet', footprint: [1.4, 1.4] }),
@@ -1274,6 +1354,8 @@ export const plantById = new Map(PLANTS.map((p) => [p.id, p]));
  * and ordered by the ton like gravel, but laid as a surface, not a loose bed.
  */
 function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | 'tonsPerCuYd'> {
+  // A look that gives its own (a supplier's weight per yard) keeps it.
+  if (m.fillType && m.depthIn) return { fillType: m.fillType, depthIn: m.depthIn, ...(m.tonsPerCuYd ? { tonsPerCuYd: m.tonsPerCuYd } : {}) };
   if (m.recipe === 'mulch') return { fillType: 'bark', depthIn: 3 };
   if (m.crumb) return { fillType: 'humus', depthIn: m.id === 'topsoil' ? 3 : 2.5 };
   if (m.id === 'decomposed-granite') return { fillType: 'dg', depthIn: 3, tonsPerCuYd: 1.4 };
@@ -1310,6 +1392,8 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   loungeSet: 'Furniture sets', bistroSet: 'Furniture sets', diningSet: 'Furniture sets', diningSling: 'Furniture sets',
   patioHeater: 'Patio heaters', ceilingFan: 'Ceiling fans',
   ...YARD_SWAP,
+  ...ELECTRIC_SWAP,
+  ...WATER_FIRE_SWAP,
 };
 
 /** The class a feature switches within (see SWAP_CLASS). */

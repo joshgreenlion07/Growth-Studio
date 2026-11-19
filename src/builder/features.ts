@@ -25,9 +25,12 @@ import { pillarWaterWall } from './pillarwaterwall';
 import { urnFountain } from './urnfountain';
 import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
+import { buildWaterFire } from './waterfire';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 import { buildFourFall, type FourFallInstance } from './fourfall';
 import { buildKitchenFeature } from './kitchen/island';
+import { buildMirador, buildOutletPost, type MiradorSink } from './mirador';
+import type { OutletJoin } from '../siteplan/outletjoin';
 import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
 
@@ -61,6 +64,8 @@ export interface NightLight {
 
 export interface FeatureBuild {
   object: THREE.Group;
+  /** Parts under grade shown while the trenches are open (an outlet's stub-up and its elbow), kept apart from `object`. */
+  below: THREE.Group;
   surfaces: THREE.Mesh[];
   lights: NightLight[];
   /** Landscape lighting fixtures' aimed beams (engine/landlights.ts), in world space. */
@@ -143,9 +148,11 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', fourFallBed?: (f: FeaturePlacement) => FourFallBedLook): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', fourFallBed?: (f: FeaturePlacement) => FourFallBedLook, joins?: Map<string, Map<string, OutletJoin>>): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
+  const below = new THREE.Group();
+  below.name = 'features-below';
   const surfaces: THREE.Mesh[] = [];
   const lights: NightLight[] = [];
   const landLights: LandLight[] = [];
@@ -221,6 +228,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     if (!spec) continue;
     if (spec.fixture && site) f = site.place(f, spec.fixture);
     const o = new THREE.Group();
+    const ob = new THREE.Group();
     const parts: Parts = new Map();
     const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
       const list = parts.get(m) ?? [];
@@ -308,6 +316,42 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     };
     const kind: FeatureKind = spec.kind;
     const [W, D] = spec.footprint;
+    // What the Mirador pergola and outlet builders (builder/mirador.ts) hand back, in this feature's local space.
+    const mirador = (): MiradorSink => ({
+      add,
+      object(m) {
+        o.add(m);
+        m.traverse((c) => {
+          if (!(c instanceof THREE.Mesh)) return;
+          geos.push(c.geometry);
+          if (c instanceof THREE.InstancedMesh) surfaces.push(c);
+        });
+      },
+      anchor: (x, y, z) => anchorAt(o, x, y, z),
+      act,
+      light(x, y, z, color, intensity, distance) {
+        const l: NightLight = { position: local(x, y, z), color, intensity, distance, flicker: false, shade: true };
+        lights.push(l);
+        return l;
+      },
+      landLight(l) {
+        const w = { ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (-f.rotationDeg * Math.PI) / 180) };
+        landLights.push(w);
+        return w;
+      },
+      glow: (m) => extraGlow.push(m),
+      own: (m) => owned.push(m),
+      lift(x, z) {
+        const w = local(x, 0, z);
+        return lift?.([w.x, w.z]) ?? 0;
+      },
+      under(m, g) {
+        const mesh = new THREE.Mesh(g, m);
+        mesh.receiveShadow = true;
+        geos.push(g);
+        ob.add(mesh);
+      },
+    });
 
     switch (kind) {
       case 'firePit': {
@@ -346,6 +390,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'pergolaLouvered': {
+        if (spec.model === 'mirador-111') {
+          // Mirador 111, 10 x 10 or 10 x 20: louvers, cranks, pedestals, café lights and post outlets (builder/mirador.ts).
+          buildMirador(mirador(), spec, f.options, joins?.get(f.id));
+          break;
+        }
         if (spec.model === 'stratus') {
           const led = ledGlow.clone();
           owned.push(led);
@@ -677,6 +726,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'shedResin':
       case 'gardenBench':
       case 'raisedBedCedar':
+      case 'vegoModernBed':
       case 'potTrellis':
       case 'slatScreen': {
         // Side-yard pieces (siteplan/yard.ts, builder/yard/): on paving they stand on its top.
@@ -775,6 +825,21 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         cazoFireWaterBowl(sink, (t) => fire(t), (x, y, z, c, i, d) => light(x, y, z, c, i, d, true), f.id);
         break;
       }
+      case 'basaltFountain':
+      case 'birdbath':
+      case 'roundFirePit': {
+        // Homeowner water and fire pieces matched to maker products (siteplan/waterfire.ts, builder/waterfire/): on paving
+        // they stand on its top.
+        buildWaterFire(kind, {
+          f, spec, sink,
+          fire: (t) => fire(t),
+          fireLight: (x, y, z, color, intensity, distance) => light(x, y, z, color, intensity, distance, true),
+          act,
+          anchor: (x, y, z) => anchorAt(o, x, y, z),
+          option: (key) => featureOption(spec, f.options, key),
+        }, lift?.(f.position) ?? 0);
+        break;
+      }
       case 'patinaBowl': {
         patinaBowl(sink, f.id, 0, 0, 0, f.planted !== false);
         break;
@@ -868,6 +933,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         } });
         break;
       }
+      case 'outletPost': {
+        // A 4x4 post with a weatherproof GFCI outlet under an in-use cover (builder/mirador.ts).
+        buildOutletPost(mirador(), spec, f.options, f.size, joins?.get(f.id));
+        break;
+      }
       case 'bench': {
         for (let k = 0; k < 4; k++) add(mat.teak, box(1.5, 0.04, 0.1, 0, 0.42, -0.17 + k * 0.115));
         for (const sx of [-0.6, 0.6]) add(mat.teak, box(0.08, 0.42, 0.4, sx, 0, 0));
@@ -914,6 +984,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     }
     o.position.set(f.position[0], y0, f.position[1]);
     o.rotation.y = (-f.rotationDeg * Math.PI) / 180;
+    if (ob.children.length) {
+      ob.position.copy(o.position);
+      ob.rotation.copy(o.rotation);
+      below.add(ob);
+    }
     o.userData.itemId = f.id;
     if (spec.kind === 'steppingStone') {
       // What the material pointer reports for a stepping stone: its slab, concrete or flagstone, and color.
@@ -932,6 +1007,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
 
   return {
     object: group,
+    below,
     surfaces,
     lights,
     landLights,

@@ -10,11 +10,14 @@ import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
 import { mowCurbOutline, mowCurbSink, profileGeometry } from './mowcurb';
+import { rockBorderGeometry } from './rockborder';
+import { boulderMaterial } from './waterrock';
 import type { PoolLayout } from './pools';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
 import { metalPicketFence } from './decor/fence-metal-picket';
 import { buildDeck } from './deck';
 import { deckTopOf, isBoardDeck } from '../siteplan/deckzone';
+import { cladFace, cladLook, exposedEdges, type Blocker } from './landing';
 
 /**
  * Patios with soldier borders and inset lights, raised planters, walls with
@@ -546,11 +549,21 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
       const cut = pools.touches(z.polygon);
       const mat = (m: THREE.Material) => (cut ? pools.cutMaterial(m) : m);
       const bev = spec?.recipe === 'deck' ? 0.004 : 0.006;
-      let field = z.polygon;
-      const pad = padOf(z);
+      // A clad landing (builder/landing.ts): veneer on its exposed sides, a coping along their tops, the paving inside it.
+      const clad = (z.elevation ?? 0) > 0 ? cladLook(z.clad) : null;
+      let outline = z.polygon;
+      if (clad) {
+        const blockers: Blocker[] = [...housePolys(plan).map((poly) => ({ poly, top: Infinity })), ...plan.zones.flatMap((o, k) => (k !== i && o.kind === 'hardscape' ? [{ poly: o.polygon, top: zoneTop(o, k) }] : []))];
+        const cb = cladFace(z.polygon, exposedEdges(z.polygon, t, blockers), t, height, clad, spec?.thickness ?? 0.06, z.id);
+        outline = cb.field;
+        geos.push(...cb.geos);
+        for (const m of cb.meshes) { group.add(m); surfaces.push(m); }
+      }
+      let field = outline;
+      const pad = clad ? null : padOf(z);
       if (z.border && !pad && materialById.has(z.border.catalogId)) {
         const w = Math.max(0.08, Math.min(0.6, z.border.width));
-        const inner = insetPolygon(z.polygon, w);
+        const inner = insetPolygon(outline, w);
         field = inner;
         const sailor = z.border.course === 'sailor';
         const bp = materialById.get(z.border.catalogId)?.pattern;
@@ -562,7 +575,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         // (Detailed lines only, so every other line's border looks as it did.)
         const cells = bp?.kind !== 'soldier' || pieceIn !== (sailor ? b : a) || !hasPaverDetail(z.border.catalogId) ? undefined
           : sailor ? { n: Math.round(L / b), m: Math.round(L / a), size: a * 0.0254 } : { n: Math.round(L / a), m: Math.round(L / b), size: b * 0.0254 };
-        const bg = borderGeometry(z.polygon, inner, t, -0.06, sailor, pieceIn, cells);
+        const bg = borderGeometry(outline, inner, t, -0.06, sailor, pieceIn, cells);
         geos.push(bg);
         const bm = new THREE.Mesh(bg, mat(catalogMaterial(z.border.catalogId, { side: THREE.DoubleSide })));
         bm.receiveShadow = true;
@@ -570,7 +583,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
         bm.userData.part = 'border';
         bm.userData.catalogId = z.border.catalogId;
         group.add(bm);
-        const mj = mitreJoints(z.polygon, inner, t);
+        const mj = mitreJoints(outline, inner, t);
         if (mj) {
           geos.push(mj);
           group.add(new THREE.Mesh(mj, mat(plainMaterial('mitre-joint', { color: '#5f584e', roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }))));
@@ -823,6 +836,39 @@ function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geo
   if (l.points.length < 2) return g;
   const { n, r } = stepCount(l.height, l.riser);
   const T = l.tread ?? 0.3, d = stepsDown(l, zones, houses);
+  // Clad steps (builder/landing.ts): each tread on a riser faced in the veneer, its nosing the coping.
+  const clad = cladLook(l.clad);
+  if (clad) {
+    // The rise is counted from the paving the flight comes down onto (a walk), so its risers are equal above it, as Area
+    // Planner gives them (the raised area's height over the paving around it).
+    const a0 = l.points[0], b0 = l.points[1], run = (n - 1) * T + 0.15;
+    const foot: Vec2 = [(a0[0] + b0[0]) / 2 + d[0] * run, (a0[1] + b0[1]) / 2 + d[1] * run];
+    const base = Math.max(0, ...zones.flatMap((z, k) => (z.kind === 'hardscape' && !(z.elevation ?? 0) && pointInPolygon(foot, z.polygon) ? [zoneTop(z, k)] : [])));
+    const rects: { poly: Vec2[]; top: number }[] = [];
+    for (let i = 0; i < l.points.length - 1; i++) {
+      const a = l.points[i], b = l.points[i + 1];
+      for (let j = 1; j < n; j++) {
+        const k0 = (j - 1) * T, k1 = j * T;
+        rects.push({ poly: [[a[0] + d[0] * k0, a[1] + d[1] * k0], [b[0] + d[0] * k0, b[1] + d[1] * k0], [b[0] + d[0] * k1, b[1] + d[1] * k1], [a[0] + d[0] * k1, a[1] + d[1] * k1]], top: base + l.height - j * r });
+      }
+    }
+    const blockers: Blocker[] = [...houses.map((poly) => ({ poly, top: Infinity })), ...zones.flatMap((z, k) => (z.kind === 'hardscape' ? [{ poly: z.polygon, top: zoneTop(z, k) }] : [])), ...rects];
+    const tread = catalogMaterial(l.catalogId);
+    for (const rc of rects) {
+      const cb = cladFace(rc.poly, exposedEdges(rc.poly, rc.top, blockers.filter((b) => b !== rc)), rc.top, height, clad, materialById.get(l.catalogId)?.thickness ?? 0.06, l.id);
+      geos.push(...cb.geos);
+      for (const m of cb.meshes) g.add(m);
+      const y0 = Math.min(...rc.poly.map(height), 0) - 0.06;
+      const slabGeo = slab(cb.field, y0, rc.top, 0.004);
+      geos.push(slabGeo);
+      const m = new THREE.Mesh(slabGeo, tread);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      Object.assign(m.userData, { itemId: l.id, part: 'steps', catalogId: l.catalogId });
+      g.add(m);
+    }
+    return g;
+  }
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < l.points.length - 1; i++) {
     const a = l.points[i], b = l.points[i + 1];
@@ -863,7 +909,11 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
 
   // Walls and curbs are one continuous mitered body along the path linePath gives them (moved off
   // the line onto the surface that matters less); fences and steel edging go segment by segment.
-  if (l.kind === 'wall' || (l.kind === 'edging' && spec?.recipe === 'curb')) {
+  if (l.kind === 'edging' && spec?.rockBorder) {
+    // A rock border: stones laid one by one along the line as drawn (builder/rockborder.ts).
+    const stones = rockBorderGeometry(l, spec.rockBorder, height);
+    if (stones) put('stone', boulderMaterial(), stones);
+  } else if (l.kind === 'wall' || (l.kind === 'edging' && spec?.recipe === 'curb')) {
     const path = linePath(l, zones);
     if (path.pts.length < 2) return g;
     const y0 = path.pts.map((p) => Math.min(height(p), 0) - 0.08);
@@ -934,7 +984,7 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     m.receiveShadow = true;
     m.userData.itemId = l.id;
     // What the material pointer reports: the wall face or its cap, a curb, or a fence.
-    m.userData.part = l.kind === 'wall' ? (key === 'cap' ? 'cap' : 'wall') : l.kind === 'fence' ? 'fence' : key === 'pavers' || key === 'mitre' ? 'edge' : 'curb';
+    m.userData.part = l.kind === 'wall' ? (key === 'cap' ? 'cap' : 'wall') : l.kind === 'fence' ? 'fence' : key === 'pavers' || key === 'mitre' ? 'edge' : key === 'stone' ? 'stone' : 'curb';
     m.userData.catalogId = l.catalogId;
     g.add(m);
   }

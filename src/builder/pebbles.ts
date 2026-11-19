@@ -12,8 +12,9 @@ import type { GroundModel } from './ground';
 import type { Quality } from '../engine/post';
 
 /**
- * Beds of loose stone or chips (a material with spec.pebble: Mexican beach pebble, crushed gravel, bark and wood chips),
- * drawn piece by piece. `pebble.form` picks the pieces: smooth beach pebbles, angular crushed stone, or flat wood chips.
+ * Beds of loose stone or chips (a material with spec.pebble: Mexican beach pebble, river cobble, crushed gravel, bark and
+ * wood chips), drawn piece by piece. `pebble.form` picks the pieces: smooth beach pebbles, rounded river rock and cobble,
+ * angular crushed stone, flat wood chips, or bark nuggets (with a share of splinters among them).
  *
  * Every stone is one of a few smooth, slightly lopsided ovals, scaled to its own length, width and thickness from the
  * size range it is sold in, turned at random and tipped a little, and set in partly, so the bed reads as stones piled two
@@ -66,6 +67,138 @@ function pebbleShape(s: number, detail: number): THREE.BufferGeometry {
     col[i * 3 + 1] = c;
     col[i * 3 + 2] = c;
   }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  shapeCache.set(key, g);
+  return g;
+}
+
+/**
+ * A unit river rock or cobble (long side 1 along x before scaling), seed `s`: rounder and fuller than a beach pebble. An
+ * icosphere welded smooth and pushed only a little toward a box (exponent near 2, an egg), egg-shaped and lopsided, with
+ * broad lumps and a slightly flattened underside where it settled. Vertex color darkens toward the bottom, where stones
+ * touch and shade each other, with soft mottling.
+ */
+function roundShape(s: number, detail: number): THREE.BufferGeometry {
+  const key = `river${s}:${detail}`;
+  const hit = shapeCache.get(key);
+  if (hit) return hit;
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.5, detail);
+  g.deleteAttribute('normal');
+  g.deleteAttribute('uv');
+  g = mergeVertices(g);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const r = rng(`river${s}`);
+  const egg = 0.06 + r() * 0.14, lop = (r() - 0.5) * 0.18, flatBottom = 0.08 + r() * 0.14;
+  const box = 2.0 + r() * 0.35;
+  const lump = 0.05;
+  const v = new THREE.Vector3();
+  const col = new Float32Array(p.count * 3), uv = new Float32Array(p.count * 2);
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const sup = (Math.abs(v.x) ** box + Math.abs(v.y) ** box + Math.abs(v.z) ** box) ** (-1 / box);
+    const bumps = (vnoise(v.x * 1.6 + s * 5, v.z * 1.6 + v.y * 1.3, 1e6, s) - 0.5) * lump + (vnoise(v.x * 4 + s, v.y * 4 + v.z * 3, 1e6, s + 9) - 0.5) * 0.02;
+    const k = sup * (1 + egg * v.x + lop * v.z * v.x + bumps);
+    let y = v.y * k;
+    if (y < 0) y *= 1 - flatBottom;
+    const x = v.x * 0.5 * k, z = v.z * 0.5 * k;
+    y *= 0.5;
+    p.setXYZ(i, x, y, z);
+    uv[i * 2] = (x + y * 0.4) * 1.4 + s * 0.31;
+    uv[i * 2 + 1] = (z + y * 0.7) * 1.4 + s * 0.17;
+    const mott = vnoise(v.x * 3 + s, v.y * 3 + v.z * 2.5, 1e6, s + 3);
+    // Darker low down than a beach pebble: a fuller stone's lower half sits in the shade of the stones round it.
+    const ao = 0.32 + 0.68 * Math.min(1, Math.max(0, (v.y + 0.5) / 1.05)) ** 1.1;
+    const c = ao * (0.88 + mott * 0.2);
+    col[i * 3] = c;
+    col[i * 3 + 1] = c;
+    col[i * 3 + 2] = c;
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  shapeCache.set(key, g);
+  return g;
+}
+
+/**
+ * River rock and cobble's skin, gray to multiply each stone's color: water-worn but not polished, a fine granular grain
+ * with light and dark specks, faint bands of other mineral, matte to satin (dry stone).
+ */
+function riverMaterial(): THREE.MeshStandardMaterial {
+  const set = textureSet('riverSkin2', () =>
+    paint(512, 0.08, 1.5, (u, v) => {
+      const fine = vnoise(u * 240, v * 240, 240, 41), coarse = vnoise(u * 40, v * 40, 40, 42), fleck = vnoise(u * 320, v * 320, 320, 43);
+      const band = vnoise(u * 6 + coarse * 2, v * 22, 22, 44);
+      // Granular stone: light and dark grains, broad blotches of weathering, and now and then a vein of other mineral.
+      const light = fleck > 0.8 ? (fleck - 0.8) * 3.5 : 0, dark = fleck < 0.14 ? (0.14 - fleck) * 3 : 0;
+      const vein = band > 0.8 ? (band - 0.8) * 1.2 : 0;
+      const g = Math.min(1, 0.8 + fine * 0.1 + coarse * 0.14 + light * 0.4 - dark * 0.45 + vein * 0.5);
+      return { h: 0.5 + fine * 0.16 + coarse * 0.12, c: [g, g, g], r: 0.68 + fine * 0.1 + coarse * 0.06 };
+    }),
+  );
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap, roughness: 1, metalness: 0 });
+  m.normalScale.set(0.6, 0.6);
+  return m;
+}
+
+/**
+ * A unit bark nugget (long side 1 along x, width 1 along z, thickness 1 along y before scaling), seed `s`: a flat plate
+ * of bark broken along five to seven straight cracks (an angular outline), its top and bottom flat, the rim beveled a
+ * little, the top a touch domed and tilted. Faceted (bark is rough, not worn smooth); the skin (nuggetMaterial) gives the
+ * cork and fissures. Vertex color darkens toward the bottom.
+ */
+function nuggetShape(s: number, detail: number): THREE.BufferGeometry {
+  const key = `nugget${s}:${detail}`;
+  const hit = shapeCache.get(key);
+  if (hit) return hit;
+  const r = rng(`nugget${s}`);
+  const K = 5 + Math.floor(r() * 3);
+  let ring: [number, number][] = Array.from({ length: K }, (_, k) => {
+    const a = ((k + (r() - 0.5) * 0.6) / K) * Math.PI * 2, rad = 0.36 + r() * 0.16;
+    return [Math.cos(a) * rad, Math.sin(a) * rad];
+  });
+  // To a unit plate: 1 x 1 across.
+  const xs = ring.map((q) => q[0]), zs = ring.map((q) => q[1]);
+  const kx = 1 / (Math.max(...xs) - Math.min(...xs)), kz = 1 / (Math.max(...zs) - Math.min(...zs));
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cz = (Math.max(...zs) + Math.min(...zs)) / 2;
+  ring = ring.map(([x, z]) => [(x - cx) * kx, (z - cz) * kz]);
+  const tilt = (r() - 0.5) * 0.3, dome = 0.06 + r() * 0.1;
+  // Rings from the bottom up: [inset, height]; the near shape bevels both rims, the far one only the top.
+  const rings: [number, number][] = detail > 0 ? [[0.86, -0.5], [1, -0.28], [1, 0.3], [0.84, 0.5]] : [[1, -0.5], [1, 0.3], [0.84, 0.5]];
+  const pos: number[] = [], col: number[] = [], uv: number[] = [];
+  const P = (ri: number, k: number): [number, number, number] => {
+    const [f, y] = rings[ri], [x, z] = ring[k % K];
+    return [x * f, y + (y > 0 ? tilt * x : 0), z * f];
+  };
+  // Darker down the broken sides and underneath; the top's own tone wanders a little piece to piece.
+  const topTone = 0.9 + r() * 0.15;
+  const shade = (y: number) => (y > 0.4 ? topTone : 0.4 + 0.45 * Math.min(1, Math.max(0, (y + 0.55) / 1.1)) ** 0.8);
+  const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
+    for (const q of [a, b, c]) {
+      pos.push(q[0], q[1], q[2]);
+      uv.push(q[0] * 1.3 + q[1] * 0.4 + s * 0.29, q[2] * 1.3 + q[1] * 0.7 + s * 0.13);
+      const g = shade(q[1]);
+      col.push(g, g, g);
+    }
+  };
+  for (let ri = 0; ri < rings.length - 1; ri++) {
+    for (let k = 0; k < K; k++) {
+      const a = P(ri, k), b = P(ri, k + 1), c = P(ri + 1, k + 1), d = P(ri + 1, k);
+      tri(a, c, b);
+      tri(a, d, c);
+    }
+  }
+  const top: [number, number, number] = [0, 0.5 + dome, 0], bot: [number, number, number] = [0, -0.5, 0];
+  for (let k = 0; k < K; k++) {
+    tri(top, P(rings.length - 1, k + 1), P(rings.length - 1, k));
+    tri(bot, P(0, k), P(0, k + 1));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
@@ -204,10 +337,35 @@ function chipMaterial(): THREE.MeshStandardMaterial {
   return m;
 }
 
-type Form = 'pebble' | 'crushed' | 'chip';
-/** Per form, on each piece's linear albedo (see placeStones). */
-const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2] };
-const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : pebbleShape(s, detail));
+/**
+ * Bark nuggets' skin, gray to multiply each piece's color: corky outer bark, blotchy and layered, with fine cracks
+ * running one way and a few pale flecks where the cork is broken; fully matte.
+ */
+function nuggetMaterial(): THREE.MeshStandardMaterial {
+  const set = textureSet('nuggetSkin2', () =>
+    paint(512, 0.05, 3, (u, v) => {
+      const cork = vnoise(u * 90, v * 90, 90, 51), layer = vnoise(u * 30, v * 160, 160, 52), crack = vnoise(u * 40, v * 420, 420, 53);
+      const fleck = vnoise(u * 260, v * 260, 260, 54);
+      const dark = crack < 0.18 ? (0.18 - crack) * 2.2 : 0, pale = fleck > 0.88 ? (fleck - 0.88) * 3 : 0;
+      const g = Math.min(1, 0.78 + cork * 0.18 + (layer - 0.5) * 0.2 - dark * 1.4 + pale);
+      return { h: 0.45 + cork * 0.3 + layer * 0.2 - dark * 0.8, c: [g, g, g], r: 0.93 + cork * 0.05 };
+    }),
+  );
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap, roughness: 1, metalness: 0 });
+  m.normalScale.set(1.3, 1.3);
+  return m;
+}
+
+type Form = 'pebble' | 'crushed' | 'chip' | 'river' | 'nugget';
+/**
+ * Per form, on each piece's linear albedo (see placeStones). River rock is fuller than a beach pebble, so more of each
+ * stone turns from the sun and they shade one another more: a little more gain (set by eye on the sample beds). Bark
+ * nuggets lie flatter than shredded chips and shade one another less.
+ */
+const FORM_GAIN: Record<Form, [number, number, number]> = { pebble: [1, 1, 1], crushed: [1.45, 1.47, 1.6], chip: [2, 2, 2.2], river: [1.12, 1.12, 1.16], nugget: [2.6, 2.35, 2.5] };
+const shapeOf = (form: Form, s: number, detail: number) => (form === 'crushed' ? crushedShape(s, detail) : form === 'chip' ? chipShape(s, detail) : form === 'river' ? roundShape(s, detail) : form === 'nugget' ? nuggetShape(s, detail) : pebbleShape(s, detail));
+/** Bark splinters among nuggets: shapes past SHAPES, drawn as wood chips. */
+const SPLINTER_SHAPES = 2;
 
 export interface Stone {
   x: number;
@@ -221,6 +379,8 @@ export interface Stone {
   tipZ: number;
   color: THREE.Color;
   shape: number;
+  /** How far the shape reaches from its center along an axis, as a share of its size, kept high (see pieceTop). */
+  full?: number;
 }
 
 interface Tile {
@@ -288,7 +448,7 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const mats = new Map<Form, THREE.MeshStandardMaterial>();
   const matOf = (f: Form) => {
     let m = mats.get(f);
-    if (!m) mats.set(f, (m = f === 'crushed' ? crushedMaterial() : f === 'chip' ? chipMaterial() : pebbleMaterial()));
+    if (!m) mats.set(f, (m = f === 'crushed' ? crushedMaterial() : f === 'chip' ? chipMaterial() : f === 'river' ? riverMaterial() : f === 'nugget' ? nuggetMaterial() : pebbleMaterial()));
     return m;
   };
   const tiles: Tile[] = [];
@@ -301,7 +461,8 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
     const P = spec.pebble!;
     const form: Form = P.form ?? 'pebble';
     const mat = matOf(form);
-    const avg = ((P.minIn + P.maxIn) / 2) * 0.0254;
+    // A bed of mixed sizes is drawn and faded by its typical stone (the sizes' middles, weighted by the area each covers).
+    const avg = (P.mix ? P.mix.reduce((t, b) => t + b.share * (b.minIn + b.maxIn) / 2, 0) / P.mix.reduce((t, b) => t + b.share, 0) : (P.minIn + P.maxIn) / 2) * 0.0254;
     // Small stones get plainer shapes: their facets never show. Gravel under an inch is many pieces: the plainest shapes.
     const nearDetail = form === 'crushed' ? (avg < 0.015 ? 0 : 1) : avg < 0.03 ? 1 : 2;
     const farDetail = form === 'crushed' ? 0 : avg < 0.03 ? 0 : 1;
@@ -316,11 +477,15 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
       const box = new THREE.Box3();
       const near: THREE.InstancedMesh[] = [], far: THREE.InstancedMesh[] = [];
       const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), t = new THREE.Vector3(), e = new THREE.Euler();
-      for (let sh = 0; sh < SHAPES; sh++) {
+      for (let sh = 0; sh < SHAPES + (P.splinters ? SPLINTER_SHAPES : 0); sh++) {
         const mine = list.filter((s) => s.shape === sh);
         if (!mine.length) continue;
+        // Splinters among bark nuggets are wood chips.
+        const splinter = sh >= SHAPES;
+        const shapeAt = (detail: number) => (splinter ? chipShape(sh + 1, detail) : shapeOf(form, sh + 1, detail));
+        const mt = splinter ? matOf('chip') : mat;
         // The near and the far mesh draw the same stones: they share one copy of the stones' places and colors.
-        const a = new THREE.InstancedMesh(shapeOf(form, sh + 1, nearDetail), mat, mine.length);
+        const a = new THREE.InstancedMesh(shapeAt(nearDetail), mt, mine.length);
         mine.forEach((s, i) => {
           e.set(s.tipX, s.yaw, s.tipZ, 'YXZ');
           q.setFromEuler(e);
@@ -331,12 +496,14 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
           a.setColorAt(i, s.color);
           box.expandByPoint(t);
         });
-        const b = new THREE.InstancedMesh(shapeOf(form, sh + 1, farDetail), mat, mine.length);
+        const b = new THREE.InstancedMesh(shapeAt(farDetail), mt, mine.length);
         b.instanceMatrix = a.instanceMatrix;
         b.instanceColor = a.instanceColor;
         for (const [im, list2] of [[a, near], [b, far]] as [THREE.InstancedMesh, THREE.InstancedMesh[]][]) {
           im.name = `pebbles-${spec.id}`;
-          im.castShadow = false;
+          // Cobble 2 in and up casts its own shadow (each stone shades the next, as the stones of a dry creek do);
+          // smaller stones are too many and too small for the shadow map.
+          im.castShadow = form === 'river' && avg >= 0.05;
           im.receiveShadow = true;
           im.computeBoundingSphere();
           im.visible = false;
@@ -348,8 +515,9 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
       box.expandByScalar(avg);
       // A stone stops showing at about 2 px on a 1,000 px view; the detailed shape matters only well inside that. Small
       // stones stay in 3D to 16 m at least: across a yard, at a low angle, the flat texture would read lighter than stones.
-      // Gravel under an inch is too many pieces to draw across a yard: it stays in 3D to about 7 m, then the texture.
-      const farTo = form === 'crushed' && avg < 0.015 ? 7 : Math.max(avg * 520, 16);
+      // Gravel under an inch, and bark nuggets (a whole front yard of them), are too many pieces to draw across a yard:
+      // they stay in 3D to about 7 m, then the texture.
+      const farTo = (form === 'crushed' && avg < 0.015) || form === 'nugget' ? 7 : Math.max(avg * 520, 16);
       tiles.push({ box, near, far, nearTo: avg * 110 * reach, farTo: farTo * reach });
     }
   }
@@ -375,64 +543,103 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
 /**
  * The stones of one bed: on a jittered grid about 0.7 of a stone apart (so they touch, overlap a little and pile, as poured stone
  * does), each with its own size from the sold range (more of the middle sizes), shape, turn, tip, color and how deep it
- * sits. Only where this zone is the top one.
+ * sits. Only where this zone is the top one. A bed of mixed sizes (spec.pebble.mix) is laid biggest first, each size on
+ * its own grid over its share of the bed, the smaller stones then filling round the bigger ones.
  */
 export function placeStones(z: BedArea, spec: MaterialSpec): Stone[] {
   const P = spec.pebble!;
   const form = P.form ?? 'pebble';
   const r = rng(`pebbles:${z.key}`);
-  const IN = 0.0254, avg = ((P.minIn + P.maxIn) / 2) * IN;
-  // Pebbles and crushed stone: about 0.7 of a stone apart, so they touch and pile. Chips are flat and narrow: spaced by
-  // their area, a little overlapped, so they cover the ground in a layer or two.
-  let step = form === 'chip' ? avg * Math.sqrt((P.wide[0] + P.wide[1]) / 2) * 0.8 : avg * 0.7;
-  // At most about 400,000 pieces a bed (fine gravel over a big bed): past that they spread out and the ground texture,
-  // the same pieces packed tight, fills between them.
-  const b0 = bounds(z.polygon);
-  const est = ((b0.maxX - b0.minX) * (b0.maxY - b0.minY)) / (step * step);
-  if (est > 400000) step *= Math.sqrt(est / 400000);
-  const b = b0;
+  const IN = 0.0254;
+  const flat = form === 'chip' || form === 'nugget';
+  const bands = P.mix ? [...P.mix].sort((a, b) => b.maxIn - a.maxIn) : [{ minIn: P.minIn, maxIn: P.maxIn, share: 1 }];
   // Broken faces and stacked chips turn from the sun and shade one another far more than smooth pebbles do (the stone
   // grade was fitted on those): measured top-down in the default light, so the bed renders at its photo colors.
   // Gravel under half an inch shows more shaded gaps between its many pieces: a little more again.
-  const gain = FORM_GAIN[form].map((g) => g * (form === 'crushed' && avg < 0.012 ? 1.3 : 1)) as [number, number, number];
+  const avg0 = ((P.minIn + P.maxIn) / 2) * IN;
+  const gain = FORM_GAIN[form].map((g) => g * (form === 'crushed' && avg0 < 0.012 ? 1.3 : 1)) as [number, number, number];
   const cols = P.colors.map((x) => new THREE.Color().setRGB(...(rockAlbedo(x.c).map((v, k) => v * gain[k]) as [number, number, number])));
   const cum: number[] = [];
   P.colors.reduce((s, x) => (cum.push(s + x.share), s + x.share), 0);
   const out: Stone[] = [];
-  for (let y = b.minY; y < b.maxY; y += step) {
-    for (let x = b.minX; x < b.maxX; x += step) {
-      const p: Vec2 = [x + r() * step, y + r() * step];
-      if (!z.inside(p)) continue;
-      const u = (r() + r()) / 2;
-      const len = (P.minIn + (P.maxIn - P.minIn) * u) * IN;
-      // The whole stone stays inside the bed (behind its edging), not only its center.
-      const reach = len * 0.45;
-      if (!z.inside([p[0] + reach, p[1]]) || !z.inside([p[0] - reach, p[1]]) || !z.inside([p[0], p[1] + reach]) || !z.inside([p[0], p[1] - reach])) continue;
-      const wid = len * (P.wide[0] + (P.wide[1] - P.wide[0]) * r());
-      const thick = len * (P.thick[0] + (P.thick[1] - P.thick[0]) * r());
-      const h = r();
-      const ci = Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v));
-      const color = cols[ci].clone().multiplyScalar(0.88 + r() * 0.24).multiply(new THREE.Color(...z.tint));
-      // Pebbles lie flat-ish, a few stood on edge against their neighbors, sunk a fifth to a half of their thickness.
-      // Crushed stone lies any which way. Chips lie flat in a loose layer, each at its own height so none share a plane.
-      const steep = r() < (form === 'crushed' ? 0.35 : form === 'chip' ? 0.06 : 0.12);
-      const tip = form === 'crushed' ? 1.4 : form === 'chip' ? 0.3 : 0.4;
-      const py = form === 'chip' ? z.height(p) + thick * 0.3 + r() * avg * 0.12 : z.height(p) + thick * (0.5 - (0.2 + r() * 0.3));
-      out.push({
-        x: p[0],
-        y: py,
-        z: p[1],
-        len,
-        wid,
-        thick,
-        yaw: r() * Math.PI * 2,
-        tipX: (r() - 0.5) * (steep ? 1.1 : tip),
-        tipZ: (r() - 0.5) * (steep ? 0.9 : tip * 0.9),
-        color,
-        shape: Math.floor(r() * SHAPES),
-      });
+  // The bigger stones already laid, by cell, so the smaller ones fill round them rather than through them.
+  const big = new Map<string, Stone[]>();
+  const CELL = bands[0].maxIn * IN;
+  const underBig = (p: Vec2) => {
+    const cx = Math.floor(p[0] / CELL), cy = Math.floor(p[1] / CELL);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      for (const st of big.get(`${cx + i},${cy + j}`) ?? []) if (Math.hypot(p[0] - st.x, p[1] - st.z) < Math.min(st.len, st.wid) * 0.42) return true;
     }
-  }
+    return false;
+  };
+  bands.forEach((band, bi) => {
+    const last = bi === bands.length - 1;
+    const avg = ((band.minIn + band.maxIn) / 2) * IN;
+    // Pebbles and crushed stone: about 0.7 of a stone apart, so they touch and pile. Chips and bark are flat: spaced by
+    // their area, a little overlapped, so they cover the ground in a layer or two.
+    // River cobble (2 in and up) is fuller: a little farther apart, so the stones touch rather than run into one another.
+    let step = flat ? avg * Math.sqrt((P.wide[0] + P.wide[1]) / 2) * 0.8 : avg * (form === 'river' && avg >= 0.05 ? 0.75 : 0.7);
+    // At most about 400,000 pieces a bed (fine gravel over a big bed): past that they spread out and the ground texture,
+    // the same pieces packed tight, fills between them.
+    const b = bounds(z.polygon);
+    const est = ((b.maxX - b.minX) * (b.maxY - b.minY)) / (step * step);
+    if (est > 400000) step *= Math.sqrt(est / 400000);
+    for (let y = b.minY; y < b.maxY; y += step) {
+      for (let x = b.minX; x < b.maxX; x += step) {
+        const p: Vec2 = [x + r() * step, y + r() * step];
+        if (!z.inside(p)) continue;
+        // A bigger size covers its share of the bed; the smallest fills the rest.
+        if (bands.length > 1 && ((!last && r() > band.share) || (bi > 0 && underBig(p)))) continue;
+        const u = (r() + r()) / 2;
+        let len = (band.minIn + (band.maxIn - band.minIn) * u) * IN;
+        // The whole stone stays inside the bed (behind its edging), not only its center.
+        const reach = len * 0.45;
+        if (!z.inside([p[0] + reach, p[1]]) || !z.inside([p[0] - reach, p[1]]) || !z.inside([p[0], p[1] + reach]) || !z.inside([p[0], p[1] - reach])) continue;
+        let wid = len * (P.wide[0] + (P.wide[1] - P.wide[0]) * r());
+        let thick = len * (P.thick[0] + (P.thick[1] - P.thick[0]) * r());
+        const h = r();
+        const ci = Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v));
+        const color = cols[ci].clone().multiplyScalar(0.88 + r() * 0.24).multiply(new THREE.Color(...z.tint));
+        // Pebbles lie flat-ish, a few stood on edge against their neighbors, sunk a fifth to a half of their thickness.
+        // River rock tips more. Crushed stone lies any which way. Chips and bark lie flat in a loose layer, each at its own
+        // height so none share a plane.
+        const round = form === 'river';
+        const steep = r() < (form === 'crushed' ? 0.35 : flat ? 0.06 : round ? 0.18 : 0.12);
+        const tip = form === 'crushed' ? 1.4 : flat ? 0.3 : round ? 0.6 : 0.4;
+        let shape = -1;
+        // Bark: a share of long, thin splinters of wood among the nuggets.
+        if (P.splinters && r() < P.splinters) {
+          shape = SHAPES + Math.floor(r() * SPLINTER_SHAPES);
+          len *= 1.6;
+          wid = len * (0.1 + r() * 0.08);
+          thick = len * (0.05 + r() * 0.03);
+        }
+        const py = flat ? z.height(p) + thick * 0.3 + r() * avg * 0.12 : z.height(p) + thick * (0.5 - (0.2 + r() * 0.3));
+        const st: Stone = {
+          x: p[0],
+          y: py,
+          z: p[1],
+          len,
+          wid,
+          thick,
+          yaw: r() * Math.PI * 2,
+          tipX: (r() - 0.5) * (steep ? 1.1 : tip),
+          tipZ: (r() - 0.5) * (steep ? 0.9 : tip * 0.9),
+          color,
+          shape: shape >= 0 ? shape : Math.floor(r() * SHAPES),
+          // River rock is rounder and lumpier (roundShape): it reaches a little further out.
+          ...(round ? { full: 0.68 } : {}),
+        };
+        out.push(st);
+        if (!last) {
+          const k = `${Math.floor(st.x / CELL)},${Math.floor(st.z / CELL)}`;
+          const l = big.get(k) ?? [];
+          l.push(st);
+          big.set(k, l);
+        }
+      }
+    }
+  });
   return out;
 }
 
@@ -450,7 +657,7 @@ const CENTER_INSET = 0.01;
  * times the sine of the tip about the other horizontal axis, with the thickness taken at its full tipped height.
  */
 function pieceTop(st: Stone): number {
-  const F = 0.56;
+  const F = st.full ?? 0.56;
   const sx = Math.abs(Math.sin(st.tipX)), sz = Math.abs(Math.sin(st.tipZ));
   return st.y + F * (st.thick * Math.max(Math.cos(st.tipX) * Math.cos(st.tipZ), 0) + Math.max(st.len, st.wid) * (sx + sz));
 }
