@@ -194,6 +194,8 @@ export interface FixtureSetting {
   beamDeg?: number;
   /** Color temperature in kelvin (fixtures with a choice). */
   kelvin?: number;
+  /** RGB color as '#rrggbb' (color-changing RGBCW fixtures only; it replaces `kelvin` when set). */
+  color?: string;
   /** Aim of an adjustable head, degrees from straight up, tipped toward the placement's front. */
   tiltDeg?: number;
   /** Meters above grade for a fixture on a wall, cap, riser or post (the underside of the cap for cap lights). */

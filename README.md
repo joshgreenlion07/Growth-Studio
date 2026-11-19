@@ -247,11 +247,14 @@ Messages use `window.postMessage`:
   `truscapes-ts-tssa-200`; the list is `TRUSCAPES` in `src/siteplan/truscapes.ts`)
   are drawn to the maker's spec sheets and light the yard after dusk with their
   published lumens, beam angle and color temperature. A feature placement can
-  carry `fixture: { finish?, beamDeg?, kelvin?, tiltDeg?, mountHeight? }`:
+  carry `fixture: { finish?, beamDeg?, kelvin?, color?, tiltDeg?, mountHeight? }`:
   `finish` is a finish the fixture is sold in (`black`, `bronze`, `brown`,
   `white`, `gray`, `stainless`, or the maker's code `BLK`, `BRZ`, ...),
   `beamDeg` and `kelvin` snap to the lamp or color choices it offers (others are
-  dropped), `tiltDeg` (0-90, wells 0-20) tips an aimed head from straight up
+  dropped), `color` (`'#rrggbb'`) sets a color-changing RGBCW fixture
+  (TS-A100C, TS-A6500C, TS-A6000C, TS-A3000C) to an RGB color in place of its
+  white: its beam, lens glow and the pool on the ground take it (white-only
+  fixtures drop it and keep `kelvin`), `tiltDeg` (0-90, wells 0-20) tips an aimed head from straight up
   toward the placement's front (`rotationDeg` turns it), and `mountHeight` is
   meters above grade for a cap, riser or wall fixture (a cap light's is the
   underside of the cap). A cap or face light sent without `mountHeight` within

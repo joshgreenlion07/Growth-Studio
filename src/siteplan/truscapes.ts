@@ -67,6 +67,8 @@ export interface FixtureSpec {
   lumens: number;
   kelvin: number;
   kelvins?: number[];
+  /** An RGBCW lamp: besides its whites it can be set to any RGB color. */
+  rgb?: boolean;
   /** Beam angle, degrees (360 published for path lights is drawn as a wide downward spread under the hat). */
   beamDeg: number;
   beams?: number[];
@@ -132,7 +134,7 @@ export const TRUSCAPES: FixtureSpec[] = [
   {
     maker: 'Tru-Scapes', model: 'TS-A6500C', series: 'Adjustable Walkway Wash Light', category: 'Path lights', family: 'walkwayWash', mount: 'stake',
     dims: { length: 7.125, headH: 3.5, headD: 1.5, legH: 0.75 },
-    finishes: BB, lumens: 68, kelvin: 2700, kelvins: COLOR_K, beamDeg: 120, tiltDeg: 0, watts: 2,
+    finishes: BB, lumens: 68, kelvin: 2700, kelvins: COLOR_K, rgb: true, beamDeg: 120, tiltDeg: 0, watts: 2,
     lamp: 'Replaceable Bluetooth RGBCW LED module (2700-6500 K), 68 lumens', construction: `${ALU}, 5 in stainless spikes`,
     page: `${PAGE}adjustable-walkway-wash-light-ts-a6500c/`, size: '7 in wide x 8-1/2 in tall x 1-1/2 in deep', footprint: [0.18, 0.05], facts: [],
   },
@@ -164,7 +166,7 @@ export const TRUSCAPES: FixtureSpec[] = [
   {
     maker: 'Tru-Scapes', model: 'TS-A100C', series: 'Smart Integrated Accent Light', category: 'Accent lights', family: 'bullet', mount: 'stake',
     dims: { bodyD: 2.875, bodyL: 5.3, shroudLong: 1.45, shroudShort: 0.45, riser: 1.8, taper: 0.92, fins: 1 },
-    finishes: BB, lumens: 980, kelvin: 2700, kelvins: COLOR_K, beamDeg: 36, tiltDeg: 15, watts: 16,
+    finishes: BB, lumens: 980, kelvin: 2700, kelvins: COLOR_K, rgb: true, beamDeg: 36, tiltDeg: 15, watts: 16,
     lamp: 'Integrated Bluetooth RGBCW COB LED (2700-6500 K), 980 lumens', construction: 'Die-cast aluminum with a finned heat sink',
     page: `${PAGE}smart-integrated-accent-light/`, size: '6-3/4 in long, 2-7/8 in face, 7 in tall', footprint: S(0.1), facts: [],
   },
@@ -196,7 +198,7 @@ export const TRUSCAPES: FixtureSpec[] = [
   {
     maker: 'Tru-Scapes', model: 'TS-A6000C', series: 'Color Changing Hardscape Light', category: 'Hardscape lights', family: 'hardscape', mount: 'cap',
     dims: { length: 7.125, plateD: 3, plateT: 0.09, headH: 0.875, headD: 0.75, leds: 12 },
-    finishes: BB, lumens: 68, kelvin: 2700, kelvins: COLOR_K, beamDeg: 120, tiltDeg: 0, watts: 2,
+    finishes: BB, lumens: 68, kelvin: 2700, kelvins: COLOR_K, rgb: true, beamDeg: 120, tiltDeg: 0, watts: 2,
     lamp: 'Replaceable Bluetooth RGBCW LED module (2700-6500 K), 68 lumens', construction: ALU,
     page: `${PAGE}color-changing-hardscape-light-ts-a6000c/`, size: '7-1/8 in wide x 7/8 in tall face, 3 in plate', footprint: [0.18, 0.08], facts: [],
   },
@@ -210,7 +212,7 @@ export const TRUSCAPES: FixtureSpec[] = [
   {
     maker: 'Tru-Scapes', model: 'TS-A3000C', series: 'Mini Color Changing Cap Wall Light', category: 'Hardscape lights', family: 'hardscape', mount: 'cap',
     dims: { length: 3.5, plateD: 3, plateT: 0.09, headH: 0.875, headD: 0.75, leds: 2 },
-    finishes: ['black'], lumens: 18, kelvin: 2700, kelvins: COLOR_K, beamDeg: 120, tiltDeg: 0, watts: 0.8,
+    finishes: ['black'], lumens: 18, kelvin: 2700, kelvins: COLOR_K, rgb: true, beamDeg: 120, tiltDeg: 0, watts: 0.8,
     lamp: 'Replaceable Bluetooth RGBCW LED module (2700-6500 K), 18 lumens', construction: ALU,
     page: `${PAGE}color-changing-cap-wall-hardscape-light-a3000c/`, size: '3-1/2 in wide x 7/8 in tall face, 3 in plate', footprint: [0.09, 0.08], facts: [],
   },
@@ -325,7 +327,7 @@ const MOUNT_WORDS: Record<FixtureSpec['mount'], string> = {
 
 for (const fx of TRUSCAPES) {
   const light = fx.lumens > 0
-    ? `${fx.lumens} lumens, ${fx.kelvins ? '2700-6500 K color changing (2700 K default)' : `${fx.kelvin} K`}, ${fx.beamDeg === 360 ? '360 degree beam under the hat' : `${fx.beamDeg} degree beam`}${fx.beams && fx.beams.length > 1 ? ` (${fx.beams.join(' or ')} degree lamps)` : ''}`
+    ? `${fx.lumens} lumens, ${fx.rgb ? '2700-6500 K white or RGB color (2700 K default)' : fx.kelvins ? '2700-6500 K color changing (2700 K default)' : `${fx.kelvin} K`}, ${fx.beamDeg === 360 ? '360 degree beam under the hat' : `${fx.beamDeg} degree beam`}${fx.beams && fx.beams.length > 1 ? ` (${fx.beams.join(' or ')} degree lamps)` : ''}`
     : `${fx.watts} W low-voltage transformer`;
   fx.facts = [fx.size, light, fx.lamp, `${fx.construction}; ${fx.finishes.map((f) => FIXTURE_FINISHES[f].name.toLowerCase()).join(' or ')}`, MOUNT_WORDS[fx.mount]];
 }
@@ -346,8 +348,25 @@ export function truscapesFeatures(): Omit<FeatureSpec, 'placeholder'>[] {
   }));
 }
 
+/**
+ * The light colors offered for an RGBCW fixture in the editors (Area Planner keeps a copy as TS_LIGHT_COLORS): four
+ * whites and six colors. Any other '#rrggbb' is a custom color.
+ */
+export const LIGHT_COLORS: { label: string; kelvin?: number; color?: string }[] = [
+  { label: 'Warm white 2700 K', kelvin: 2700 },
+  { label: 'Soft white 3000 K', kelvin: 3000 },
+  { label: 'Cool white 4000 K', kelvin: 4000 },
+  { label: 'Daylight 5000 K', kelvin: 5000 },
+  { label: 'Red', color: '#ff2a1a' },
+  { label: 'Amber', color: '#ffa31a' },
+  { label: 'Green', color: '#22e04a' },
+  { label: 'Blue', color: '#2a5cff' },
+  { label: 'Purple', color: '#8a3dff' },
+  { label: 'Pink', color: '#ff2ad0' },
+];
+
 /** A placement's options resolved against what the fixture offers. */
-export function fixtureSetting(fx: FixtureSpec, s?: FixtureSetting): Required<Omit<FixtureSetting, 'mountHeight'>> & { finish: FinishId; mountHeight?: number } {
+export function fixtureSetting(fx: FixtureSpec, s?: FixtureSetting): Required<Omit<FixtureSetting, 'mountHeight' | 'color'>> & { finish: FinishId; mountHeight?: number; color?: string } {
   const finish = (s?.finish && fx.finishes.includes(s.finish as FinishId) ? s.finish : fx.finishes[0]) as FinishId;
   const nearest = (list: number[] | undefined, v: number | undefined, d: number) =>
     v === undefined || !list?.length ? d : list.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a), list[0]);
@@ -357,7 +376,18 @@ export function fixtureSetting(fx: FixtureSpec, s?: FixtureSetting): Required<Om
     kelvin: nearest(fx.kelvins, s?.kelvin, fx.kelvin),
     tiltDeg: Math.max(0, Math.min(fx.family === 'well' ? 20 : 90, s?.tiltDeg ?? fx.tiltDeg)),
     ...(s?.mountHeight !== undefined ? { mountHeight: Math.max(0, Math.min(4, s.mountHeight)) } : {}),
+    // Only an RGBCW lamp takes a color; a white-only fixture keeps its kelvin.
+    ...(fx.rgb && s?.color && cleanHex(s.color) ? { color: cleanHex(s.color)! } : {}),
   };
+}
+
+/** '#rgb' or '#rrggbb' (the '#' optional) as lowercase '#rrggbb', else null. */
+export function cleanHex(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1].toLowerCase();
+  return '#' + (h.length === 3 ? h.split('').map((c) => c + c).join('') : h);
 }
 
 /** Clean an incoming fixture setting: keep only numbers in range and choices the fixture offers. */
@@ -373,6 +403,8 @@ export function cleanFixtureSetting(fx: FixtureSpec, o: Record<string, unknown>)
   if (beam !== undefined && fx.beams?.length) out.beamDeg = fixtureSetting(fx, { beamDeg: beam }).beamDeg;
   const k = n(o.kelvin);
   if (k !== undefined && fx.kelvins?.length) out.kelvin = fixtureSetting(fx, { kelvin: k }).kelvin;
+  const color = fx.rgb ? cleanHex(o.color) : null;
+  if (color) out.color = color;
   const tilt = n(o.tiltDeg);
   if (tilt !== undefined) out.tiltDeg = Math.max(0, Math.min(90, tilt));
   const mh = n(o.mountHeight);
