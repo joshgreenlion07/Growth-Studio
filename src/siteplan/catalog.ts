@@ -111,6 +111,9 @@ export interface PaverPattern {
   /** Face mix: every piece's drifts run the same way, along its x side, as the pieces are laid in the maker's install
    * photos (Premier Slab); left out, each piece's run along one side or the other at random. */
   mixAlong?: boolean;
+  /** Face mix: each piece shades from end to end and leans lighter or darker as a whole: [end-to-end strength, per-piece
+   * lean], in the drift field's units (about 0.1 is a clear shift). Avalon Slate's photo colors. */
+  mixShade?: [number, number];
   /** The line's own joint sand as photographed (sRGB hex), when it differs from the usual sand (Premier Slab). */
   jointSand?: string;
   /** The maker's chamfer on the face's edges, meters, when its cut sheet gives one (Premier Slab: 3 mm). */
@@ -858,16 +861,18 @@ const BELGARD: MaterialSpec[] = [
   // Every Catalina Grana color as its own 6 x 9 border, offered on its own (not only as "same as the main course").
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
   // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
-  ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette]): MaterialSpec[] => {
+  ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette, shares]): MaterialSpec[] => {
     const id = `${L.slug}-${slugOf(n)}`;
+    // A color read with its tones' shares clouds them through each piece (Avalon Slate Toscana and Victorian).
+    const mix: Partial<PaverPattern> = shares && L.mix ? { blend: 'mix', mix: shares, mixScale: L.mix.scale, mixEdge: L.mix.edge, mixShade: L.mix.shade } : {};
     const tags = { matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: L.shelf, color: n };
     if (L.shelf === 'Pavers') {
       const sizes = L.colorSizes?.[n] ?? L.sizes ?? CATALINA_SIZES;
       return [
-        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured' }, thickness: 0.06, ...tags }),
-        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, ...(L.face ? { face: L.face } : {}) }, thickness: 0.06, auto: true }),
+        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured', ...mix }, thickness: 0.06, ...tags }),
+        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, ...(L.face ? { face: L.face } : {}), ...mix }, thickness: 0.06, auto: true }),
         // A line that sells its own border stone (Avalon Slate) offers every color as a border on its own too.
-        ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured' }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
+        ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured', ...mix }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
       ];
     }
     if (L.shelf === 'Curb') return [M({ id, name: `${L.name}, ${n}`, use: 'edging', group: 'Edging', recipe: 'curb', palette: palette.slice(1, 3), ...tags })];

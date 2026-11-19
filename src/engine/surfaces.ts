@@ -507,8 +507,17 @@ function mixThresholds(mix: number[], b = 0): number[] {
   }
   return cut;
 }
-function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number, scale: [number, number] = [2.3, 6.5], edge: [number, number] = [0.022, 0], along = false): RGB {
+/**
+ * `shade` (Avalon Slate's photo colors): each piece also shades from one end to the other (`grad`, at `at`, 0..1 along
+ * its length) and leans lighter or darker as a whole (`bias`): tones darker than the base gather at one end and on the
+ * darker pieces, lighter tones at the other end and on the lighter pieces, the way Belgard's swatch photos show a stone
+ * clouding from mocha to charcoal across its face. Only the tones' shares move; the face itself is untouched.
+ */
+function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number, scale: [number, number] = [2.3, 6.5], edge: [number, number] = [0.022, 0], along = false, shade?: { grad: number; bias: number; at: number }): RGB {
   const cut = mixThresholds(mix, edge[1]);
+  // The shading's lean per tone: +1 for a tone darker than the base, -1 for a lighter one.
+  const lum = (k: RGB) => k[0] * 0.2126 + k[1] * 0.7152 + k[2] * 0.0722;
+  const tilt = shade ? ((hash(id, 6.1) < 0.5 ? -1 : 1) * (shade.at - 0.5) * 2 * shade.grad + (hash(id, 7.7) - 0.5) * 2 * shade.bias) : 0;
   // Drifts run along one side of the piece or the other (or, `along`, all the same way), leaning up to 5 degrees.
   const th = (along || r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
   const ca = Math.cos(th), sa = Math.sin(th);
@@ -528,7 +537,8 @@ function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: numbe
     // Patches about 20 to 50 cm along and 6 to 18 cm across at the default scale (Premier Smooth); Premier Slab's run
     // most of the way across the slab and 3 to 10 cm wide, soft-edged and frayed (its mixScale and mixEdge), as
     // Basalite's install photos show them.
-    const f = mixField(su * scale[0] + i * 7.3, sv * scale[1] + warp + i * 3.1, s + i * 11) + grain * (edge[1] ? 1.6 : 1) + breakup + (r2 - 0.5) * 0.03;
+    const lean = tilt ? tilt * (lum(colors[i]) < lum(colors[0]) ? 1 : -1) : 0;
+    const f = mixField(su * scale[0] + i * 7.3, sv * scale[1] + warp + i * 3.1, s + i * 11) + grain * (edge[1] ? 1.6 : 1) + breakup + (r2 - 0.5) * 0.03 + lean;
     c = mixRGB(c, colors[i], smooth(cut[i] - edge[0], cut[i] + edge[0], f));
   }
   return c;
@@ -564,7 +574,9 @@ function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined 
  * drawn by the detail overlay), so one color is not 64 MB of GPU memory.
  */
 // A face mix (Premier Smooth) has crisp, powdery drift edges that read as blocks up close at the small size.
-const paverMapSize = (spec: MaterialSpec, p: PaverPattern, T: number) => (T > 5 || p.blend === 'mix' || (p.face === 'antiqued' && /antiqued-flat-top-/.test(spec.id)) ? 2048 : 1024);
+// A face mix's crisp drifts (Premier Smooth, Premier Slab) take the larger map; Avalon Slate's soft clouds (mixShade)
+// keep the slate face's own map size, so its relief shades exactly as before.
+const paverMapSize = (spec: MaterialSpec, p: PaverPattern, T: number) => (T > 5 || (p.blend === 'mix' && !p.mixShade) || (p.face === 'antiqued' && /antiqued-flat-top-/.test(spec.id)) ? 2048 : 1024);
 
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
@@ -736,8 +748,11 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
     const bev = antiqued ? 0.12 + 0.88 * smooth(J, J + bevel, edge) : smooth(J, J + bevel, edge);
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
-    if (p.blend === 'mix' && p.mix && hit.lx !== undefined && hit.ly !== undefined) {
-      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2, p.mixScale, p.mixEdge, p.mixAlong);
+    if (p.blend === 'mix' && p.mix && ((hit.lx !== undefined && hit.ly !== undefined) || p.mixShade)) {
+      // A layout without piece coordinates (a random ashlar, a soldier course) draws the drifts in the texture's own
+      // meters; the piece's id still gives every piece its own drifts.
+      const sh = p.mixShade ? { grad: p.mixShade[0], bias: p.mixShade[1], at: hit.along } : undefined;
+      c = mixTone(colors, p.mix, hit.lx ?? x, hit.ly ?? y, id, r1, r2, p.mixScale, p.mixEdge, p.mixAlong, sh);
     } else if (p.blend !== 'cloud') {
       const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
       c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
