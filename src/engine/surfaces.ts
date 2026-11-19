@@ -3,6 +3,7 @@ import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { ledgerPaint, sandStuccoPaint, santaBarbaraPaint } from './fountain-surfaces';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 import { boardFaceSet } from './deckboards';
@@ -1277,6 +1278,15 @@ function stonesSet(spec: MaterialSpec, cells: number, tile: number, gloss: numbe
 
 function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
   const colors = pal(spec);
+  // Wall veneers (shelf 'Wall veneer'): a maker's ledger panels, or Green Lion's stucco finishes.
+  if (face === 'ledgerPanel') {
+    const v = spec.veneer;
+    const look = { tones: spec.palette, weights: v?.weights ?? spec.palette.map(() => 1 / spec.palette.length), rowIn: v?.rowIn ?? [1.5, 2] as [number, number], tallRow: v?.tallRow, pieceIn: v?.pieceIn ?? [4, 12] as [number, number], rust: v?.rust, quartz: v?.quartz };
+    // The photo's own average when the look has one (the panel photo, joints and all), else its tones' average.
+    return ledgerPaint(spec.id, look, v?.albedo ?? wallFaceMean(spec));
+  }
+  if (face === 'santaBarbara') return santaBarbaraPaint(spec.id, spec.palette, spec.veneer?.albedo ?? wallFaceMean(spec));
+  if (face === 'sandStucco') return sandStuccoPaint(spec.id, spec.palette, spec.veneer?.albedo ?? wallFaceMean(spec));
   if (face === 'plaster') {
     const [a, b] = colors;
     return paint(512, 2.4, 3, (u, v) => {

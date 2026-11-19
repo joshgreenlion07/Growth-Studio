@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { materialById } from '../siteplan/catalog';
+import { materialById, isStuccoFace } from '../siteplan/catalog';
 import { pointInPolygon } from '../siteplan/geometry';
 import type { LineItem, Vec2, Zone } from '../siteplan/types';
 
@@ -19,7 +19,7 @@ export const CURB_REVEAL = 0.0762;
 /** Thickness in meters of a line that is built as a solid body: a wall or a concrete curb. 0 for the rest. */
 export function lineThickness(l: LineItem): number {
   const spec = materialById.get(l.catalogId);
-  if (l.kind === 'wall') return (spec?.wall?.face ?? 'splitFace') === 'plaster' ? 0.25 : 0.3;
+  if (l.kind === 'wall') return isStuccoFace(spec?.wall?.face) ? 0.25 : 0.3;
   // Curbs are Belgard Melville Curb units: 4 in thick (24 in long, 6 1/2 in tall).
   if (l.kind === 'edging' && spec?.recipe === 'curb') return CURB_THICK;
   return 0;

@@ -173,6 +173,20 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
       return { group: porcelain ? 'Porcelain' : 'Pavers', about, spec };
     }
     case 'wall':
+      if (m.shelf === 'Wall veneer') {
+        const v = m.wall?.face;
+        return {
+          group: 'Wall veneer',
+          about: v === 'ledgerPanel'
+            ? `${m.matches ?? m.name}: split-face natural stone ledger panels set over a block wall or column, "cool whites with warm creams" (MSI). Grout free: the strips butt tight, some standing proud of the rest.`
+            : v === 'santaBarbara'
+              ? 'Santa Barbara stucco: a smooth hand-troweled finish coat with soft, cloudy mottling and burnished trowel sweeps, over a block wall or column. As built on Green Lion\'s three-pillar water feature.'
+              : 'Sand finish stucco: the finish coat floated to an even, fine sand texture, over a block wall or column.',
+          spec: v === 'ledgerPanel'
+            ? ['6 x 24 in panels, 3/4 in thick, with 6 x 12 x 6 in L corners', 'Set on 1/2 in of stone veneer mortar over the block (or lath and scratch coat)', 'Cap: Basalite 2 in cap or the wall\'s own']
+            : ['Three coats over lath or block: scratch, brown and the finish coat, about 7/8 in', 'Color in the finish coat', 'Top finished in the same stucco'],
+        };
+      }
       return {
         group: 'Walls',
         about: m.maker ? `${m.maker} ${m.line} wall block.` : m.wall?.face === 'plaster' ? 'A block wall finished with smooth plaster or stucco.' : m.wall?.face === 'ledgestone' || m.wall?.face === 'stackedStone' ? 'A block wall faced with stone veneer.' : 'A segmental block wall with a cap.',

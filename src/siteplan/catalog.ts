@@ -135,7 +135,28 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
 }
 
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat' | 'metalPicket';
-export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
+export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | 'ledgerPanel' | 'santaBarbara' | 'sandStucco' | UnitFace;
+/** A wall finished in stucco (plaster, Santa Barbara smooth trowel, sand finish): its cap is the same stucco. */
+export function isStuccoFace(face: WallFace | undefined): boolean {
+  return face === 'plaster' || face === 'santaBarbara' || face === 'sandStucco';
+}
+/**
+ * A wall veneer (shelf 'Wall veneer'): a finish over a block wall or column core. Ledger panels (face 'ledgerPanel'):
+ * the share of strips in each palette tone, strip heights and lengths (inches), how often a strip is a double course,
+ * and iron staining (0..1). Stucco: the average albedo (linear) when it is taken from a finished job's photos.
+ */
+export interface WallVeneer {
+  weights?: number[];
+  rowIn?: [number, number];
+  tallRow?: number;
+  pieceIn?: [number, number];
+  rust?: number;
+  /** Split quartzite (flatter, crisper strips with a fine sparkle), not travertine. */
+  quartz?: boolean;
+  albedo?: [number, number, number];
+  /** Thickness of the veneer with its setting bed (stone and mortar, or the stucco coats), inches. */
+  thicknessIn: number;
+}
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
  * 'tumbled' (Castlemanor Grana), 'tumbledRough' (Castlemanor Rustic), 'ashlar' (Ashlar Tandem), 'lamina' (Lamina
@@ -272,6 +293,8 @@ export interface MaterialSpec {
   /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
   fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
+  /** A wall veneer's own details (face 'ledgerPanel', 'santaBarbara', 'sandStucco'). */
+  veneer?: WallVeneer;
   /** Hardscape thickness above grade, meters. */
   thickness?: number;
   /** Manufacturer line this look is modeled on, if any. */
@@ -279,7 +302,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
@@ -321,6 +344,7 @@ export type FeatureKind =
   | 'waterWallStucco'
   | 'copperBowl'
   | 'pillarFountain'
+  | 'veneerColumn'
   | 'cedarWaterWall'
   | 'patinaBowl'
   | 'fireWaterBowl'
@@ -352,6 +376,8 @@ export interface FeatureSpec {
   name: string;
   group: FeatureGroup;
   kind: FeatureKind;
+  /** A veneer column's finish: the wall veneer look (shelf 'Wall veneer') its faces are clad in. */
+  veneer?: string;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
   /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
@@ -697,6 +723,19 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'wall-stucco', name: 'Stucco wall, tan', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#b3a58f', '#a29480'], wall: { face: 'plaster', cap: '#a89a84' } }),
   M({ id: 'wall-dark-stacked', name: 'Dark stacked stone veneer', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#3d3b39', '#2e2d2c', '#24231f', '#46423d'], wall: { face: 'ledgestone', cap: '#2e2d2c' } }),
   M({ id: 'wall-stacked-stone', name: 'Stacked stone veneer, brown', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#a88a6c', '#8a6e55', '#6e5745', '#b9a184'], wall: { face: 'stackedStone', cap: '#b9a58a' } }),
+  /*
+   * Wall veneers (shelf 'Wall veneer'): finishes over a block wall, picked like any wall look, and the faces of the
+   * veneer columns. MSI Arctic Golden: MSI's Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624, quartzite, split face,
+   * grout free) with its 6x12x6 "L" corner (LPNLQARCGLD618COR); strips about 1 1/2 in tall (now and then a double)
+   * and 3 to 12 in long, cool whites and warm creams with golden veins. Tones and shares read from MSI's panel photo
+   * (6 px cells, the darkest tenth dropped as joints and shadow, k-means in CIELAB); its average albedo is the photo's
+   * mean over the whole panel, joints and all, through the wall calibration (WALL_GAIN). Set 3/4 in proud on 1/2 in of
+   * mortar. Stucco: Green Lion's own finishes, in the warm gray of the three-pillar job (builder/pillarfountain.ts),
+   * the Santa Barbara smooth trowel as photographed there and the sand (float) finish in the same color.
+   */
+  M({ id: 'msi-arctic-golden-ledger', name: 'MSI Arctic Golden stacked stone', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#e1d4cf', '#d3c6c2', '#d7c7bc', '#c6b8b1', '#eee3dd', '#e7d7c8', '#cbb8a7', '#dbc8b3'], wall: { face: 'ledgerPanel', cap: '#ba9a7b' }, veneer: { weights: [0.207, 0.15, 0.141, 0.134, 0.124, 0.106, 0.079, 0.06], rowIn: [1.25, 1.75], tallRow: 0.06, pieceIn: [3, 12], rust: 0.25, quartz: true, albedo: [0.403, 0.328, 0.262], thicknessIn: 1.25 }, matches: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624)', maker: 'MSI', line: 'Arctic Golden Stacked Stone', shelf: 'Wall veneer', color: 'Arctic Golden' }),
+  M({ id: 'stucco-santa-barbara-warm-gray', name: 'Santa Barbara smooth trowel stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bfb9b4', '#98938f', '#a09f9f'], wall: { face: 'santaBarbara', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Santa Barbara stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
+  M({ id: 'stucco-sand-finish-warm-gray', name: 'Sand finish stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bcb6b0', '#a49f9a'], wall: { face: 'sandStucco', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Sand finish stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
   // Fences
   M({ id: 'fence-board-on-board', name: 'Board-on-board, natural cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#b08a63', '#9a7552', '#86643f'], fence: 'boardOnBoard' }),
   M({ id: 'fence-gray-lattice', name: 'Gray board, cedar lattice top', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7d8083', '#6d7073', '#5d6063'], fence: 'grayLattice' }),
@@ -931,6 +970,19 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water wall: a 6 x 6 ft panel of MSI Silver Travertine ledger stone framed by horizontal cedar slats that run 3 ft out on each side under a cedar cap beam. A copper box scupper pours a lit sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble. A Tru-Scapes up and down sconce lights each cedar wing, and a gardenia in a PMD cement egg pot stands in front of each (an option).',
     facts: ['12 ft long x 6 ft 8 in tall, 2 ft 6 in from the back of the wall to the front of the pebbles (a 6 in wall and a 24 in pebble strip)', 'Stone panel 6 x 6 ft: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), split face', 'Clear cedar 1x4 slats, 5/8 in gaps, dark backer, cedar returns and a 4 in cedar cap beam', '12 in copper box scupper, lip 49 in up, LED lit; two 1 in copper spouts 36 in up, 24 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 60 in up: 10 W, 802 lm', 'Black Mexican beach pebble 1-2 in, no open water; LED pucks where the water lands', 'PMD 24 x 22 in Cement Egg Pot, White, with a Gardenia \'Veitchii\', one each side (option)'],
   }),
+  /*
+   * Veneer columns: a Basalite 225 Lightweight 16 x 8 x 16 column block core (16 in square, 8 in courses; on Green Lion's
+   * supplier bills) clad in a wall veneer, under a Basalite Column Cap (CA: 24 x 24 x 2 in, chiseled edges, flat top,
+   * Sand or Pewter). One per finish, so a placed column can be switched to another finish like any feature; heights in
+   * whole block courses. (Basalite lists the cap as coming soon in California.)
+   */
+  ...([['msi-arctic-golden-ledger', 'MSI Arctic Golden stacked stone'], ['stucco-santa-barbara-warm-gray', 'Santa Barbara stucco, warm gray'], ['stucco-sand-finish-warm-gray', 'sand finish stucco, warm gray']] as const).map(([veneer, label]) => F({
+    id: `veneer-column-${veneer}`, name: `Column, ${label}`, group: 'Accents', kind: 'veneerColumn', footprint: [24 * 0.0254, 24 * 0.0254], veneer,
+    sizes: [24, 32, 40, 48, 56].map((h) => ({ label: `${h} in of block, ${h + 2} in tall with the cap`, size: [24 * 0.0254, 24 * 0.0254, (h + 2) * 0.0254] as [number, number, number] })), size: 2,
+    options: [{ key: 'pewterCap', label: 'Pewter cap (Sand when off)', default: false }],
+    about: `A 16 in square column of Basalite column block, clad in ${label}, under a Basalite Column Cap 24 x 24 x 2 in.`,
+    facts: ['Core: Basalite 225 Lightweight 16 x 8 x 16 column block, 8 in courses', veneer === 'msi-arctic-golden-ledger' ? 'Veneer: MSI Arctic Golden Splitface Panel 6x24 with the 6x12x6 L corner, set on 1/2 in of mortar (18 1/2 in finished)' : 'Stucco over lath, 7/8 in (17 3/4 in finished)', 'Cap: Basalite Column Cap, 24 x 24 x 2 in, Sand or Pewter'],
+  })),
   F({
     id: 'patina-bowl-planter', name: 'Patina bowl planter, 23 in', group: 'Accents', kind: 'patinaBowl', plantable: true, footprint: [23 * 0.0254, 23 * 0.0254],
     about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, gray gravel top dressing, planted with a blue agave (or left empty).',
@@ -1005,7 +1057,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',

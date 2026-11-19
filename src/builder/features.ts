@@ -13,6 +13,7 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { veneerColumn } from './veneercolumn';
 import { buildWaterRock } from './waterrock';
 import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
@@ -609,6 +610,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'cortenPlanter': {
         add(mat.corten, box(W, 0.7, D, 0, 0, 0));
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
+        break;
+      }
+      case 'veneerColumn': {
+        // A block column clad in a wall veneer under a Basalite column cap (builder/veneercolumn.ts).
+        veneerColumn({ f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, lift: lift?.(f.position) });
         break;
       }
       case 'cortenPlanterTall':
