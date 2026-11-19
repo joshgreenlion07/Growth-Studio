@@ -419,7 +419,7 @@ export function createWaterfall(options = {}) {
   // how the soil meets the host's ground (setGround): off until a colour is given
   const GU = {
     uEdgeCol: { value: new THREE.Color(0.15, 0.068, 0.034) }, uEdgeRough: { value: 0.95 }, uEdgeAmt: { value: 0 }, uEdgeW: { value: 2.5 },
-    uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 },
+    uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 }, uEdgeChip: { value: 0 },
   };
   const group = new THREE.Group(); group.name = 'four-fall-waterfall';
   const body = new THREE.Group(); group.add(body);
@@ -529,7 +529,7 @@ export function createWaterfall(options = {}) {
       .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW; varying vec3 vGN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vGN = normal; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
         // bark chips are drawn from above on flat soil and from the side on steep banks, and the drawings are blended;
@@ -573,8 +573,23 @@ export function createWaterfall(options = {}) {
         // the fade keeps the bark chips: their light and dark (scaled to average 1) multiply the host's colour, so the band
         // reads as bark in that colour and not as a smooth strip. uEdgeTex 0 gives a flat colour instead.
         float gPat = mix(0.46, 1.539, chipC) * (0.5 + 0.7 * chipH) / 0.883;
+        float gBandHt = chipH * 0.035;   // chip relief inside the band, feet
+        vec2 gHp = vTW.xz / max(uEdgeChip, 0.001);
+        float gHpW = max(fwidth(gHp.x), fwidth(gHp.y));   // how many host chips one pixel covers
         vec3 gOwn = diffuseColor.rgb * base;
         if (gEdge > 0.0) {
+          if (uEdgeChip > 0.0) {
+            // the host's own bark, when its chip size is given (setGround chipSize): round chips that spacing apart, each
+            // darkening to 0.55 at its joint and varying about 20% chip to chip, scaled to average 1. The fade then
+            // dissolves from these, at the border, into this feature's shards further in. Where the chips get too
+            // small on screen to draw cleanly they settle to their average, so the joints do not shimmer.
+            float hF = gFade * (1.0 - smoothstep(0.3, 0.8, gHpW));
+            vec4 hc = voro(gHp);
+            float hE = mix(0.786, smoothstep(0.0, 0.18, hc.y - hc.x), hF), hId = mix(0.5, hc.z, hF);
+            gPat = (0.55 + 0.525 * hE) * (0.8 + 0.4 * hId) / 0.9625;
+            // relief in proportion to the chip: about an eighth of its width
+            gBandHt = mix(gBandHt, hE * 0.775 * (0.6 + 0.4 * hId) * 0.12 * uEdgeChip, gEdge);
+          }
           // mixed on a square-root scale, which steps evenly to the eye between a dark colour and a light one
           vec3 gHost = uEdgeCol * mix(1.0, gPat, uEdgeTex);
           vec3 gMix = mix(sqrt(max(gOwn, vec3(0.0))), sqrt(max(gHost, vec3(0.0))), gEdge);
@@ -582,7 +597,7 @@ export function createWaterfall(options = {}) {
         } else {
           diffuseColor.rgb = gOwn;
         }
-        float gHt = mix(chipH * 0.035, gravH * 0.03, vMat.x) * (1.0 - vMat.y) * gFade * (1.0 - gEdge * (1.0 - uEdgeTex));`)
+        float gHt = mix(gBandHt, gravH * 0.03, vMat.x) * (1.0 - vMat.y) * gFade * (1.0 - gEdge * (1.0 - uEdgeTex));`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(mix(roughnessFactor, 0.3, gWI.x * 0.8), uEdgeRough, gEdge);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -1220,6 +1235,7 @@ export function createWaterfall(options = {}) {
     GU.uEdgeRough.value = g?.roughness ?? 0.95;
     GU.uEdgeW.value = Math.max(0.2, g?.width ?? 2.5);
     GU.uEdgeTex.value = clamp(g?.texture ?? 1, 0, 1);
+    GU.uEdgeChip.value = on && g.chipSize > 0 ? g.chipSize : 0;
     const t = on ? clamp(g.tint ?? 0, 0, 1) : 0, c = GU.uEdgeCol.value;
     GU.uTintK.value.set(mix(1, clamp(c.r / MULCH_MEAN[0], 0.2, 5), t), mix(1, clamp(c.g / MULCH_MEAN[1], 0.2, 5), t), mix(1, clamp(c.b / MULCH_MEAN[2], 0.2, 5), t));
   }
@@ -1229,6 +1245,8 @@ export function createWaterfall(options = {}) {
    *   roughness : the host ground's roughness, default 0.95        width : how far in the blend reaches, feet, default 2.5
    *   texture : 0..1, how much of the bark chip pattern and relief stays in the faded band, default 1. The pattern averages 1,
    *             so the band averages the colour given. 0 fades to that colour flat, with no chips.
+   *   chipSize : spacing of the host's own bark chips, feet (for example 0.096). When given, the host side of the fade is drawn
+   *             as round chips that far apart, dissolving into this feature's shards. Left out, the band uses this feature's chips.
    *   tint : 0..1, how far the whole mound's bark is shifted toward that colour (0 keeps the feature's own bark), default 0
    *   sink : how far below the host's ground level the border of the soil sits, feet, default 0.03 (it is 0.3 with no ground set)
    * The first quarter of the width stays fully that colour, then it fades into the feature's own bark.

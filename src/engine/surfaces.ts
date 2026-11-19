@@ -1144,13 +1144,25 @@ function buildLayerSet(kind: BuildLayer): PBRSet {
 
 export const buildLayerTextures = (kind: BuildLayer) => textureSet(`layer:${kind}`, () => buildLayerSet(kind));
 
+/** Bark mulch texture: one tile, meters, and the round voronoi chips across it. */
+const MULCH_TILE = 1.4;
+const MULCH_CHIPS = 48;
+
+/**
+ * Spacing of a bed material's chips in its ground texture, meters, when they are round voronoi chips (bark mulch:
+ * MULCH_CHIPS across MULCH_TILE, about 29 mm), else undefined. A four-fall waterfall draws its edge fade at this size.
+ */
+export function materialChipSpacing(spec: MaterialSpec): number | undefined {
+  return spec.recipe === 'mulch' ? MULCH_TILE / MULCH_CHIPS : undefined;
+}
+
 function mulchSet(spec: MaterialSpec): PBRSet {
   const [a, b] = pal(spec);
-  return paint(512, 1.4, 14, (u, v) => {
-    const cell = voronoi(u, v, 48, 4, 1);
+  return paint(512, MULCH_TILE, 14, (u, v) => {
+    const cell = voronoi(u, v, MULCH_CHIPS, 4, 1);
     const ang = cell.id * Math.PI;
     const ca = Math.cos(ang), sa = Math.sin(ang);
-    const ru = (u * ca - v * sa) * 48, rv = (u * sa + v * ca) * 48;
+    const ru = (u * ca - v * sa) * MULCH_CHIPS, rv = (u * sa + v * ca) * MULCH_CHIPS;
     const fiber = vnoise(ru * 3, rv * 22, 1e6, 3);
     const edge = smooth(0.0, 0.18, cell.f2 - cell.f1);
     const h = edge * (0.55 + 0.45 * fiber) * (0.6 + cell.id * 0.4);

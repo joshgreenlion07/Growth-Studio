@@ -47,6 +47,8 @@ export interface WaterfallGround {
   width?: number;
   /** 0 to 1: how much of the bark chip pattern and relief stays in the faded band. The pattern averages 1, so the band averages `color`. 0 fades to the colour flat. Default 1. */
   texture?: number;
+  /** Spacing of the host's own bark chips, feet (for example 0.096). When given, the host side of the fade is drawn as round chips that far apart (joints falling to 0.55, about 20% chip-to-chip variation, average 1), dissolving into the feature's own shards. Left out, the band uses the feature's chips. */
+  chipSize?: number;
   /** 0 to 1: how far the whole mound's bark is shifted toward that colour. Default 0. */
   tint?: number;
   /** How far below the host's ground the border of the soil sits, feet. Default 0.03 (0.3 when no ground is set). */

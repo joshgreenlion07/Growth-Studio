@@ -14,6 +14,8 @@ import { fourFallBed, fourFallBedCut, fourFallFrame, fourFallGroundCuts, inGroun
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
+import { materialChipSpacing } from '../engine/surfaces';
+import { FT } from '../siteplan/fourfall';
 import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
 import { isBoardDeck } from '../siteplan/deckzone';
@@ -85,10 +87,14 @@ export interface SceneBuild {
  * in bark, mulch and stone beds; in a soil fill (humus, compost, dirt: spec.crumb) chips would read as gravel, so it
  * fades to the bed's color flat (texture 0).
  */
-export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; texture: number } | null {
+export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; texture: number; chipSize: number } | null {
   const bed = fourFallBed(f, zoneAt);
   const spec = bed ? materialById.get(bed.catalogId) : undefined;
-  return spec ? { ...groundLook(spec), texture: spec.crumb ? 0 : 1 } : null;
+  if (!spec) return null;
+  // Bark mulch beds also give their chip spacing (feet), so the fade draws the bed's own chips at their size; other
+  // beds pass 0 and the band uses the module's chips.
+  const chip = materialChipSpacing(spec);
+  return { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0 };
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
