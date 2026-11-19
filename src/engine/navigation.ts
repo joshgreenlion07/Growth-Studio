@@ -167,6 +167,11 @@ export class Navigation {
   private touches = new Set<number>();
   /** Touch mode: the on-screen controls are on. */
   private touch = false;
+  /**
+   * Client mode (Area Planner's client page, people new to 3D): walk only, slower and steady. Left and right (keys,
+   * joystick) turn instead of stepping sideways; no run, no lens zoom (wheel, pinch, triggers), no shortcut keys.
+   */
+  client = false;
   /** The on-screen joystick (-1..1, down is backward like a controller stick) and rise button (-1, 0, 1), and its eased result. */
   private vstick = { x: 0, y: 0 };
   private vstickOut = { x: 0, y: 0 };
@@ -204,6 +209,13 @@ export class Navigation {
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       const first = this.host.mode() !== 'orbit';
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (this.client) {
+        if (first && ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) {
+          this.keys.add(k);
+          e.preventDefault();
+        }
+        return;
+      }
       if (k === 'm') { this.host.toggleMeasure(); return; }
       if (k === 'p') { this.host.togglePointer(); return; }
       if (k === 'l') { this.host.togglePointLock(); return; }
@@ -240,7 +252,7 @@ export class Navigation {
         c.setPointerCapture?.(e.pointerId);
         if (this.fingers.size >= 2) {
           this.drag = null;
-          this.pinchDist = this.fingerGap();
+          this.pinchDist = this.client ? 0 : this.fingerGap();
         } else if (this.fingers.size === 1) this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
         return;
       }
@@ -254,7 +266,7 @@ export class Navigation {
         f.y = e.clientY;
         if (this.fingers.size === 2) {
           const d = this.fingerGap();
-          if (this.pinchDist > 8 && d > 8) this.pinch(Math.log(d / this.pinchDist));
+          if (!this.client && this.pinchDist > 8 && d > 8) this.pinch(Math.log(d / this.pinchDist));
           this.pinchDist = d;
           return;
         }
@@ -283,6 +295,7 @@ export class Navigation {
       if (e.target !== c) return;
       e.preventDefault();
       e.stopPropagation();
+      if (this.client) return;
       const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1);
       if (e.ctrlKey) {
         // Safari reports its pinch as gesture events; never count one pinch twice.
@@ -370,7 +383,7 @@ export class Navigation {
 
   /** Fingers apart by `logScale` (log of the scale change): closer in, or a longer lens in walk mode. */
   private pinch(logScale: number) {
-    if (!logScale) return;
+    if (!logScale || this.client) return;
     this.host.onTakeOver();
     this.zoomEase = PINCH_EASE;
     const mode = this.host.mode();
@@ -521,8 +534,15 @@ export class Navigation {
         mz /= m;
       }
       // Drag right to look right, drag up to look up. Direct, not eased: it follows the hand.
-      mouseYaw = this.look.x * 0.0035;
-      mousePitch = this.look.y * 0.0035;
+      mouseYaw = this.look.x * (this.client ? 0.003 : 0.0035);
+      mousePitch = this.look.y * (this.client ? 0.003 : 0.0035);
+      if (this.client) {
+        // Left and right turn, eased like a stick (about 50 degrees a second at full push); nothing steps sideways.
+        lx += mx * 0.9;
+        mx = 0;
+        fast = false;
+        zoom = 0;
+      }
     }
     this.look.x = this.look.y = 0;
     if (mode === 'walk') lift = 0;
@@ -562,7 +582,8 @@ export class Navigation {
     const want = this.want.set(0, 0, 0);
     const ground = this.host.groundAt(cam.position.x, cam.position.z);
     if (mode === 'walk') {
-      const speed = 1.6 * (fast ? 3 : 1);
+      // Client mode: a calm stroll (1.1 m/s), never the run.
+      const speed = this.client ? 1.1 : 1.6 * (fast ? 3 : 1);
       want.addScaledVector(this.fwd, -mz * speed).addScaledVector(this.right, mx * speed);
       // Triggers zoom the lens while walking.
       if (Math.abs(zoom) > 0.02) {

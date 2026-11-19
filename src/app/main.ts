@@ -127,6 +127,34 @@ function setViewer(on: boolean) {
 if (embedViewer) document.documentElement.classList.add('viewer');
 
 /**
+ * Client mode (`?embed=1&client=1`, Area Planner's client page, for people new to 3D): view only, with every studio
+ * control hidden (html.client in page.html) but the on-screen joystick in touch mode. It starts in Walk at the walk
+ * start point once the plan is built, stays in Walk, has no sound, and only the movement keys work. A tap or click
+ * uses a door, fire, water or light; double tap or double click the ground walks there (Studio.clientMode,
+ * Navigation.client). The parent page draws its own menu and sends `quality` (low, medium, high; also `quality=` on the
+ * address) and `time` (morning, afternoon, sunset, night).
+ */
+const EMBED_CLIENT = EMBED && new URLSearchParams(location.search).get('client') === '1';
+if (EMBED_CLIENT) {
+  embedViewer = true;
+  document.documentElement.classList.add('viewer', 'client');
+}
+/** Client mode's three qualities: Low is Draft (with fewer pixels, see Studio.pixelRatioFor), Medium Light, High Balanced. */
+const CLIENT_QUALITY: Record<string, Quality> = { low: 'draft', medium: 'light', high: 'balanced' };
+const CLIENT_MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+if (EMBED_CLIENT) {
+  // Only walking keys reach the studio: no full screen (F), measurements, labels, Library or other shortcuts.
+  window.addEventListener('keydown', (e) => { if (!CLIENT_MOVE_KEYS.has(e.key.toLowerCase()) || e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation(); }, true);
+}
+function clientTime(t: string) {
+  if (!studio) return;
+  if (t === 'morning') studio.setHour(9.5);
+  else if (t === 'afternoon') studio.setMood('afternoon');
+  else if (t === 'sunset') studio.setMood('golden');
+  else if (t === 'night') studio.setMood('night');
+}
+
+/**
  * Touch mode (iPad, fingers only): on-screen joystick, mode switcher, Home and Use, and finger look and pinch in walk
  * and fly (app/touchcontrols.ts, engine/navigation.ts). In Area Planner it is `?touch=1` on the embed address and the
  * parent's `{ type: 'touch', on }` message. On its own the studio turns it on when the only pointer is coarse (a tablet
@@ -257,6 +285,15 @@ function bootStudio() {
   touchUI = new TouchControls(host, () => studio);
   $('#btn-touch').addEventListener('click', () => setTouch(!touchOn, true));
   setTouch(touchOn);
+  if (EMBED_CLIENT) {
+    studio.clientMode = true;
+    studio.tapToWalk = true;
+    studio.handActive = true;
+    studio.nav.client = true;
+    studio.audio.setMuted(true);
+    const q = CLIENT_QUALITY[new URLSearchParams(location.search).get('quality') ?? ''];
+    if (q) studio.setQuality(q);
+  }
   studio.setPlan(plan).then(showStageNote, () => {});
   $('#loading').hidden = true;
   // Area Planner has its own second screen; the studio on its own gets this one.
@@ -1264,7 +1301,13 @@ function onEmbedMessage(e: MessageEvent) {
   }
   if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open, true); return; }
   if (d.type === 'touch') { setTouch((d as { on?: unknown }).on === true); return; }
-  if (d.type === 'mode') { setViewer((d as { viewer?: unknown }).viewer === true); return; }
+  if (d.type === 'mode') { if (!EMBED_CLIENT) setViewer((d as { viewer?: unknown }).viewer === true); return; }
+  if (d.type === 'quality') {
+    const q = CLIENT_QUALITY[String((d as { quality?: unknown }).quality)];
+    if (EMBED_CLIENT && q) studio?.setQuality(q);
+    return;
+  }
+  if (d.type === 'time') { if (EMBED_CLIENT) clientTime(String((d as { time?: unknown }).time)); return; }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'cover') {
@@ -1348,6 +1391,8 @@ function applyEmbedPlan() {
     const extra = res.warnings.length ? { warnings: res.warnings } : {};
     shown.then(
       () => {
+        // Client mode starts walking at the walk start point, in the yard (Studio.placeWalker).
+        if (EMBED_CLIENT) studio?.setNavMode('walk');
         showStageNote();
         embedReply(true, extra);
       },

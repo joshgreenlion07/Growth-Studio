@@ -498,6 +498,13 @@ html.embed section.scene-pane { display: grid !important; position: fixed; inset
 html.embed .dock { max-height: 50vh; overflow: auto; }
 /* View-only embed on a phone (Area Planner's client page): the 3D view keeps most of the screen; the dock scrolls. */
 @media (max-width: 600px) { html.embed.viewer .dock { max-height: 30vh; max-height: 30dvh; } }
+/* Client mode (?client=1): only the 3D view, and the joystick in touch mode; the parent page has the menu. */
+html.client .dock, html.client #views, html.client .scene-tools, html.client #stage-card, html.client #embed-note,
+html.client #updating, html.client #loading, html.client #library, html.client #library-book, html.client #nav-hint,
+html.client .quick-hud, html.client .quick-aim, html.client .tape-label, html.client #height-meter, html.client .measure-label,
+html.client .tc-bar, html.client .tc-rise, html.client .ss-float, html.client #toast, html.client .toast { display: none !important; }
+html.client .tc-stick { width: 148px; height: 148px; left: max(22px, env(safe-area-inset-left, 0px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); background: rgba(32, 35, 33, 0.42); border: 3px solid rgba(245, 242, 234, 0.85); box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); }
+html.client .tc-knob { width: 64px; height: 64px; margin: -32px 0 0 -32px; background: #AFE414; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
 .dock-end { margin-left: auto; }
 #embed-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; pointer-events: none; }
 #embed-note p { margin: 0; max-width: 34em; padding: 10px 16px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; text-align: center; }
