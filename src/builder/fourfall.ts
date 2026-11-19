@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { featureById, plantById, type FeatureSpec } from '../siteplan/catalog';
+import { featureById, materialById, plantById, type FeatureSpec } from '../siteplan/catalog';
 import { FOUR_FALL_BACK_SLOPE, FOUR_FALL_SOIL_BEHIND, FOUR_FALL_SOIL_BESIDE, FOUR_FALL_WIDTH, FT, fourFallDepthFt, fourFallOutlineFt, fourFallParams, type FourFallParams } from '../siteplan/fourfall';
 import type { FeaturePlacement, PlantPlacement, Vec2 } from '../siteplan/types';
 import type { Quality } from '../engine/post';
@@ -164,10 +164,38 @@ export interface FourFallBuilt {
   frame: FourFallFrame;
 }
 
-/** `ground`: the yard's ground height at a point of the feature's local frame (meters), relative to the placement's. */
-export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Quality, ground: (x: number, z: number) => number): FourFallBuilt {
+/**
+ * The mound's soil cover matched to the bed the waterfall stands in (`bed`, a bed look's id), so it reads as the same
+ * fill: black humus, compost or dirt as their crumbs' darkest and lightest soil tones, finer than bark; bark mulch as
+ * its own palette. Any other bed (rock, gravel) or none keeps the module's own shredded bark.
+ */
+export function fourFallMulch(bed: string | undefined): { dark: [number, number, number]; light: [number, number, number]; grain: number } | null {
+  const m = bed ? materialById.get(bed) : undefined;
+  if (!m) return null;
+  const lin = (hex: string): [number, number, number] => {
+    const c = new THREE.Color(hex);
+    return [c.r, c.g, c.b];
+  };
+  const lum = (hex: string) => {
+    const c = new THREE.Color(hex);
+    return c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+  };
+  const span = (hexes: string[]) => {
+    const s = [...hexes].sort((a, b) => lum(a) - lum(b));
+    return { dark: lin(s[0]), light: lin(s[s.length - 1]) };
+  };
+  if (m.crumb) return { ...span(m.crumb.soil.map((x) => x.c)), grain: 1.7 };
+  if (m.recipe === 'mulch' && m.palette.length) return { ...span(m.palette), grain: 1 };
+  return null;
+}
+
+/**
+ * `ground`: the yard's ground height at a point of the feature's local frame (meters), relative to the placement's.
+ * `bed`: the bed look the waterfall stands in, for its soil cover (fourFallMulch).
+ */
+export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Quality, ground: (x: number, z: number) => number, bed?: string): FourFallBuilt {
   const frame = fourFallFrame(f, spec), { p } = frame;
-  const opts = { unit: FT, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality) };
+  const opts = { unit: FT, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality), mulch: fourFallMulch(bed) };
   const wf = createWaterfall(opts);
   // The plan outline and the module must agree on the size.
   const ms = waterfallSize(opts), [ow, od] = fourFallOutlineFt(p);

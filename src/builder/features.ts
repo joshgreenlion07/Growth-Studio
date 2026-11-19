@@ -130,7 +130,7 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light'): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', bedAt?: (p: Vec2) => string | undefined): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -667,7 +667,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'fourFall': {
         // The four-fall rock waterfall (builder/fourfall.ts): its own rock, soil, water and falls, in one module.
-        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; });
+        // Its soil cover takes the bed it stands in: the bed most of its outline's sample points fall in.
+        const votes = new Map<string, number>();
+        for (const [sx, sz] of [[0, 0], [-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) {
+          const w = local(sx * W, 0, sz * D), id = bedAt?.([w.x, w.z]);
+          if (id) votes.set(id, (votes.get(id) ?? 0) + 1);
+        }
+        const bed = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bed);
         o.add(ff.group);
         surfaces.push(...ff.surfaces);
         fourFalls.push(ff.inst);

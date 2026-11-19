@@ -28,6 +28,12 @@ export interface WaterfallOptions {
   refraction?: boolean;
   /** 'light': rocks built with about a third of the triangles, for phones and tablets; the same layout. Default 'full'. Cannot change after creation. */
   detail?: 'full' | 'light';
+  /**
+   * The soil cover's two tones (linear RGB) and how fine it is (1 = shredded bark chips, higher = finer, e.g. 1.7 for
+   * crumbly humus), to match the bed around the feature; it also colors the dirt line at the foot of the rocks.
+   * Default null: the model's own shredded bark. Cannot change after creation.
+   */
+  mulch?: { dark: [number, number, number]; light: [number, number, number]; grain?: number } | null;
 }
 
 export interface WaterfallFall { i: number; x: number; z: number; w: number; top: number; bot: number; drop: number; land: number }
