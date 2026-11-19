@@ -658,6 +658,8 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
   const spec = materialById.get(wallId);
   const cap = choice === 'midnight' ? MIDNIGHT : choice === 'same' ? (spec?.palette[1] ?? spec?.palette[0] ?? '#8f8c87') : (spec?.wall?.cap ?? '#8f8c87');
   if (isStuccoFace(spec?.wall?.face)) return catalogMaterial(wallId);
+  // A veneer wall's own coping (MSI Caldera porcelain), unless a Midnight or matching cap was chosen.
+  if (spec?.veneer?.cap && !choice && materialById.has(spec.veneer.cap)) return catalogMaterial(spec.veneer.cap);
   // A rough-hewn (or chiseled, tumbled) wall's own cap: textured stone, unless a Midnight cap was chosen.
   if (spec?.wall && hasRoughCap(spec.wall.face) && choice !== 'midnight') return pbrMaterial(`cap:${wallId}`, wallCapTextures(spec));
   // A maker's cap color comes from its swatch photo, like its wall: render it at that color.
@@ -672,7 +674,7 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
  */
 export function capOverhang(spec: MaterialSpec | undefined): number {
   if (isStuccoFace(spec?.wall?.face)) return 0.02;
-  const own = spec?.wall?.unit?.capOver;
+  const own = spec?.wall?.unit?.capOver ?? spec?.veneer?.capOverIn;
   return own !== undefined ? own * 0.0254 : CAP_OVER_IN * 0.0254;
 }
 const CAP_OVER_IN = 2.5;
@@ -866,8 +868,11 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       put('wall', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map(() => l.height)));
       // The cap overhangs both faces and the open ends by the same amount, wherever the wall stands
       // against the line (a wall moved onto the bed side still shows its overhang on the patio side).
-      const capTop = l.height + (isStuccoFace(face) ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : 0.06);
+      const capTop = l.height + (isStuccoFace(face) ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : spec?.veneer?.capIn !== undefined ? spec.veneer.capIn * 0.0254 : 0.06);
       const cap = bandGeometry(extendPath(path, over), (d) => d - half - over, (d) => d + half + over, path.pts.map(() => l.height), path.pts.map(() => capTop));
+      // A coping laid in 24 in pieces: its top's texture starts at the cap's back edge, so the one course of pieces fills
+      // the cap across instead of a joint running down its middle.
+      if (spec?.veneer?.cap && !l.cap) startAcrossAtEdge(cap);
       put('cap', isStuccoFace(face) ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else {
       // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
@@ -916,6 +921,17 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     g.add(m);
   }
   return g;
+}
+
+/** Shifts a band's top UVs across so they start at 0 on one edge at every point along it (see bandGeometry). */
+function startAcrossAtEdge(g: THREE.BufferGeometry) {
+  const n = g.getAttribute('normal'), uv = g.getAttribute('uv') as THREE.BufferAttribute;
+  const key = (i: number) => Math.round(uv.getX(i) * 1e4);
+  const lo = new Map<number, number>();
+  for (let i = 0; i < uv.count; i++) if (n.getY(i) > 0.5) lo.set(key(i), Math.min(lo.get(key(i)) ?? Infinity, uv.getY(i)));
+  // A quarter inch in, clear of the course's own joint.
+  for (let i = 0; i < uv.count; i++) if (n.getY(i) > 0.5) uv.setY(i, uv.getY(i) - (lo.get(key(i)) ?? 0) + 0.25 * 0.0254);
+  uv.needsUpdate = true;
 }
 
 type Put = (key: string, mat: THREE.Material, geo: THREE.BufferGeometry, shadow?: boolean) => void;

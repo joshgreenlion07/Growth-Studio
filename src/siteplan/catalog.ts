@@ -175,6 +175,12 @@ export interface WallVeneer {
   albedo?: [number, number, number];
   /** Thickness of the veneer with its setting bed (stone and mortar, or the stucco coats), inches. */
   thicknessIn: number;
+  /** The whole wall's thickness with the veneer on both faces, inches (a veneered 8 in block wall). */
+  wallIn?: number;
+  /** The coping it is capped with (a coping look's id), its thickness and how far it runs past each face, inches. */
+  cap?: string;
+  capIn?: number;
+  capOverIn?: number;
 }
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
@@ -750,10 +756,19 @@ export const MATERIALS: MaterialSpec[] = [
    * and 3 to 12 in long, cool whites and warm creams with golden veins. Tones and shares read from MSI's panel photo
    * (6 px cells, the darkest tenth dropped as joints and shadow, k-means in CIELAB); its average albedo is the photo's
    * mean over the whole panel, joints and all, through the wall calibration (WALL_GAIN). Set 3/4 in proud on 1/2 in of
-   * mortar. Stucco: Green Lion's own finishes, in the warm gray of the three-pillar job (builder/pillarfountain.ts),
+   * mortar, on an 8 in block wall (10 1/2 in in all), capped with MSI Caldera Blanca coping. Stucco: Green Lion's own finishes, in the warm gray of the three-pillar job (builder/pillarfountain.ts),
    * the Santa Barbara smooth trowel as photographed there and the sand (float) finish in the same color.
    */
-  M({ id: 'msi-arctic-golden-ledger', name: 'MSI Arctic Golden stacked stone', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#e1d4cf', '#d3c6c2', '#d7c7bc', '#c6b8b1', '#eee3dd', '#e7d7c8', '#cbb8a7', '#dbc8b3'], wall: { face: 'ledgerPanel', cap: '#ba9a7b' }, veneer: { weights: [0.207, 0.15, 0.141, 0.134, 0.124, 0.106, 0.079, 0.06], rowIn: [1.25, 1.75], tallRow: 0.06, pieceIn: [3, 12], rust: 0.25, quartz: true, albedo: [0.403, 0.328, 0.262], thicknessIn: 1.25 }, matches: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624)', maker: 'MSI', line: 'Arctic Golden Stacked Stone', shelf: 'Wall veneer', color: 'Arctic Golden' }),
+  M({ id: 'msi-arctic-golden-ledger', name: 'MSI Arctic Golden stacked stone', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#e1d4cf', '#d3c6c2', '#d7c7bc', '#c6b8b1', '#eee3dd', '#e7d7c8', '#cbb8a7', '#dbc8b3'], wall: { face: 'ledgerPanel', cap: '#e4ddd1' }, veneer: { weights: [0.207, 0.15, 0.141, 0.134, 0.124, 0.106, 0.079, 0.06], rowIn: [1.25, 1.75], tallRow: 0.06, pieceIn: [3, 12], rust: 0.25, quartz: true, albedo: [0.403, 0.328, 0.262], thicknessIn: 1.25, wallIn: 10.5, cap: 'msi-caldera-blanca-coping', capIn: 0.79, capOverIn: 1.25 }, matches: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624)', maker: 'MSI', line: 'Arctic Golden Stacked Stone', shelf: 'Wall veneer', color: 'Arctic Golden' }),
+  /*
+   * The coping Green Lion caps veneer walls with (on its supplier bills): MSI Arterra Caldera, 13 x 24 x 2 cm matte
+   * porcelain pool coping with one long bullnose edge, a wood-look face. Blanca (LCOPNCALBLA1324, white-warm) and Coala
+   * (LCOPNCALCOA1324, light gray), colors read from MSI's product photos (the top face, in quarters by lightness). Laid
+   * as one course of 24 in pieces along the wall top, grouted 1/8 in (the texture's course is drawn a little deeper than
+   * the 13 in piece, so no joint runs along the cap's edges). Not offered as paving.
+   */
+  M({ id: 'msi-caldera-blanca-coping', name: 'MSI Arterra Caldera Blanca coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#ede7db', '#e4ddd0', '#e2dace', '#dcd3c7'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#c9c4bb' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Blanca 13x24x2cm bullnose coping (LCOPNCALBLA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Blanca' }),
+  M({ id: 'msi-caldera-coala-coping', name: 'MSI Arterra Caldera Coala coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#8d8785', '#7e7774', '#7d7573', '#79706f'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#a8a39c' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Coala 13x24x2cm bullnose coping (LCOPNCALCOA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Coala' }),
   M({ id: 'stucco-santa-barbara-warm-gray', name: 'Santa Barbara smooth trowel stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bfb9b4', '#98938f', '#a09f9f'], wall: { face: 'santaBarbara', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Santa Barbara stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
   M({ id: 'stucco-sand-finish-warm-gray', name: 'Sand finish stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bcb6b0', '#a49f9a'], wall: { face: 'sandStucco', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Sand finish stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
   // Fences
