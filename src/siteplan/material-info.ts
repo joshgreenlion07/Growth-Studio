@@ -164,6 +164,14 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       }
       return { group: 'Decking', about: m.id === 'wood-deck' ? 'A cedar deck: warm natural wood boards on a wood frame.' : 'A composite deck: boards that look like wood and need no staining.', spec: ['Boards on joists at 16 in on center', 'Hidden fasteners', 'Frame on concrete footings'] };
     case 'paver': {
+      if (m.line === 'Premier Slab') {
+        // Basalite's own words for the line, and its cut sheet and pattern brochure (CA).
+        return {
+          group: 'Pavers',
+          about: `Basalite Premier Slab 24 x 24: a "smooth cleanlined paver" (Basalite) whose face mix clouds ${m.color ?? 'its colors'} through every slab. Used on its own as a stepping stone or laid as a patio in Basalite's Stacked Bond, Running Bond or 45 degree Running Bond.`,
+          spec: ['594 x 594 x 60 mm (23.54 in with its spacer nubs), 3 mm chamfer, 106 lb', '32 per pallet, 123 sq ft; pedestrian use only', 'Special order only in some regions', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
+        };
+      }
       if (m.line === 'Premier Smooth') {
         // Basalite's own words for the line, and its cut sheet (BA-CA 5/24/2024).
         return {

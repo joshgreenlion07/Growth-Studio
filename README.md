@@ -228,7 +228,11 @@ Messages use `window.postMessage`:
   two). Basalite Premier Smooth takes `'combo3' | 'combo4'`: Basalite's 3 Piece
   Combo Pattern and 4 Piece Pattern #4 (the combo with the 12 x 18), traced from
   its pattern brochure and laid on the line's real 11.79 in module (11.73 in
-  faces plus spacer joints). Left out, or not one the paver offers, the paver's first. The looks in
+  faces plus spacer joints). Basalite Premier Slab takes
+  `'stack' | 'halfBond' | 'halfBond45'`: Stacked Bond, Running Bond (half bond)
+  and 45 degree Running Bond, the three patterns in its brochure, laid on the
+  24 x 24 slab's real 23.54 in module (cut sheet: 594 x 594 x 60 mm with
+  spacers, 3 mm chamfer). Left out, or not one the paver offers, the paver's first. The looks in
   the `ready` message carry `laying: true` and `layings: { id, name }[]` (the
   default first) when they take a laying pattern.
 - The material pointer (controller Y, or P) marks the center of the view. In

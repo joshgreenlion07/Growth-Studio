@@ -11,7 +11,7 @@ export const BASALITE_IMAGE_BASE = 'https://basalite.com/wp-content/uploads/';
 export const BASALITE_MEDIA: Record<string, MakerMedia> = {
   'Premier Slab': {
     page: 'https://basalite.com/products/premier-slab-ca/',
-    sizes: ['24 x 24: 594 x 594 x 60 mm (23 1/2 x 23 1/2 in x 60 mm)'],
+    sizes: ['24 x 24: 594 x 594 x 60 mm, 23.54 in with its spacers, 3 mm chamfer, 106 lb', '32 per pallet, 123 sq ft, 3442 lb; pedestrian use only'],
     images: {
       'Midnight Terrace': '2023/09/premier-slab-24x24-midnightterrace.jpg',
       'Bodega Dunes': '2023/09/premier-slab-24x24-bodegadunes.jpg',
