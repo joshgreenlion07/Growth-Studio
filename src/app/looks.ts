@@ -25,6 +25,11 @@ export interface Look {
    * Left out when there is none.
    */
   notice?: string;
+  /**
+   * false for a look the open plan uses that is no longer offered (turned off in the Library, or out of area): the
+   * parent keeps it as the current choice where it is used and offers it nowhere else. Left out when it is offered.
+   */
+  offered?: false;
   /** Typical install or plant facts, one line each ("3 in deep, raked even"). */
   spec: string[];
   /** Botanical name, for a plant. */

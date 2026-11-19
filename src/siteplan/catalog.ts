@@ -766,8 +766,8 @@ export const MATERIALS: MaterialSpec[] = [
    * and 3 to 12 in long, cool whites and warm creams with golden veins. Tones and shares read from MSI's panel photo
    * (6 px cells, the darkest tenth dropped as joints and shadow, k-means in CIELAB); its average albedo is the photo's
    * mean over the whole panel, joints and all, through the wall calibration (WALL_GAIN). Set 3/4 in proud on 1/2 in of
-   * mortar, on an 8 in block wall (10 1/2 in in all), capped with MSI Caldera Blanca coping. Stucco: Green Lion's own finishes, in the warm gray of the three-pillar job (builder/pillarfountain.ts),
-   * the Santa Barbara smooth trowel as photographed there and the sand (float) finish in the same color.
+   * mortar, on an 8 in block wall (10 1/2 in in all), capped with MSI Caldera Blanca coping. Stucco: Green Lion's own finishes, the Santa Barbara smooth trowel
+   * (as photographed on the three-pillar job, builder/pillarfountain.ts) and the sand (float) finish, in SW 7029 Agreeable Gray.
    */
   M({ id: 'msi-arctic-golden-ledger', name: 'MSI Arctic Golden stacked stone', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#e1d4cf', '#d3c6c2', '#d7c7bc', '#c6b8b1', '#eee3dd', '#e7d7c8', '#cbb8a7', '#dbc8b3'], wall: { face: 'ledgerPanel', cap: '#e4ddd1' }, veneer: { weights: [0.207, 0.15, 0.141, 0.134, 0.124, 0.106, 0.079, 0.06], rowIn: [1.25, 1.75], tallRow: 0.06, pieceIn: [3, 12], rust: 0.25, quartz: true, albedo: [0.403, 0.328, 0.262], thicknessIn: 1.25, wallIn: 10.5, cap: 'msi-caldera-blanca-coping', capIn: 0.79, capOverIn: 1.25 }, matches: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624)', maker: 'MSI', line: 'Arctic Golden Stacked Stone', shelf: 'Wall veneer', color: 'Arctic Golden' }),
   /*
@@ -779,8 +779,13 @@ export const MATERIALS: MaterialSpec[] = [
    */
   M({ id: 'msi-caldera-blanca-coping', name: 'MSI Arterra Caldera Blanca coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#ede7db', '#e4ddd0', '#e2dace', '#dcd3c7'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#c9c4bb' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Blanca 13x24x2cm bullnose coping (LCOPNCALBLA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Blanca' }),
   M({ id: 'msi-caldera-coala-coping', name: 'MSI Arterra Caldera Coala coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#8d8785', '#7e7774', '#7d7573', '#79706f'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#a8a39c' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Coala 13x24x2cm bullnose coping (LCOPNCALCOA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Coala' }),
-  M({ id: 'stucco-santa-barbara-warm-gray', name: 'Santa Barbara smooth trowel stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bfb9b4', '#98938f', '#a09f9f'], wall: { face: 'santaBarbara', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Santa Barbara stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
-  M({ id: 'stucco-sand-finish-warm-gray', name: 'Sand finish stucco, warm gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#bcb6b0', '#a49f9a'], wall: { face: 'sandStucco', cap: '#aba6a1' }, veneer: { albedo: [0.14, 0.118, 0.097], thicknessIn: 0.875 }, maker: 'Green Lion', line: 'Sand finish stucco', shelf: 'Wall veneer', color: 'Warm gray' }),
+  // Stucco color: Sherwin-Williams SW 7029 Agreeable Gray (the owner's pick of a common Sherwin-Williams stucco color,
+  // sold at every Sherwin-Williams store in Northern California): #D1CBC1, LRV 60.4 (sherwin-williams.com). The swatch
+  // is taken like a maker wall's swatch photo: its color in linear light through the wall calibration (WALL_GAIN in
+  // engine/surfaces.ts), so the wall renders back to the swatch in the default light; the tones only shade the trowel
+  // or float marks around it.
+  M({ id: 'stucco-santa-barbara-sw-agreeable-gray', name: 'Santa Barbara smooth trowel stucco, SW 7029 Agreeable Gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d8d2c8', '#bcb7ae', '#c7c3bf'], wall: { face: 'santaBarbara', cap: '#d1cbc1' }, veneer: { albedo: [0.38, 0.337, 0.267], thicknessIn: 0.875 }, matches: 'Sherwin-Williams SW 7029 Agreeable Gray', maker: 'Green Lion', line: 'Santa Barbara stucco', shelf: 'Wall veneer', color: 'SW 7029 Agreeable Gray' }),
+  M({ id: 'stucco-sand-finish-sw-agreeable-gray', name: 'Sand finish stucco, SW 7029 Agreeable Gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d6d0c6', '#c2bdb3'], wall: { face: 'sandStucco', cap: '#d1cbc1' }, veneer: { albedo: [0.38, 0.337, 0.267], thicknessIn: 0.875 }, matches: 'Sherwin-Williams SW 7029 Agreeable Gray', maker: 'Green Lion', line: 'Sand finish stucco', shelf: 'Wall veneer', color: 'SW 7029 Agreeable Gray' }),
   // Fences
   M({ id: 'fence-board-on-board', name: 'Board-on-board, natural cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#b08a63', '#9a7552', '#86643f'], fence: 'boardOnBoard' }),
   M({ id: 'fence-gray-lattice', name: 'Gray board, cedar lattice top', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7d8083', '#6d7073', '#5d6063'], fence: 'grayLattice' }),
@@ -1055,7 +1060,7 @@ export const FEATURES: FeatureSpec[] = [
    * Sand or Pewter). One per finish, so a placed column can be switched to another finish like any feature; heights in
    * whole block courses. (Basalite lists the cap as coming soon in California.)
    */
-  ...([['msi-arctic-golden-ledger', 'MSI Arctic Golden stacked stone'], ['stucco-santa-barbara-warm-gray', 'Santa Barbara stucco, warm gray'], ['stucco-sand-finish-warm-gray', 'sand finish stucco, warm gray']] as const).map(([veneer, label]) => F({
+  ...([['msi-arctic-golden-ledger', 'MSI Arctic Golden stacked stone'], ['stucco-santa-barbara-sw-agreeable-gray', 'Santa Barbara stucco, SW 7029 Agreeable Gray'], ['stucco-sand-finish-sw-agreeable-gray', 'sand finish stucco, SW 7029 Agreeable Gray']] as const).map(([veneer, label]) => F({
     id: `veneer-column-${veneer}`, name: `Column, ${label}`, group: 'Accents', kind: 'veneerColumn', footprint: [24 * 0.0254, 24 * 0.0254], veneer,
     sizes: [24, 32, 40, 48, 56].map((h) => ({ label: `${h} in of block, ${h + 2} in tall with the cap`, size: [24 * 0.0254, 24 * 0.0254, (h + 2) * 0.0254] as [number, number, number] })), size: 2,
     options: [{ key: 'pewterCap', label: 'Pewter cap (Sand when off)', default: false }],
@@ -1153,6 +1158,11 @@ export function swapClassOf(f: FeatureSpec): string {
 
 /** Old ids from earlier saved plans. */
 export const LEGACY_IDS: Record<string, string> = {
+  // The stucco looks were first drawn in the three-pillar job's warm gray; they are now SW 7029 Agreeable Gray.
+  'stucco-santa-barbara-warm-gray': 'stucco-santa-barbara-sw-agreeable-gray',
+  'stucco-sand-finish-warm-gray': 'stucco-sand-finish-sw-agreeable-gray',
+  'veneer-column-stucco-santa-barbara-warm-gray': 'veneer-column-stucco-santa-barbara-sw-agreeable-gray',
+  'veneer-column-stucco-sand-finish-warm-gray': 'veneer-column-stucco-sand-finish-sw-agreeable-gray',
   'accent-tree-red': 'japanese-maple-red',
   'columnar-tree': 'italian-cypress',
   'rounded-shrub': 'boxwood',

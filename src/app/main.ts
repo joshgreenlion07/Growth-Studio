@@ -1,4 +1,4 @@
-import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, swapClassOf, type FeatureGroup, type LayingPattern, type MaterialUse } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, swapClassOf, type FeatureGroup, type LayingPattern, type MaterialSpec, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
 import type { SitePlan, Vec2 } from '../siteplan/types';
@@ -1214,6 +1214,7 @@ function applyEmbedPlan() {
     plan = res.plan;
     planName = next.name.trim().slice(0, 80) || plan.site.name;
     embedAsked.clear();
+    embedLooksForPlan();
     // The parent can name its coordinate frame; while it is unchanged the coordinates have not
     // moved, so the camera stays even when the lot outline grows.
     const sameFrame = !!next.frame && next.frame === embedLastFrame;
@@ -1251,8 +1252,54 @@ function applyEmbedPlan() {
 }
 
 /** The looks the parent can offer: approved pavers, borders, walls, fences, curbs, maker turf and bed fills. */
+/** A look the parent's pickers deal in: paving, borders, walls, fences, curbs, maker turf and bed fills. */
+const embedKind = (m: MaterialSpec) => (m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain' || m.group === 'Concrete')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed';
+
+/** Every catalog material id the plan names anywhere (zone, border, line, cap, feature look...). */
+function planMaterialIds(p: SitePlan): Set<string> {
+  const out = new Set<string>();
+  const walk = (v: unknown) => {
+    if (typeof v === 'string') {
+      if (materialById.has(v)) out.add(v);
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(p);
+  return out;
+}
+
+/** The ids sent in the last looks list (see embedLooks). */
+let embedLookIds = new Set<string>();
+
+/**
+ * The looks the parent's pickers offer, plus any look the open plan already uses that is no longer offered (a line
+ * or color turned off in the Library, or a Belgard color not sold in Northern California), marked `offered: false`:
+ * the parent shows such a look as the current choice, so it can be changed to an offered one, and offers it nowhere.
+ */
 function embedLooks(): Look[] {
-  return MATERIALS.filter((m) => !m.auto && isOffered(m) && ((m.use === 'hardscape' && (m.group === 'Pavers' || m.group === 'Porcelain' || m.group === 'Concrete')) || m.use === 'border' || m.use === 'wall' || m.use === 'fence' || (m.use === 'edging' && m.recipe === 'curb') || (m.use === 'turf' && !!m.turf) || m.use === 'bed')).map(lookOf);
+  const used = planMaterialIds(plan);
+  const out: Look[] = [];
+  for (const m of MATERIALS) {
+    if (!embedKind(m)) continue;
+    const offered = !m.auto && isOffered(m);
+    if (!offered && !used.has(m.id)) continue;
+    const look = lookOf(m);
+    if (!offered) look.offered = false;
+    out.push(look);
+  }
+  embedLookIds = new Set(out.map((l) => l.id));
+  return out;
+}
+
+/** After a new plan: send the looks again when it uses a look the parent was not sent (one no longer offered). */
+function embedLooksForPlan() {
+  for (const id of planMaterialIds(plan)) {
+    const m = materialById.get(id);
+    if (m && embedKind(m) && !embedLookIds.has(id)) {
+      window.parent.postMessage({ source: 'growth-studio', type: 'materials', materials: embedLooks() }, embedOrigin || '*');
+      return;
+    }
+  }
 }
 
 /**
