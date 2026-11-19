@@ -73,12 +73,39 @@ if (EMBED) document.documentElement.classList.add('embed');
  * iPad and iPhone (WebKit on iOS and iPadOS, an iPad that reports itself as a Mac included). Their element full screen
  * ends on any quick one-finger swipe down, and a page cannot stop it (WebKit's own dismiss gesture, not a scroll), so
  * dragging to look around or pulling the joystick back would leave it. There the studio's full screen is its fixed
- * layout alone (`section.scene-pane.fs`), without the Fullscreen API; in an embed the parent fills its own page.
+ * layout alone (`section.scene-pane.fs`), never the Fullscreen API; in an embed the parent fills its own page.
+ * Any browser there counts (all WebKit), and the "desktop site" mode that reports a Mac. A Mac with no touch does not.
+ * navigator.standalone is not used: Mac Safari has it too. Area Planner has the same test.
  */
 const APPLE_TOUCH = (() => {
-  const ua = navigator.userAgent || '';
-  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+  try {
+    const ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod|CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)) return true;
+    if (!/Macintosh/.test(ua)) return false;
+    return (navigator.maxTouchPoints || 0) > 1 || 'ontouchend' in document || matchMedia('(any-pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
 })();
+
+/**
+ * The last touch on the page, ms (performance.now). A full screen that ends within FS_SWIPE_MS of one was ended by the
+ * system's swipe down, not by Esc or the exit button, so the studio keeps its full-screen layout. In an embed each
+ * touch is also passed to the parent (`{ type: 'touch-input' }`, at most every 300 ms), which does the same.
+ */
+let lastTouchAt = -1e9;
+let touchSentAt = -1e9;
+const FS_SWIPE_MS = 1500;
+const noteTouch = (e: PointerEvent) => {
+  if (e.pointerType !== 'touch') return;
+  lastTouchAt = performance.now();
+  if (EMBED && embedOrigin && lastTouchAt - touchSentAt > 300) {
+    touchSentAt = lastTouchAt;
+    window.parent.postMessage({ source: 'growth-studio', type: 'touch-input' }, embedOrigin);
+  }
+};
+window.addEventListener('pointerdown', noteTouch, { capture: true, passive: true });
+window.addEventListener('pointermove', noteTouch, { capture: true, passive: true });
 
 /**
  * View-only embed: the parent page shows the 3D view to someone who may look but not change the saved plan (Area
@@ -1104,13 +1131,13 @@ function initFullscreen() {
       set(true);
       // Inside Area Planner, the parent page goes full screen with its own material panel; without an answer
       // within 300 ms, the studio uses the real Fullscreen API itself. The fixed layout above works without either.
+      // On iPad and iPhone (APPLE_TOUCH) the studio never calls the Fullscreen API: the parent fills its page, or,
+      // with no parent to ask, the layout fills the frame or the page.
       if (EMBED && embedOrigin) {
-        // No answer (another site, or the parent not ready): the real Fullscreen API, on iPad too, since `.fs` alone
-        // fills only the frame there; a swipe down may end it, but some full screen beats none.
-        const t = window.setTimeout(() => { parentFullscreen = null; pane.requestFullscreen?.().catch(() => {}); }, 300);
+        const t = APPLE_TOUCH ? 0 : window.setTimeout(() => { parentFullscreen = null; pane.requestFullscreen?.().catch(() => {}); }, 300);
         parentFullscreen = (pon) => { window.clearTimeout(t); viaParent = pon; parentFullscreen = (later) => { if (!later && on) { viaParent = false; set(false); } }; };
         window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-request' }, embedOrigin);
-      } else if (!APPLE_TOUCH || EMBED) pane.requestFullscreen?.().catch(() => {});   // an embed with no parent to ask: as above
+      } else if (!APPLE_TOUCH) pane.requestFullscreen?.().catch(() => {});
     } else {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       if (viaParent && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-exit' }, embedOrigin);
@@ -1119,7 +1146,8 @@ function initFullscreen() {
     }
   };
   btn.addEventListener('click', toggle);
-  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && on) set(false); });
+  // Ended just after a touch: the system's swipe down on a device APPLE_TOUCH missed. The layout stays full screen.
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && on && performance.now() - lastTouchAt > FS_SWIPE_MS) set(false); });
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
