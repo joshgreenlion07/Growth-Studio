@@ -1,38 +1,48 @@
 /**
- * Basalite Concrete Products lines, from basalite.com (California region, 11/2026). Color names are Basalite's.
+ * Basalite Concrete Products lines, from basalite.com (California region, read for the Sacramento region, 11/2026).
+ * Color names are Basalite's.
  *
- * Premier Slab: "smooth cleanlined paver", one size, 24 x 24: 594 mm W x 594 mm L x 60 mm H (23 1/2 x 23 1/2 in x 60 mm),
- * square arrises, with small spacer nubs on the sides that set the joint (Basalite's dimension drawing). 32 units and
- * 123 sq ft per pallet, 3442 lb. Five colors, every one a clouded blend: two or three tones drifting through the face
- * in soft streaks (Basalite's swatch photos), drawn with the 'cloud' blend. "Available by special order only in some
- * regions."
+ * Premier Slab 24 x 24 ("smooth cleanlined paver"), from its California page, cut sheet and pattern brochure: one size,
+ * 594 mm W x 594 mm L x 60 mm H, laid on a 23.54 in module (the cut sheet's US size: the face plus the spacer nubs on
+ * its sides, so a 0.15 in joint), a 3 mm chamfer, 106 lb; 32 units and 123 sq ft per pallet, 3442 lb; pedestrian use
+ * only. "Available by special order only in some regions." Northern California colors: Positano, Torino, Bodega Dunes,
+ * Oceanside and Midnight Terrace (no SeaScape for this line). Basalite's brochure gives three patterns: Running Bond,
+ * Stacked Bond and 45 degree Running Bond.
  *
- * The four colors per entry are read from Basalite's full-size swatch photos (120 px, 12 px inset, linear light): the
- * mean of the lightest quarter of the pixels, the warmest quarter, the coolest quarter and the darkest quarter, light to
- * dark. A blend of tan and gray streaks keeps its two hues this way (plain 4-means splits it by lightness only and
- * averages the tan and the gray together); the four tones average to within 2% of the photo's mean. No Basalite image
- * ships with the app.
+ * Colors read from Basalite's swatch photo of each color (800 px; the slabs laid at 45 degrees, so the photo is turned
+ * 45 degrees before the joints are found and masked, 9 px each side, with a 14 px inset from the photo's edge), in
+ * 4 x 4 px cells: five tone groups by k-means in CIELAB, each tone its group's mean in linear light, with the share of the
+ * face it covers, laid by the face-mix painter (blend 'mix', as Premier Smooth) in long, narrow, soft streaks that fray
+ * into fine dragged lines (`mixScale`, `mixEdge`). Basalite's install photos show the streaks running parallel to one
+ * edge of each slab (its swatch photos are turned 45 degrees). Each color's tones are then scaled per channel so a
+ * top-down render in the default light reads back that color's photo mean (the photos run a little cooler and the
+ * renderer's tone curve compresses the lightest and darkest colors; before the correction Torino read 3 b* warmer and
+ * Oceanside 4.5 L* darker, and Oceanside, the lightest, took a second pass). The joint sand is the light half of the
+ * photos' joint pixels: light warm gray with dark grains. No Basalite image ships with the app.
  */
 export interface BasaliteLine {
   slug: string;
   name: string;
-  /** Piece face size and joint, inches: the 594 mm slab with its spacer joint (about 4 mm). */
+  /** The slab's module (its face plus the spacer joint) and the joint, inches. */
   size: [number, number];
   joint: number;
+  /** The chamfer on the face's edges, meters. */
+  chamfer: number;
   /** Joint sand as Basalite's swatch photos show it: light gray with dark grains. */
   jointSand: string;
   /** Thickness, meters. */
   thickness: number;
-  colors: [string, string[]][];
+  /** Name, its tones (most of the face first), and how much of the face each covers. */
+  colors: [string, string[], number[]][];
 }
 
 export const BASALITE_LINES: BasaliteLine[] = [
-  { slug: 'premier-slab', name: 'Premier Slab', size: [23.5, 23.5], joint: 0.16, jointSand: '#cdc9c1', thickness: 0.06, colors: [
-    ['Midnight Terrace', ['#bdb9b0', '#a49888', '#979691', '#8c857b']],
-    ['Bodega Dunes', ['#c8c9cc', '#c1bbb5', '#a6aab2', '#a3a5a9']],
-    ['Oceanside', ['#dddede', '#d3d2d1', '#ced1d4', '#c9cacb']],
-    ['Positano', ['#b7b5b1', '#b2aba2', '#a6a8a9', '#9f9e9c']],
-    ['Torino', ['#b4b7bb', '#a9adb2', '#a5a6aa', '#8c8f95']],
+  { slug: 'premier-slab', name: 'Premier Slab', size: [23.54, 23.54], joint: 0.15, chamfer: 0.003, jointSand: '#cfc8be', thickness: 0.06, colors: [
+    ['Midnight Terrace', ['#b4b1a9', '#a59d92', '#938678', '#7c7b77', '#93908a'], [0.269, 0.263, 0.251, 0.111, 0.107]],
+    ['Bodega Dunes', ['#c6c8d0', '#c1bcbc', '#b9bcc5', '#a6abb7', '#9096a3'], [0.369, 0.257, 0.191, 0.111, 0.073]],
+    ['Oceanside', ['#e6ebf2', '#dfe6eb', '#ecf1f8', '#d5dee4', '#f4fbff'], [0.3, 0.253, 0.224, 0.116, 0.108]],
+    ['Positano', ['#a3a4a4', '#aeafae', '#aba59f', '#9e9b98', '#939699'], [0.325, 0.242, 0.162, 0.154, 0.117]],
+    ['Torino', ['#a2a6b0', '#969ca6', '#abb1bb', '#8a8f9a', '#7a7f89'], [0.323, 0.23, 0.205, 0.15, 0.091]],
   ] },
 ];
 

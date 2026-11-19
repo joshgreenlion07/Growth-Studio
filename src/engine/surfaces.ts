@@ -397,6 +397,11 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
   const s = p.scale ?? 1;
   // Basalite's own patterns (Premier Smooth), on the maker's real module.
   if (laying === 'combo3' || laying === 'combo4') return moduleLayout({ ...BASALITE_MODULES[laying], scale: s });
+  // Premier Slab's: Running Bond (half bond, four courses of four slabs to the texture), and the same turned 45 degrees,
+  // whose lattice (S, 0), (S / 2, S) repeats square every 2 x sqrt(2) slabs once turned (the texture holds three of
+  // those each way, so the slabs' drifts do not visibly repeat). Stacked Bond is the plain grid below.
+  if (laying === 'halfBond') return runningLayout(a, b, 0.5, false, 4, 4, seed);
+  if (laying === 'halfBond45') return moduleLayout({ pieces: [[0, 0, a, a]], v1: [a, 0], v2: [a / 2, a], P: 3 * 2 * Math.SQRT2 * a, diagonal: true });
   // 1-piece patterns of 6 x 9 (Antiqued Flat Top): half bond, 9 in along the course; or the 45 degree herringbone.
   if (laying === 'running') return runningLayout(9, 6, 0.5, false, 24, 16, seed);
   if (laying === 'herringbone') return moduleLayout(ANTIQUED.herringbone);
@@ -410,7 +415,7 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
     }
     case 'plank': return runningLayout(a, b, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
     // A clouded blend repeats every 3 x 3 slabs, so its streaks do not repeat every second slab.
-    case 'grid': return runningLayout(a, b, 0, false, p.blend === 'cloud' ? 3 : 2, p.blend === 'cloud' ? 3 : 2, seed);
+    case 'grid': return runningLayout(a, b, 0, false, p.blend ? 3 : 2, p.blend ? 3 : 2, seed);
     case 'herringbone': return herringboneLayout(a, b);
     case 'basket': return basketLayout(a, b);
     case 'cobble': return cobbleLayout(p.sizes, seed);
@@ -466,28 +471,46 @@ const MIX_Q: number[] = (() => {
   for (let i = 0; i < 6000; i++) out.push(mixField(r() * 400, r() * 400, 300 + Math.floor(r() * 50) * 3));
   return out.sort((a, b) => a - b);
 })();
-const mixQuantile = (k: number) => MIX_Q[Math.max(0, Math.min(MIX_Q.length - 1, Math.round(k * (MIX_Q.length - 1))))];
+/** The same with a break-up of amplitude b added (mixTone's `edge[1]`), which widens the spread the thresholds sit in. */
+const mixQs = new Map<number, number[]>();
+function mixQTable(b: number): number[] {
+  if (!b) return MIX_Q;
+  let q = mixQs.get(b);
+  if (!q) {
+    const r = rng('mix-q-' + b);
+    q = [];
+    for (let i = 0; i < 6000; i++) {
+      const up = (vnoise(r() * 400, r() * 400, 1e6, 92) - 0.5) * 0.45 + (vnoise(r() * 400, r() * 400, 1e6, 93) - 0.5) * 0.25 + (vnoise(r() * 400, r() * 400, 1e6, 94) - 0.5) * 0.5;
+      q.push(mixField(r() * 400, r() * 400, 300 + Math.floor(r() * 50) * 3) + up * b);
+    }
+    q.sort((a, c) => a - c);
+    mixQs.set(b, q);
+  }
+  return q;
+}
+const mixQuantile = (k: number, q = MIX_Q) => q[Math.max(0, Math.min(q.length - 1, Math.round(k * (q.length - 1))))];
 const mixCuts = new Map<string, number[]>();
 /** Thresholds for tones 1.. so each covers its share: from the top tone down, the share of what is left uncovered. */
-function mixThresholds(mix: number[]): number[] {
-  const key = mix.join(',');
+function mixThresholds(mix: number[], b = 0): number[] {
+  const key = mix.join(',') + '|' + b;
   let cut = mixCuts.get(key);
   if (!cut) {
+    const q = mixQTable(b);
     cut = new Array(mix.length).fill(1);
     let left = 1;
     for (let i = mix.length - 1; i >= 1; i--) {
       const p = Math.min(0.95, mix[i] / Math.max(1e-6, left));
-      cut[i] = mixQuantile(1 - p);
+      cut[i] = mixQuantile(1 - p, q);
       left -= mix[i];
     }
     mixCuts.set(key, cut);
   }
   return cut;
 }
-function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number): RGB {
-  const cut = mixThresholds(mix);
-  // Drifts run along one side of the piece or the other, leaning up to 5 degrees.
-  const th = (r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
+function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number, scale: [number, number] = [2.3, 6.5], edge: [number, number] = [0.022, 0], along = false): RGB {
+  const cut = mixThresholds(mix, edge[1]);
+  // Drifts run along one side of the piece or the other (or, `along`, all the same way), leaning up to 5 degrees.
+  const th = (along || r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
   const ca = Math.cos(th), sa = Math.sin(th);
   const su = lx * ca + ly * sa, sv = -lx * sa + ly * ca;
   const s = 300 + (id % 50) * 3;
@@ -496,11 +519,17 @@ function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: numbe
   const g1x = lx * 0.81 - ly * 0.59, g1y = lx * 0.59 + ly * 0.81, g2x = lx * 0.38 + ly * 0.93, g2y = -lx * 0.93 + ly * 0.38;
   const grain = (vnoise(g1x * 170, g1y * 170, 1e6, s + 90) - 0.5) * 0.06 + (vnoise(g2x * 410, g2y * 410, 1e6, s + 91) - 0.5) * 0.035;
   const warp = (vnoise(su * 1.6, sv * 1.6, 1e6, s + 80) - 0.5) * 0.7;
+  // A cloudy break-up a centimeter or two across (mixEdge[1]), so the drifts fray into speckled wisps instead of
+  // ending on a clean line, and a wider blend band (mixEdge[0]) for their soft inner gradients (Premier Slab).
+  // Fine lines dragged along the drift (Basalite's install photos show them) fray it along its length too.
+  const breakup = edge[1] ? ((vnoise(g1x * 38, g1y * 38, 1e6, s + 92) - 0.5) * 0.45 + (vnoise(g2x * 85, g2y * 85, 1e6, s + 93) - 0.5) * 0.25 + (vnoise(su * 5, sv * 80, 1e6, s + 94) - 0.5) * 0.5) * edge[1] : 0;
   let c = colors[0];
   for (let i = 1; i < colors.length && i < mix.length; i++) {
-    // Patches about 20 to 50 cm along and 6 to 18 cm across.
-    const f = mixField(su * 2.3 + i * 7.3, sv * 6.5 + warp + i * 3.1, s + i * 11) + grain + (r2 - 0.5) * 0.03;
-    c = mixRGB(c, colors[i], smooth(cut[i] - 0.022, cut[i] + 0.022, f));
+    // Patches about 20 to 50 cm along and 6 to 18 cm across at the default scale (Premier Smooth); Premier Slab's run
+    // most of the way across the slab and 3 to 10 cm wide, soft-edged and frayed (its mixScale and mixEdge), as
+    // Basalite's install photos show them.
+    const f = mixField(su * scale[0] + i * 7.3, sv * scale[1] + warp + i * 3.1, s + i * 11) + grain * (edge[1] ? 1.6 : 1) + breakup + (r2 - 0.5) * 0.03;
+    c = mixRGB(c, colors[i], smooth(cut[i] - edge[0], cut[i] + edge[0], f));
   }
   return c;
 }
@@ -520,7 +549,7 @@ const DETAIL_SLUGS = [
   'avalon-slate', 'catalina-grana', 'antiqued-flat-top',
   'dimensions-6', 'dimensions-12-60mm', 'dimensions-12-80mm', 'dimensions-18', 'dimensions-antiqued',
   'dimensions-single-units', 'dimensions-slabs', 'dimensions-slab-24',
-  'premier-smooth',
+  'premier-smooth', 'premier-slab',
 ];
 const DETAIL_LINES = new RegExp(`^(?:border-of-|paver-edge-)?(?:${DETAIL_SLUGS.join('|')})-`);
 function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
@@ -582,7 +611,7 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
   // Antiqued Flat Top has no chamfer: its arris is worn round over about 7 mm, unevenly, with chips broken out of it
   // (drawn in the shader, `worn`), as the pattern texture draws it.
   const worn = p.face === 'antiqued';
-  const bevel = worn ? 0.007 : p.face === 'smooth' ? 0.0025 : 0.005;
+  const bevel = p.chamfer ?? (worn ? 0.007 : p.face === 'smooth' ? 0.0025 : 0.005);
   const common = {
     joint: (p.joint * IN) / 2,
     bevel,
@@ -668,7 +697,7 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
   const T = lay.tile;
   const J = (p.joint * IN) / 2;
   const antiqued = p.face === 'antiqued';
-  const bevel = p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005;
+  const bevel = p.chamfer ?? (p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005);
   const size = paverMapSize(spec, p, T);
   // Noise frequencies per tile for the antiqued face, whole numbers so the texture stays seamless.
   const F = (m: number) => Math.max(2, Math.round(T / m));
@@ -708,7 +737,7 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
     if (p.blend === 'mix' && p.mix && hit.lx !== undefined && hit.ly !== undefined) {
-      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2);
+      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2, p.mixScale, p.mixEdge, p.mixAlong);
     } else if (p.blend !== 'cloud') {
       const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
       c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
@@ -1648,11 +1677,18 @@ export function slabSet(spec: MaterialSpec, wIn = 24, dIn = wIn): PBRSet {
       const x = u * T, y = (1 - v) * T;
       // distance to the slab's edge, m (outside the slab, where the tile runs past a short side: the edge itself)
       const e = Math.max(0, Math.min(x, W - x, y, D - y));
-      const bev = smooth(0, 0.006, e); // a 1/4 in chamfer
+      const p = spec.pattern;
+      const bev = smooth(0, p?.chamfer ?? 0.006, e); // the maker's chamfer, else a 1/4 in one
       const cloud = fbm(u, v, 3, 4, 31), patch = fbm(u + 0.3, v + 0.7, 5, 3, 35);
       const grain = vnoise(u * 400, v * 400, 400, 33), fine = vnoise(u * 140, v * 140, 140, 34);
-      let c = mixRGB(colors[0], colors[Math.min(n - 1, 1)], cloud);
-      c = mixRGB(c, colors[Math.min(n - 1, 2)], smooth(0.55, 0.85, patch) * 0.5);
+      let c: RGB;
+      if (p?.blend === 'mix' && p.mix) {
+        // A face-mix slab (Basalite Premier Slab) set as a one-slab pad: the same drifts as in its patio.
+        c = mixTone(colors, p.mix, x, y, 17, 0.31, 0.5, p.mixScale, p.mixEdge, p.mixAlong);
+      } else {
+        c = mixRGB(colors[0], colors[Math.min(n - 1, 1)], cloud);
+        c = mixRGB(c, colors[Math.min(n - 1, 2)], smooth(0.55, 0.85, patch) * 0.5);
+      }
       c = mulRGB(c, (0.94 + grain * 0.06 + fine * 0.03) * (0.82 + bev * 0.18));
       return { h: bev * (0.96 + grain * 0.03), c, r: 0.72 + grain * 0.1 };
     });

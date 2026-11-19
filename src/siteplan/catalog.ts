@@ -103,8 +103,18 @@ export interface PaverPattern {
    * order (the first is the base, the rest drift through it). Read from the maker's swatch photo.
    */
   mix?: number[];
+  /** With blend 'mix': the drifts' spatial frequency along and across them, cycles per meter (default 2.3, 6.5). */
+  mixScale?: [number, number];
+  /** Face mix: the half-width of the band where one tone fades into the next, and how strongly a centimeter-scale
+   * break-up frays the drifts' edges into speckled wisps (Premier Slab); left out, crisp drifts with powdery edges. */
+  mixEdge?: [number, number];
+  /** Face mix: every piece's drifts run the same way, along its x side, as the pieces are laid in the maker's install
+   * photos (Premier Slab); left out, each piece's run along one side or the other at random. */
+  mixAlong?: boolean;
   /** The line's own joint sand as photographed (sRGB hex), when it differs from the usual sand (Premier Slab). */
   jointSand?: string;
+  /** The maker's chamfer on the face's edges, meters, when its cut sheet gives one (Premier Slab: 3 mm). */
+  chamfer?: number;
   /**
    * Real inches per nominal inch, when the maker's pieces lay out on a module a little under the nominal size (Basalite
    * Premier Smooth: 11.79 in per nominal 12, its 11.73 in faces plus spacer joints). The layout is drawn in nominal
@@ -120,9 +130,9 @@ export interface PaverPattern {
  * 3-Piece Running Bond, and 'running' and 'herringbone' the 1-Piece Running Bond and 45 degree Herringbone of 6 x 9.
  * Left out, the first pattern the paver offers.
  */
-export type LayingPattern = 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone' | 'combo3' | 'combo4';
-export const LAYING_PATTERNS: LayingPattern[] = ['a', 'b', 'random', 'running3', 'running', 'herringbone', 'combo3', 'combo4'];
-export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar', running3: '3-piece running bond', running: '1-piece running bond (6 x 9)', herringbone: '1-piece herringbone (6 x 9)', combo3: '3 Piece Combo Pattern', combo4: '4 Piece Pattern #4 (with 12 x 18)' };
+export type LayingPattern = 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone' | 'combo3' | 'combo4' | 'stack' | 'halfBond' | 'halfBond45';
+export const LAYING_PATTERNS: LayingPattern[] = ['a', 'b', 'random', 'running3', 'running', 'herringbone', 'combo3', 'combo4', 'stack', 'halfBond', 'halfBond45'];
+export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar', running3: '3-piece running bond', running: '1-piece running bond (6 x 9)', herringbone: '1-piece herringbone (6 x 9)', combo3: '3 Piece Combo Pattern', combo4: '4 Piece Pattern #4 (with 12 x 18)', stack: 'Stacked Bond', halfBond: 'Running Bond', halfBond45: '45° Running Bond' };
 const sameSizes = (s: [number, number][] | undefined, want: number[][]) => !!s && s.length === want.length && want.every(([a, b], i) => s[i][0] === a && s[i][1] === b);
 /** True for a paver whose pieces are the 6 x 12, 9 x 12 and 12 x 12 set Pattern A and B are drawn for. */
 export function isThreePiece(spec: MaterialSpec | undefined): boolean {
@@ -132,6 +142,10 @@ export function isThreePiece(spec: MaterialSpec | undefined): boolean {
 export function isAntiqued(spec: MaterialSpec | undefined): boolean {
   return !!spec && spec.use === 'hardscape' && spec.line === 'Antiqued Flat Top';
 }
+/** True for a Basalite Premier Slab 24 x 24 paver (Basalite's three published patterns). */
+export function isPremierSlab(spec: MaterialSpec | undefined): boolean {
+  return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Slab';
+}
 /** True for a Basalite Premier Smooth main-course paver (Basalite's own two published patterns). */
 export function isPremierSmooth(spec: MaterialSpec | undefined): boolean {
   return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Smooth';
@@ -139,6 +153,8 @@ export function isPremierSmooth(spec: MaterialSpec | undefined): boolean {
 /** The laying patterns a paver offers, the default first; empty when it is laid one way only. */
 export function layingsFor(spec: MaterialSpec | undefined): LayingPattern[] {
   if (isPremierSmooth(spec)) return ['combo3', 'combo4'];
+  // Basalite's three Premier Slab patterns; Stacked Bond first, as plans drawn before the patterns were laid.
+  if (isPremierSlab(spec)) return ['stack', 'halfBond', 'halfBond45'];
   if (isAntiqued(spec)) return spec!.pattern?.kind === 'ashlar' ? ['a', 'running3', 'running', 'herringbone'] : ['running', 'herringbone'];
   if (isThreePiece(spec)) return ['a', 'b', 'random'];
   return [];
@@ -891,8 +907,9 @@ export const FLAGSTONES: { id: string; name: string; sold: string; stone: FlagSt
 MATERIALS.push(...FLAGSTONES.map((g): MaterialSpec => M({ id: g.id, name: `${g.name} flagstone`, use: 'hardscape', group: 'Natural stone', recipe: 'flagstone', palette: g.palette, thickness: g.thicknessIn * 0.0254, matches: `${g.name} flagstone (${g.sold})`, line: `${g.name} flagstone`, color: g.name, auto: true, flag: { stone: g.stone, thicknessIn: g.thicknessIn } })));
 
 /*
- * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm (23 1/2 in) square slab, 60 mm thick, laid in a grid on
- * its spacer joints. Its colors are clouded blends. Basalite sells no border stone for it, so it has no matching border.
+ * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm square slab, 60 mm thick, on a 23.54 in module with its
+ * spacer joints and a 3 mm chamfer, laid in Basalite's Stacked Bond, Running Bond or 45 degree Running Bond. Its colors
+ * are face-mix blends. Basalite sells no border stone for it, so it has no matching border.
  */
 // Composite deck boards (siteplan/decking.ts), one look per color.
 for (const L of DECK_LINES) {
@@ -901,8 +918,8 @@ for (const L of DECK_LINES) {
   }
 }
 for (const L of BASALITE_LINES) {
-  for (const [n, palette] of L.colors) {
-    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud', jointSand: L.jointSand }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+  for (const [n, palette, mix] of L.colors) {
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [0.9, 12], mixEdge: [0.1, 0.2], mixAlong: true, jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
   }
 }
 
