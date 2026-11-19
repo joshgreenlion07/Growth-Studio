@@ -123,6 +123,8 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /** Double tap to walk (iPad, walk mode): the second tap within this long (ms) of the first one's lift, and this near (px). */
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_PX = 30;
+/** Client mode: the narrowest the default view is, side to side (degrees). */
+const CLIENT_WIDE_H_DEG = 78;
 /** How far short of a wall, tree, house or water the walk stops (m, about 2 ft), and the longest walk (m). */
 const WALK_STAND_OFF = 0.6;
 const WALK_MAX = 60;
@@ -213,6 +215,37 @@ export class Studio {
    */
   clientMode = false;
   private beaconAt = 0;
+  /**
+   * Client mode's lens: the view is at least WIDE_H_DEG wide (a portrait phone gets a tall, natural view instead of a
+   * narrow slice; landscape and computers keep their 60 degrees when that is already wider), at most 100 degrees tall.
+   * clientK narrows it (two-finger pinch, the wheel), down to 30 degrees wide; 1 is the wide default. The camera only
+   * turns its lens: it never moves. Eased toward its target each frame, so it follows the fingers without jumps.
+   */
+  private clientK = 1;
+  private clientWideV(aspect: number) {
+    const v = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(CLIENT_WIDE_H_DEG) / 2) / Math.max(0.2, aspect));
+    return THREE.MathUtils.clamp(v, THREE.MathUtils.degToRad(60), THREE.MathUtils.degToRad(100));
+  }
+  /** The smallest clientK: 30 degrees wide. */
+  private clientKMin(aspect: number) {
+    return Math.min(1, Math.tan(THREE.MathUtils.degToRad(15)) / (Math.tan(this.clientWideV(aspect) / 2) * Math.max(0.2, aspect)));
+  }
+  clientZoom(logScale: number) {
+    if (!this.clientMode || !Number.isFinite(logScale)) return;
+    this.clientK = THREE.MathUtils.clamp(this.clientK * Math.exp(-logScale), this.clientKMin(this.camera.aspect), 1);
+    this.invalidate();
+  }
+  /** The lens client mode wants now (degrees, vertical); `now` sets it at once instead of easing. */
+  private clientLens(dt: number, now = false) {
+    if (!this.clientMode || this.navMode !== 'walk' || this.tween) return;
+    const a = this.camera.aspect, vw = this.clientWideV(a), k = Math.max(this.clientKMin(a), this.clientK);
+    const want = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vw / 2) * k));
+    const d = want - this.camera.fov;
+    if (Math.abs(d) < 0.01) return;
+    this.camera.fov = now ? want : this.camera.fov + d * (1 - Math.exp(-14 * dt));
+    this.camera.updateProjectionMatrix();
+  }
+
   /** Client mode: when the camera last moved (the rings pulse only for a while after, so a still view stops drawing). */
   private clientActiveAt = 0;
   /** Double tap timing: a little more time and room in client mode. */
@@ -434,6 +467,7 @@ export class Studio {
       togglePlantLabels: () => this.setPlantLabels(!this.measure.plants),
       quick: (dir, held) => this.onQuick(dir, held),
       use: () => this.onUse(),
+      clientZoom: (s) => this.clientZoom(s),
     });
     this.measure = new Measurements(container);
     this.measure.onRedraw = () => this.invalidate();
@@ -467,7 +501,16 @@ export class Studio {
       if (this.navMode !== 'walk' || r.width !== f.w || r.height !== f.h) return;
       tap(f.x, f.y);
     };
+    // Fingers on the scene now, and whether this press had a second one (client mode: a pinch is never a tap or a
+    // double tap; elsewhere taps behave as before).
+    let fingers = 0, multi = false;
+    const lift = (e: PointerEvent) => { if (e.pointerType === 'touch') fingers = Math.max(0, fingers - 1); };
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') fingers++;
+      if (e.isPrimary) multi = false;
+      if (fingers > 1) multi = true;
+      // Client mode: a second finger starts a pinch, so a first tap waiting for its second is dropped, never run.
+      if (this.clientMode && !e.isPrimary && firstTap) dropFirst();
       downAt = performance.now();
       downTs = e.timeStamp;
       // A second finger, or a mode change since: the first tap acts now. A second touch that may be the double tap
@@ -511,7 +554,8 @@ export class Studio {
     };
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
-      const isTap = !!down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400);
+      lift(e);
+      const isTap = !(multi && this.clientMode) && !!down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400);
       down = null;
       if (this.tapToWalk && this.navMode === 'walk' && (e.pointerType === 'touch' || this.clientMode) && e.isPrimary) {
         const x = e.clientX, y = e.clientY;
@@ -540,7 +584,8 @@ export class Studio {
       if (isTap) tap(e.clientX, e.clientY);
     });
     // The system took the touch (a gesture, an alert): no tap waits and no press is left half done.
-    this.renderer.domElement.addEventListener('pointercancel', () => {
+    this.renderer.domElement.addEventListener('pointercancel', (e) => {
+      lift(e);
       dropFirst();
       down = null;
     });
@@ -1334,6 +1379,8 @@ export class Studio {
     this.camera.fov = 60;
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(this.controls.target);
+    // Client mode starts at its wide lens, at once.
+    this.clientLens(0, true);
   }
 
   setMeasureMode(mode: MeasureMode) {
@@ -2009,6 +2056,7 @@ export class Studio {
       if (k >= 1) this.tween = null;
     }
     this.nav.update(dt);
+    this.clientLens(dt);
     if (this.navMode === 'orbit') {
       // The same glide per second at any frame rate (60, 120 Hz, or throttled to 30).
       this.controls.dampingFactor = 1 - Math.pow(1 - 0.08, dt * 60);

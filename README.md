@@ -398,7 +398,7 @@ Messages use `window.postMessage`:
   (and the joystick in touch mode, larger, with a lime knob); every studio control, label and toast is hidden. It starts in
   Walk once the plan is built, standing at the walk start and facing the main feature (a water, fire, pergola, kitchen or
   spa view), else the house, and never leaves Walk. Walking is calm (1.1 m/s, no run); left and right (arrow keys, A/D,
-  the joystick) turn instead of stepping sideways; wheel, pinch and lens zoom do nothing; only the walking keys reach
+  the joystick) turn instead of stepping sideways. The lens is wide: at least 78 degrees side to side (a phone held upright gets a tall view, at most 100 degrees high; landscape and computers keep 60 degrees high when that is wider), worked out again on every resize or turn of the phone. Two-finger pinch and the mouse wheel zoom the lens only (the camera never moves), from that wide view down to 30 degrees side to side, eased; a new visit starts wide again, and a pinch is never a tap or a double tap; only the walking keys reach
   the studio. A tap or click uses a door, fire, water or light, and a soft lime ring pulses now and then under each usable
   thing within 14 m, for 6 s after the camera last moved (a still view stops drawing). A controller gives only its sticks, A or View to use and Menu to go back to the start. Escape is sent to the parent as `{ type: 'key', key: 'Escape' }`. Double tap or double click the ground walks there (450 ms between taps). No sound at all (not saved:
   the person's own sound setting is kept). The parent sends `{ type: 'quality', quality }` (`low` = Draft at 0.75 pixel
