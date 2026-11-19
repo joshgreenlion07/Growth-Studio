@@ -26,7 +26,7 @@ export interface WaterfallOptions {
   lights?: 'data' | 'three' | false;
   /** Water reads a colour + depth copy of the scene (see setRefraction). Default true. Cannot change after creation. */
   refraction?: boolean;
-  /** 'light': rocks built with about a third of the triangles, for phones and tablets; the same layout. Default 'full'. Cannot change after creation. */
+  /** 'light': rocks with about a third of the triangles, for phones and tablets. Same layout. Default 'full'. */
   detail?: 'full' | 'light';
   /** Rock and cobble shading. 'light' drops the finest grain, speckle and lichen (about a quarter of the noise work). Left out, it follows detail. Cannot change after creation. */
   shading?: 'full' | 'light' | null;
@@ -34,22 +34,24 @@ export interface WaterfallOptions {
   ground?: WaterfallGround | null;
 }
 
+export interface WaterfallFall { i: number; x: number; z: number; w: number; top: number; bot: number; drop: number; land: number }
+export interface WaterfallPool { cx: number; cz: number; rx: number; rz: number; wl: number; depth: number; basin?: boolean }
+export interface WaterfallLayout { H: number; D: number; base: number; lvl: number; head: number; top: number; falls: WaterfallFall[]; pools: WaterfallPool[] }
+
 export interface WaterfallGround {
-  /** The host ground's average colour: THREE.Color in linear space, or a hex number / CSS string. */
+  /** The host ground's average colour, unlit: THREE.Color in linear space, or a hex number / CSS string. */
   color: THREE.Color | number | string;
   /** Default 0.95. */
   roughness?: number;
   /** How far in from the border the blend reaches, feet. Default 2.5. */
   width?: number;
+  /** 0 to 1: how much of the bark chip pattern and relief stays in the faded band. The pattern averages 1, so the band averages `color`. 0 fades to the colour flat. Default 1. */
+  texture?: number;
   /** 0 to 1: how far the whole mound's bark is shifted toward that colour. Default 0. */
   tint?: number;
   /** How far below the host's ground the border of the soil sits, feet. Default 0.03 (0.3 when no ground is set). */
   sink?: number;
 }
-
-export interface WaterfallFall { i: number; x: number; z: number; w: number; top: number; bot: number; drop: number; land: number }
-export interface WaterfallPool { cx: number; cz: number; rx: number; rz: number; wl: number; depth: number; basin?: boolean }
-export interface WaterfallLayout { H: number; D: number; base: number; lvl: number; head: number; top: number; falls: WaterfallFall[]; pools: WaterfallPool[] }
 
 export interface WaterfallNightLight {
   /** Feature-local feet. Convert with wf.body.localToWorld(). */
@@ -92,19 +94,18 @@ export interface Waterfall {
   nightLights: WaterfallNightLight[];
   /** Overall size in feet. */
   size: { width: number; depth: number; height: number };
-  /** Rectangle of soil the feature brings with it, feature-local feet. The host should not draw its own ground inside it.
-   *  With a ground set (setGround) its border is up at grade and a 0.6 ft apron runs under it, so cut exactly on it. */
+  /** Rectangle of soil the feature brings with it, feature-local feet. The host should not draw its own ground inside it. */
   soil: { x0: number; x1: number; z0: number; z1: number };
   /** Soil height in feet above the feature origin at a feature-local point. */
   soilHeight(x: number, z: number): number;
   /** True when a plant of this radius can stand at a feature-local point (not in water, a fall, the beach or a rock). */
   canPlant(x: number, z: number, radius?: number): boolean;
   setEnvironment(e: WaterfallEnvironment): Waterfall;
-  setRefraction(r: { color: THREE.Texture; depth: THREE.DepthTexture; width: number; height: number; near: number; far: number }): Waterfall;
-  /** Pump on (default) or off: off hides the falling sheets and spray and stills the churn and foam; the pools keep their water. */
+  /** Pump on or off. Off hides the falling sheets and spray and stills the pools. Kept across rebuild(). */
   setFlowing(on: boolean): Waterfall;
   /** Blend the edge of the soil into the host's ground, or pass null to switch it off. A changed sink, or on/off, rebuilds. */
   setGround(g: Partial<WaterfallGround> | null): Waterfall;
+  setRefraction(r: { color: THREE.Texture; depth: THREE.DepthTexture; width: number; height: number; near: number; far: number }): Waterfall;
   /** Every frame. pointScale = drawing-buffer height in px * 0.5 * camera.projectionMatrix.elements[5]. */
   update(timeSeconds: number, frame?: { lightLevel?: number; pointScale?: number }): Waterfall;
   rebuild(next?: Partial<WaterfallOptions>): Waterfall;
@@ -114,5 +115,5 @@ export interface Waterfall {
 export const WATERFALL_DEFAULTS: Required<WaterfallOptions>;
 export function waterfallSize(options?: WaterfallOptions): { width: number; depth: number; height: number; soilBehind: number; soilBeside: number };
 export function createWaterfall(options?: WaterfallOptions): Waterfall;
-/** Frees one detail level's shared geometry ('full' or 'light'), or every level when none is given. */
+/** Frees the shared geometry of one detail level, or of every level when called with no argument. */
 export function disposeWaterfallAssets(detail?: 'full' | 'light'): void;
