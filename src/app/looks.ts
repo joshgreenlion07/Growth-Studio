@@ -11,6 +11,7 @@ import type { HouseLook, SitePlan, WaterKind } from '../siteplan/types';
 import { resolveLook, roofText } from '../siteplan/houselooks';
 import { palletsFor, type Pallet } from '../siteplan/pallets';
 import { layingMix } from '../engine/surfaces';
+import { BORDER_BURIED, BORDER_STONE_RATIO, mossSizeIn, rockBorderPerFoot } from '../siteplan/groundrock';
 
 export interface Look {
   id: string;
@@ -71,6 +72,8 @@ export interface Look {
   sizes?: [number, number][];
   /** Sizes as the maker lists them, with thickness. */
   sizeText?: string[];
+  /** A rock border (an edging look laid as stones): the stones' weight range (lb), and about how many stones and pounds a linear foot takes. */
+  rockBorder?: { lb: [number, number]; stonesPerFt: number; lbPerFt: number };
   thicknessIn?: number;
   face?: string;
   /** The maker's swatch photo for this color, loaded live from the maker's site. */
@@ -172,6 +175,13 @@ export function lookOf(m: MaterialSpec): Look {
     look.sizeText = [`${m.board.thicknessIn} x ${m.board.widthIn} in x ${m.board.lengthsFt.join(', ')} ft boards`, `Fascia ${m.board.fasciaIn[0]} x ${m.board.fasciaIn[1]} in`];
     if (d?.line.page) look.page = d.line.page;
     if (d?.image) look.image = d.image;
+  }
+  // A rock border: its stones and how much a run takes, for the parent's takeoff.
+  if (m.rockBorder) {
+    const B = m.rockBorder, per = rockBorderPerFoot(B);
+    const len = (lb: number) => Math.round(mossSizeIn(lb, BORDER_STONE_RATIO, BORDER_BURIED)[0]);
+    look.rockBorder = { lb: [B.lb[0], B.lb[1]], stonesPerFt: Math.round(per.stones * 100) / 100, lbPerFt: Math.round(per.lb) };
+    look.sizeText = [`Stones ${B.lb[0]} to ${B.lb[1]} lb, about ${len(B.lb[0])} to ${len(B.lb[1])} in long`, `About ${per.stones.toFixed(1)} stones and ${Math.round(per.lb)} lb a linear foot`];
   }
   // Synthetic turf: its pile and weight as the maker lists them, and the product page.
   if (m.turf) {

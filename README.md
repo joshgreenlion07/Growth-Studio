@@ -35,6 +35,14 @@ night lighting, and a camera with focus blur.
   loose tips, lean downwind with the Wind setting, glow at night and read
   orange by day; each fire's light flickers on its own beat. The sample
   "Fire" shows every kind.
+- **Maker water and fire pieces** (`siteplan/waterfire.ts`, `builder/waterfire/`):
+  the Stone Forest flat-topped natural basalt fountain NF81-FLT (water wells up
+  through its polished top and runs down the crust faces into a hidden 44 in
+  basin under pebbles), the Campania International glazed birdbath 6802 in
+  Petrol and Antique Glaze (still water; the Hand tool empties and fills it),
+  and The Outdoor Plus Florence 42 x 12 in GFRC fire pit in Chocolate. On
+  paving they stand on its top. The sample "Water and fire" sets them on
+  pebbles, bark and crushed rock.
 - **Growth:** install, 1, 3, 5 and 10 years, from each plant's nursery and
   mature size.
 - **Light:** real sun position for the property's latitude, north arrow and
@@ -207,6 +215,26 @@ Messages use `window.postMessage`:
 - Every bed look in the `ready` list carries `fillType` (`bark`, `humus` for
   humus, compost and dirt, `rock` for rock, gravel and pebble, `dg`), `depthIn`
   (the usual spread depth) and, for rock, gravel and DG, `tonsPerCuYd`.
+- Bark, cobble and pebble from a customer job (`siteplan/groundrock.ts`), drawn piece by piece like the pebble:
+  SiteOne Small Decorative Bark (`siteone-small-decorative-bark`, form `nugget`: flat, angular red-brown bark plates
+  3/8-1 1/2 in with a share of wood splinters); California Landscape Supply Noiya cobble (also sold as Noiyo or Noya)
+  `noiya-cobble-2-4` and `noiya-cobble-4-8` (form `river`: rounded, egg-shaped, granular, piled; 2 in and up casts
+  shadows), and the dry creek mix `noiya-cobble-dry-creek-mix` (`pebble.mix`: 25% of the bed's area in 4 x 8 in, laid
+  first, the 2 x 4 in filling round them); GreenWaste Noiyo pebble 1 1/2 in (`noiyo-pebble-1-1-2`) and California
+  Landscape Supply Salt & Pepper 1 1/2 in (`salt-and-pepper-1-1-2`). Colors are read from the finished yard's video
+  (bark, cobble) or the supplier's photo (the pebbles). The Noiya looks carry `tonsPerCuYd` 1.3.
+- Moss rock by weight (group Accents, swap class Boulders): `moss-rock-double-head` (10-80 lb border stones),
+  `moss-rock-garden-boulder` (50-300 lb) and `moss-rock-showpiece-boulder` (800-1,500 lb, standing on end). Each size
+  is set from its weight (165 lb a cubic foot, the stone filling half its box; `mossSizeIn`), in the light tan-gray of
+  the job's boulders; the double-head mixes that with buff and dark lichen-crusted stones.
+- A rock border is an edging line whose look has `rockBorder` (shelf `Rock border`, use `edging`, sent in the looks
+  list): `moss-rock-border-double-head` lays double-head moss rock along the line as drawn, one stone at a time (15-80
+  lb, 1-7 in apart, wandering 3 in off the line, now and then a small stone tucked beside a big one), each its own shape
+  seeded by the line's id (`builder/rockborder.ts`). A closed line rings a bed (a dry creek's both banks). Its look
+  carries `rockBorder: { lb, stonesPerFt, lbPerFt }` for the parent's takeoff (`rockBorderPerFoot`: about 0.8 stones
+  and 36 lb a linear foot) and `sizeText`. The material pointer reports part `stone`.
+  The sample **Dry creek bed** shows them all: the cobble mix creek ringed with the border, a showpiece group, garden
+  boulders and bark, and a steel-edged bed of each pebble and cobble.
 - MSI Evergrass synthetic turf (`msi-summer-gold-96`, `msi-viridian-91`,
   `msi-viridian-pet-96`, shelf `Synthetic turf`, listed in `materials`) is drawn
   from MSI's specs (`turf` on the look): a ground texture painted blade by blade
@@ -263,6 +291,15 @@ Messages use `window.postMessage`:
   hardscape zone covers them. The sample "Night lighting: Tru-Scapes" lights the
   modern backyard; its look is closest to Tru-Scapes' own photos about an hour
   after sunset.
+- Vista Professional lighting (`vista-br-2500` bollard, `vista-gr-5006` up light,
+  `vista-tcs-300` WiFi transformer; the list is `VISTA` in `src/siteplan/vista.ts`,
+  drawn by `src/builder/vistalights.ts`) works the same way and takes the same
+  `fixture` settings (`beamDeg` 15, 25, 36 or 60 for the GR-5006). The bollard's
+  light leaves its column lens out and down all round (a ring beam fitted to
+  Vista's photometrics); the transformer's bottom sits at Vista's 18 in minimum
+  when no `mountHeight` is given. A cap or face light sent without `mountHeight`
+  also snaps to the edge of a raised landing (a hardscape zone with `elevation`),
+  under its top course. Sample: "Night lighting: Vista bollards and up lights".
 - `plan.models` places a designer's own rendering on a drawn footprint:
   `{ id, polygon, asset, kind: 'glb' | 'image', height?, turn: 0-3, fit: 'contain' | 'stretch' }`.
   The file is not in the plan. `asset` is an id; the studio asks for each file
@@ -422,6 +459,12 @@ Messages use `window.postMessage`:
     borders it), `boulders` and `uplight` (default on). Water and its sound switch by hand like the other fountains.
   - Ground: MSI Caldera Blanca porcelain, `msi-caldera-blanca-plank-8x47` (3/8 in plank) and
     `msi-caldera-blanca-paver-16x47` (2 cm outdoor paver), both laid staggered by a third.
+- Tall raised beds and deck planters (`siteplan/planterbeds.ts`; sample **Vego raised beds, deck planters and a clad
+  entry landing**): `vego-modern-pro-32-27x83-<color>` (`urban-charcoal`, `midnight-blue`, `umber-brown`), Vego Garden's
+  32" Extra Tall Modern Pro 27" x 83" metal raised bed (83 x 27 x 32 in, the one Vego bed at that size; built by
+  `builder/yard/vegobed.ts`), and `deck-planter-cedar-2x12`, a planter built from cedar lumber along a deck's side
+  (4x4 posts, two 2x12 courses, 2x6 cap; 6 to 9 ft long, 16 in wide, 24 in tall; drawn by the cedar raised bed's
+  builder). Both are 'Raised beds'; plants placed inside stand on their soil.
 - The Cal Spas Tropical Plus PPZ-743BC hot tub is a feature with `catalogId:
   'calspas-ppz-743bc'` (84 x 84 in; its front, with the control panel and the
   steps, faces +y on the plan before `rotationDeg`). Optional `cover`: `'open'`
@@ -450,6 +493,14 @@ Messages use `window.postMessage`:
   `subpanel`, `outlet`, `junction`, `transformer`, `gas-meter`, `gas-stub`,
   `water-meter`, `backflow`, `controller`, `valves`, `hose-bib`, `stub`.
   Plans without the key load as before.
+  An electrical line whose end is within 1.5 m of an outlet's conduit stub-up
+  (a Mirador post outlet or the 4x4 outlet post) is joined to it when the yard
+  is built (`siteplan/outletjoin.ts`; the plan itself is not changed): the
+  stub-up's elbow turns toward the run at the run's own depth, overriding the
+  placement's elbow options, its tail takes the run's conduit size through a
+  reducer, the run's conduit comes in straight and slips into the tail, and
+  the trench is dug on to the riser. An `outlet` point within 1 m of such a
+  stub-up is that outlet: its marker and riser are left out.
 - A hardscape or turf zone can carry `layers: { base?, bedding? }` (meters):
   the compacted base rock and the bedding layer under it for the build stages.
   Left out: pavers and flagstone 4 in base under 1 in sand, concrete 4 in
@@ -541,7 +592,8 @@ Messages use `window.postMessage`:
     the linear fire pit, the Cazo fire and water bowl, a patio heater: out, or
     lit even by day); a water wall's, fountain's or fire and water bowl's water; path
     lights and uplights; each Tru-Scapes fixture (its beams and lens); the
-    Stratus pergola's LED lights; the Cal Spas spa's
+    Stratus pergola's LED lights; the Mirador pergolas' louvers (cranked open or
+    closed) and café string lights; the Cal Spas spa's
     cover (folded up or closed), jets (bubbles round the seats and steam off the
     water while the cover is open) and lights. Of several things on one feature,
     the one nearest the aim point is used. What is set by hand stays through
@@ -623,6 +675,16 @@ Messages use `window.postMessage`:
   (`veneer-column-<look id>`): a Basalite 16 in column block core clad in the veneer under a Basalite Column Cap
   24 x 24 x 2 in, heights in whole 8 in block courses (`sizes`), option `pewterCap`. They share the swap class
   'Columns', so a placed column switches finish like any feature. Sample: "Wall veneers".
+- `coronado-honey-ledge-huron` (Coronado Stone Honey Ledge, Huron; manufactured stone, dry-stacked, 1 1/2 in with its
+  mortar, an 11 in wall) is a wall veneer too; a free-standing wall in it takes a plain cap in the sill's gray.
+- Clad landings and steps (`builder/landing.ts`): a raised hardscape zone (`elevation` > 0) or a `steps` line may carry
+  `clad: { veneer, coping? }`. Its exposed sides (not along a house, nor against paving as high or higher) are faced in
+  the wall veneer look `veneer` from just below grade to the coping, and a coping runs along their tops, swept to the
+  maker's profile, its back flush with the paving and its nose the maker's overhang past the veneer, mitered at corners
+  (`coping` is a look in `COPING_PROFILES`, `siteplan/coronado.ts`; left out, the veneer's own `edge` coping:
+  Honey Ledge takes `coronado-chiseled-stone-sill-light-grey`, 24 x 3 x 2 1/2 in, 1 in over). The drawn outline is
+  the veneer's face; the paving (and its border) fills inside the coping. Clad steps count their rise from the
+  paving at their foot, so their risers are equal above a walk.
 - A wall's cap overhangs both faces and its open ends by the same amount: the
   maker's own overhang where its cap and block sizes give one (`capOver` on
   the line's wall unit), else 2 1/2 in (the usual 2 to 3 in). Raised planters

@@ -77,7 +77,7 @@ function bowlParts(concrete: THREE.Material, add: (m: THREE.Material, g: THREE.B
 }
 
 /** Lava rock: porous chunks 3/4 to 2 in, black to dark rust, heaped a little over the burner. */
-function lavaRock(radius: number, y: number, seed: string): THREE.BufferGeometry {
+export function lavaRock(radius: number, y: number, seed: string): THREE.BufferGeometry {
   const r = rng(seed);
   const unit = new THREE.DodecahedronGeometry(1, 0).toNonIndexed();
   const up = unit.getAttribute('position'), un = unit.getAttribute('normal');

@@ -5,6 +5,9 @@ import type { FeaturePlacement } from '../siteplan/types';
 import { ROCK_GRAIN_MEAN, rockGrainSet } from '../engine/rock-surfaces';
 import { pbrMaterial } from './materials';
 import { buildRock, footSink, type GroundAt, type RockLook, type RockShape } from './stonegeo';
+import { BORDER_STONE, GARDEN_BOULDER, MOSS_BOULDER, SHOWPIECE, borderLook } from './groundrock-looks';
+import { BOULDER_BURIED, BORDER_BURIED } from '../siteplan/groundrock';
+import { rng } from '../siteplan/geometry';
 
 /*
  * Moss rock and Canyon Tech boulders (siteplan/waterrocks.ts): each one its own shape (builder/stonegeo.ts), seeded by
@@ -44,11 +47,16 @@ const FLAT: RockShape = { squareness: 4.6, cuts: 5, cutDepth: [0.78, 0.95], edge
 /** Crisper: more cuts, sharper edges. */
 const CANYON: RockShape = { squareness: 3.6, cuts: 9, cutDepth: [0.64, 0.86], edge: 0.025, lump: 0.035, rough: 0.02, pocket: 0.05, lean: 4 };
 
-const STYLE: Record<string, { shape: RockShape; look: RockLook }> = {
+/** Each boulder's shape and look (a function of a number in [0, 1) picks one per placement), and the share buried. */
+const STYLE: Record<string, { shape: RockShape; look: RockLook | ((h: number) => RockLook); buried?: number }> = {
   'moss-rock-rounded': { shape: ROUNDED, look: MOSS_LOOK },
   'moss-rock-tall': { shape: TALL, look: MOSS_LOOK },
   'moss-rock-flat-top': { shape: FLAT, look: MOSS_LOOK },
   'canyon-tech-boulder': { shape: CANYON, look: CANYON_LOOK },
+  // Moss rock by weight (siteplan/groundrock.ts), in the tan-gray of a customer job's finished yard.
+  'moss-rock-double-head': { shape: BORDER_STONE, look: borderLook, buried: BORDER_BURIED },
+  'moss-rock-garden-boulder': { shape: GARDEN_BOULDER, look: MOSS_BOULDER, buried: BOULDER_BURIED },
+  'moss-rock-showpiece-boulder': { shape: SHOWPIECE, look: MOSS_BOULDER, buried: BOULDER_BURIED },
 };
 
 /** The one material every boulder shares: the grain texture, tinted by each rock's vertex colors (scaled up for the map's mean). */
@@ -72,7 +80,8 @@ export function buildWaterRock(c: WaterRockContext) {
   const st = STYLE[c.spec.id];
   if (!st) return;
   const size = featureSize(c.spec, c.f.size, 0.4);
-  const geo = buildRock({ shape: st.shape, look: st.look, size, buried: c.lift ? 0.04 : 0.2, seed: c.f.id, moss: featureOption(c.spec, c.f.options, 'moss') });
+  const look = typeof st.look === 'function' ? st.look(rng(`look:${c.f.id}`)()) : st.look;
+  const geo = buildRock({ shape: st.shape, look, size, buried: c.lift ? 0.04 : st.buried ?? 0.2, seed: c.f.id, moss: featureOption(c.spec, c.f.options, 'moss') });
   if (c.lift) geo.translate(0, c.lift, 0);
   else geo.translate(0, -footSink(c.ground, size[0], size[1], size[2] * 0.4), 0);
   c.add(boulderMaterial(), geo);

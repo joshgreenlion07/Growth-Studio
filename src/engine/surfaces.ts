@@ -1488,8 +1488,11 @@ function pebbleGroundSet(spec: MaterialSpec): PBRSet {
   P.colors.reduce((s, x) => (cum.push(s + x.share), s + x.share), 0);
   const pickC = (h: number) => lin[Math.max(0, cum.findIndex((v) => h * cum[cum.length - 1] <= v))];
   const form = P.form ?? 'pebble';
+  // Between river cobble: the shade of the stones' average color, deep but not black.
+  const riverGap = mulRGB([0, 1, 2].map((k) => lin.reduce((t, c) => t + c[k], 0) / lin.length) as RGB, 0.48);
   // Chips are long and narrow: their cells are counted by width, then stretched along each chip.
-  const across = form === 'chip' ? avg * ((P.wide[0] + P.wide[1]) / 2) : avg;
+  const flatPieces = form === 'chip' || form === 'nugget';
+  const across = flatPieces ? avg * ((P.wide[0] + P.wide[1]) / 2) : avg;
   const cells = Math.max(6, Math.round(1 / (across * 0.85)));
   // Scaled to the stones' average color, so a bed reads the same where its 3D stones give way to this texture.
   const toLin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
@@ -1509,12 +1512,13 @@ function pebbleGroundSet(spec: MaterialSpec): PBRSet {
       const c = mulRGB(pickC(hash(cell.id, 7)), (0.78 + tilt + Math.min(1, edge * 3) * 0.12) * (0.94 + grain * 0.1));
       return { h: Math.min(1, edge * 2.2) * (0.7 + facet * 0.3), c, r: 0.85 + grain * 0.1 };
     }
-    if (form === 'chip') {
+    if (flatPieces) {
       // Flat chips overlapping: long cells along each chip's own direction, grain along it, darker under the next one.
+      // Bark nuggets are wider plates: cells stretched less.
       const cell = voronoi(u, v, cells, 19, 0.95);
       const ang = hash(cell.id, 5) * Math.PI;
       const ca = Math.cos(ang), sa = Math.sin(ang);
-      const along = cell.dx * ca - cell.dy * sa, acr = (cell.dx * sa + cell.dy * ca) * 2.6;
+      const along = cell.dx * ca - cell.dy * sa, acr = (cell.dx * sa + cell.dy * ca) * (form === 'nugget' ? 1.5 : 2.6);
       const d = Math.hypot(along * 0.55, acr) / (0.45 + hash(cell.id, 1) * 0.1);
       if (d >= 1) return { h: 0.05, c: mulRGB(lin[lin.length - 1], 0.45), r: 1 };
       const fib = vnoise(u * 40 + along * 3, v * 40 + acr * 9, 40, 6);
@@ -1528,7 +1532,8 @@ function pebbleGroundSet(spec: MaterialSpec): PBRSet {
     const d = Math.hypot(ex, ey) / (0.46 + hash(cell.id, 1) * 0.08);
     const dome = Math.sqrt(Math.max(0, 1 - d * d));
     const pit = vnoise(u * 900, v * 900, 900, 4);
-    if (dome <= 0) return { h: 0, c: mulRGB(lin[0], 0.45), r: 1 };
+    // Between beach pebbles the gaps show a lighter stone's shade; between river cobble, deeper shade.
+    if (dome <= 0) return { h: 0, c: form === 'river' ? riverGap : mulRGB(lin[0], 0.45), r: 1 };
     const c = mulRGB(pickC(hash(cell.id, 7)), (0.62 + dome * 0.42) * (0.94 + pit * 0.1));
     return { h: dome, c, r: 0.72 + pit * 0.15 };
   }, mean);
@@ -1563,7 +1568,7 @@ function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
   // Wall veneers (shelf 'Wall veneer'): a maker's ledger panels, or Green Lion's stucco finishes.
   if (face === 'ledgerPanel') {
     const v = spec.veneer;
-    const look = { tones: spec.palette, weights: v?.weights ?? spec.palette.map(() => 1 / spec.palette.length), rowIn: v?.rowIn ?? [1.5, 2] as [number, number], tallRow: v?.tallRow, pieceIn: v?.pieceIn ?? [4, 12] as [number, number], rust: v?.rust, quartz: v?.quartz };
+    const look = { tones: spec.palette, weights: v?.weights ?? spec.palette.map(() => 1 / spec.palette.length), rowIn: v?.rowIn ?? [1.5, 2] as [number, number], tallRow: v?.tallRow, tallIn: v?.tallIn, pieceIn: v?.pieceIn ?? [4, 12] as [number, number], rust: v?.rust, quartz: v?.quartz, cast: v?.cast };
     // The photo's own average when the look has one (the panel photo, joints and all), else its tones' average.
     return ledgerPaint(spec.id, look, v?.albedo ?? wallFaceMean(spec));
   }

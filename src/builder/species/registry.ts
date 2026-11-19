@@ -74,6 +74,12 @@ import { build as cherryLaurelCompacta } from './shrubs/cherry-laurel-compacta';
 import { build as hopseedBushPurpurea } from './shrubs/hopseed-bush-purpurea';
 import { build as glossyAbeliaKaleidoscope } from './shrubs/glossy-abelia-kaleidoscope';
 import { build as lomandraPlatinumBeauty } from './grasses/lomandra-platinum-beauty';
+import { build as lomandraLeadingLime } from './grasses/lomandra-leading-lime';
+import { build as lomandraMinersGold } from './grasses/lomandra-miners-gold';
+import { build as fountainGrassLittleBunny } from './grasses/fountain-grass-little-bunny';
+import { build as agaveBlueFlame } from './succulents/agave-blue-flame';
+import { build as agaveSnowGlow } from './succulents/agave-snow-glow';
+import { build as cordylineTorbayDazzler } from './tropicals/cordyline-torbay-dazzler';
 import { build as liriopeSilverySunproof } from './grasses/liriope-silvery-sunproof';
 import { build as redYucca } from './succulents/red-yucca';
 import { build as echeveria } from './succulents/echeveria';
@@ -93,6 +99,15 @@ import { build as lamiumWhiteNancy } from './groundcover/lamium-white-nancy';
 import { build as oliveLittleOllie } from './shrubs/olive-little-ollie';
 import { build as feijoaStandard } from './trees/feijoa-standard';
 import { build as starJasmineMetalTrellis } from './shrubs/star-jasmine-metal-trellis';
+import { build as verbenaTapienPurple } from './groundcover/verbena-tapien-purple';
+import { build as lantanaSpreadingWhite } from './groundcover/lantana-spreading-white';
+import { build as sedumLemonBall } from './succulents/sedum-lemon-ball';
+import { build as pittosporumCremeDeMint } from './shrubs/pittosporum-creme-de-mint';
+import { build as loniceraBaggesensGold } from './shrubs/lonicera-baggesens-gold';
+import { build as coastRedwood } from './trees/coast-redwood';
+import { build as ginkgoPrincetonSentry } from './trees/ginkgo-princeton-sentry';
+import { build as calleryPearBradford } from './trees/callery-pear-bradford';
+import { build as calleryPearBradfordLeaf } from './trees/callery-pear-bradford-leaf';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -173,6 +188,12 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'hopseed-bush-purpurea': hopseedBushPurpurea,
   'glossy-abelia-kaleidoscope': glossyAbeliaKaleidoscope,
   'lomandra-platinum-beauty': lomandraPlatinumBeauty,
+  'lomandra-leading-lime': lomandraLeadingLime,
+  'lomandra-miners-gold': lomandraMinersGold,
+  'fountain-grass-little-bunny': fountainGrassLittleBunny,
+  'agave-blue-flame': agaveBlueFlame,
+  'agave-snow-glow': agaveSnowGlow,
+  'cordyline-torbay-dazzler': cordylineTorbayDazzler,
   'liriope-silvery-sunproof': liriopeSilverySunproof,
   'red-yucca': redYucca,
   'echeveria': echeveria,
@@ -192,4 +213,13 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'olive-little-ollie': oliveLittleOllie,
   'feijoa-standard': feijoaStandard,
   'star-jasmine-metal-trellis': starJasmineMetalTrellis,
+  'verbena-tapien-purple': verbenaTapienPurple,
+  'lantana-spreading-white': lantanaSpreadingWhite,
+  'sedum-lemon-ball': sedumLemonBall,
+  'pittosporum-creme-de-mint': pittosporumCremeDeMint,
+  'lonicera-baggesens-gold': loniceraBaggesensGold,
+  'coast-redwood': coastRedwood,
+  'ginkgo-princeton-sentry': ginkgoPrincetonSentry,
+  'callery-pear-bradford': calleryPearBradford,
+  'callery-pear-bradford-leaf': calleryPearBradfordLeaf,
 };

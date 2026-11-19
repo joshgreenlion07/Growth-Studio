@@ -8,6 +8,7 @@
  */
 import { featureById, materialById, MOW_CURB_SHAPES, outOfAreaNote, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
 import type { ExistingStructure, WaterKind } from './types';
+import { GROUND_ROCK_NOTES } from './groundrock';
 
 /** Inches as a builder writes them, to the sixteenth: 4.5 → "4 1/2 in", 0.1875 → "3/16 in". */
 function fmtIn(x: number): string {
@@ -116,7 +117,7 @@ export function materialInfo(m: MaterialSpec): MaterialInfo {
 }
 
 function baseInfo(m: MaterialSpec): MaterialInfo {
-  const bed = BED[m.id];
+  const bed = BED[m.id] ?? GROUND_ROCK_NOTES[m.id];
   if (bed) return { group: m.group, ...bed };
   if (m.use === 'bed') return { group: m.group, about: `${m.name}: a bed cover.`, spec: ['3 in deep over weed fabric'] };
   switch (m.recipe) {
@@ -234,6 +235,14 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       return { group: porcelain ? 'Porcelain' : 'Pavers', about, spec };
     }
     case 'wall':
+      if (m.shelf === 'Wall veneer' && m.maker === 'Coronado Stone') {
+        // Coronado Honey Ledge (siteplan/coronado.ts): Coronado's spec sheet.
+        return {
+          group: 'Wall veneer',
+          about: `${m.matches ?? m.name}: manufactured stone veneer, a mix of individual ledge stones and panelized stones, dry-stacked over a block wall or a raised landing's riser. Huron is a cool gray blend of mid gray, charcoal and light greige stones with a few taupe and rust ones.`,
+          spec: ['Stones 2 to 4 in tall, up to 20 in long, a few 5 to 6 in; panel strips 1/2 to 4 in; about 1 in thick; 7 to 10 lb per sq ft', 'Dura-Pak: 12.5 sq ft of flats or 12.5 ln ft of corners (returns 3 to 11 in)', 'Dry-stacked on polymer-modified mortar over lath and scratch coat, or block', 'Edge of a raised landing: Coronado Chiseled Stone Sill, 1 in past the veneer'],
+        };
+      }
       if (m.shelf === 'Wall veneer') {
         const v = m.wall?.face;
         return {

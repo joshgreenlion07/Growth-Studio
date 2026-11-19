@@ -113,7 +113,7 @@ export function ledgerStoneSet(): PBRSet {
 }
 
 /** The golden travertine's tones (the three-pillar feature's panels): beige, tan, honey, taupe gray, a few cream and brown. */
-export type LedgerLook = { tones: string[]; weights: number[]; rowIn: [number, number]; tallRow?: number; pieceIn: [number, number]; rust?: number; /** Split quartzite: flatter, crisper strips, no pits, a fine sparkle of quartz. */ quartz?: boolean };
+export type LedgerLook = { tones: string[]; weights: number[]; rowIn: [number, number]; tallRow?: number; /** A tall course's height (in); left out, twice the shortest. */ tallIn?: number; pieceIn: [number, number]; rust?: number; /** Split quartzite: flatter, crisper strips, no pits, a fine sparkle of quartz. */ quartz?: boolean; /** Manufactured (cast) stone: each piece cast in one even tone over a soft cleft, no pits or bedding, edges a little ragged. */ cast?: boolean };
 const LEDGER_TONES: LedgerLook = {
   tones: ['#c9b8a2', '#c0a88c', '#b39a7e', '#aaa092', '#d3cbbf', '#a39282', '#94806c', '#bcab98'],
   weights: [0.2, 0.18, 0.13, 0.13, 0.08, 0.1, 0.06, 0.12],
@@ -156,7 +156,7 @@ export function ledgerPaint(seed: string, look: LedgerLook, mean: RGB): PBRSet {
     let y = 0;
     while (y < 24 - 0.5) {
       const [h0, h1] = look.rowIn;
-      let h = look.tallRow && r() < look.tallRow ? h0 * 2 : h0 + r() * (h1 - h0);
+      let h = look.tallRow && r() < look.tallRow ? (look.tallIn ?? h0 * 2) : h0 + r() * (h1 - h0);
       if (24 - (y + h) < h0) h = 24 - y;
       // Pieces around the 24 in repeat from a random start, the last one cut to close the loop.
       const pieces: { x0: number; len: number; id: number }[] = [];
@@ -180,14 +180,15 @@ export function ledgerPaint(seed: string, look: LedgerLook, mean: RGB): PBRSet {
       return tones[0];
     };
     // The cleft face: rough relief at 1/4 to 3 in, sampled twice to light it from the sky above (the photos' look).
-    // (Quartzite's cleft is finer and flatter: the coarse 1/3 in grain is left out, it reads as blocks on a pale stone.)
-    const cleftAt = look.quartz ? (u: number, v: number) => fbm(u, v, 8, 5, 61) : (u: number, v: number) => fbm(u, v, 8, 5, 61) * 0.75 + vnoise(u * 72, v * 30, 72, 63) * 0.25;
+    // (Quartzite's cleft is finer and flatter, and a cast stone's softer: the coarse 1/3 in grain is left out, it reads as
+    // blocks on a pale stone.)
+    const cleftAt = look.quartz || look.cast ? (u: number, v: number) => fbm(u, v, 8, 5, 61) : (u: number, v: number) => fbm(u, v, 8, 5, 61) * 0.75 + vnoise(u * 72, v * 30, 72, 63) * 0.25;
     return paint(N, T, 7, (u, v) => {
       // Canvas rows run top down and are flipped on upload: height in the panel is 1 - v.
       const X = u * 24, Y = (1 - v) * 24;
       // Ragged split edges: the joint lines wander with a coarse noise, up to about 1/4 in.
       // Quartzite splits cleaner: its edges wander about a quarter as much.
-      const rag = look.quartz ? 0.28 : 1;
+      const rag = look.quartz ? 0.28 : look.cast ? 0.6 : 1;
       const ragY = (vnoise(u * 48, v * 24, 48, 69) - 0.5) * 0.45 * rag, ragX = (vnoise(u * 30, v * 60, 30, 70) - 0.5) * 0.5 * rag;
       const Yr = Y + ragY;
       const row = rows.find((rw) => Yr >= rw.y0 && Yr < rw.y1) ?? (Yr < 0 ? rows[rows.length - 1] : rows[0]);
@@ -203,13 +204,14 @@ export function ledgerPaint(seed: string, look: LedgerLook, mean: RGB): PBRSet {
       const d = 1 / N;
       const cl = cleftAt(u + piece.id * 0.37, v), up = cleftAt(u + piece.id * 0.37, v - d * 2), dn = cleftAt(u + piece.id * 0.37, v + d * 2);
       // Facets turned up to the sky are lighter, turned down darker.
-      const slope = (up - dn) * (q ? 5 : 9);
-      const pit = q ? 0 : vnoise(u * 300, v * 300, 300, 65);
-      const bed = look.quartz ? 0.5 : vnoise(u * 6 + piece.id * 13, v * 160, 1e6, 67);
+      const cast = look.cast ? 1 : 0;
+      const slope = (up - dn) * (q ? 5 : cast ? 7 : 9);
+      const pit = q || cast ? 0 : vnoise(u * 300, v * 300, 300, 65);
+      const bed = look.quartz || cast ? 0.5 : vnoise(u * 6 + piece.id * 13, v * 160, 1e6, 67);
       let c = pick(piece.id);
       // Travertine shades within a piece as much as between pieces: honey and gray clouds, bedding streaks, pits.
       const swirl = fbm(u + piece.id, v, 8, 3, 66);
-      c = mixRGB(c, pick(hashQ(piece.id * 7.3)), (q ? 0.3 : 0.5) * smooth(0.3, 0.75, swirl));
+      c = mixRGB(c, pick(hashQ(piece.id * 7.3)), (q ? 0.3 : cast ? 0.22 : 0.5) * smooth(0.3, 0.75, swirl));
       if (look.rust) {
         // Iron in the stone: a soft tan-rust stain across some strips and a few small rust-brown spots.
         const stained = hashQ(piece.id * 3.1) < 0.16 * look.rust;
@@ -217,7 +219,7 @@ export function ledgerPaint(seed: string, look: LedgerLook, mean: RGB): PBRSet {
         const spot = vnoise(u * 110 + piece.id * 9, v * 110, 110, 73);
         c = mixRGB(c, RUST_SPOT, smooth(1 - 0.05 * look.rust, 1 - 0.02 * look.rust, spot) * 0.8);
       }
-      c = mulRGB(c, 0.88 + (cl - 0.5) * (q ? 0.1 : 0.24) + (bed - 0.5) * (q ? 0.05 : 0.12) + Math.max(-0.14, Math.min(0.14, slope)) - (pit > 0.88 ? 0.25 * smooth(0.88, 0.94, pit) : 0));
+      c = mulRGB(c, 0.88 + (cl - 0.5) * (q ? 0.1 : cast ? 0.16 : 0.24) + (bed - 0.5) * (q ? 0.05 : 0.12) + Math.max(-0.14, Math.min(0.14, slope)) - (pit > 0.88 ? 0.25 * smooth(0.88, 0.94, pit) : 0));
       // Quartz grains catch the light here and there.
       const glint = q ? vnoise(u * 320, v * 320, 320, 77) : 0;
       if (glint > 0.95) c = mulRGB(c, 1 + (glint - 0.95) * 1.6);

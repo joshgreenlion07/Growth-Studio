@@ -8,6 +8,7 @@ import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
+import { joinOutlets } from '../siteplan/outletjoin';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type FourFallBedLook, type NightLight } from './features';
 import { fourFallCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
@@ -310,6 +311,9 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   root.name = 'yard';
   const gm = groundModel(plan);
   const ctx = buildContext(plan);
+  // Electrical runs that end near an outlet's stub-up are run on to it (siteplan/outletjoin.ts): the trenches, pipes
+  // and equipment are built from this plan, and the outlets turn their elbows to meet them.
+  const joined = joinOutlets(plan);
   yield 'context';
   const pools = yield* poolSteps(plan, WATER_LEVEL);
   yield 'pools';
@@ -320,14 +324,14 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   let years = 3;
   // The construction views (pits, trenches, pipes, base and bedding) are built the first time a stage or the cutaway
   // asks for them; the finished yard shows only the utility equipment.
-  const equip = buildEquipment(plan, ground.surface);
+  const equip = buildEquipment(joined.plan, ground.surface);
   const constructionRoot = new THREE.Group();
   constructionRoot.name = 'construction';
   if (equip.object) constructionRoot.add(equip.object);
   let built: ConstructionBuild | null = null;
   const site = (): ConstructionBuild => {
     if (built) return built;
-    const c = buildConstruction(plan, ground.surface, quality, false);
+    const c = buildConstruction(joined.plan, ground.surface, quality, false);
     built = c;
     constructionRoot.add(c.object);
     // New meshes join the yard's layers as the rest did (shadows): the caller re-tags after setStage.
@@ -382,7 +386,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedFor(f, gm));
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedFor(f, gm), joined.joins);
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -427,7 +431,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
         }
         continue;
       }
-      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'pillarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall' || spec.kind === 'slatScreen' || spec.kind === 'gardenBench' || spec.kind === 'shedResin' || spec.kind === 'raisedBedCedar') {
+      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'pillarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall' || spec.kind === 'slatScreen' || spec.kind === 'gardenBench' || spec.kind === 'shedResin' || spec.kind === 'raisedBedCedar' || spec.kind === 'vegoModernBed') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
         continue;
@@ -505,7 +509,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel, backing });
   yield 'plants';
 
-  root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
+  root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, features.below, models.object, plants.object);
   if (turf.object) {
     // Lawn blades are left out of reflections for speed.
     turf.object.layers.set(WATER_LAYER_SKIP);
@@ -565,6 +569,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (pebbles.object) pebbles.object.visible = fin;
     if (humus.object) humus.object.visible = fin;
     features.object.visible = fin;
+    // Stub-ups and their elbows stand in the open trenches (builder/mirador.ts).
+    features.below.visible = stage === 'trench';
     models.object.visible = fin;
     plants.object.visible = fin;
     if (!fin) ensureStanding();

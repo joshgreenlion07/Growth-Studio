@@ -142,110 +142,118 @@ const BLUE_VIOLET: VerbenaPalette = {
   buds: ['#4a2286', '#563078'],
 };
 
-export const build: SpeciesBuilder = (spec) => {
-  const H = spec.matureHeight, Sp = spec.matureSpread, R = Sp / 2;
-  const r = rng(spec.id);
-  const leaves = new GeoBuilder();
-  const flowers = new GeoBuilder();
-  const wood = new GeoBuilder();
-  const center = V(0, -Sp * 0.6, 0), radii = V(1, 1, 1);
+/**
+ * The Tapien mat in a given flower color: `flowerKey` names its flower atlas, `leaf` scales the leaf sprigs (the
+ * patents give some Tapien varieties larger leaves than Blue Violet's). Shared with 'Tapien Purple'.
+ */
+export function tapienBuilder(palette: VerbenaPalette, flowerKey: string, leaf = 1): SpeciesBuilder {
+  return (spec) => {
+    const H = spec.matureHeight, Sp = spec.matureSpread, R = Sp / 2;
+    const r = rng(spec.id);
+    const leaves = new GeoBuilder();
+    const flowers = new GeoBuilder();
+    const wood = new GeoBuilder();
+    const center = V(0, -Sp * 0.6, 0), radii = V(1, 1, 1);
 
-  // A low, even mat: stems pile up a little over the crown and thin to single runners at the edge.
-  const mound = (rho: number) => H * 0.62 * Math.pow(clamp(1 - rho * rho), 0.45);
-  const runners = growRunners(r, {
-    n: 14,
-    R,
-    step: 0.025,
-    wander: 0.5,
-    reachMin: 0.76,
-    levels: [
-      { every: 0.06, angle: 0.8, len: [0.08, 0.22] },
-      { every: 0.06, angle: 0.85, len: [0.04, 0.1] },
-    ],
-    y: (rho, layer) => 0.006 + mound(rho) * (0.18 + 0.82 * layer),
-  });
+    // A low, even mat: stems pile up a little over the crown and thin to single runners at the edge.
+    const mound = (rho: number) => H * 0.62 * Math.pow(clamp(1 - rho * rho), 0.45);
+    const runners = growRunners(r, {
+      n: 14,
+      R,
+      step: 0.025,
+      wander: 0.5,
+      reachMin: 0.76,
+      levels: [
+        { every: 0.06, angle: 0.8, len: [0.08, 0.22] },
+        { every: 0.06, angle: 0.85, len: [0.04, 0.1] },
+      ],
+      y: (rho, layer) => 0.006 + mound(rho) * (0.18 + 0.82 * layer),
+    });
 
-  const swayAt = (y: number) => clamp(y / H) * 0.85;
-  const birthAt = (rho: number) => (rho < 0.55 || r() < 0.3 ? 0 : clamp((rho - 0.55) * 2 + r() * 0.15, 0.08, 0.85));
-  const white = col('#ffffff');
-  const fl = col('#ffffff', 0.74);
+    const swayAt = (y: number) => clamp(y / H) * 0.85;
+    const birthAt = (rho: number) => (rho < 0.55 || r() < 0.3 ? 0 : clamp((rho - 0.55) * 2 + r() * 0.15, 0.08, 0.85));
+    const white = col('#ffffff');
+    const fl = col('#ffffff', 0.74);
 
-  const head = (tip: THREE.Vector3, dir: THREE.Vector3, birth: number) => {
-    // The shoot turns up and holds its head an inch or two over the mat.
-    const rise = 0.022 + r() * 0.022;
-    const out = V(dir.x, 0, dir.z).normalize();
-    const c = tip.clone().addScaledVector(out, 0.008 + r() * 0.012).add(V(0, rise, 0));
-    const size = 0.034 + r() * 0.009;
-    const n = V(out.x * (0.1 + r() * 0.3) + (r() - 0.5) * 0.25, 1, out.z * (0.1 + r() * 0.3) + (r() - 0.5) * 0.25).normalize();
-    const q = r();
-    const s1 = swayAt(c.y);
-    domeCard(flowers, c, n, r() * TAU, size, 0.13, fcell(q < 0.42 ? 0 : q < 0.84 ? 1 : 3), fl, birth, tip, s1);
-    const a = r() * TAU;
-    const stalkDir = c.clone().sub(tip).normalize();
-    const L = size * 1.25;
-    leafQuad(flowers, c.clone().addScaledVector(stalkDir, -L * 0.9), stalkDir, V(Math.cos(a), 0, Math.sin(a)), L, L, fcell(2), fl.clone().multiplyScalar(0.92), birth, tip, { segs: 1, sway0: swayAt(tip.y), sway1: s1 });
-  };
+    const head = (tip: THREE.Vector3, dir: THREE.Vector3, birth: number) => {
+      // The shoot turns up and holds its head an inch or two over the mat.
+      const rise = 0.022 + r() * 0.022;
+      const out = V(dir.x, 0, dir.z).normalize();
+      const c = tip.clone().addScaledVector(out, 0.008 + r() * 0.012).add(V(0, rise, 0));
+      const size = 0.034 + r() * 0.009;
+      const n = V(out.x * (0.1 + r() * 0.3) + (r() - 0.5) * 0.25, 1, out.z * (0.1 + r() * 0.3) + (r() - 0.5) * 0.25).normalize();
+      const q = r();
+      const s1 = swayAt(c.y);
+      domeCard(flowers, c, n, r() * TAU, size, 0.13, fcell(q < 0.42 ? 0 : q < 0.84 ? 1 : 3), fl, birth, tip, s1);
+      const a = r() * TAU;
+      const stalkDir = c.clone().sub(tip).normalize();
+      const L = size * 1.25;
+      leafQuad(flowers, c.clone().addScaledVector(stalkDir, -L * 0.9), stalkDir, V(Math.cos(a), 0, Math.sin(a)), L, L, fcell(2), fl.clone().multiplyScalar(0.92), birth, tip, { segs: 1, sway0: swayAt(tip.y), sway1: s1 });
+    };
 
-  for (const run of runners) {
-    const n = Math.max(1, Math.round(run.length / 0.024));
-    let side = r() < 0.5 ? 1 : -1;
-    for (let k = 0; k < n; k++) {
-      const t = (k + r() * 0.5) / n;
-      const at = along(run.pts, t);
-      side = -side;
-      const rho = Math.hypot(at.p.x, at.p.z) / R;
-      const edge = clamp((rho - 0.74) / 0.26);
-      const last = k === n - 1;
-      const len = (last ? 0.06 : 0.075) * (0.85 + r() * 0.3);
-      const pitch = lerp(0.12 + r() * 0.8 * (0.25 + run.layer), 0.03 + r() * 0.12, edge) + (last ? 0.3 : 0);
-      const shade = lerp(0.6, 1.0, clamp(run.layer * 0.85 + edge * 0.5 + r() * 0.25)) * (0.92 + r() * 0.16);
+    for (const run of runners) {
+      const n = Math.max(1, Math.round(run.length / 0.024));
+      let side = r() < 0.5 ? 1 : -1;
+      for (let k = 0; k < n; k++) {
+        const t = (k + r() * 0.5) / n;
+        const at = along(run.pts, t);
+        side = -side;
+        const rho = Math.hypot(at.p.x, at.p.z) / R;
+        const edge = clamp((rho - 0.74) / 0.26);
+        const last = k === n - 1;
+        const len = (last ? 0.06 : 0.075) * leaf * (0.85 + r() * 0.3);
+        const pitch = lerp(0.12 + r() * 0.8 * (0.25 + run.layer), 0.03 + r() * 0.12, edge) + (last ? 0.3 : 0);
+        const shade = lerp(0.6, 1.0, clamp(run.layer * 0.85 + edge * 0.5 + r() * 0.25)) * (0.92 + r() * 0.16);
+        const b = birthAt(rho);
+        const s0 = swayAt(at.p.y);
+        lay(leaves, at.p, heading(at.dir) + (last ? 0 : side * (0.3 + r() * 0.6)), pitch, (r() - 0.5) * 0.7, len, len, cellUV(last ? 2 : Math.floor(r() * 2)), white.clone().multiplyScalar(shade), b, { segs: 2, curl: pitch * 1.2 + r() * 0.25, center, radii, normalBend: 0.5, sway0: s0, sway1: clamp(s0 + 0.2) });
+        // Side shoots all along the upper stems flower too, so the heads nearly cover the mat.
+        if (!last && run.layer > 0.35 && r() < 0.1) head(at.p.clone().add(V((r() - 0.5) * 0.02, 0.008, (r() - 0.5) * 0.02)), at.dir, clamp(b + r() * 0.1, 0, 0.9));
+      }
+      const end = along(run.pts, 1);
+      const erho = Math.hypot(end.p.x, end.p.z) / R;
+      if (r() < 0.86) head(end.p, end.dir, birthAt(erho));
+      if (run.level === 0) {
+        const pts = run.pts.filter((_, i) => i % 3 === 0 || i === run.pts.length - 1);
+        tube(wood, pts, 0.0018, 0.0011, 4, white, 0, pts[0], (i) => swayAt(pts[i].y));
+      }
+    }
+
+    // Upright flowering shoots over the middle of the mat, each with its own leafy sprig.
+    for (let k = 0; k < 22; k++) {
+      const rho = Math.sqrt(r()) * 0.66, a = r() * TAU, az = r() * TAU;
+      const p = V(Math.cos(a) * rho * R, 0.006 + mound(rho) * (0.7 + r() * 0.3), Math.sin(a) * rho * R);
       const b = birthAt(rho);
-      const s0 = swayAt(at.p.y);
-      lay(leaves, at.p, heading(at.dir) + (last ? 0 : side * (0.3 + r() * 0.6)), pitch, (r() - 0.5) * 0.7, len, len, cellUV(last ? 2 : Math.floor(r() * 2)), white.clone().multiplyScalar(shade), b, { segs: 2, curl: pitch * 1.2 + r() * 0.25, center, radii, normalBend: 0.5, sway0: s0, sway1: clamp(s0 + 0.2) });
-      // Side shoots all along the upper stems flower too, so the heads nearly cover the mat.
-      if (!last && run.layer > 0.35 && r() < 0.1) head(at.p.clone().add(V((r() - 0.5) * 0.02, 0.008, (r() - 0.5) * 0.02)), at.dir, clamp(b + r() * 0.1, 0, 0.9));
+      const len = 0.065 * leaf * (0.85 + r() * 0.3), pitch = 0.5 + r() * 0.5;
+      const s0 = swayAt(p.y);
+      const base = p.clone().add(V(-Math.cos(az) * len * 0.75 * Math.cos(pitch), -len * 0.75 * Math.sin(pitch), -Math.sin(az) * len * 0.75 * Math.cos(pitch)));
+      lay(leaves, base, az, pitch, (r() - 0.5) * 0.5, len, len, cellUV(2), white.clone().multiplyScalar(0.9 + r() * 0.15), b, { segs: 2, curl: 0.5, center, radii, normalBend: 0.5, sway0: clamp(s0 - 0.2), sway1: s0 });
+      head(p, V(Math.cos(az), 0, Math.sin(az)), b);
     }
-    const end = along(run.pts, 1);
-    const erho = Math.hypot(end.p.x, end.p.z) / R;
-    if (r() < 0.86) head(end.p, end.dir, birthAt(erho));
-    if (run.level === 0) {
-      const pts = run.pts.filter((_, i) => i % 3 === 0 || i === run.pts.length - 1);
-      tube(wood, pts, 0.0018, 0.0011, 4, white, 0, pts[0], (i) => swayAt(pts[i].y));
+
+    // Older shaded leaves on the soil under the mat.
+    for (let k = 0; k < 60; k++) {
+      const low = k < 26;
+      const rho = Math.sqrt(r()) * (low ? 0.82 : 0.66), a = r() * TAU, az = r() * TAU, sz = (0.13 + r() * 0.05) * leaf;
+      const p = V(Math.cos(a) * rho * R, 0.004 + mound(rho) * (low ? 0.08 : 0.3 + r() * 0.4), Math.sin(a) * rho * R);
+      const base = p.clone().add(V(-Math.cos(az) * sz * 0.5, 0, -Math.sin(az) * sz * 0.5));
+      lay(leaves, base, az, 0.02, 0, sz, sz, cellUV(3), col('#ffffff', low ? 0.42 + r() * 0.12 : 0.62 + r() * 0.14), birthAt(rho), { segs: 1, center, radii, normalBend: 0.5, sway0: 0, sway1: 0 }, p);
     }
-  }
 
-  // Upright flowering shoots over the middle of the mat, each with its own leafy sprig.
-  for (let k = 0; k < 22; k++) {
-    const rho = Math.sqrt(r()) * 0.66, a = r() * TAU, az = r() * TAU;
-    const p = V(Math.cos(a) * rho * R, 0.006 + mound(rho) * (0.7 + r() * 0.3), Math.sin(a) * rho * R);
-    const b = birthAt(rho);
-    const len = 0.065 * (0.85 + r() * 0.3), pitch = 0.5 + r() * 0.5;
-    const s0 = swayAt(p.y);
-    const base = p.clone().add(V(-Math.cos(az) * len * 0.75 * Math.cos(pitch), -len * 0.75 * Math.sin(pitch), -Math.sin(az) * len * 0.75 * Math.cos(pitch)));
-    lay(leaves, base, az, pitch, (r() - 0.5) * 0.5, len, len, cellUV(2), white.clone().multiplyScalar(0.9 + r() * 0.15), b, { segs: 2, curl: 0.5, center, radii, normalBend: 0.5, sway0: clamp(s0 - 0.2), sway1: s0 });
-    head(p, V(Math.cos(az), 0, Math.sin(az)), b);
-  }
+    // The crown: a short stub where the stems meet.
+    tube(wood, [V(0, 0, 0), V(0, 0.015, 0)], 0.005, 0.0035, 5, white, 0, V(), () => 0);
 
-  // Older shaded leaves on the soil under the mat.
-  for (let k = 0; k < 60; k++) {
-    const low = k < 26;
-    const rho = Math.sqrt(r()) * (low ? 0.82 : 0.66), a = r() * TAU, az = r() * TAU, sz = 0.13 + r() * 0.05;
-    const p = V(Math.cos(a) * rho * R, 0.004 + mound(rho) * (low ? 0.08 : 0.3 + r() * 0.4), Math.sin(a) * rho * R);
-    const base = p.clone().add(V(-Math.cos(az) * sz * 0.5, 0, -Math.sin(az) * sz * 0.5));
-    lay(leaves, base, az, 0.02, 0, sz, sz, cellUV(3), col('#ffffff', low ? 0.42 + r() * 0.12 : 0.62 + r() * 0.14), birthAt(rho), { segs: 1, center, radii, normalBend: 0.5, sway0: 0, sway1: 0 }, p);
-  }
-
-  // The crown: a short stub where the stems meet.
-  tube(wood, [V(0, 0, 0), V(0, 0.015, 0)], 0.005, 0.0035, 5, white, 0, V(), () => 0);
-
-  fitMat([leaves, flowers, wood], H, Sp);
-  return {
-    leaves: leaves.build(),
-    flowers: flowers.build(),
-    wood: wood.build(),
-    leafMap: leafAtlas(),
-    flowerMap: verbenaFlowerAtlas('gc-verbena-tapien-flowers', BLUE_VIOLET, (g, r, x, y, ang, len) => cutLeaf(g, r, x, y, ang, len, GREENS[2], 0), '#55703a', 'rgba(80,60,110,0.95)'),
-    bark: { map: verbenaStemBark() },
-    look: { leafRoughness: 0.72, translucency: 0.32, bend: 0.025, flutter: 0.005 },
+    fitMat([leaves, flowers, wood], H, Sp);
+    return {
+      leaves: leaves.build(),
+      flowers: flowers.build(),
+      wood: wood.build(),
+      leafMap: leafAtlas(),
+      flowerMap: verbenaFlowerAtlas(flowerKey, palette, (g, r, x, y, ang, len) => cutLeaf(g, r, x, y, ang, len, GREENS[2], 0), '#55703a', 'rgba(80,60,110,0.95)'),
+      bark: { map: verbenaStemBark() },
+      look: { leafRoughness: 0.72, translucency: 0.32, bend: 0.025, flutter: 0.005 },
+    };
   };
-};
+}
+
+export const build: SpeciesBuilder = tapienBuilder(BLUE_VIOLET, 'gc-verbena-tapien-flowers');

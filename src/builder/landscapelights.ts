@@ -14,6 +14,7 @@ import { boxUV } from './materials';
 import { zoneTop } from './hardscape';
 import { COVER_FLOOR_TOP, coverFloorAt } from './coverfloor';
 import { linePath } from './linepath';
+import { vistaBollard, vistaTransformer, vistaUplight } from './vistalights';
 
 /**
  * Landscape lighting fixtures (TruScapes, siteplan/truscapes.ts), drawn to the maker's published sizes and product
@@ -25,8 +26,8 @@ import { linePath } from './linepath';
  * the fixture's color temperature (or its RGB color, for a color-changing lamp set to one).
  */
 
-const IN = 0.0254;
-type Part = [THREE.Material, THREE.BufferGeometry];
+export const IN = 0.0254;
+export type Part = [THREE.Material, THREE.BufferGeometry];
 
 export class FixtureMaterials {
   /** Lenses and lit glass: glow at night (the studio sets their emissive intensity). */
@@ -102,29 +103,29 @@ export class FixtureMaterials {
 /* Geometry helpers (inches)                                            */
 
 /** A turned part from a profile of [radius, height] points, bottom to top. Repeat a point for a hard edge. */
-function lathe(profile: [number, number][], seg = 28): THREE.BufferGeometry {
+export function lathe(profile: [number, number][], seg = 28): THREE.BufferGeometry {
   const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-4, r), y));
   const g = new THREE.LatheGeometry(pts, seg);
   return g;
 }
 
-function cyl(r: number, h: number, y = 0, seg = 24, rTop = r): THREE.BufferGeometry {
+export function cyl(r: number, h: number, y = 0, seg = 24, rTop = r): THREE.BufferGeometry {
   return new THREE.CylinderGeometry(rTop, r, h, seg).translate(0, y + h / 2, 0);
 }
 
-function box(w: number, h: number, d: number, x = 0, y = 0, z = 0, round = 0): THREE.BufferGeometry {
+export function box(w: number, h: number, d: number, x = 0, y = 0, z = 0, round = 0): THREE.BufferGeometry {
   const g = round > 0 ? new RoundedBoxGeometry(w, h, d, 2, Math.min(round, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3)) : new THREE.BoxGeometry(w, h, d);
   boxUV(g);
   return g.translate(x, y + h / 2, z);
 }
 
 /** A disc facing +y at height y. */
-function disc(r: number, y: number, seg = 24): THREE.BufferGeometry {
+export function disc(r: number, y: number, seg = 24): THREE.BufferGeometry {
   return new THREE.CircleGeometry(r, seg).rotateX(-Math.PI / 2).translate(0, y, 0);
 }
 
 /** A disc facing -y at height y. */
-function discDown(r: number, y: number, seg = 24): THREE.BufferGeometry {
+export function discDown(r: number, y: number, seg = 24): THREE.BufferGeometry {
   return new THREE.CircleGeometry(r, seg).rotateX(Math.PI / 2).translate(0, y, 0);
 }
 
@@ -180,7 +181,7 @@ function elbow(r: number, bend: number, y: number, seg = 20): THREE.BufferGeomet
 /* ------------------------------------------------------------------ */
 /* Fixture builders                                                     */
 
-interface Ctx {
+export interface Ctx {
   spec: FixtureSpec;
   finish: THREE.MeshStandardMaterial;
   m: FixtureMaterials;
@@ -195,7 +196,7 @@ interface Ctx {
   lights: LandLight[];
 }
 
-const UP = new THREE.Vector3(0, 1, 0);
+export const UP = new THREE.Vector3(0, 1, 0);
 
 function light(c: Ctx, at: THREE.Vector3, dir: THREE.Vector3, beamDeg: number, cutoffDeg: number, lumens: number, range: number) {
   c.lights.push({ position: at.multiplyScalar(IN), direction: dir.normalize(), beamDeg, cutoffDeg, lumens, kelvin: c.kelvin, ...(c.color ? { color: c.color } : {}), range });
@@ -526,6 +527,10 @@ const BUILDERS: Record<FixtureSpec['family'], (c: Ctx) => void> = {
   puck,
   walkwayWash,
   transformer,
+  // Vista Professional (builder/vistalights.ts): called through, so the import cycle never reads them early.
+  vistaBollard: (c) => vistaBollard(c),
+  vistaUplight: (c) => vistaUplight(c),
+  vistaTransformer: (c) => vistaTransformer(c),
 };
 
 /** Default mount heights (m above grade) for fixtures fixed to a face, when the placement gives none. */
@@ -542,7 +547,7 @@ interface WallFace {
 export interface FixtureSite {
   surface(p: Vec2): number;
   /**
-   * A cap or face light placed near a wall or raised planter without a mount height (as Area Planner places them)
+   * A cap or face light placed near a wall, raised planter or raised landing without a mount height (as Area Planner places them)
    * moves onto the nearest face within 0.75 m, turns to face out from it, and takes the cap's underside as its
    * height (a face light takes its default height on that face). Others come back unchanged.
    */
@@ -551,7 +556,7 @@ export interface FixtureSite {
 
 export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): FixtureSite {
   const surface = finishedSurface(plan.zones, height, coverFloorAt(plan.structures, plan));
-  type Face = { a: Vec2; b: Vec2; d0: number; d1: number; half: number; cap: number };
+  type Face = { a: Vec2; b: Vec2; d0: number; d1: number; half: number; cap: number; poly?: Vec2[] };
   const faces: Face[] = [];
   for (const l of plan.lines) {
     if (l.kind !== 'wall') continue;
@@ -562,8 +567,16 @@ export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): Fixtur
   for (const z of plan.zones) {
     if (!z.raised || z.polygon.length < 3) continue;
     const n = z.polygon.length;
-    for (let i = 0; i < n; i++) faces.push({ a: z.polygon[i], b: z.polygon[(i + 1) % n], d0: 0, d1: 0, half: 0, cap: Math.max(0.2, Math.min(1.2, z.raised.height)) - 0.05 });
+    for (let i = 0; i < n; i++) faces.push({ a: z.polygon[i], b: z.polygon[(i + 1) % n], d0: 0, d1: 0, half: 0, cap: Math.max(0.2, Math.min(1.2, z.raised.height)) - 0.05, poly: z.polygon });
   }
+  // Raised paving (an entry landing or a step) and decks: the edge's face, a cap light under its front course (the
+  // paving sits on the zone's elevation; a deck's boards are 1 in thick).
+  plan.zones.forEach((z, zi) => {
+    if (z.kind !== 'hardscape' || !(z.elevation && z.elevation > 0.1) || z.polygon.length < 3) return;
+    const n = z.polygon.length;
+    const cap = isBoardDeck(z) ? zoneTop(z, zi) - 0.025 : z.elevation;
+    for (let i = 0; i < n; i++) faces.push({ a: z.polygon[i], b: z.polygon[(i + 1) % n], d0: 0, d1: 0, half: 0, cap, poly: z.polygon });
+  });
   const nearest = (p: Vec2): WallFace | null => {
     let best: WallFace | null = null, bestD = 0.75;
     for (const f of faces) {
@@ -574,12 +587,9 @@ export function fixtureSite(plan: SitePlan, height: (p: Vec2) => number): Fixtur
       const qx = f.a[0] + ux * t, qy = f.a[1] + uy * t;
       const across = (p[0] - qx) * nx + (p[1] - qy) * ny;
       const d = f.d0 + (f.d1 - f.d0) * (t / len);
-      // A raised planter's outline: the outside is the side the point is on, unless that side is inside the zone.
+      // A raised planter's or landing's outline: the outside is the side the point is on, unless that side is inside the zone.
       let side = across >= d ? 1 : -1;
-      if (f.half === 0) {
-        const z = plan.zones.find((zz) => zz.raised && zz.polygon.includes(f.a));
-        if (z && pointInPolygon([qx + nx * side * 0.05, qy + ny * side * 0.05], z.polygon)) side = -side;
-      }
+      if (f.poly && pointInPolygon([qx + nx * side * 0.05, qy + ny * side * 0.05], f.poly)) side = -side;
       const face = d + side * f.half;
       const gap = Math.abs(across - face);
       if (gap < bestD) {
@@ -643,7 +653,7 @@ export function buildFixture(spec: FeatureSpec, f: FeaturePlacement, m: FixtureM
   BUILDERS[fx.family](c);
   // Inches to meters, and up to the mount height for fixtures on a face, cap or wall.
   const inGround = fx.mount === 'stake' || fx.mount === 'grade';
-  const lift = inGround ? surface - ground : (set.mountHeight ?? MOUNT_DEFAULT[fx.mount] ?? 0) - ground;
+  const lift = inGround ? surface - ground : (set.mountHeight ?? fx.mountDefault ?? MOUNT_DEFAULT[fx.mount] ?? 0) - ground;
   const s = new THREE.Matrix4().makeScale(IN, IN, IN).premultiply(new THREE.Matrix4().makeTranslation(0, lift, 0));
   for (const [, g] of c.parts) {
     g.applyMatrix4(s);

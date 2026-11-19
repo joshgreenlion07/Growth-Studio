@@ -36,6 +36,11 @@ export interface LandLight {
   color?: string;
   /** Reach in meters, past which the light is dropped (it is faded out before). */
   range: number;
+  /**
+   * Brightest away from the axis, not on it (a bollard's column lens throws its light out and down): the intensity
+   * doubles from the axis to `beamDeg / 2` (instead of halving) and keeps rising to the cutoff.
+   */
+  ring?: boolean;
   /** Switched off by hand in the 3D view (builder/actions.ts): left out of the pool. */
   off?: boolean;
 }
@@ -164,11 +169,11 @@ export function lightColor(kelvin: number, color?: string, out = new THREE.Color
   return m > 1e-4 ? out.multiplyScalar(1 / m) : kelvinColor(kelvin, out);
 }
 
-/** Peak (center) candela of a beam carrying `lumens`, for the beam shape above. */
-export function peakCandela(lumens: number, beamDeg: number, cutoffDeg: number): number {
+/** Peak (center) candela of a beam carrying `lumens`, for the beam shape above (a ring beam's on its axis). */
+export function peakCandela(lumens: number, beamDeg: number, cutoffDeg: number, ring = false): number {
   const a = Math.max(1e-4, 1 - Math.cos((beamDeg * Math.PI) / 360));
   const umax = 1 - Math.cos((Math.min(179, cutoffDeg) * Math.PI) / 360);
-  const flux = ((2 * Math.PI * a) / Math.LN2) * (1 - Math.pow(2, -umax / a));
+  const flux = ((2 * Math.PI * a) / Math.LN2) * (ring ? Math.pow(2, umax / a) - 1 : 1 - Math.pow(2, -umax / a));
   return lumens / Math.max(1e-4, flux);
 }
 
@@ -189,13 +194,15 @@ export class LandLightPool {
     lights.forEach((l, i) => {
       const o = i * STRIDE;
       const half = Math.min(170, l.beamDeg) / 2;
-      const cut = Math.max(half * 1.05, Math.min(178, l.cutoffDeg) / 2);
+      // A ring beam rises toward its cutoff, so the cutoff may sit inside its half angle.
+      const cut = l.ring ? Math.min(89, l.cutoffDeg / 2) : Math.max(half * 1.05, Math.min(178, l.cutoffDeg) / 2);
       const dir = l.direction.clone().normalize();
-      const cd = peakCandela(l.lumens, l.beamDeg, l.cutoffDeg) * CANDELA_TO_SCENE;
+      const cd = (l.ring ? peakCandela(l.lumens, l.beamDeg, cut * 2, true) : peakCandela(l.lumens, l.beamDeg, l.cutoffDeg)) * CANDELA_TO_SCENE;
       lightColor(l.kelvin, l.color, col).multiplyScalar(cd);
       this.packed.set([l.position.x, l.position.y, l.position.z, l.range], o);
       this.packed.set([dir.x, dir.y, dir.z, Math.cos((cut * Math.PI) / 180)], o + 4);
-      this.packed.set([col.r, col.g, col.b, 1 / Math.max(1e-4, 1 - Math.cos((half * Math.PI) / 180))], o + 8);
+      // The shader's falloff exp2(-(1 - cos t) * w): a negative w makes a ring beam grow away from its axis.
+      this.packed.set([col.r, col.g, col.b, (l.ring ? -1 : 1) / Math.max(1e-4, 1 - Math.cos((half * Math.PI) / 180))], o + 8);
     });
     this.lastPick.set(Infinity, 0, 0);
     this.write(null);

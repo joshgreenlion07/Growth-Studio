@@ -1,5 +1,6 @@
 import type { FeatureKind, FeatureSpec } from './catalog';
 import { featureSize, type FeatureSize } from './decor';
+import { vegoBedSoil } from './planterbeds';
 
 /*
  * Side-yard pieces from a client job's plan set and its product sheets: a Suncast resin storage shed, a 5 ft wooden
@@ -10,11 +11,11 @@ import { featureSize, type FeatureSize } from './decor';
  * `builder/urnfountain.ts`, the jasmine by its species file).
  */
 
-export type YardKind = 'shedResin' | 'gardenBench' | 'raisedBedCedar' | 'potTrellis' | 'slatScreen';
+export type YardKind = 'shedResin' | 'gardenBench' | 'raisedBedCedar' | 'potTrellis' | 'slatScreen' | 'vegoModernBed';
 
 /** The class each switches within (catalog SWAP_CLASS). */
 export const YARD_SWAP: Record<YardKind, string> = {
-  shedResin: 'Sheds', gardenBench: 'Seating', raisedBedCedar: 'Raised beds', potTrellis: 'Planters', slatScreen: 'Screens and trellises',
+  shedResin: 'Sheds', gardenBench: 'Seating', raisedBedCedar: 'Raised beds', potTrellis: 'Planters', slatScreen: 'Screens and trellises', vegoModernBed: 'Raised beds',
 };
 
 const IN = 0.0254;
@@ -63,6 +64,8 @@ export const POT_TRELLIS = {
 
 /** The soil of a raised bed a plant can stand in: outer length, width, the wall's thickness, and its soil height. */
 export function raisedBedSoil(spec: FeatureSpec, own?: [number, number, number]): { W: number; D: number; inset: number; soil: number } | null {
+  // A Vego Garden metal bed (siteplan/planterbeds.ts).
+  if (spec.kind === 'vegoModernBed') return vegoBedSoil(spec, own);
   if (spec.kind !== 'raisedBedCedar') return null;
   const [W, D, H] = featureSize(spec, own, 18 * IN);
   return { W, D, inset: RAISED_BED.board * IN, soil: H - RAISED_BED.soilDrop * IN };
@@ -125,4 +128,4 @@ export const YARD_FEATURES: FeatureSpec[] = [
 ];
 
 /** The kinds above (for the feature builder's switch). */
-export const YARD_KINDS: readonly FeatureKind[] = ['shedResin', 'gardenBench', 'raisedBedCedar', 'potTrellis', 'slatScreen'];
+export const YARD_KINDS: readonly FeatureKind[] = ['shedResin', 'gardenBench', 'raisedBedCedar', 'potTrellis', 'slatScreen', 'vegoModernBed'];
