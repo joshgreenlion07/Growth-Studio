@@ -365,13 +365,21 @@ export const WATERFALL_DEFAULTS = {
   lights: 'data',   // 'data': only report where the under-fall lights go; 'three': also add PointLights; false: none
   refraction: true, // water reads a colour + depth copy of the scene (see setRefraction)
   detail: 'full',   // 'light': rocks with about a third of the triangles (phones, tablets); same layout, sizes within a percent or so
+  topFall: null,    // feet: the top fall's drop (head pool to the next pool) when shorter than the model's own share;
+                    // the lower pools stay where `height` puts them and the top stones come down with the head pool
   mulch: null,      // { dark, light, grain }: the soil cover's two tones (linear RGB arrays) and how fine it is (1 = bark chips;
                     // higher is finer), to match the bed around it; null keeps the model's own shredded bark
 };
 /** Overall size in feet for a set of options, without building anything. */
 export function waterfallSize(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options }, head = 1.5 + (o.level - 3) * 0.25;
-  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: o.height, soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: topHeight(o.height, o.topFall), soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+}
+/** Patio level to the top stones: `height`, or with a short top fall, the next pool's level plus that fall plus the head stones. */
+function topHeight(height, topFall) {
+  if (!topFall) return height;
+  const top = height - 0.95, wl1 = top - 0.30 * (top + 0.15);
+  return wl1 + topFall + 0.95;
 }
 export function createWaterfall(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options };
@@ -562,11 +570,14 @@ export function createWaterfall(options = {}) {
   const MATS = { grass: grassMat, vgrass: grassMat, fern: leafyMat, hosta: leafyMat, lavender: shrubMat, catmint: shrubMat, pink: shrubMat, white: shrubMat, box: shrubMat, moss: shrubMat, cypress: shrubMat };
 
   let L = null;
-  function makeLayout(H, base, lvl) {
+  function makeLayout(H, base, lvl, topFall) {
     const head = 1.5 + (lvl - 3) * 0.25, lv = [lvl * 1.08, lvl * 0.92, lvl];   // source pool, then three upper levels, a little unequal
     const D = base + lv[0] + lv[1] + lv[2] + head;
-    const top = H - 0.95, basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
+    let top = H - 0.95;
+    const basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
     const wl = [top]; for (let i = 0; i < 4; i++) wl.push(wl[i] - fr[i] * total); wl[4] = basin;
+    // a short top fall: the head pool only topFall above the next pool, the top stones the same height above it as before
+    if (topFall) { wl[0] = wl[1] + topFall; top = wl[0]; H = topHeight(H, topFall); }
     // lips from the front: fall 4 at the back of the lowest level, then one level further back each time
     const z4 = -base, z3 = z4 - lv[2], z2 = z3 - lv[1], z1 = z2 - lv[0], fzs = [z1, z2, z3, z4];
     const wander = 1 + clamp((lvl - 3) / 2, 0, 1) * 0.35;
@@ -1155,7 +1166,7 @@ export function createWaterfall(options = {}) {
   function rebuild(next) {
     if (next) Object.assign(o, next);
     W = o.width;
-    L = makeLayout(o.height, o.lowest, o.level);
+    L = makeLayout(o.height, o.lowest, o.level, o.topFall);
     clearWorld();
     rnd = mulberry32(o.seed);
     rocks = []; bermRocks = [];

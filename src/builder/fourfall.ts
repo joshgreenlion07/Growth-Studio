@@ -59,7 +59,8 @@ export const CUT_FRONT = 0.12;
 
 /** The module's soil rectangle (its `soil`), feet, without building it. */
 export function soilRect(p: FourFallParams) {
-  return { x0: -(FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE), x1: FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE, z0: -fourFallDepthFt(p) - FOUR_FALL_BACK_SLOPE - 0.8, z1: 0.4 };
+  const w = p.width ?? FOUR_FALL_WIDTH;
+  return { x0: -(w / 2 + FOUR_FALL_SOIL_BESIDE), x1: w / 2 + FOUR_FALL_SOIL_BESIDE, z0: -fourFallDepthFt(p) - FOUR_FALL_BACK_SLOPE - 0.8, z1: 0.4 };
 }
 
 /**
@@ -195,7 +196,7 @@ export function fourFallMulch(bed: string | undefined): { dark: [number, number,
  */
 export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Quality, ground: (x: number, z: number) => number, bed?: string): FourFallBuilt {
   const frame = fourFallFrame(f, spec), { p } = frame;
-  const opts = { unit: FT, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality), mulch: fourFallMulch(bed) };
+  const opts = { unit: FT, width: p.width ?? FOUR_FALL_WIDTH, topFall: p.topFall ?? null, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality), mulch: fourFallMulch(bed) };
   const wf = createWaterfall(opts);
   // The plan outline and the module must agree on the size.
   const ms = waterfallSize(opts), [ow, od] = fourFallOutlineFt(p);

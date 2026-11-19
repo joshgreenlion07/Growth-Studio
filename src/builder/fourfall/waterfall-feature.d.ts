@@ -10,6 +10,11 @@ export interface WaterfallOptions {
   lowest?: number;
   /** Each of the three upper levels, front to back. Owner's range 3 to 5. Default 3. */
   level?: number;
+  /**
+   * The top fall's drop (head pool to the pool below it), when shorter than the model's own share of the height. The
+   * lower pools stay where `height` puts them; the top stones come down with the head pool. Default null.
+   */
+  topFall?: number | null;
   /** How far the planted soil runs behind the top stones before it is back at grade. Default 4.5. */
   backSlope?: number;
   /** Raise the whole feature. Use about 0.6 when the host cannot open its ground under it. Default 0. */
