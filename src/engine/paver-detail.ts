@@ -66,7 +66,8 @@ const RECIPES: Record<DetailFace, { k: number; fn: (u: number, v: number) => { a
       return { a: 1 + (fine - 0.5) * 0.05 - pin * 0.06 - dark * 0.16 + light * 0.12, h: fine * 0.03 - pin * 0.3 - dark * 0.02, r: (fine - 0.5) * 0.06 + pin * 0.08 };
     },
   },
-  // Textured face: fine aggregate of about 2 mm with small dark pores.
+  // Textured face: fine aggregate of about 2 mm with small dark pores. (No detailed line uses it yet: every Belgard
+  // line in the catalog has a smooth, slate or antiqued face; check it before a textured line opts in.)
   textured: {
     k: 1.6,
     fn: (u, v) => {
@@ -130,6 +131,8 @@ export const EDGE_RANGE = 0.04;
 export interface PaverEdges {
   /** Cache key: maps with the same key are the same image (one layout, whatever the line or color). */
   key: string;
+  /** The look's catalog id and laying pattern ("id|laying"), from which the texture worker paints the map. */
+  src: string;
   size: number;
   /** Side of the full-size pattern texture the map is placed for (the shader waits for it, see uPavReady). */
   mapSize: number;
@@ -155,11 +158,50 @@ export interface PaverDetail {
   edges: PaverEdges;
 }
 
-const edgeMaps = new Map<string, { tex: THREE.DataTexture; E: PaverEdges }>();
-function edgeTexture(E: PaverEdges): THREE.DataTexture {
+/**
+ * Paints edge maps off the page (texture-jobs.ts registers the texture worker): `done` gets the pixels, or null when
+ * the worker could not paint them. Returns false when no worker can take it (the map is then painted here).
+ */
+export type EdgePainter = (src: string, done: (data: Uint8Array | null) => void) => boolean;
+let edgePainter: EdgePainter | null = null;
+export function setEdgePainter(p: EdgePainter | null) {
+  edgePainter = p;
+}
+
+/*
+ * Edge maps, one per key, kept while a material draws with them (materials.ts releases the least recently used). A map
+ * is painted by the texture worker where there is one: a random ashlar's map is its own per color (its layout is seeded
+ * by the look's id), up to 4 million texels, a few hundred milliseconds of painting that must not land on the page as
+ * many lines and colors are picked. Until its pixels are in, the overlay stays off (uPavReady) and the pattern texture's
+ * own joints show, as they do farther away.
+ */
+interface EdgeEntry {
+  tex: THREE.DataTexture;
+  E: PaverEdges;
+  ready: boolean;
+  /** Bumped by each paint request, so only the latest one's pixels are taken. */
+  gen: number;
+}
+const edgeMaps = new Map<string, EdgeEntry>();
+
+function fillEdges(entry: EdgeEntry) {
+  const g = ++entry.gen;
+  entry.ready = false;
+  const put = (data: Uint8Array) => {
+    if (edgeMaps.get(entry.E.key) !== entry || entry.gen !== g) return;
+    entry.tex.image.data = data;
+    entry.tex.needsUpdate = true;
+    entry.ready = true;
+  };
+  if (edgePainter?.(entry.E.src, (d) => put(d && d.length === entry.E.size * entry.E.size ? d : entry.E.paint()))) return;
+  put(entry.E.paint());
+}
+
+function edgeTexture(E: PaverEdges): EdgeEntry {
   const have = edgeMaps.get(E.key);
-  if (have) return have.tex;
-  const t = new THREE.DataTexture(E.paint(), E.size, E.size, THREE.RedFormat);
+  if (have) return have;
+  // No pixels until they are painted: a texture never marked for upload is not sent to GL (the overlay is off meanwhile).
+  const t = new THREE.DataTexture(null, E.size, E.size, THREE.RedFormat);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.NoColorSpace;
   // A distance changes smoothly, so it is read without mip levels (the shader stops using it before joints get thin).
@@ -170,9 +212,10 @@ function edgeTexture(E: PaverEdges): THREE.DataTexture {
   t.onUpdate = () => {
     t.image.data = null;
   };
-  t.needsUpdate = true;
-  edgeMaps.set(E.key, { tex: t, E });
-  return t;
+  const entry: EdgeEntry = { tex: t, E, ready: false, gen: 0 };
+  edgeMaps.set(E.key, entry);
+  fillEdges(entry);
+  return entry;
 }
 
 /** Release one edge map (materials.ts keeps the most recently used few). */
@@ -181,13 +224,21 @@ export function disposeEdgeMap(key: string) {
   edgeMaps.delete(key);
 }
 
-/** The WebGL context came back: give every edge map its pixels again to upload. */
+/** The WebGL context came back: paint every edge map again to upload. */
 export function restorePaverDetail() {
-  for (const { tex, E } of edgeMaps.values()) {
-    tex.image.data = E.paint();
-    tex.needsUpdate = true;
-  }
+  for (const entry of edgeMaps.values()) fillEdges(entry);
 }
+
+/** Edge maps held now, and their GPU bytes (one byte a texel), for tests and the console (`__gsPaverEdges`). */
+export function paverEdgeStats() {
+  let bytes = 0, ready = 0;
+  for (const { E, ready: r } of edgeMaps.values()) {
+    bytes += E.size * E.size;
+    if (r) ready++;
+  }
+  return { maps: edgeMaps.size, ready, mb: +(bytes / 1048576).toFixed(1), keys: [...edgeMaps.keys()] };
+}
+(globalThis as { __gsPaverEdges?: unknown }).__gsPaverEdges = paverEdgeStats;
 
 /** The renderer is going away: release every detail and edge texture. */
 export function disposePaverDetail() {
@@ -332,11 +383,12 @@ export function patchDetail(m: THREE.Material, from: THREE.Material) {
   if (!d) return;
   m.userData.paverDetail = d;
   const E = d.detail.edges;
+  const edge = edgeTexture(E);
   const sand = new THREE.Color().setRGB(E.sand[0], E.sand[1], E.sand[2], THREE.SRGBColorSpace);
   const uniforms = {
     uPavDetail: { value: detailTexture(d.detail.face) },
     uPavTile: { value: d.tileMeters / DETAIL_TILE },
-    uPavEdge: { value: edgeTexture(E) },
+    uPavEdge: { value: edge.tex },
     uPavE: { value: new THREE.Matrix2().fromArray(E.e) },
     uPavE0: { value: new THREE.Vector2(E.off[0], E.off[1]) },
     uPavEdgeN: { value: E.size },
@@ -344,12 +396,12 @@ export function patchDetail(m: THREE.Material, from: THREE.Material) {
     uPavJoint: { value: new THREE.Vector4(E.joint, E.bevel, E.slope, E.push) },
     uPavSand: { value: new THREE.Vector3(sand.r, sand.g, sand.b) },
     uPavWorn: { value: E.worn ? 1 : 0 },
-    // Off until the full-size pattern maps are in: the quick low-resolution copy first shown sits half a (larger) texel
-    // apart, so its joints would not meet the edge map's.
+    // Off until the full-size pattern maps are in (the quick low-resolution copy first shown sits half a (larger) texel
+    // apart, so its joints would not meet the edge map's) and the edge map is painted.
     uPavReady: {
       get value() {
         const img = (m as THREE.MeshStandardMaterial).map?.image as { width?: number } | undefined;
-        return (img?.width ?? 0) >= E.mapSize ? 1 : 0;
+        return edge.ready && (img?.width ?? 0) >= E.mapSize ? 1 : 0;
       },
     },
   };

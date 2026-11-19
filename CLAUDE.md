@@ -11,7 +11,8 @@ finished-work photos in `reference/green-lion-style/`.
   sample yards. Everything talks through the SitePlan.
 - `src/engine/` — renderer: sky and real sun position (`sky.ts`), procedural
   PBR textures (`textures.ts`, `surfaces.ts`; close-range paver grain, joints and chamfers in real size,
-  `paver-detail.ts`, on for the lines `DETAIL_LINES` in `surfaces.ts` lists), plant growth and wind shaders
+  `paver-detail.ts`, on for every Belgard paver line, listed in `DETAIL_LINES` in `surfaces.ts`; its edge maps are
+  painted in the texture worker), plant growth and wind shaders
   (`foliage.ts`), water and planar reflections (`water.ts`), camera look with
   focus blur, bloom and grade (`post.ts`), landscape lighting beams for up to 64
   fixtures in every lit material's light pass (`landlights.ts`), generated camera views (`views.ts`),

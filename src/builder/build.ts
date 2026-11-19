@@ -527,6 +527,9 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
+      // A restyle (a new color picked) is a build of its own for the materials' keep-the-last-few rules (stamped looks,
+      // paver edge maps): without it nothing picked in a run of restyles would ever be released.
+      beginMaterialBuild();
       newTextureGeneration();
       const old = hard;
       hard = buildHardscape(next, gm.height, pools);
