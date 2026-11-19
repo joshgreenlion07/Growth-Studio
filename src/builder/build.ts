@@ -374,8 +374,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     for (const f of plan.features) {
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
-      // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
-      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl') {
+      // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
+      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl') {
         if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
         continue;
       }
