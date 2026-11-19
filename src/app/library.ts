@@ -75,6 +75,8 @@ function catOf(m: MaterialSpec): string | null {
   if (m.use === 'edging' || m.shelf === 'Paver edge') return 'edging';
   if (m.use === 'hardscape' && m.group === 'Concrete') return 'concrete';
   if (m.use === 'hardscape' && m.group === 'Pavers') return 'pavers';
+  // A maker's porcelain (MSI Caldera) sits with the pavers.
+  if (m.use === 'hardscape' && m.group === 'Porcelain' && m.maker) return 'pavers';
   return null;
 }
 

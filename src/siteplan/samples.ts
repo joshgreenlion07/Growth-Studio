@@ -7,6 +7,7 @@ import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
 import { sampleUrnFountains } from './sample-urn-fountains';
+import { sampleSideYard } from './sample-side-yard';
 import { sampleMowCurb } from './sample-mow-curb';
 import { sampleSteelEdging } from './sample-steel-edging';
 import { sampleFourFall } from './sample-four-fall';
@@ -509,6 +510,7 @@ export const SAMPLES = [
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
   { id: 'cedar-water-wall', name: 'Cedar slat water wall, Silver Travertine', make: sampleCedarWaterWall },
   { id: 'urn-fountains', name: 'Urn fountains: Blue Thumb aqua-teal and Tuscany vases', make: sampleUrnFountains },
+  { id: 'side-yard', name: 'Side yard with shed, raised bed and urn fountain', make: sampleSideYard },
   { id: 'mow-curb', name: 'Poured concrete mow curb: slant, mower and block', make: sampleMowCurb },
   { id: 'steel-edging', name: 'Black steel edging: 1/8 in and 3/16 in', make: sampleSteelEdging },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
