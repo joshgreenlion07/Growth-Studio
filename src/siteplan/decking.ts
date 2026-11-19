@@ -71,6 +71,8 @@ const TREX_ENHANCE: DeckBoardSpec = {
  * photo of the board face (images.trex.com, central 60% of the 400 px swatch or of the board in the 1600 px sample shot),
  * light to dark. Home Depot (homedepot.com, 11/2026) sells Enhance Naturals and Basics; in a San Jose store Rocky Harbor
  * was stocked (1 x 6 x 16 grooved, RH010616E2G01) and most other colors were special order or online only.
+ * Trex's Enhance page (11/2026) lists ten colors: Naturals Foggy Wharf, Rocky Harbor, Toasted Sand, Honey Grove, Cinnamon Cove, Golden
+ * Hour; Basics Saddle, Clam Shell, Tide Pool, Pebble Beach. Coastal Bluff and Beach Dune are no longer on it; they stay for plans that use them.
  */
 /** Trex's image server (swatch photos, loaded live by the material panel; never copied into the app). */
 const T = 'https://images.trex.com/is/image/trexcompany/';
@@ -82,6 +84,7 @@ export const DECK_LINES: DeckLine[] = [
     ['Toasted Sand', ['#9e8167', '#92765d', '#886f57', '#735c46'], T + 'trex-enhance-naturals-decking-toasted-sand-board-grain-detail-pattern-color-selector-1'],
     ['Coastal Bluff', ['#938272', '#857464', '#7b6b5c', '#67594b'], T + 'trex-enhance-naturals-decking-coastal-bluff-board-grain-detail-pattern-color-selector-1'],
     ['Honey Grove', ['#af9a7f', '#a28e74', '#96836a', '#7d6b54'], T + 'enh-001-hg-decking-swatch-HY010608E2S56'],
+    ['Cinnamon Cove', ['#8d6b5c', '#805f51', '#765546', '#614133'], T + 'enh-trex-002-cc-decking-swatch-CC0106202S01'],
     ['Golden Hour', ['#c9a17c', '#c09875', '#b58d6d', '#97745a'], T + 'enh-3halfinch-002-gh-square-swatch'],
   ] },
   { maker: 'Trex', name: 'Enhance Basics', slug: 'trex-enhance-basics', page: 'https://www.trex.com/products/decking/enhance/', board: { ...TREX_ENHANCE, grain: 'solid', boardTone: 0.04 }, sold: 'Home Depot, Lowe\'s, Trex dealers', colors: [
