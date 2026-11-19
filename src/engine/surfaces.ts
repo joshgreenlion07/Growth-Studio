@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
-import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, recipeAverage, textureSet, type PBRSet, type RGB } from './textures';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 import { boardFaceSet } from './deckboards';
@@ -1730,7 +1730,18 @@ export function latticeAlpha(): THREE.Texture {
 /** Textures for a catalog material. `laying` picks the laying pattern of a paver that offers patterns (its first when left out). */
 export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const lay = layingOf(spec, laying);
-  return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, () => {
+  return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, materialRecipe(spec, lay));
+}
+
+const averages = new Map<string, { color: RGB; roughness: number } | null>();
+/** A material's average albedo (linear RGB) and roughness channel, as its painted maps average out. Kept per material. */
+export function materialAverage(spec: MaterialSpec): { color: RGB; roughness: number } | null {
+  if (!averages.has(spec.id)) averages.set(spec.id, recipeAverage(materialRecipe(spec, layingOf(spec))));
+  return averages.get(spec.id)!;
+}
+
+function materialRecipe(spec: MaterialSpec, lay: LayingPattern | undefined): () => PBRSet {
+  return () => {
     switch (spec.recipe) {
       case 'lawn': return lawnSet(spec);
       case 'turfArtificial': return turfSet(spec);
@@ -1748,7 +1759,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'curb': return curbSet(spec);
       case 'steelEdging': return steelSet(spec);
     }
-  });
+  };
 }
 
 function flagstoneSet(spec: MaterialSpec): PBRSet {

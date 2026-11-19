@@ -3,17 +3,17 @@ import { beginMaterialBuild } from './materials';
 import { featureById, plantById } from '../siteplan/catalog';
 import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
-import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
+import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2, Zone } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls } from './fourfall';
+import { fourFallBed, fourFallBedCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
-import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
+import { groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
 import { onDecks } from './deck';
 import { isBoardDeck } from '../siteplan/deckzone';
@@ -76,6 +76,17 @@ export interface SceneBuild {
   restyleHardscape(plan: SitePlan): void;
   setYears(years: number): void;
   dispose(): void;
+}
+
+/**
+ * The ground a four-fall waterfall's soil fades into: the look of the bed it is set in (fourfall.ts fourFallBed; its
+ * painted texture's average color in linear light and its ground roughness, ground.ts groundLook), or null on lawn,
+ * paving or nothing, where it keeps its edges tucked under grade.
+ */
+export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number } | null {
+  const bed = fourFallBed(f, zoneAt);
+  const spec = bed ? materialById.get(bed.catalogId) : undefined;
+  return spec ? groundLook(spec) : null;
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
@@ -352,7 +363,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality);
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedLook(f, gm.zoneAt));
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -363,6 +374,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const structIdx = [...plan.structures.filter((s) => s.kind !== 'cover' && s.polygon.length >= 3).map((s) => s.polygon), ...structs.solids].map((poly) => new PolygonIndex(poly));
   const stepsIdx = new PolygonSet(plan.lines.filter((l) => l.kind === 'steps').flatMap((l) => stepsFootprint(l, plan.zones)));
   const modelIdx = new PolygonSet((plan.models ?? []).map((m) => m.polygon));
+  const bedCuts = new Map<string, GroundCut>();
+  for (const f of plan.features) {
+    const spec = featureById.get(f.catalogId);
+    const cut = spec?.kind === 'fourFall' ? fourFallBedCut(f, spec, gm.zoneAt) : null;
+    if (cut) bedCuts.set(f.id, cut);
+  }
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
     if (onFloor(p)) return true;
@@ -376,6 +393,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
+      // A waterfall set in a bed clears exactly its soil (the ground is cut there too, fourfall.ts).
+      const bedCut = bedCuts.get(f.id);
+      if (bedCut) {
+        if (inGroundCut([bedCut], p)) return true;
+        continue;
+      }
       if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
@@ -390,7 +413,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   yield 'turf';
   // Inside a four-fall waterfall's soil there is no bed of the yard's own: loose stones and humus pieces are left out
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
-  const fallCuts = fourFallGroundCuts(plan.features);
+  const fallCuts = fourFallGroundCuts(plan.features, gm.zoneAt);
   const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
   const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
   yield 'pebbles';
@@ -540,6 +563,16 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
+      // A waterfall set in a bed takes the bed's color again (the same zones, maybe a new material).
+      for (const ff of features.fourFalls) {
+        const f = next.features.find((x) => x.id === ff.itemId);
+        if (!f) continue;
+        const look = fourFallBedLook(f, (q) => {
+          const z = gm.zoneAt(q);
+          return z ? next.zones[plan.zones.indexOf(z)] ?? z : null;
+        });
+        if (look && ff.wf.options.ground) ff.wf.setGround(look);
+      }
       // A restyle (a new color picked) is a build of its own for the materials' keep-the-last-few rules (stamped looks,
       // paver edge maps): without it nothing picked in a run of restyles would ever be released.
       beginMaterialBuild();

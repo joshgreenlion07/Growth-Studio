@@ -23,6 +23,7 @@ import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 import { buildFourFall, type FourFallInstance } from './fourfall';
+import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
 
 /**
@@ -129,7 +130,7 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light'): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', bedLook?: (f: FeaturePlacement) => WaterfallGround | null): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -661,7 +662,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'fourFall': {
         // The four-fall rock waterfall (builder/fourfall.ts): its own rock, soil, water and falls, in one module.
-        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; });
+        // Set in a bed, the edge of its soil fades into the bed's color and meets the bed flush (fourfall.ts fourFallBed).
+        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bedLook?.(f) ?? null);
         o.add(ff.group);
         surfaces.push(...ff.surfaces);
         fourFalls.push(ff.inst);
