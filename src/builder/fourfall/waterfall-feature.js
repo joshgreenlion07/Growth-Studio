@@ -22,6 +22,9 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const G = 32.2, V0 = 2.1, GRADE = -0.05;
+// Newer three builds (seen in r186, not in r170) keep a second copy of the sheen colour, material.specularColorBlended, which
+// direct light reads instead of specularColor. Looked up in the build's own shader text, so no revision number is assumed.
+const SPEC_BLENDED = THREE.ShaderChunk.lights_physical_fragment.includes('specularColorBlended');
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const mix = (a, b, t) => a + (b - a) * t;
 const sstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
@@ -71,6 +74,14 @@ vec4 voro(vec2 p){ vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0; ve
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 o = vec2(float(x), float(y)); vec2 h = vh2(i + o); vec2 r = o + h - f; float d = dot(r, r);
     if (d < d1) { d2 = d1; d1 = d; id = h; } else if (d < d2) { d2 = d; } }
   return vec4(sqrt(d1), sqrt(d2), id); }
+`;
+const GCHIPS = `
+// bark chip pattern for a flat coordinate: x = chip height, y = which chip (for its colour)
+vec2 gChips(vec2 q){
+  vec4 a = voro(vec2(q.x * 7.0 + q.y * 3.0, q.y * 17.0 - q.x * 4.0));
+  vec4 b = voro(vec2(q.x * 5.0 - q.y * 13.0, q.y * 6.0 + q.x * 11.0) + 17.0);
+  return vec2(max(1.0 - a.x * 1.35, (1.0 - b.x * 1.35) * 0.92), a.x < b.x ? a.z : b.z);
+}
 `;
 // x = wet (0..1), y = depth under the water surface in feet, z = damp (close to water)
 const WATER_INFO = `
@@ -365,11 +376,16 @@ export const WATERFALL_DEFAULTS = {
   lights: 'data',   // 'data': only report where the under-fall lights go; 'three': also add PointLights; false: none
   refraction: true, // water reads a colour + depth copy of the scene (see setRefraction)
   detail: 'full',   // 'light': rocks with about a third of the triangles (phones, tablets); same layout, sizes within a percent or so
+  shading: null,    // 'full' | 'light'. Left out, it follows `detail`. 'light' drops the finest grain, speckle and lichen from rock and cobble (set at creation)
+  ground: null,     // { color, roughness, width, tint, sink }: blend the edge of the soil into the host's ground (see setGround)
   topFall: null,    // feet: the top fall's drop (head pool to the next pool) when shorter than the model's own share;
                     // the lower pools stay where `height` puts them and the top stones come down with the head pool
   mulch: null,      // { dark, light, grain }: the soil cover's two tones (linear RGB arrays) and how fine it is (1 = bark chips;
                     // higher is finer), to match the bed around it; null keeps the model's own shredded bark
 };
+// the feature's own shredded bark (linear): its dark and light tones, and its average colour once the chips are drawn.
+// The average is what setGround's tint works from; with options.mulch it is rescaled to the tones given.
+const MULCH_DARK = [0.085, 0.036, 0.02], MULCH_LIGHT = [0.27, 0.125, 0.06], MULCH_MEAN = [0.15, 0.068, 0.034];
 /** Overall size in feet for a set of options, without building anything. */
 export function waterfallSize(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options }, head = 1.5 + (o.level - 3) * 0.25;
@@ -386,6 +402,7 @@ export function createWaterfall(options = {}) {
   let W = o.width;
   const { waterNrm, KINDS, COBBLE_HI, COBBLE_LO, PLANTS } = assets(o.detail);
   const DEF = o.refraction ? { REFRACT: 1 } : {};
+  const LIGHT = (o.shading ?? o.detail) === 'light';   // cheaper rock and cobble shading for phones and tablets
   let rnd = mulberry32(1);
   const R2 = (a, b) => a + (b - a) * rnd();
   // light and sky, set by the host through setEnvironment()
@@ -413,12 +430,25 @@ export function createWaterfall(options = {}) {
     uUnit: { value: o.unit },
   };
   const bindWI = sh => { for (const k in WI) sh.uniforms[k] = WI[k]; };
+  // how the soil meets the host's ground (setGround): off until a colour is given
+  const GU = {
+    uEdgeCol: { value: new THREE.Color(0.15, 0.068, 0.034) }, uEdgeRough: { value: 0.95 }, uEdgeAmt: { value: 0 }, uEdgeW: { value: 2.5 },
+    uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 }, uEdgeChip: { value: 0 }, uEdgeSpec: { value: 1 },
+    uEdgePat: { value: new THREE.Vector2(0.46, 1.539) },   // the cover's dark and light tone over its middle tone (see below)
+  };
   // the soil cover: the model's own shredded bark unless the host matches it to the bed around it (options.mulch)
-  const MU = { uMulchA: { value: new THREE.Color(0.085, 0.036, 0.02) }, uMulchB: { value: new THREE.Color(0.27, 0.125, 0.06) }, uGrain: { value: 1 } };
+  const MU = { uMulchA: { value: new THREE.Color(...MULCH_DARK) }, uMulchB: { value: new THREE.Color(...MULCH_LIGHT) }, uGrain: { value: 1 } };
+  let mulchMean = MULCH_MEAN;
   if (o.mulch) {
     MU.uMulchA.value.setRGB(...o.mulch.dark); MU.uMulchB.value.setRGB(...o.mulch.light); MU.uGrain.value = o.mulch.grain || 1;
     // the dirt line at the foot of the rocks takes the same soil
     WI.uSoil.value.copy(MU.uMulchA.value).lerp(MU.uMulchB.value, 0.35);
+    // the edge blend (setGround) follows the new cover: its average colour for the tint, and the contrast of its two
+    // tones for the chips drawn in the faded band (the pair still averages 1, so the band still averages the host's colour)
+    const A = MU.uMulchA.value, B = MU.uMulchB.value, lum = c => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    mulchMean = ['r', 'g', 'b'].map((k, i) => Math.max(1e-4, MULCH_MEAN[i] * (A[k] + B[k]) / (MULCH_DARK[i] + MULCH_LIGHT[i])));
+    const mid = Math.max((lum(A) + lum(B)) / 2, 1e-6);
+    GU.uEdgePat.value.set(lum(A) / mid, lum(B) / mid);
   }
   const group = new THREE.Group(); group.name = 'four-fall-waterfall';
   const body = new THREE.Group(); group.add(body);
@@ -444,11 +474,18 @@ export function createWaterfall(options = {}) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vRk; varying vec3 vRkW;\n' + NOISE3 + WATER_INFO)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float rkFade = 1.0 - smoothstep(18.0, 46.0, length(vViewPosition) / uUnit);
-        float rkG = rkN(vRk * 24.0) * 0.6 + rkN(vRk * 61.0) * 0.4;
-        float rkMott = rkN(vRk * 5.5 + 2.0) * 0.6 + rkN(vRk * 12.0 + 7.0) * 0.4;
-        float rkDark = smoothstep(0.74, 0.84, rkN(vRk * 140.0)) * rkFade;
-        float rkLight = smoothstep(0.74, 0.88, rkN(vRk * 190.0 + 3.7)) * rkFade;
-        float rkNz = rkN(vRkW * 2.6) * 0.6 + rkN(vRkW * 8.5) * 0.4;
+        #ifdef WF_LIGHT
+          float rkG = rkN(vRk * 24.0);
+          float rkMott = rkN(vRk * 5.5 + 2.0);
+          float rkDark = 0.0, rkLight = 0.0;
+          float rkNz = rkN(vRkW * 2.6);
+        #else
+          float rkG = rkN(vRk * 24.0) * 0.6 + rkN(vRk * 61.0) * 0.4;
+          float rkMott = rkN(vRk * 5.5 + 2.0) * 0.6 + rkN(vRk * 12.0 + 7.0) * 0.4;
+          float rkDark = smoothstep(0.74, 0.84, rkN(vRk * 140.0)) * rkFade;
+          float rkLight = smoothstep(0.74, 0.88, rkN(vRk * 190.0 + 3.7)) * rkFade;
+          float rkNz = rkN(vRkW * 2.6) * 0.6 + rkN(vRkW * 8.5) * 0.4;
+        #endif
         vec3 rkWI = waterInfo(vRkW, rkNz);
         float rkHt = (0.008 * rkG + 0.02 * rkMott - 0.002 * rkDark) * rkFade * (1.0 - 0.8 * rkWI.x);
         diffuseColor.rgb *= (0.88 + 0.22 * rkG) * (0.86 + 0.28 * rkMott) * (1.0 - 0.2 * rkDark);
@@ -458,11 +495,19 @@ export function createWaterfall(options = {}) {
         vec3 rkWN = inverseTransformDirection(normal, viewMatrix);
         float rkAbove = vRkW.y - groundAt(vRkW);
         float rkDry = 1.0 - rkWI.x;
-        float rkLi = smoothstep(0.78, 0.9, rkN(vRkW * 13.0 + 21.0)) * smoothstep(0.5, 0.68, rkN(vRkW * 1.6 + 3.0)) * rkDry * smoothstep(-0.2, 0.4, rkWN.y);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.32, 0.25), rkLi * 0.22);
-        float rkMt = 0.6 - 0.27 * rkWI.z, rkMf = rkN(vRkW * 34.0);
+        #ifdef WF_LIGHT
+          float rkMt = 0.6 - 0.27 * rkWI.z, rkMf = 0.5;
+        #else
+          float rkLi = smoothstep(0.78, 0.9, rkN(vRkW * 13.0 + 21.0)) * smoothstep(0.5, 0.68, rkN(vRkW * 1.6 + 3.0)) * rkDry * smoothstep(-0.2, 0.4, rkWN.y);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.32, 0.25), rkLi * 0.22);
+          float rkMt = 0.6 - 0.27 * rkWI.z, rkMf = rkN(vRkW * 34.0);
+        #endif
         float rkMoss = smoothstep(0.42, 0.86, rkWN.y + 0.25 * (rkNz - 0.5)) * smoothstep(rkMt, rkMt + 0.15, rkNz + (rkMf - 0.5) * 0.14) * step(rkWI.y, 0.0001) * (1.0 - smoothstep(0.3, 0.8, rkWI.x));
-        vec3 rkMossC = mix(vec3(0.045, 0.062, 0.012), vec3(0.15, 0.165, 0.035), rkN(vRkW * 19.0)) * (0.7 + 0.6 * rkMf);
+        #ifdef WF_LIGHT
+          vec3 rkMossC = mix(vec3(0.045, 0.062, 0.012), vec3(0.15, 0.165, 0.035), rkG);
+        #else
+          vec3 rkMossC = mix(vec3(0.045, 0.062, 0.012), vec3(0.15, 0.165, 0.035), rkN(vRkW * 19.0)) * (0.7 + 0.6 * rkMf);
+        #endif
         diffuseColor.rgb = mix(diffuseColor.rgb, rkMossC, rkMoss * 0.9);
         float rkDirt = (1.0 - smoothstep(0.01, 0.15 + 0.16 * rkNz, rkAbove)) * (1.0 - smoothstep(0.0, 0.05, rkWI.y));
         diffuseColor.rgb = mix(diffuseColor.rgb, uSoil * (0.7 + 0.6 * rkG), rkDirt * 0.88);
@@ -472,7 +517,8 @@ export function createWaterfall(options = {}) {
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.62, 0.72, 0.4), rkSub * 0.55);
         roughnessFactor = clamp(mix(roughnessFactor, 0.2, rkWI.x * (1.0 - rkMoss)) + rkMoss * 0.1 + rkDirt * 0.1, 0.05, 1.0);`);
   };
-  rockMat.customProgramCacheKey = () => 'wf-rock-v3';
+  if (LIGHT) rockMat.defines = { ...rockMat.defines, WF_LIGHT: 1 };
+  rockMat.customProgramCacheKey = () => 'wf-rock-v5' + (LIGHT ? '-light' : '');
 
   // ---- cobbles and pebbles: dry and matte on the bank, dark and glossy where the water reaches them
   const pebbleMat = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0 });
@@ -489,55 +535,112 @@ export function createWaterfall(options = {}) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vPbW;\n' + NOISE3 + WATER_INFO)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        float pbG = rkN(vPbW * 38.0), pbB = rkN(vPbW * vec3(9.0, 26.0, 9.0) + 4.0), pbS = smoothstep(0.7, 0.85, rkN(vPbW * 120.0));
+        #ifdef WF_LIGHT
+          float pbG = rkN(vPbW * 38.0), pbB = 0.5, pbS = 0.0;
+        #else
+          float pbG = rkN(vPbW * 38.0), pbB = rkN(vPbW * vec3(9.0, 26.0, 9.0) + 4.0), pbS = smoothstep(0.7, 0.85, rkN(vPbW * 120.0));
+        #endif
         vec3 pbWI = waterInfo(vPbW, pbG);
         float pbAbove = vPbW.y - groundAt(vPbW);
         diffuseColor.rgb *= (0.8 + 0.3 * pbG) * (0.85 + 0.3 * pbB) * (1.0 - 0.25 * pbS) * mix(1.0, 0.56, pbWI.x) * mix(0.4, 1.0, smoothstep(-0.03, 0.07, pbAbove));
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.78, 0.5), smoothstep(0.0, 0.3, pbWI.y) * 0.4);
         roughnessFactor = mix(roughnessFactor, 0.16, pbWI.x);`);
   };
-  pebbleMat.customProgramCacheKey = () => 'wf-pebble-v3';
+  if (LIGHT) pebbleMat.defines = { ...pebbleMat.defines, WF_LIGHT: 1 };
+  pebbleMat.customProgramCacheKey = () => 'wf-pebble-v5' + (LIGHT ? '-light' : '');
 
   // ---- ground: shredded bark mulch, stream gravel and lawn drawn in world space; darker and mossier near water
   const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
   groundMat.onBeforeCompile = sh => {
     bindWI(sh);
+    for (const k in GU) sh.uniforms[k] = GU[k];
     for (const k in MU) sh.uniforms[k] = MU[k];
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vTW = transformed;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW; varying vec3 vGN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vGN = normal; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW;\nuniform vec3 uMulchA, uMulchB; uniform float uGrain;\n' + NOISE3 + VORO2 + WATER_INFO)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip, uEdgeSpec; uniform vec4 uSoilRect;\nuniform vec3 uMulchA, uMulchB; uniform float uGrain; uniform vec2 uEdgePat;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
-        float gSteep = smoothstep(0.45, 0.75, 1.0 - inverseTransformDirection(normalize(vNormal), viewMatrix).y);
-        vec2 gp = mix(vTW.xz, vec2((vTW.x + vTW.z) * 0.7, vTW.y), gSteep);
-        vec2 gq = gp * uGrain;
-        vec4 c1 = voro(vec2(gq.x * 7.0 + gq.y * 3.0, gq.y * 17.0 - gq.x * 4.0));
-        vec4 c2 = voro(vec2(gq.x * 5.0 - gq.y * 13.0, gq.y * 6.0 + gq.x * 11.0) + 17.0);
-        float chipH = mix(0.55, max(1.0 - c1.x * 1.35, (1.0 - c2.x * 1.35) * 0.92), gFade);
-        float chipC = mix(0.5, c1.x < c2.x ? c1.z : c2.z, gFade);
-        vec3 mulch = mix(uMulchA, uMulchB, chipC) * (0.5 + 0.7 * chipH);
-        vec4 g1 = voro(gp * 10.0);
+        // bark chips are drawn from above on flat soil and from the side on steep banks, and the drawings are blended;
+        // bending a single drawing round the bank made stripes
+        vec2 gp = vTW.xz;
+        vec3 gTw = pow(abs(normalize(vGN)), vec3(4.0)); gTw /= gTw.x + gTw.y + gTw.z;
+        vec2 gChip = vec2(0.0); float gCw = 0.0;
+        if (gTw.y > 0.02) { gChip += gTw.y * gChips(gp * uGrain); gCw += gTw.y; }
+        if (gTw.x > 0.02) { gChip += gTw.x * gChips(vTW.zy * uGrain + 3.7); gCw += gTw.x; }
+        if (gTw.z > 0.02) { gChip += gTw.z * gChips(vTW.xy * uGrain + 9.1); gCw += gTw.z; }
+        gChip /= max(gCw, 0.001);
+        float chipH = mix(0.55, gChip.x, gFade);
+        float chipC = mix(0.5, gChip.y, gFade);
+        vec3 mulch = mix(uMulchA, uMulchB, chipC) * (0.5 + 0.7 * chipH) * uTintK;
+        #ifdef WF_LIGHT
+          // same pixels, less work: gravel is only worked out where there is gravel, and the unused lawn layer is skipped
+          vec4 g1 = vMat.x > 0.002 ? voro(gp * 10.0) : vec4(1.0, 1.0, 0.0, 0.0);
+        #else
+          vec4 g1 = voro(gp * 10.0);
+        #endif
         vec3 gcol = mix(vec3(0.3, 0.25, 0.19), vec3(0.4, 0.22, 0.1), step(0.62, g1.z));
         gcol = mix(gcol, vec3(0.2, 0.2, 0.2), step(0.8, g1.w)) * (0.45 + 0.75 * (1.0 - g1.x));
         float gravH = mix(0.5, 1.0 - g1.x, gFade);
-        float lawnN = rkN(vec3(gp * 13.0, 1.7)) * 0.6 + rkN(vec3(gp * 41.0, 4.1)) * 0.4;
-        vec3 lawn = vec3(0.055, 0.115, 0.022) * (0.6 + 0.8 * lawnN);
-        vec3 base = mix(mix(mulch, gcol, vMat.x), lawn, vMat.y);
+        #ifdef WF_LIGHT
+          vec3 base = mix(mulch, gcol, vMat.x);
+        #else
+          float lawnN = rkN(vec3(gp * 13.0, 1.7)) * 0.6 + rkN(vec3(gp * 41.0, 4.1)) * 0.4;
+          vec3 lawn = vec3(0.055, 0.115, 0.022) * (0.6 + 0.8 * lawnN);
+          vec3 base = mix(mix(mulch, gcol, vMat.x), lawn, vMat.y);
+        #endif
         float gNz = rkN(vTW * 2.3) * 0.6 + rkN(vTW * 7.0) * 0.4;
         vec3 gWI = waterInfo(vTW, gNz);
         float gDamp = gWI.z * (1.0 - vMat.y);
         base *= mix(1.0, 0.55, max(gDamp * 0.8, gWI.x));
         base = mix(base, vec3(0.05, 0.085, 0.018) * (0.7 + 0.6 * gNz), gDamp * smoothstep(0.45, 0.7, gNz) * (1.0 - smoothstep(0.0, 0.02, gWI.y)) * 0.75);
-        diffuseColor.rgb *= base;
-        float gHt = mix(chipH * 0.035, gravH * 0.03, vMat.x) * (1.0 - vMat.y) * gFade;`)
+        // toward the border of the soil, fade into the host's own ground colour so no line shows where the two meet (setGround)
+        float gEdgeD = min(min(vTW.x - uSoilRect.x, uSoilRect.z - vTW.x), min(vTW.z - uSoilRect.y, uSoilRect.w - vTW.z));
+        // the first quarter of the width stays fully the host's colour, then it fades: next to a dark bed even a little of
+        // this lighter bark would show as a pale band
+        float gEdge = uEdgeAmt * (1.0 - smoothstep(uEdgeW * 0.25, uEdgeW, gEdgeD * (0.6 + 0.8 * gNz))) * (1.0 - vMat.x);
+        // the fade keeps the bark chips: their light and dark (scaled to average 1) multiply the host's colour, so the band
+        // reads as bark in that colour and not as a smooth strip. uEdgeTex 0 gives a flat colour instead.
+        float gPat = mix(uEdgePat.x, uEdgePat.y, chipC) * (0.5 + 0.7 * chipH) / 0.883;
+        float gBandHt = chipH * 0.035;   // chip relief inside the band, feet
+        vec2 gHp = vTW.xz / max(uEdgeChip, 0.001);
+        float gHpW = max(fwidth(gHp.x), fwidth(gHp.y));   // how many host chips one pixel covers
+        vec3 gOwn = diffuseColor.rgb * base;
+        if (gEdge > 0.0) {
+          if (uEdgeChip > 0.0) {
+            // the host's own bark, when its chip size is given (setGround chipSize): round chips that spacing apart, each
+            // darkening to 0.55 at its joint and varying about 20% chip to chip, scaled to average 1. The fade then
+            // dissolves from these, at the border, into this feature's shards further in. Where the chips get too
+            // small on screen to draw cleanly they settle to their average, so the joints do not shimmer.
+            float hF = gFade * (1.0 - smoothstep(0.3, 0.8, gHpW));
+            vec4 hc = voro(gHp);
+            float hE = mix(0.786, smoothstep(0.0, 0.18, hc.y - hc.x), hF), hId = mix(0.5, hc.z, hF);
+            gPat = (0.55 + 0.525 * hE) * (0.8 + 0.4 * hId) / 0.9625;
+            // relief in proportion to the chip: about an eighth of its width
+            gBandHt = mix(gBandHt, hE * 0.775 * (0.6 + 0.4 * hId) * 0.12 * uEdgeChip, gEdge);
+          }
+          // mixed on a square-root scale, which steps evenly to the eye between a dark colour and a light one
+          vec3 gHost = uEdgeCol * mix(1.0, gPat, uEdgeTex);
+          vec3 gMix = mix(sqrt(max(gOwn, vec3(0.0))), sqrt(max(gHost, vec3(0.0))), gEdge);
+          diffuseColor.rgb = gMix * gMix;
+        } else {
+          diffuseColor.rgb = gOwn;
+        }
+        float gHt = mix(gBandHt, gravH * 0.03, vMat.x) * (1.0 - vMat.y) * gFade * (1.0 - gEdge * (1.0 - uEdgeTex));`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+        // the sheen of the soil fades toward the host ground's own across the band (setGround specular); on a dark bed
+        // the standard sheen reflects enough sky to show the band as a bluish strip
+        float gSpecK = mix(1.0, uEdgeSpec, gEdge);
+        material.specularColor *= gSpecK; material.specularF90 *= gSpecK;` + (SPEC_BLENDED ? `
+        material.specularColorBlended *= gSpecK;` : ''))
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.3, gWI.x * 0.8);`)
+        roughnessFactor = mix(mix(roughnessFactor, 0.3, gWI.x * 0.8), uEdgeRough, gEdge);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = rkPerturb(-vViewPosition, normal, vec2(dFdx(gHt), dFdy(gHt)) * uUnit, faceDirection);`);
   };
-  groundMat.customProgramCacheKey = () => 'wf-ground-v4';
+  if (LIGHT) groundMat.defines = { ...groundMat.defines, WF_LIGHT: 1 };
+  groundMat.customProgramCacheKey = () => 'wf-ground-v5' + (LIGHT ? '-light' : '');
 
   function plantMaterial(o) {
     const m = new THREE.MeshStandardMaterial({ vertexColors: !o.map, map: o.map || null, alphaTest: o.map ? 0.5 : 0, side: THREE.DoubleSide, roughness: 0.8, metalness: 0 });
@@ -791,11 +894,20 @@ export function createWaterfall(options = {}) {
   function buildTerrain() {
     const x0 = -(W / 2 + 3.2), x1 = W / 2 + 3.2, z0 = -L.D - o.backSlope - 0.8, z1 = 0.4, nx = Math.round((x1 - x0) / 0.18), nz = Math.round((z1 - z0) / 0.18);
     soil = { x0, x1, z0, z1 };
-    const g = track(new THREE.PlaneGeometry(x1 - x0, z1 - z0, nx, nz));
+    GU.uSoilRect.value.set(x0, z0, x1, z1);
+    // the border of the soil: tucked 0.3 ft under the host's ground, or (with setGround) brought up to meet it almost flush
+    builtSink = groundSink();
+    const rim = (o.ground ? 0 : GRADE) - builtSink - o.lift;
+    // with setGround the soil also runs a little past its rectangle as a low apron, so the host's ground, cut on the
+    // rectangle, always has soil under its edge and never a gap
+    const ap = o.ground ? 0.6 : 0, apN = ap ? 3 : 0;
+    const g = track(new THREE.PlaneGeometry(x1 - x0 + 2 * ap, z1 - z0 + 2 * ap, nx + 2 * apN, nz + 2 * apN));
     g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
     const p = g.attributes.position, col = new Float32Array(p.count * 3), mat = new Float32Array(p.count * 2), bp = L.pools[4];
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), z = p.getZ(i), edge = Math.min(sstep(0, 0.8, Math.min(x - x0, x1 - x, z - z0)), sstep(0, 0.25, z1 - z)); p.setY(i, mix(GRADE - 0.3 - o.lift, heightAt(x, z), edge));
+      const x = p.getX(i), z = p.getZ(i), inset = Math.min(x - x0, x1 - x, z - z0, z1 - z);
+      const edge = Math.min(sstep(0, 0.8, Math.min(x - x0, x1 - x, z - z0)), sstep(0, 0.25, z1 - z));
+      p.setY(i, ap > 0 && inset < 0 ? rim - 0.35 * sstep(0, ap, -inset) : mix(rim, heightAt(x, z), edge));
       let ao = 1;   // soil is shaded where a stone sits on it
       for (const r of rocks) { const dx = x - r.x, dz = z - r.z, d2 = dx * dx + dz * dz, R = r.rad; if (d2 < R * R * 2.6) ao = Math.min(ao, mix(0.5, 1, sstep(R * 0.75, R * 1.6, Math.sqrt(d2)))); }
       let grav = 0;
@@ -1151,7 +1263,44 @@ export function createWaterfall(options = {}) {
     if (o.lights === 'three') for (const n of nightLights) { const pl = new THREE.PointLight(n.color, 0, n.distance, 2); pl.position.copy(n.position); body.add(pl); fallLights.push(pl); }
   }
 
-  const api = { group, body, water: fx, options: o, layout: null, nightLights: [], size: null, soil: null, soilHeight, canPlant, setEnvironment, setRefraction, setFlowing, update, rebuild, dispose };
+  const api = { group, body, water: fx, options: o, layout: null, nightLights: [], size: null, soil: null, soilHeight, canPlant, setEnvironment, setRefraction, setFlowing, setGround, update, rebuild, dispose };
+  // ---------- meeting the host's ground
+  let builtSink = 0.3;
+  function groundSink() { return o.ground ? (o.ground.sink ?? 0.03) : 0.3; }
+  function applyGround() {
+    const g = o.ground, on = !!(g && g.color !== undefined && g.color !== null);
+    GU.uEdgeAmt.value = on ? 1 : 0;
+    if (on) GU.uEdgeCol.value.set(g.color);
+    GU.uEdgeRough.value = g?.roughness ?? 0.95;
+    GU.uEdgeW.value = Math.max(0.2, g?.width ?? 2.5);
+    GU.uEdgeTex.value = clamp(g?.texture ?? 1, 0, 1);
+    GU.uEdgeChip.value = on && g.chipSize > 0 ? g.chipSize : 0;
+    GU.uEdgeSpec.value = on ? Math.max(0, g.specular ?? 1) : 1;
+    const t = on ? clamp(g.tint ?? 0, 0, 1) : 0, c = GU.uEdgeCol.value;
+    GU.uTintK.value.set(mix(1, clamp(c.r / mulchMean[0], 0.2, 5), t), mix(1, clamp(c.g / mulchMean[1], 0.2, 5), t), mix(1, clamp(c.b / mulchMean[2], 0.2, 5), t));
+  }
+  /**
+   * Blend the edge of the feature's soil into the host's ground, so no line shows where the two meet. Pass null to switch it off.
+   *   color : the host ground's average colour, unlit (THREE.Color in linear space, or a hex number / CSS string)
+   *   roughness : the host ground's roughness, default 0.95        width : how far in the blend reaches, feet, default 2.5
+   *   specular : the host ground's specular intensity (the specularIntensity of a MeshPhysicalMaterial, for example 0.45),
+   *             default 1, which is a standard material's full sheen. The soil's sheen fades toward it across the band.
+   *   texture : 0..1, how much of the bark chip pattern and relief stays in the faded band, default 1. The pattern averages 1,
+   *             so the band averages the colour given. 0 fades to that colour flat, with no chips.
+   *   chipSize : spacing of the host's own bark chips, feet (for example 0.096). When given, the host side of the fade is drawn
+   *             as round chips that far apart, dissolving into this feature's shards. Left out, the band uses this feature's chips.
+   *   tint : 0..1, how far the whole mound's bark is shifted toward that colour (0 keeps the feature's own bark), default 0.
+   *          With options.mulch it works from that cover's average colour, not from the feature's own bark.
+   *   sink : how far below the host's ground level the border of the soil sits, feet, default 0.03 (it is 0.3 with no ground set)
+   * The first quarter of the width stays fully that colour, then it fades into the feature's own bark.
+   * Colour, roughness, specular, width, texture, chipSize and tint apply at once. A changed sink, or switching the blend on or off, rebuilds the feature.
+   */
+  function setGround(g) {
+    o.ground = g ? { ...(o.ground || {}), ...g } : null;
+    applyGround();
+    if (L && groundSink() !== builtSink) rebuild();
+    return api;
+  }
   /** Soil height in feet above the feature origin at a feature-local point (x, z in feet). Use it to stand plan plants on the mound. */
   function soilHeight(x, z) { return heightAt(x, z) + o.lift; }
   /** True when a plant of this radius (feet) can stand at a feature-local point: not in water, under a fall, on the cobble beach or inside a rock. */
@@ -1170,6 +1319,7 @@ export function createWaterfall(options = {}) {
     clearWorld();
     rnd = mulberry32(o.seed);
     rocks = []; bermRocks = [];
+    applyGround();
     placeRocks(); publishLayout(); buildTerrain(); buildRockMeshes(); buildWater(); buildFalls(); buildCobbles(); buildPlants(); buildNightLights();
     group.scale.setScalar(o.unit); body.position.y = o.lift;
     api.layout = L; api.nightLights = nightLights; api.soil = soil;

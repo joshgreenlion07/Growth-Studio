@@ -1,15 +1,16 @@
 import * as THREE from 'three';
-import { materialById } from '../siteplan/catalog';
+import { featureById, materialById } from '../siteplan/catalog';
 import { bounds, distToPolyline, fallProfile, projectOnPolyline, type Bounds } from '../siteplan/geometry';
 import { PolygonIndex, PolygonSet, inBounds } from '../siteplan/spatial';
 import type { SitePlan, Vec2, Zone } from '../siteplan/types';
+import type { MaterialSpec } from '../siteplan/catalog';
 import type { PBRSet } from '../engine/textures';
-import { materialTextures, soilTextures } from '../engine/surfaces';
+import { materialAverage, materialTextures, soilTextures } from '../engine/surfaces';
 import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
 import type { Quality } from '../engine/post';
-import { fourFallGroundCuts, type GroundCut } from './fourfall';
+import { LEVEL_REACH, bedZoneAt, fourFallBedChoice, fourFallCut, fourFallCutsOverlap, fourFallGroundCuts, type FourFallBedChoice, type GroundCut } from './fourfall';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -27,6 +28,8 @@ export interface GroundModel {
   /** The zone on top at a point (later zones win), or null. */
   zoneAt(p: Vec2): Zone | null;
   inWater(p: Vec2, pad?: number): boolean;
+  /** Each four-fall waterfall's bed, by feature id (fourfall.ts fourFallBedChoice): decided here once, read by every part. */
+  fourFalls: Map<string, FourFallBedChoice>;
 }
 
 /** Texture units a fragment shader may use on this GPU; the Studio sets it from the renderer (WebGL's minimum is 16). */
@@ -67,6 +70,11 @@ export function groundModel(plan: SitePlan): GroundModel {
     const i = zoneSet.lastContaining(p[0], p[1]);
     return i < 0 ? null : plan.zones[i];
   };
+  // A four-fall waterfall blended into its bed meets the bed's ground flush along the edge of its soil (fourfall.ts):
+  // the bed's mound is levelled to the waterfall's own grade there (`levels`, filled in below once terrain exists).
+  const levels: (GroundCut & { y: number })[] = [];
+  const fourFalls = new Map<string, FourFallBedChoice>();
+  let levelOn = false;
   const siteIdx = new PolygonIndex(plan.site.boundary);
   const bedIdx = new Map(beds.map((z) => [z, zoneSet.items[plan.zones.indexOf(z)]]));
   // Water, each with the box beyond which it has no effect on the ground or on inWater.
@@ -119,6 +127,7 @@ export function groundModel(plan: SitePlan): GroundModel {
             const k = spec?.recipe === 'mulch' ? 0.07 : 0.025;
             h = Math.max(h, k * (d / 1.2));
           }
+          if (levels.length) h = levelled(h, p);
         }
       }
     }
@@ -151,7 +160,45 @@ export function groundModel(plan: SitePlan): GroundModel {
     return h;
   };
 
-  return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater };
+  // Level the bed to each waterfall's grade on its soil and 0.25 m past it (more than a ground grid cell, so the ground
+  // mesh is exactly level where it is cut), then back to the bed's own height over the next 0.6 m.
+  function levelled(h: number, p: Vec2): number {
+    if (!levelOn) return h;
+    for (const a of levels) {
+      const dx = p[0] - a.cx, dy = p[1] - a.cy;
+      const lx = Math.abs(dx * a.cos - dy * a.sin) - a.hx, lz = Math.abs(dx * a.sin + dy * a.cos) - a.hz;
+      if (lx > LEVEL_REACH || lz > LEVEL_REACH) continue;
+      const out = Math.hypot(Math.max(lx, 0), Math.max(lz, 0));
+      const t = Math.min(1, Math.max(0, (out - 0.25) / (LEVEL_REACH - 0.25)));
+      h = a.y + (h - a.y) * t * t * (3 - 2 * t);
+    }
+    return h;
+  }
+  // Each waterfall's bed, and the grade it is set at: the ground's own height at its front middle, where the module stands.
+  const bedAt = bedZoneAt(plan.zones);
+  const blended: { id: string; cut: GroundCut; y: number }[] = [];
+  for (const f of plan.features) {
+    const spec = featureById.get(f.catalogId);
+    if (spec?.kind !== 'fourFall') continue;
+    const choice = fourFallBedChoice(f, spec, bedAt, zoneAt, (p) => terrain(p, false));
+    fourFalls.set(f.id, choice);
+    if (choice.blend) blended.push({ id: f.id, cut: fourFallCut(f, spec, 'exact'), y: choice.y });
+  }
+  // Two blended waterfalls within each other's levelling reach, set at different grades, would each level the other's
+  // ground: both keep their edges tucked instead.
+  for (let i = 0; i < blended.length; i++) {
+    for (let j = i + 1; j < blended.length; j++) {
+      const a = blended[i], b = blended[j];
+      if (Math.abs(a.y - b.y) >= 0.01 && fourFallCutsOverlap(a.cut, b.cut, LEVEL_REACH)) {
+        fourFalls.get(a.id)!.blend = false;
+        fourFalls.get(b.id)!.blend = false;
+      }
+    }
+  }
+  for (const b of blended) if (fourFalls.get(b.id)!.blend) levels.push({ ...b.cut, y: b.y });
+  levelOn = true;
+
+  return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater, fourFalls };
 }
 
 /* ------------------------------------------------------------------ */
@@ -389,18 +436,44 @@ const stageUniforms = (): GroundStageUniforms => ({
   uCutCh: { value: new THREE.Vector2(0, 0) },
 });
 
+/** The ground's specular intensity (its sky reflection, toned down from a standard material's 1). */
+export const GROUND_SPECULAR = 0.45;
+
+/** Roughness of the bare soil layer of the ground shader. */
+const SOIL_ROUGHNESS = 0.97;
+
+/** The roughness the ground shader gives a material's layer. */
+export function groundRoughness(spec: MaterialSpec): number {
+  const r = spec.recipe;
+  // Loose stone drawn stone by stone (spec.pebble): its ground is the bed seen from afar, satin like the stones.
+  if (spec.pebble) return 0.92;
+  // Black humus: soft, damp-dark soil, the most matte surface in the yard.
+  if (spec.crumb) return 0.99;
+  return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
+}
+
+/**
+ * How a material reads on the ground from a few feet away: its painted texture's average albedo (linear) and the
+ * roughness its ground layer is drawn with. A four-fall waterfall fades the edge of its soil into this (fourfall.ts).
+ */
+export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness: number } {
+  const avg = materialAverage(spec);
+  let color: THREE.Color;
+  if (avg) color = new THREE.Color(avg.color[0], avg.color[1], avg.color[2]);
+  else {
+    // A recipe that paints nothing: the palette's average, taken in linear light.
+    color = new THREE.Color(0, 0, 0);
+    for (const hex of spec.palette) color.add(new THREE.Color(hex));
+    color.multiplyScalar(1 / Math.max(1, spec.palette.length));
+  }
+  return { color, roughness: groundRoughness(spec) };
+}
+
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
 function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout, stage: GroundStageUniforms, cuts: GroundCut[] = []): THREE.MeshPhysicalMaterial {
   const soil = soilTextures();
   const sets: PBRSet[] = [soil, ...layerIds.map((id) => materialTextures(materialById.get(id)!))];
-  const roughK = [0.97, ...layerIds.map((id) => {
-    const spec = materialById.get(id)!, r = spec.recipe;
-    // Loose stone drawn stone by stone (spec.pebble): its ground is the bed seen from afar, satin like the stones.
-    if (spec.pebble) return 0.92;
-    // Black humus: soft, damp-dark soil, the most matte surface in the yard.
-    if (spec.crumb) return 0.99;
-    return r === 'blackPebble' ? 0.55 : r === 'riverRock' || r === 'cobble' ? 0.7 : r === 'turfArtificial' ? 0.8 : 0.93;
-  })];
+  const roughK = [SOIL_ROUGHNESS, ...layerIds.map((id) => groundRoughness(materialById.get(id)!))];
   const n = sets.length;
   // Texture units: many GPUs (Apple's among them) have only WebGL's minimum of 16 per fragment shader. Besides the
   // layers the ground samples the first splat map, the dig-out map, the environment map and its lookup table, the
@@ -412,7 +485,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
   const withNormal = Math.max(0, Math.min(n, maxTextureUnits - fixed - n));
   // Physical material so the ground's sky reflection can be toned down:
   // rough mulch and soil reflect far less than the default 4%.
-  const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: 0.45 });
+  const mat = new THREE.MeshPhysicalMaterial({ map: soil.map, normalMap: soil.normalMap, roughness: 1, metalness: 0, specularIntensity: GROUND_SPECULAR });
   mat.onBeforeCompile = (s) => {
     s.uniforms.uSplatA = { value: splats[0] };
     if (splatB) s.uniforms.uSplatB = { value: splats[1] };
@@ -536,7 +609,7 @@ export function* groundSteps(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
   yield 'ground splats';
   const stage = stageUniforms();
-  const mat = splatMaterial(layers, area, splats, pools, stage, fourFallGroundCuts(plan.features));
+  const mat = splatMaterial(layers, area, splats, pools, stage, fourFallGroundCuts(plan.features, gm.fourFalls));
   yield 'ground material';
   const step = quality === 'draft' ? 0.3 : 0.18;
   const site = new THREE.Mesh(yield* gridGeometry(area, step, gm.grade), mat);

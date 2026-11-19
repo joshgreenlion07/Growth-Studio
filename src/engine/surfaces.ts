@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type LayingPattern, type MaterialSpec, type PaverPattern, type UnitFace, type WallFace, type WallUnit } from '../siteplan/catalog';
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
-import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, recipeAverage, textureSet, type PBRSet, type RGB } from './textures';
 import { ledgerPaint, sandStuccoPaint, santaBarbaraPaint } from './fountain-surfaces';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
@@ -1318,13 +1318,25 @@ function buildLayerSet(kind: BuildLayer): PBRSet {
 
 export const buildLayerTextures = (kind: BuildLayer) => textureSet(`layer:${kind}`, () => buildLayerSet(kind));
 
+/** Bark mulch texture: one tile, meters, and the round voronoi chips across it. */
+const MULCH_TILE = 1.4;
+const MULCH_CHIPS = 48;
+
+/**
+ * Spacing of a bed material's chips in its ground texture, meters, when they are round voronoi chips (bark mulch:
+ * MULCH_CHIPS across MULCH_TILE, about 29 mm), else undefined. A four-fall waterfall draws its edge fade at this size.
+ */
+export function materialChipSpacing(spec: MaterialSpec): number | undefined {
+  return spec.recipe === 'mulch' ? MULCH_TILE / MULCH_CHIPS : undefined;
+}
+
 function mulchSet(spec: MaterialSpec): PBRSet {
   const [a, b] = pal(spec);
-  return paint(512, 1.4, 14, (u, v) => {
-    const cell = voronoi(u, v, 48, 4, 1);
+  return paint(512, MULCH_TILE, 14, (u, v) => {
+    const cell = voronoi(u, v, MULCH_CHIPS, 4, 1);
     const ang = cell.id * Math.PI;
     const ca = Math.cos(ang), sa = Math.sin(ang);
-    const ru = (u * ca - v * sa) * 48, rv = (u * sa + v * ca) * 48;
+    const ru = (u * ca - v * sa) * MULCH_CHIPS, rv = (u * sa + v * ca) * MULCH_CHIPS;
     const fiber = vnoise(ru * 3, rv * 22, 1e6, 3);
     const edge = smooth(0.0, 0.18, cell.f2 - cell.f1);
     const h = edge * (0.55 + 0.45 * fiber) * (0.6 + cell.id * 0.4);
@@ -1920,7 +1932,18 @@ export function latticeAlpha(): THREE.Texture {
 /** Textures for a catalog material. `laying` picks the laying pattern of a paver that offers patterns (its first when left out). */
 export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const lay = layingOf(spec, laying);
-  return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, () => {
+  return textureSet(`mat:${spec.id}${lay ? `:${lay}` : ''}`, materialRecipe(spec, lay));
+}
+
+const averages = new Map<string, { color: RGB; roughness: number } | null>();
+/** A material's average albedo (linear RGB) and roughness channel, as its painted maps average out. Kept per material. */
+export function materialAverage(spec: MaterialSpec): { color: RGB; roughness: number } | null {
+  if (!averages.has(spec.id)) averages.set(spec.id, recipeAverage(materialRecipe(spec, layingOf(spec))));
+  return averages.get(spec.id)!;
+}
+
+function materialRecipe(spec: MaterialSpec, lay: LayingPattern | undefined): () => PBRSet {
+  return () => {
     switch (spec.recipe) {
       case 'lawn': return lawnSet(spec);
       case 'turfArtificial': return turfSet(spec);
@@ -1938,7 +1961,7 @@ export function materialTextures(spec: MaterialSpec, laying?: LayingPattern): PB
       case 'curb': return curbSet(spec);
       case 'steelEdging': return steelSet(spec);
     }
-  });
+  };
 }
 
 function flagstoneSet(spec: MaterialSpec): PBRSet {
