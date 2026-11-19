@@ -489,7 +489,7 @@ function lightColorField(f: SitePlan['features'][number], fx: Parameters<typeof 
     else if (+v.slice(2) !== fx.kelvin) rest.kelvin = +v.slice(2);
     if (Object.keys(rest).length) f.fixture = rest;
     else delete f.fixture;
-    changed();
+    changed('structure'); // re-renders the inspector, so the select and the picker show the new color
   };
   const sel = selectEl('f-lc', opts, now, apply, 'Light color');
   pick.addEventListener('change', () => apply(`c:${pick.value}`));
