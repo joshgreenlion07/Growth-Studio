@@ -70,6 +70,17 @@ const EMBED = new URLSearchParams(location.search).get('embed') === '1';
 if (EMBED) document.documentElement.classList.add('embed');
 
 /**
+ * iPad and iPhone (WebKit on iOS and iPadOS, an iPad that reports itself as a Mac included). Their element full screen
+ * ends on any quick one-finger swipe down, and a page cannot stop it (WebKit's own dismiss gesture, not a scroll), so
+ * dragging to look around or pulling the joystick back would leave it. There the studio's full screen is its fixed
+ * layout alone (`section.scene-pane.fs`), without the Fullscreen API; in an embed the parent fills its own page.
+ */
+const APPLE_TOUCH = (() => {
+  const ua = navigator.userAgent || '';
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+})();
+
+/**
  * View-only embed: the parent page shows the 3D view to someone who may look but not change the saved plan (Area
  * Planner's assistant accounts). Set by `?viewer=1` on the embed address and by the parent's
  * `{ type: 'mode', viewer }` message. While on, the studio hides the Library and sends nothing back that would change
@@ -1094,10 +1105,12 @@ function initFullscreen() {
       // Inside Area Planner, the parent page goes full screen with its own material panel; without an answer
       // within 300 ms, the studio uses the real Fullscreen API itself. The fixed layout above works without either.
       if (EMBED && embedOrigin) {
+        // No answer (another site, or the parent not ready): the real Fullscreen API, on iPad too, since `.fs` alone
+        // fills only the frame there; a swipe down may end it, but some full screen beats none.
         const t = window.setTimeout(() => { parentFullscreen = null; pane.requestFullscreen?.().catch(() => {}); }, 300);
         parentFullscreen = (pon) => { window.clearTimeout(t); viaParent = pon; parentFullscreen = (later) => { if (!later && on) { viaParent = false; set(false); } }; };
         window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-request' }, embedOrigin);
-      } else pane.requestFullscreen?.().catch(() => {});
+      } else if (!APPLE_TOUCH || EMBED) pane.requestFullscreen?.().catch(() => {});   // an embed with no parent to ask: as above
     } else {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       if (viaParent && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'fullscreen-exit' }, embedOrigin);
