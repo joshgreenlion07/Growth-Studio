@@ -319,6 +319,9 @@ Messages use `window.postMessage`:
   bowl planter with a blue agave on each pillar); the bowl planter on its own (`patina-bowl-planter`) is `plantable`.
   The ids `three-pillar-water-feature-no-bowls` and `patina-bowl-planter-empty` from the first version still load, as
   `options: { bowls: false }` and `planted: false`.
+- The cedar slat water wall (`cedar-slat-travertine-water-wall`, 12 x 2 1/2 ft footprint, its back on the footprint's
+  back edge) offers the option `pots` (default on: a potted Gardenia 'Veitchii' in front of each cedar wing). Its stone
+  panel is MSI Silver Travertine ledger (`ww-ledger-silver` texture), its sconces Tru-Scapes Traditional Up/Down.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
