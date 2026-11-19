@@ -117,6 +117,12 @@ export class TouchControls {
 
     // iOS Safari ignores user-scalable=no: stop its page pinch and the long-press menu while touch mode is on.
     for (const t of ['gesturestart', 'gesturechange']) document.addEventListener(t, (e) => { if (this.on) e.preventDefault(); }, { passive: false });
+    // A drag on the scene or a touch control never scrolls or bounces the page (touch-action does this too; this
+    // covers WebKit versions that let a touchmove through). Other parts of the pane, like scrolling panels, keep theirs.
+    container.addEventListener('touchmove', (e) => {
+      const t = e.target as Element | null;
+      if (this.on && e.cancelable && t && (t.tagName === 'CANVAS' || this.root.contains(t))) e.preventDefault();
+    }, { passive: false });
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
     container.addEventListener('contextmenu', (e) => { if (this.on) e.preventDefault(); });
     // Nothing keeps pushing while the page is out of sight.
