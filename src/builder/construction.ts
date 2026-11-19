@@ -52,7 +52,8 @@ export interface ConstructionBuild {
    * The cutaway face for a stage: a vertical slice of the ground along `plane` (whose kept side is where its normal
    * points), showing native soil, open trenches and pits, backfill, base, bedding and the surface as they are at that
    * stage, with the pipes cut through. The caller clips the rest of the yard with the same plane. Null when the plane
-   * misses the site.
+   * misses the site. The app no longer shows it (the Cut away button was removed on 2026-11-19, at the owner's request);
+   * it is kept, unused, for a later section view.
    */
   section(stage: BuildStage, plane: THREE.Plane): THREE.Group | null;
   dispose(): void;
