@@ -16,7 +16,7 @@ import { disposePaverDetail, restorePaverDetail, setDetailAnisotropy } from './p
 import { MEASURE_MODES, Measurements, type MeasureMode } from './measure';
 import { StageLabels } from './stagelabels';
 import { SceneAudio } from './audio';
-import type { BuildStage, StageLabel } from '../builder/construction';
+import type { BuildStage } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode, type QuickDir } from './navigation';
 import { Marks, Tape, ftIn, type MarkPoint } from './marks';
 import { pointName } from '../siteplan/material-info';
@@ -287,10 +287,6 @@ export class Studio {
   /** The build stage shown (see builder/construction.ts); 'finished' is the finished yard. */
   private stage: BuildStage = 'finished';
   private stageLabels!: StageLabels;
-  /** Cut away: a vertical plane that clips the near side of the yard, and the slice face drawn on it. */
-  private cutaway: { plane: THREE.Plane; face: THREE.Group | null } | null = null;
-  private clipped = new Set<THREE.Material>();
-  onCutawayChanged: (on: boolean) => void = () => {};
   /** The shadow map is redrawn only when something that casts or lights it changed. */
   private shadowDirty = true;
   /** Sees only the shadow-pass layer and points away from the yard, so its own pass draws nothing. */
@@ -706,7 +702,6 @@ export class Studio {
       if (o.castShadow) o.layers.enable(SHADOW_PASS_LAYER);
     });
     this.shadowDirty = true;
-    this.refreshCutaway();
     if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
     this.regroundMarks();
     this.updateSky(false);
@@ -780,7 +775,6 @@ export class Studio {
 
   private swapIn(next: SceneBuild, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
     this.noteEvent('rebuild', 'new yard swapped in');
-    this.dropCutawayFace();
     const old = this.build;
     if (old) {
       this.scene.remove(old.root);
@@ -803,7 +797,6 @@ export class Studio {
     this.scene.add(next.root);
     this.stageLabels.set(next.construction.labels, this.stage);
     this.audio.setBuild(plan, next, this.stage);
-    this.refreshCutaway();
     this.views = generateViews(plan, next.gm.height);
     this.onViewsChanged(this.views);
     if (this.measure.visible) this.measure.rebuild(plan, next, this.state.years);
@@ -1489,102 +1482,7 @@ export class Studio {
     });
     this.shadowDirty = true;
     this.stageLabels.set(this.build.construction.labels, stage);
-    this.refreshCutaway();
     if (this.plan && this.measure.visible) this.measure.rebuild(this.plan, this.build, this.state.years);
-  }
-
-  get cutawayOn(): boolean {
-    return !!this.cutaway;
-  }
-
-  /**
-   * Cut away the near side of the yard: a vertical plane through the point the camera looks at, square to the view,
-   * hides everything between it and the camera, and the slice face shows the ground there at the current stage
-   * (trenches, pipes, backfill, base, bedding, surface). The plane stays put while the camera moves; turning it on
-   * again aims it at the new view.
-   */
-  setCutaway(on: boolean) {
-    if (!on) {
-      if (!this.cutaway) return;
-      this.dropCutawayFace();
-      for (const m of this.clipped) {
-        m.clippingPlanes = null;
-        m.needsUpdate = true;
-      }
-      this.clipped.clear();
-      this.cutaway = null;
-      this.stageLabels.clip = null;
-      if (this.build) this.stageLabels.set(this.build.construction.labels, this.stage);
-      this.shadowDirty = true;
-      this.invalidate();
-      this.onCutawayChanged(false);
-      return;
-    }
-    // Where the cut goes: the point the orbit view is centered on. In first person that is the ground point
-    // straight ahead (2 to 20 m away), since the view there is not centered on the yard.
-    const cam = this.camera.position;
-    const fwd = new THREE.Vector3();
-    this.camera.getWorldDirection(fwd);
-    const at = this.controls.target.clone();
-    if (this.navMode !== 'orbit') {
-      const d = fwd.y < -0.05 ? (cam.y - this.groundAt(cam.x, cam.z)) / -fwd.y : 6;
-      at.copy(cam).addScaledVector(fwd, Math.min(20, Math.max(2, d)));
-    }
-    const g = this.groundAt(at.x, at.z);
-    at.y = g;
-    const dir = new THREE.Vector3(at.x - cam.x, 0, at.z - cam.z);
-    // Looking straight down: cut along the bottom of the screen instead.
-    if (dir.lengthSq() < 1e-6) dir.set(0, 1, 0).applyQuaternion(this.camera.quaternion).setY(0);
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
-    dir.normalize();
-    const plane = new THREE.Plane(dir, -dir.dot(at));
-    this.renderer.localClippingEnabled = true;
-    this.dropCutawayFace();
-    this.cutaway = { plane, face: null };
-    this.stageLabels.clip = plane;
-    this.refreshCutaway();
-    // Face the cut: step back from it, a little above the ground, looking at the ground just below grade there,
-    // so the slice fills the view instead of the empty space where the near side of the yard was.
-    const height = this.navMode === 'walk' ? EYE_HEIGHT : 1.2;
-    this.jumpTo({
-      id: 'cutaway',
-      label: 'Cut away',
-      eye: new THREE.Vector3(at.x - dir.x * 3.6, g + height, at.z - dir.z * 3.6),
-      target: new THREE.Vector3(at.x, g - 0.35, at.z),
-      fov: this.camera.fov,
-    });
-    this.onCutawayChanged(true);
-  }
-
-  private dropCutawayFace() {
-    const face = this.cutaway?.face;
-    if (!face) return;
-    face.parent?.remove(face);
-    (face.userData.dispose as (() => void) | undefined)?.();
-    this.cutaway!.face = null;
-  }
-
-  /** Redraw the slice face for the current stage and clip every other material in the yard with the plane. */
-  private refreshCutaway() {
-    if (!this.cutaway || !this.build) return;
-    this.dropCutawayFace();
-    const planes = [this.cutaway.plane];
-    this.build.root.traverse((o) => {
-      const m = (o as THREE.Mesh).material;
-      if (!m || o.userData.noClip) return;
-      for (const mat of Array.isArray(m) ? m : [m]) {
-        if (mat.clippingPlanes?.[0] === planes[0]) continue;
-        mat.clippingPlanes = planes;
-        mat.needsUpdate = true;
-        this.clipped.add(mat);
-      }
-    });
-    const face = this.build.construction.section(this.stage, this.cutaway.plane);
-    if (face) this.build.root.add(face);
-    this.cutaway.face = face;
-    this.stageLabels.set([...this.build.construction.labels, ...((face?.userData.labels as StageLabel[] | undefined) ?? [])], this.stage);
-    this.shadowDirty = true;
-    this.invalidate();
   }
 
   get buildStage(): BuildStage {
@@ -1607,6 +1505,20 @@ export class Studio {
 
   restorePose(p: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }) {
     this.jumpTo({ id: 'saved', label: 'Saved', eye: p.eye, target: p.target, fov: p.fov });
+  }
+
+  /**
+   * Ease the camera to a pose over `ms` (ease in and out), in any movement mode: walking keeps its eye height, so a
+   * pose at the same eye only turns the view. Any input takes over and stops it, as with a camera view.
+   */
+  tweenToPose(p: { eye: THREE.Vector3; target: THREE.Vector3; fov: number }, ms: number) {
+    this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: { id: 'tween', label: '', eye: p.eye.clone(), target: p.target.clone(), fov: p.fov }, t0: -1, dur: Math.max(1, ms) };
+    this.invalidate();
+  }
+
+  /** The ground height under a point (for a pose that looks down at the ground). */
+  groundHeight(x: number, z: number) {
+    return this.groundAt(x, z);
   }
 
   private groundAt(x: number, z: number) {

@@ -15,6 +15,8 @@ const out = await build({
   target: 'es2022',
   write: false,
   legalComments: 'none',
+  // The one brand image (the Green Lion logo on the Library's book cover) goes in as a data URL, like the sounds.
+  loader: { '.png': 'dataurl' },
   logLevel: 'warning',
 });
 const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');

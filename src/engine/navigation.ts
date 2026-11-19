@@ -22,8 +22,10 @@ import * as THREE from 'three';
  *   B            plant labels      N     (on their own, apart from the measurements)
  *   Y            material pointer  P
  *   RS click     lock its material L
- *   Menu         back to start     Home (walk / fly)
- *   View         use what you aim at  G   (open / close a door or lid, switch a fire, water or light)
+ *   Menu         back to start     Home (walk / fly)   tap; acts when let go
+ *   Menu held    show the on-screen buttons for a few seconds (controller input alone never shows them)
+ *   View         use what you aim at  G   (open / close a door or lid, switch a fire, water or light); acts when let go
+ *   View held    open or close the Library
  *   D-pad ← →    pick a quick tool  , .   (every mode; see app/quicktools.ts)
  *   D-pad ↑ ↓    use it             = -   (hold ↓ or - to clear)
  *
@@ -46,6 +48,8 @@ export type NavMode = 'orbit' | 'walk' | 'fly';
 export type QuickDir = 'left' | 'right' | 'up' | 'down';
 /** How long ↓ is held before it counts as a long press (clear all), ms. */
 export const QUICK_HOLD_MS = 900;
+/** How long Menu or View is held before it counts as held (show the buttons, open the Library), ms. */
+export const BUTTON_HOLD_MS = 500;
 
 /**
  * The 3D view has the keyboard: focus is on the page itself or the canvas, not in the plan pane or on a button,
@@ -173,6 +177,12 @@ export class Navigation {
   /** When D-pad ↓ went down (ms), and whether its long press has fired. */
   private downAt = 0;
   private downHeld = false;
+  /** Menu and View: when each went down (ms, 0 while up) and whether its hold has fired. */
+  private holds = new Map<number, { at: number; fired: boolean }>();
+  /** Menu held: show the on-screen buttons (controller input never brings them back by itself). */
+  onShowControls: () => void = () => {};
+  /** View held: open or close the Library. Left unset, a held View acts as a tap. */
+  onLibrary: (() => void) | null = null;
   onConnect: (name: string) => void = () => {};
   onDisconnect: () => void = () => {};
 
@@ -181,6 +191,7 @@ export class Navigation {
     window.addEventListener('gamepaddisconnected', (e) => {
       if (e.gamepad.index === this.index) {
         this.index = null;
+        this.holds.clear();
         this.onDisconnect();
       }
     });
@@ -397,6 +408,20 @@ export class Navigation {
     pad.vibrationActuator?.playEffect('dual-rumble', { duration: 120, strongMagnitude: 0.4, weakMagnitude: 0.6 }).catch(() => {});
   }
 
+  /** A button that does one thing on a tap (when let go) and another once held BUTTON_HOLD_MS (while still down). */
+  private tapOrHold(i: number, down: boolean, tap: () => void, hold: (() => void) | null) {
+    const h = this.holds.get(i);
+    if (down && !h) this.holds.set(i, { at: performance.now(), fired: false });
+    else if (down && h && !h.fired && hold && performance.now() - h.at >= BUTTON_HOLD_MS) {
+      h.fired = true;
+      hold();
+      this.pulse(70, 0.4);
+    } else if (!down && h) {
+      this.holds.delete(i);
+      if (!h.fired) tap();
+    }
+  }
+
   private pad(): Gamepad | null {
     let pads: (Gamepad | null)[];
     try {
@@ -453,10 +478,11 @@ export class Navigation {
       if (tapped(BTN.Y)) this.host.togglePointer();
       // Pressing the right stick in holds the pointed material; again lets it follow the pointer.
       if (tapped(BTN.RS)) this.host.togglePointLock();
-      // Menu (Start) goes home: the first saved view, or back to the start point in first person.
-      if (tapped(BTN.MENU)) this.host.home();
-      // View (the two-squares button): use what the view is on, in every mode.
-      if (tapped(BTN.VIEW)) this.host.use();
+      // Menu (Start) goes home: the first saved view, or back to the start point in first person. Held, it shows the
+      // on-screen buttons. Both act on the way they end, so a tap goes home when let go and a hold never does.
+      this.tapOrHold(BTN.MENU, b(BTN.MENU), () => this.host.home(), () => this.onShowControls());
+      // View (the two-squares button): use what the view is on, in every mode. Held, it opens or closes the Library.
+      this.tapOrHold(BTN.VIEW, b(BTN.VIEW), () => this.host.use(), this.onLibrary ? () => this.onLibrary?.() : null);
       if (first && tapped(BTN.A)) this.host.toggleFly();
       // D-pad, in every mode: the quick tools. ← → pick a tool, ↑ ↓ use it, ↓ held clears.
       if (tapped(BTN.LEFT)) this.host.quick('left', false);

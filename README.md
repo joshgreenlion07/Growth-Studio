@@ -76,8 +76,7 @@ Messages use `window.postMessage`:
 | Studio to parent, one per plant as each is drawn | `{ source: 'growth-studio', type: 'plant-thumb', id, url }` (`url` is a small JPEG data URL of the plant at mature size) |
 | Parent to studio, to show a build stage | `{ source: 'area-planner', type: 'stage', stage }` (`'demo'`, `'excavate'`, `'trench'`, `'backfill'`, `'base'`, `'bedding'` or `'finished'`) |
 | Studio to parent, when the person picks a stage in the dock | `{ source: 'growth-studio', type: 'stage', stage }` |
-| Parent to studio, to cut away the near side of the yard | `{ source: 'area-planner', type: 'cutaway', on }` |
-| Studio to parent, when the cutaway is turned on or off | `{ source: 'growth-studio', type: 'cutaway', on }` |
+| Parent to studio, cut away (removed 2026-11-19; ignored, kept so an older parent does no harm; the studio no longer sends it) | `{ source: 'area-planner', type: 'cutaway', on }` |
 | Parent to studio, to ask for the look of a plant or feature it offers as a switch | `{ source: 'area-planner', type: 'look', id, item? }` (`id` is `plant:<catalog id>` or `feature:<catalog id>`; `item` is the placed item it would replace) |
 | Studio to parent, in answer | `{ source: 'growth-studio', type: 'look', id, item?, material }` (`item` echoes the request's) (`material` is the same Look the pointer sends) |
 | Parent to studio, to make the view read-only or not | `{ source: 'area-planner', type: 'mode', viewer }` (also `viewer=1` on the embed address) |
@@ -440,10 +439,9 @@ Messages use `window.postMessage`:
   ground, white marking paint around each dig, trench routes in APWA colors),
   Excavate, Trench (open trenches with the pipes at their cover, tracer wire on
   plastic gas pipe), Backfill, Base rock, Sand and Finished. Labels give
-  depths, covers and amounts. Cut away (button or `C`) clips the yard on the
-  near side of a vertical plane through the point the camera looks at (in
-  walk or fly, the ground ahead), draws the ground in section there for the
-  current stage, and moves the camera to face the cut.
+  depths, covers and amounts. (Cut away, the button and `C` key that sliced the
+  yard open, was removed on 2026-11-19 at the owner's request; the builder's
+  `section()` slice is still in `construction.ts`, unused.)
   Fences stay up in every stage. Before Finished, measurement labels show only
   Melville curb, rock beds, ruler dimensions and plants that were already there.
 - Controller (any "standard" pad, e.g. Xbox) and keys, in every camera mode:
@@ -451,8 +449,42 @@ Messages use `window.postMessage`:
   faster; X measurements (Off, Totals, Every edge; `M`); B plant labels (`N`, or
   the Plants button next to Measure); Y material pointer (`P`); right stick click
   locks its material (`L`); A walk / fly in first person (`V`); Menu (Start)
-  goes home (`Home` in first person); View (the two-squares button) uses what
-  the view is on (`G`), with any quick tool picked.
+  goes home (`Home` in first person) when let go, and held half a second shows
+  the on-screen buttons for 4 s; View (the two-squares button) uses what the
+  view is on (`G`), with any quick tool picked, when let go, and held half a
+  second opens or closes the Library.
+- On-screen controls (`src/app/scenecontrols.ts`, looks in `page.html` under
+  "Scene controls"): frosted Charcoal groups over the 3D view with inline SVG
+  icons and short labels. Top left, the camera views (one Views menu when the
+  3D view is narrower than 1300 px). Top right, in groups: Library, Second
+  screen, Touch; Orbit / Walk / Fly; Measure Off / Totals / Every edge with
+  Plants; Focus, Wind, Sound; Stage; Full screen. A chosen segment is Leaf
+  green with Charcoal text, a switch that is on has a Lime icon. Under 1700 px
+  the switches show only their icon (the tooltip names them). Touch mode makes
+  every target 44 px; a TV-sized window (1800 x 900 and up) makes them larger.
+- Auto-hide: after 2.5 s with no mouse move, wheel, touch or key, the camera
+  views, the control groups, the full-screen key hint and the height meter
+  fade and slide off screen (280 ms) and the cursor hides over the view; any of
+  those inputs brings them straight back. Controller input does not, so a
+  controller gives a clean view; hold Menu to see them. They stay while the
+  pointer is over them, while their Stage or Views menu is open, while a
+  dialog or the Library is open. In touch mode the joystick, rise / sink and
+  the Orbit / Walk / Fly bar never hide and touching them does not wake the
+  rest; a tap anywhere else does. The quick-tool chip and the pointer label
+  show and hide on their own as before. With reduced motion they hide without
+  the slide.
+- Library in full screen: the Library button stays in full screen and the
+  Library opens inside the full-screen element (full screen stays) as the open
+  left page of a Green Lion design book, with the sample filling the rest. The
+  opening (`src/app/librarybook.ts`, under 2 s): the camera tilts down to the
+  ground, the closed book appears (Deep green cover, the Green Lion logo on a
+  Charcoal plate, "Growth Library" in Tinos), the cover turns open, and the
+  left page grows into the Library. Closing plays it backwards and the camera
+  tilts back up to where it was, in walk again. Pressing Library again,
+  holding View or Esc skips it; Esc closes the Library before it leaves full
+  screen. With reduced motion the Library only fades. The Library always
+  frames its samples in orbit; closing goes back to the movement mode it was
+  opened from. Outside full screen it opens as before, with no animation.
 - Plant labels (each hand-placed plant's name, height and spread at the growth
   year shown) are their own switch, apart from the measurements: Measure Off,
   Totals and Every edge show only areas, edges, walls, runs, structures,

@@ -219,7 +219,12 @@ export interface LibraryHost {
   approve: (key: string, on: boolean) => void;
   /** The Library opened or closed. */
   onToggle: (open: boolean) => void;
+  /** Its Close button: the host closes it (with the book animation in full screen). Left out, it closes at once. */
+  requestClose?: () => void;
 }
+
+/** The Library's category names, in order (the contents page of the book in app/librarybook.ts). */
+export const libraryCategories = () => CATEGORIES.filter((c) => c.id !== 'testers').map((c) => c.label);
 
 const AGES: { years: number; label: string }[] = [
   { years: 0, label: 'Install' },
@@ -396,7 +401,7 @@ function onClick(e: Event) {
   const act = b.dataset.act!, val = b.dataset.val ?? '';
   const prod = () => s.products.find((p) => p.key + '|' + p.cat === val);
   switch (act) {
-    case 'close': return closeLibrary();
+    case 'close': return s.host.requestClose ? s.host.requestClose() : closeLibrary();
     case 'cat': s.cat = val; s.query = ''; s.product = null; return render();
     case 'open': { const p = prod(); if (p) { select(p, p.variants[0]); render(); } return; }
     case 'back': s.product = null; return render();
@@ -424,7 +429,7 @@ function render() {
   const tabs = CATEGORIES.map((c) => `<button type="button" data-act="cat" data-val="${c.id}" aria-pressed="${c.id === s.cat}">${esc(c.label)}</button>`).join('');
   s.root.innerHTML = `
     <div class="lib-head">
-      <b>Library</b>
+      <b class="lib-title">Growth Library</b>
       <span class="lib-mode">${s.host.canApprove() ? 'Approvals are saved through Area Planner' : 'View only here. Approve from Area Planner’s 3D tab'}</span>
       <button type="button" class="btn btn-small" data-act="reset" title="Frame the sample again">Reset view</button>
       <button type="button" class="btn btn-small" data-act="close">Close library</button>

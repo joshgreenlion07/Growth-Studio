@@ -14,7 +14,10 @@ import { lookOf, lookOfPoint, type Look } from './looks';
 import { pictureFor, pictureNow, swatchNow } from './swatches';
 import { pointKind } from '../siteplan/material-info';
 import { padChoices, padLook, padOf } from '../siteplan/pads';
-import { closeLibrary, libraryOpen, openLibrary } from './library';
+import { closeLibrary, libraryCategories, libraryOpen, openLibrary } from './library';
+import { LibraryBook } from './librarybook';
+import { SceneControls } from './scenecontrols';
+import logoUrl from './brand/logo-compact.png';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
 import { Studio } from '../engine/studio';
@@ -78,6 +81,8 @@ function setViewer(on: boolean) {
   embedViewer = EMBED && on;
   document.documentElement.classList.toggle('viewer', embedViewer);
   if (embedViewer && libraryOpen()) closeLibrary();
+  // View-only: no Library, so a held View is a plain tap (use).
+  if (studio) studio.nav.onLibrary = embedViewer ? null : libraryHold;
   quick?.setSkip(embedViewer ? ['mark'] : []);
 }
 if (embedViewer) document.documentElement.classList.add('viewer');
@@ -196,14 +201,14 @@ function bootStudio() {
   }
   // Phones and tablets start at a lighter quality; show it in the picker.
   $<HTMLSelectElement>('#quality').value = studio.state.quality;
-  studio.nav.onConnect = () => toast(`Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, B shows plant labels, Y shows the material pointer, pressing the right stick locks its material, Menu goes home. D-pad: left and right pick a quick tool (dig layers, ${embedViewer ? '' : 'mark, '}tape measure, light, growth, views), up and down use it.`);
+  studio.nav.onConnect = () => toast(`Controller connected. Left stick moves, right stick looks, triggers zoom, bumpers rise and sink, X steps through the measurements, B shows plant labels, Y shows the material pointer, pressing the right stick locks its material, Menu goes home (hold it to show the buttons), View uses what you aim at (hold it for the Library). D-pad: left and right pick a quick tool (dig layers, ${embedViewer ? '' : 'mark, '}tape measure, light, growth, views), up and down use it.`);
   initQuickTools(studio);
   studio.nav.onDisconnect = () => toast('Controller disconnected.');
   studio.onMeasureChanged = (m) => document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-  studio.onCutawayChanged = (on) => {
-    $('#btn-cutaway').setAttribute('aria-pressed', String(on));
-    if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'cutaway', on }, embedOrigin);
-  };
+  // The controller never brings the on-screen buttons back by itself: holding Menu does, and holding View opens or
+  // closes the Library (engine/navigation.ts).
+  studio.nav.onShowControls = () => sceneControls?.showFor();
+  studio.nav.onLibrary = embedViewer ? null : libraryHold;
   studio.onNavModeChanged = (m) => {
     document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     touchUI?.setMode(m);
@@ -250,7 +255,7 @@ function initQuickTools(s: Studio) {
   if (sound?.available) {
     const sync = () => {
       soundBtn.setAttribute('aria-pressed', String(sound.on));
-      soundBtn.textContent = sound.on ? 'Sound' : 'Sound off';
+      soundBtn.querySelector('.lbl')!.textContent = sound.on ? 'Sound' : 'Sound off';
       volume.value = String(sound.volume);
       volume.disabled = !sound.on;
     };
@@ -309,18 +314,34 @@ function applyPlan(refit: boolean) {
   $('#sample-badge').hidden = !isSample;
 }
 
+const VIEW_ICON = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13.2" r="3.3"/></svg>';
+
+/** The camera views over the 3D view: a row of buttons, or one menu when the view is narrow (page.html). */
 function renderViews() {
   const box = $('#views');
   box.replaceChildren();
-  for (const v of studio?.views ?? []) {
-    const b = h('button', { type: 'button', class: 'view-btn', text: v.label });
-    b.addEventListener('click', () => {
-      studio?.goTo(v.id);
-      box.querySelectorAll('.view-btn').forEach((x) => x.removeAttribute('aria-pressed'));
-      b.setAttribute('aria-pressed', 'true');
-    });
+  const views = studio?.views ?? [];
+  if (!views.length) return;
+  const cap = h('span', { class: 'sc-cap', title: 'Camera views' });
+  cap.innerHTML = VIEW_ICON;
+  const pick = h('select', { id: 'view-select', 'aria-label': 'Camera view' }, h('option', { value: '', text: 'Views' }));
+  const go = (id: string) => {
+    studio?.goTo(id);
+    box.querySelectorAll('.view-btn').forEach((x) => x.setAttribute('aria-pressed', String((x as HTMLElement).dataset.view === id)));
+  };
+  box.append(cap);
+  for (const v of views) {
+    const b = h('button', { type: 'button', class: 'sc-btn view-btn', 'data-view': v.id, 'aria-pressed': 'false', text: v.label });
+    b.addEventListener('click', () => go(v.id));
     box.append(b);
+    pick.append(h('option', { value: v.id, text: v.label }));
   }
+  pick.addEventListener('change', () => {
+    if (pick.value) go(pick.value);
+    pick.value = '';
+    pick.blur();
+  });
+  box.append(pick);
 }
 
 /* ------------------------------------------------------------------ */
@@ -899,7 +920,6 @@ function stepStage(by: number) {
 }
 
 function initStages() {
-  $('#btn-cutaway').addEventListener('click', () => studio?.setCutaway(!studio.cutawayOn));
   $('#btn-library').addEventListener('click', () => setLibrary(!libraryOpen()));
   // The same choice over the 3D view, so it is there in full screen too (the dock is hidden then).
   const pick = $<HTMLSelectElement>('#stage-select');
@@ -918,10 +938,7 @@ function initStages() {
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 'c' || e.key === 'C') {
-      e.preventDefault();
-      studio?.setCutaway(!studio.cutawayOn);
-    } else if (e.key === '[') {
+    if (e.key === '[') {
       e.preventDefault();
       stepStage(-1);
     } else if (e.key === ']') {
@@ -932,6 +949,7 @@ function initStages() {
 }
 
 function initDock() {
+  sceneControls = new SceneControls(() => libraryOpen() || libraryBook.busy());
   initStages();
   // Growth.
   const growth = $<HTMLInputElement>('#growth');
@@ -1001,7 +1019,7 @@ function initFullscreen() {
   let on = false, raf = 0, last = -1;
   let pose: ReturnType<Studio['savePose']> | null = null;
   document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.addEventListener('click', () => studio?.setMeasureMode(b.dataset.mode as MeasureMode)));
-  document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'walk' | 'fly')));
+  document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'orbit' | 'walk' | 'fly')));
   const tick = () => {
     raf = requestAnimationFrame(tick);
     if (!studio) return;
@@ -1014,9 +1032,18 @@ function initFullscreen() {
   const set = (v: boolean) => {
     if (v === on) return;
     on = v;
+    // The Library's book animation belongs to full screen: switching ends it at once, while fsOn still says where
+    // it was playing (a skipped close then restores the camera for that layout).
+    if (libraryBook.busy()) libraryBook.skip();
+    fsOn = on;
     pane.classList.toggle('fs', on);
     // Full screen opens in first person at eye height; leaving it puts the camera back where it was.
-    if (studio) {
+    if (studio && libraryOpen()) {
+      // Left with the Library open (Esc in the browser's own full screen): the Library keeps its sample on screen,
+      // and closing it goes back to the view from before full screen, in orbit.
+      if (!on && pose && libraryReturn) libraryReturn = { ...libraryReturn, pose, mode: 'orbit' };
+      pose = null;
+    } else if (studio) {
       if (on) {
         pose = studio.savePose();
         studio.setNavMode('walk');
@@ -1026,7 +1053,8 @@ function initFullscreen() {
         pose = null;
       }
     }
-    btn.textContent = on ? 'Exit full screen' : 'Full screen';
+    btn.querySelector('.lbl')!.textContent = on ? 'Exit full screen' : 'Full screen';
+    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Enter full screen');
     btn.setAttribute('aria-pressed', String(on));
     cancelAnimationFrame(raf);
     last = -1;
@@ -1056,6 +1084,8 @@ function initFullscreen() {
   window.addEventListener('keydown', (e) => {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Not while the Library is open (its sample is framed for the view it is in); Esc then closes the Library first.
+    if (libraryOpen() || libraryBook.busy()) return;
     if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggle(); }
     else if (e.key === 'Escape' && on && !document.fullscreenElement) {
       // Full screen the parent gave (its own fill, no Fullscreen API): tell it, as the exit button does.
@@ -1163,7 +1193,7 @@ function onEmbedMessage(e: MessageEvent) {
     postCatalog(true);
     return;
   }
-  if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open); return; }
+  if (d.type === 'library') { embedOrigin ||= e.origin; setLibrary(!!(d as { open?: unknown }).open, true); return; }
   if (d.type === 'touch') { setTouch((d as { on?: unknown }).on === true); return; }
   if (d.type === 'mode') { setViewer((d as { viewer?: unknown }).viewer === true); return; }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
@@ -1182,7 +1212,8 @@ function onEmbedMessage(e: MessageEvent) {
   if (d.type === 'pause') { studio?.pause(); touchUI?.reset(); return; }
   if (d.type === 'resume') { studio?.resume(); return; }
   if (d.type === 'fullscreen') { parentFullscreen?.(!!(d as { on?: unknown }).on); return; }
-  if (d.type === 'cutaway') { studio?.setCutaway(!!(d as { on?: unknown }).on); return; }
+  // Cut away was removed (2026-11-19, the owner did not use it); an older parent's message is ignored.
+  if (d.type === 'cutaway') return;
   if (d.type === 'stage') {
     // The parent page picked a build stage (its own stage control or a second screen).
     const stage = (d as { stage?: unknown }).stage;
@@ -1320,32 +1351,104 @@ function postCatalog(withMaterials: boolean) {
   }, to);
 }
 
-/** The camera and growth year to go back to when the Library closes. */
-let libraryReturn: { pose: ReturnType<Studio['savePose']>; years: number } | null = null;
+/** The camera, movement mode and growth year to go back to when the Library closes. */
+type LibraryReturn = { pose: ReturnType<Studio['savePose']>; years: number; mode: Studio['mode'] };
+let libraryReturn: LibraryReturn | null = null;
+let sceneControls: SceneControls | null = null;
+/** A closed Library's way back while the yard is still being rebuilt (reused if the Library opens again meanwhile). */
+let pendingReturn: LibraryReturn | null = null;
+/** Controller View held: open or close the Library. */
+const libraryHold = () => setLibrary(!libraryOpen());
+/** Full screen is on (the scene pane's `fs` layout). */
+let fsOn = false;
+const reducedMotion = () => {
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+};
+/** The Library's opening and closing in full screen: the camera looks down and a Green Lion design book opens. */
+const libraryBook = new LibraryBook({ studio: () => studio, book: $('#library-book'), panel: $('#library'), logo: logoUrl, categories: libraryCategories });
 
-/** Open or close the Library over the 3D view; closing shows the plan again where the camera was. */
-function setLibrary(open: boolean) {
-  if (!studio || open === libraryOpen()) return;
+/**
+ * Open or close the Library over the 3D view; closing shows the plan again where the camera was. In full screen it
+ * opens as a full-screen overlay in the full-screen element (so full screen stays), with the book animation
+ * (app/librarybook.ts). Asked again while that plays, it skips to the end; `force` (the parent's message) then also
+ * goes on to the asked state.
+ */
+function setLibrary(open: boolean, force = false) {
+  if (!studio) return;
+  if (libraryBook.busy()) {
+    libraryBook.skip();
+    if (!force) return;
+  }
+  if (open === libraryOpen()) return;
   if (open && embedViewer) return;   // view-only: no Library
-  if (!open) return closeLibrary();
   const s = studio;
-  libraryReturn = { pose: s.savePose(), years: s.state.years };
+  if (!open) {
+    if (fsOn) libraryBook.close(closeLibrary, reducedMotion());
+    else closeLibrary();
+    return;
+  }
+  // Reopened before the yard came back from the last close: go back to that view later, not to the sample's.
+  libraryReturn = pendingReturn ?? { pose: s.savePose(), years: s.state.years, mode: s.mode };
+  pendingReturn = null;
   s.setPointer(false);
-  openLibrary({
-    studio: s,
-    canApprove: () => EMBED && !!embedOrigin && !embedViewer,
-    approve: (key, on) => { if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'approve', key, on }, embedOrigin); },
-    onToggle: (isOpen) => {
-      $('#btn-library').setAttribute('aria-pressed', String(isOpen));
-      if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'library', open: isOpen }, embedOrigin);
-      if (isOpen) return;
-      const back = libraryReturn;
-      libraryReturn = null;
-      if (back) setYears(back.years);
-      s.setPlan(plan, false).then(() => { if (back) s.restorePose(back.pose); showStageNote(); }, () => {});
-    },
-  }, $('#library'));
+  const show = () => {
+    // The Library frames its samples with the orbit camera (walking would pull the camera down to eye height).
+    if (s.mode !== 'orbit') s.setNavMode('orbit');
+    openLibrary({
+      studio: s,
+      canApprove: () => EMBED && !!embedOrigin && !embedViewer,
+      approve: (key, on) => { if (embedOrigin && !embedViewer) window.parent.postMessage({ source: 'growth-studio', type: 'approve', key, on }, embedOrigin); },
+      requestClose: () => setLibrary(false),
+      onToggle: (isOpen) => {
+        $('#btn-library').setAttribute('aria-pressed', String(isOpen));
+        if (EMBED && embedOrigin) window.parent.postMessage({ source: 'growth-studio', type: 'library', open: isOpen }, embedOrigin);
+        if (isOpen) return;
+        const back = libraryReturn;
+        libraryReturn = null;
+        pendingReturn = back;
+        if (back) setYears(back.years);
+        else libraryBook.skip();
+        // Full screen switched meanwhile (the browser's Esc): it has put the camera back itself.
+        const fsAt = fsOn;
+        s.setPlan(plan, false).then(() => {
+          // Opened again while the yard was being rebuilt: the Library's sample is on screen, leave the camera.
+          if (libraryOpen()) return;
+          if (pendingReturn === back) pendingReturn = null;
+          if (back && fsOn === fsAt) {
+            // Back to the movement mode it was in (walk in full screen), then the camera: tilted up from the ground
+            // by the book in full screen, put straight back otherwise.
+            if (back.mode !== s.mode) s.setNavMode(back.mode);
+            if (!libraryBook.cameraBack(back.pose)) s.restorePose(back.pose);
+          }
+          showStageNote();
+        }, () => {
+          if (pendingReturn === back) pendingReturn = null;
+          // The yard could not be rebuilt: do not leave the closed book and its scrim waiting on screen.
+          libraryBook.skip();
+        });
+      },
+    }, $('#library'));
+  };
+  if (fsOn) libraryBook.open(show, reducedMotion());
+  else show();
 }
+
+/** Esc skips the Library's animation, or closes the Library (before full screen sees it). */
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
+  // Only an Esc meant for the 3D view or the Library: never a dialog's, nor one typed elsewhere on the page.
+  if (document.querySelector('dialog[open]')) return;
+  const t = e.target;
+  if (t instanceof Element && t !== document.body && t !== document.documentElement && !t.closest('#library, #scene')) return;
+  if (libraryBook.busy()) libraryBook.skip();
+  else if (libraryOpen()) setLibrary(false);
+  else return;
+  e.preventDefault();
+}, true);
 
 function initEmbed() {
   initDock();
@@ -1420,7 +1523,7 @@ function initEmbed() {
   window.setTimeout(boot, 400);
 
   if (claude?.use) claude.use('downloads').then((d) => { downloads = (d as Downloads) ?? null; }).catch(() => {});
-  (window as unknown as { __gs: unknown }).__gs = { get studio() { return studio; }, get plan() { return plan; } };
+  (window as unknown as { __gs: unknown }).__gs = { get studio() { return studio; }, get plan() { return plan; }, book: libraryBook };
 }
 
 function init() {
@@ -1591,7 +1694,7 @@ function init() {
     claude.use('sample').then((s) => { sample = (s as SampleFn) ?? null; $('#read-ai-note').hidden = !!sample; }).catch(() => {});
     claude.use('downloads').then((d) => { downloads = (d as Downloads) ?? null; }).catch(() => {});
   }
-  (window as unknown as { __gs: unknown }).__gs = { get studio() { return studio; }, get plan() { return plan; }, editor };
+  (window as unknown as { __gs: unknown }).__gs = { get studio() { return studio; }, get plan() { return plan; }, book: libraryBook, editor };
   void clone;
 }
 
