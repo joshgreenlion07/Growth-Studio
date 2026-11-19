@@ -1,4 +1,5 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
+import { samplePremierSmooth } from './sample-premier-smooth';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
@@ -484,6 +485,7 @@ export const SAMPLES = [
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
+  { id: 'premier-smooth', name: 'Basalite Premier Smooth: six colors, two patterns', make: samplePremierSmooth },
   { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'pebbles', name: 'Mexican beach pebble sizes', make: samplePebbleSizes },

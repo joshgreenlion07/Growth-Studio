@@ -164,6 +164,18 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       }
       return { group: 'Decking', about: m.id === 'wood-deck' ? 'A cedar deck: warm natural wood boards on a wood frame.' : 'A composite deck: boards that look like wood and need no staining.', spec: ['Boards on joists at 16 in on center', 'Hidden fasteners', 'Frame on concrete footings'] };
     case 'paver': {
+      if (m.line === 'Premier Smooth') {
+        // Basalite's own words for the line, and its cut sheet (BA-CA 5/24/2024).
+        return {
+          group: 'Pavers',
+          about: m.use === 'border'
+            ? `Basalite Premier Smooth 6 x 9 border${m.color ? ` in ${m.color}` : ''}: the line's smooth-faced border stone, set as a soldier course along the edge of the field.${m.color === 'Charcoal' ? ' Charcoal is sold as the border only.' : ''}`
+            : `Basalite Premier Smooth: smooth, cleanlined pavers with "polished contemporary lines and the look of real stone" (Basalite), a face mix that clouds ${m.color ?? 'its colors'} through every piece. Laid in Basalite's 3 Piece Combo Pattern, or Pattern #4 with the 12 x 18.`,
+          spec: m.use === 'border'
+            ? ['6 x 9 x 60 mm (5.83 x 8.78 in face), 280 per pallet, 100 sq ft', 'Spacer nubs set a 1/16 in joint', 'Edge restraint behind the border']
+            : ['60 mm (2 3/8 in): 6 x 12, 9 x 12 and 12 x 12 combo pallet (96, 64, 32; 121.9 sq ft), 12 x 18 sold separately', 'Faces 5.83, 8.78 and 11.73 in on an 11.79 in module (spacer nubs set a 1/16 in joint)', 'Pedestrian and light-duty vehicular (combo); 12 x 18 pedestrian', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
+        };
+      }
       const porcelain = m.group === 'Porcelain';
       const about = m.padSlab
         ? 'A large-format cast concrete slab poured or cast to the size of the pad: one solid slab with no joints. Used where no maker sells a paver that size.'

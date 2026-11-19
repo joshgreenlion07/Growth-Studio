@@ -225,7 +225,10 @@ Messages use `window.postMessage`:
   takes `'a' | 'running3' | 'running' | 'herringbone'`: its own 3-Piece
   Pattern A, 3-Piece Running Bond, and the 1-Piece Running Bond and 45 degree
   Herringbone of 6 x 9 (Midnight is sold in 6 x 9 only, so it takes the last
-  two). Left out, or not one the paver offers, the paver's first. The looks in
+  two). Basalite Premier Smooth takes `'combo3' | 'combo4'`: Basalite's 3 Piece
+  Combo Pattern and 4 Piece Pattern #4 (the combo with the 12 x 18), traced from
+  its pattern brochure and laid on the line's real 11.79 in module (11.73 in
+  faces plus spacer joints). Left out, or not one the paver offers, the paver's first. The looks in
   the `ready` message carry `laying: true` and `layings: { id, name }[]` (the
   default first) when they take a laying pattern.
 - The material pointer (controller Y, or P) marks the center of the view. In
