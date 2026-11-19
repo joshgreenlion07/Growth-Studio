@@ -72,6 +72,14 @@ vec4 voro(vec2 p){ vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0; ve
     if (d < d1) { d2 = d1; d1 = d; id = h; } else if (d < d2) { d2 = d; } }
   return vec4(sqrt(d1), sqrt(d2), id); }
 `;
+const GCHIPS = `
+// bark chip pattern for a flat coordinate: x = chip height, y = which chip (for its colour)
+vec2 gChips(vec2 q){
+  vec4 a = voro(vec2(q.x * 7.0 + q.y * 3.0, q.y * 17.0 - q.x * 4.0));
+  vec4 b = voro(vec2(q.x * 5.0 - q.y * 13.0, q.y * 6.0 + q.x * 11.0) + 17.0);
+  return vec2(max(1.0 - a.x * 1.35, (1.0 - b.x * 1.35) * 0.92), a.x < b.x ? a.z : b.z);
+}
+`;
 // x = wet (0..1), y = depth under the water surface in feet, z = damp (close to water)
 const WATER_INFO = `
 uniform vec4 uPool[5]; uniform float uPoolWL[5]; uniform vec4 uFallA[4]; uniform vec4 uFallB[4];
@@ -518,18 +526,23 @@ export function createWaterfall(options = {}) {
     bindWI(sh);
     for (const k in GU) sh.uniforms[k] = GU[k];
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vTW = transformed;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW; varying vec3 vGN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vGN = normal; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
-        float gSteep = smoothstep(0.45, 0.75, 1.0 - inverseTransformDirection(normalize(vNormal), viewMatrix).y);
-        vec2 gp = mix(vTW.xz, vec2((vTW.x + vTW.z) * 0.7, vTW.y), gSteep);
-        vec4 c1 = voro(vec2(gp.x * 7.0 + gp.y * 3.0, gp.y * 17.0 - gp.x * 4.0));
-        vec4 c2 = voro(vec2(gp.x * 5.0 - gp.y * 13.0, gp.y * 6.0 + gp.x * 11.0) + 17.0);
-        float chipH = mix(0.55, max(1.0 - c1.x * 1.35, (1.0 - c2.x * 1.35) * 0.92), gFade);
-        float chipC = mix(0.5, c1.x < c2.x ? c1.z : c2.z, gFade);
+        // bark chips are drawn from above on flat soil and from the side on steep banks, and the drawings are blended;
+        // bending a single drawing round the bank made stripes
+        vec2 gp = vTW.xz;
+        vec3 gTw = pow(abs(normalize(vGN)), vec3(4.0)); gTw /= gTw.x + gTw.y + gTw.z;
+        vec2 gChip = vec2(0.0); float gCw = 0.0;
+        if (gTw.y > 0.02) { gChip += gTw.y * gChips(gp); gCw += gTw.y; }
+        if (gTw.x > 0.02) { gChip += gTw.x * gChips(vTW.zy + 3.7); gCw += gTw.x; }
+        if (gTw.z > 0.02) { gChip += gTw.z * gChips(vTW.xy + 9.1); gCw += gTw.z; }
+        gChip /= max(gCw, 0.001);
+        float chipH = mix(0.55, gChip.x, gFade);
+        float chipC = mix(0.5, gChip.y, gFade);
         vec3 mulch = mix(vec3(0.085, 0.036, 0.02), vec3(0.27, 0.125, 0.06), chipC) * (0.5 + 0.7 * chipH) * uTintK;
         #ifdef WF_LIGHT
           // same pixels, less work: gravel is only worked out where there is gravel, and the unused lawn layer is skipped
