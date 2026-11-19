@@ -20,6 +20,7 @@ import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
 import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain';
 import { cedarWaterWall } from './cedarwaterwall';
+import { urnFountain } from './urnfountain';
 import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
@@ -711,6 +712,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'cedarWaterWall': {
         cedarWaterWall(sink, f.id, featureOption(spec, f.options, 'pots'));
+        break;
+      }
+      case 'urnFountain': {
+        urnFountain(sink, spec.urn ?? 'glazed', f.id);
         break;
       }
       case 'fireWaterBowl': {

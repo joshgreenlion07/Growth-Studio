@@ -396,6 +396,7 @@ export type FeatureKind =
   | 'pillarFountain'
   | 'veneerColumn'
   | 'cedarWaterWall'
+  | 'urnFountain'
   | 'patinaBowl'
   | 'fireWaterBowl'
   | 'fourFall'
@@ -429,6 +430,8 @@ export interface FeatureSpec {
   kind: FeatureKind;
   /** A veneer column's finish: the wall veneer look (shelf 'Wall veneer') its faces are clad in. */
   veneer?: string;
+  /** An urn fountain's urn (builder/urnfountain.ts): the glazed ceramic urn or the chiseled stone jar. */
+  urn?: 'glazed' | 'jar';
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
   /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
@@ -708,6 +711,17 @@ export const MATERIALS: MaterialSpec[] = [
     ] },
     matches: `Mexican beach pebble, black, ${label}`, maker: 'Natural stone', line: 'Mexican beach pebble', shelf: 'Rock', color: label,
   })),
+  // California Landscape Supply's 1 1/2 in Yosemite Tan (californialandscapesupply.com, bulk materials): rounded river
+  // stone, light and mid gray, blue-gray, warm gray and tan to cream, a few rust-brown; tones read from its photo (the
+  // stones, not the shadows between them). Also sold 2 x 4 in.
+  M({ id: 'yosemite-tan-1-5', name: 'Yosemite Tan river pebble, 1 1/2 in', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
+    palette: ['#b3b2ae', '#9e9c98', '#8b8986', '#77746f'],
+    pebble: { minIn: 1, maxIn: 2, wide: [0.66, 0.88], thick: [0.45, 0.62], colors: [
+      { c: '#b9bcbf', share: 0.2 }, { c: '#a3a5a7', share: 0.2 }, { c: '#8a96a6', share: 0.14 }, { c: '#8c8682', share: 0.14 },
+      { c: '#bcae9e', share: 0.14 }, { c: '#b8996f', share: 0.08 }, { c: '#6f7178', share: 0.06 }, { c: '#93694f', share: 0.04 },
+    ] },
+    matches: 'Yosemite Tan, 1 1/2 in', maker: 'California Landscape Supply', line: 'Yosemite Tan', shelf: 'Rock', color: '1 1/2 in',
+  }),
   // Bark and wood chips Green Lion buys by the yard (California Landscape Supply), drawn chip by chip (builder/pebbles.ts,
   // form 'chip'). Walk On Bark: shredded fir and pine chips, 1-3 in, natural tan to red-brown with some fresh, paler wood.
   M({ id: 'walk-on-bark', name: 'Walk On Bark, natural brown', use: 'bed', group: 'Mulch and rock', recipe: 'blackPebble',
@@ -1070,6 +1084,20 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water wall: a 6 x 6 ft panel of MSI Silver Travertine ledger stone framed by horizontal cedar slats that run 3 ft out on each side under a cedar cap beam. A copper box scupper pours a lit sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble. A Tru-Scapes up and down sconce lights each cedar wing, and a gardenia in a PMD cement egg pot stands in front of each (an option).',
     facts: ['12 ft long x 6 ft 8 in tall, 2 ft 6 in from the back of the wall to the front of the pebbles (a 6 in wall and a 24 in pebble strip)', 'Stone panel 6 x 6 ft: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), split face', 'Clear cedar 1x4 slats, 5/8 in gaps, dark backer, cedar returns and a 4 in cedar cap beam', '12 in copper box scupper, lip 49 in up, LED lit; two 1 in copper spouts 36 in up, 24 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 60 in up: 10 W, 802 lm', 'Black Mexican beach pebble 1-2 in, no open water; LED pucks where the water lands', 'PMD 24 x 22 in Cement Egg Pot, White, with a Gardenia \'Veitchii\', one each side (option)'],
   }),
+  // Urn fountains from the owner's design boards (builder/urnfountain.ts), drawn without the boards' plants.
+  F({
+    id: 'urn-fountain-glazed', name: 'Urn fountain, Blue Thumb glazed aqua-teal vase', group: 'Water', kind: 'urnFountain', urn: 'glazed', footprint: [68 * 0.0254, 60 * 0.0254],
+    maker: 'Blue Thumb', page: 'https://shopbluethumb.com/closed-top-vase-fountain-kit-fnt60036/',
+    about: 'A pondless bubbling vase: Blue Thumb\'s Closed Top Fountain Kit FNT60036, a glossy aqua-teal glazed ceramic vase with darker blue-green drips, water welling up through its closed top and running down every side into a hidden basin under Yosemite Tan river pebble, with two boulders.',
+    facts: ['Vase 22 in wide x 31 in tall, glazed ceramic, one of a kind (Blue Thumb FNT60036)', 'Kit: 36 in Achelous AquaBox basin (39.5 in across, 16 in deep), 530 GPH pump, plumbing and flow valve, auto-fill valve', 'Bed: California Landscape Supply 1 1/2 in Yosemite Tan, about 5 1/2 x 5 ft', 'A Canyon Tech boulder in front and a moss rock behind (moss off)'],
+  }),
+  // The second board's jar: no maker sells it as drawn, so the owner picked Blue Thumb's Tuscany Vase, the nearest shape.
+  F({
+    id: 'urn-fountain-jar', name: 'Urn fountain, Blue Thumb Tuscany vase', group: 'Water', kind: 'urnFountain', urn: 'jar', footprint: [80 * 0.0254, 64 * 0.0254],
+    maker: 'Blue Thumb', page: 'https://shopbluethumb.com/fountain-vase-kit-fnt40018/',
+    about: 'A pondless brimming vase: Blue Thumb\'s Tuscany Vase Fountain Kit FNT40018, a tall hand-glazed ceramic vase in warm sandy-yellow and cream, weathered darker toward its foot, under a terracotta rolled rim. A bubbling plume (LED lit at night) wells in its mouth and the water brims over the rim down every side into a hidden basin under black Mexican beach pebble, ringed by three tan boulders.',
+    facts: ['Vase 22 in wide x 39 in tall, hand-glazed ceramic, one of a kind (Blue Thumb FNT40018)', 'Kit: 48 in Achelous basin, 1,110 GPH mag-drive pump, plumbing and flow valve, LED on the standpipe, water-level support', 'Bed: black Mexican beach pebble 1-2 in, about 6 1/2 x 5 1/2 ft', 'Three moss rocks round the basin (moss off)'],
+  }),
   /*
    * Veneer columns: a Basalite 225 Lightweight 16 x 8 x 16 column block core (16 in square, 8 in courses; on Green Lion's
    * supplier bills) clad in a wall veneer, under a Basalite Column Cap (CA: 24 x 24 x 2 in, chiseled edges, flat top,
@@ -1157,7 +1185,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
