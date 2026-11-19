@@ -13,6 +13,7 @@
  * the app draws its own look-alike textures, not manufacturer images.
  */
 import { BELGARD_LINES } from './belgard';
+import { NORCAL_REGION, PACIFIC_STOCKTON } from './belgard-regions';
 import { BASALITE_LINES } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
@@ -1076,12 +1077,59 @@ export function isTester(m: MaterialSpec): boolean {
   return !m.maker && !m.auto && !m.id.startsWith('border-of-') && TESTER_GROUPS.has(m.group);
 }
 
-/** The approval key of a look: its maker's line, or the look itself. A `border-of-<paver>` follows its paver. */
+/* ------------------------------------------------------------------ */
+/* Out of area (Belgard colors not sold in Northern California)          */
+/* ------------------------------------------------------------------ */
+
+const colorKey = (c: string) => c.toLowerCase().replace(/grey/g, 'gray').replace(/[^a-z0-9]/g, '');
+const stocktonSets = new Map(Object.entries(PACIFIC_STOCKTON).map(([line, cs]) => [line, new Set(cs.map(colorKey))]));
+
+/**
+ * True when Belgard does not sell this look's color in Northern California, where Green Lion works (its Pacific
+ * Stockton region; see belgard-regions.ts). A `border-of-<paver>` follows its paver. Looks of other makers, and of
+ * Belgard lines not in that list, are never out of area.
+ */
+export function isOutOfArea(m: MaterialSpec): boolean {
+  if (m.id.startsWith('border-of-')) {
+    const base = materialById.get(m.id.slice('border-of-'.length));
+    if (base) return isOutOfArea(base);
+  }
+  if (m.maker !== 'Belgard' || !m.line) return false;
+  const set = stocktonSets.get(m.line);
+  return !!set && !set.has(colorKey(m.color ?? ''));
+}
+
+/** True when Belgard sells none of this line in Northern California. */
+export function lineOutOfArea(line: string): boolean {
+  return stocktonSets.get(line)?.size === 0;
+}
+
+/** The bold note an out-of-area look carries on its description, or undefined when it is sold here. */
+export function outOfAreaNote(m: MaterialSpec): string | undefined {
+  if (m.id.startsWith('border-of-')) {
+    const base = materialById.get(m.id.slice('border-of-'.length));
+    if (base) return outOfAreaNote(base);
+  }
+  if (!isOutOfArea(m)) return undefined;
+  const line = m.line ?? '';
+  return lineOutOfArea(line)
+    ? `Out of area product: Belgard does not sell ${line} in Northern California (its ${NORCAL_REGION} region).`
+    : `Out of area product: Belgard does not sell ${line} in ${m.color} in Northern California (its ${NORCAL_REGION} region).`;
+}
+
+/** The suffix of the approval key that holds a line's out-of-area colors (off unless the Library turns it on). */
+export const OUT_OF_AREA_KEY = '|out-of-area';
+
+/**
+ * The approval key of a look: its maker's line, or the look itself. A `border-of-<paver>` follows its paver. A Belgard
+ * color not sold in Northern California is approved apart from the rest of its line, under `line:<maker>|<line>|out-of-area`.
+ */
 export function approvalKeyOf(m: MaterialSpec): string {
   if (m.id.startsWith('border-of-')) {
     const base = materialById.get(m.id.slice('border-of-'.length));
     if (base) return approvalKeyOf(base);
   }
+  if (m.maker && m.line && isOutOfArea(m)) return `line:${m.maker}|${m.line}${OUT_OF_AREA_KEY}`;
   // A line's 6 x 9 paver edge is approved on its own: it is often offered where the line's pavers are not.
   if (m.maker && m.line && m.shelf === 'Paver edge') return `line:${m.maker}|${m.line} 6 x 9 edge`;
   return m.maker && m.line ? `line:${m.maker}|${m.line}` : `mat:${m.id}`;
@@ -1091,6 +1139,8 @@ let gatedLines: Set<string> | null = null;
 /** Approved when nothing overrides it. */
 function approvedByDefault(key: string): boolean {
   if (!key.startsWith('line:')) return true;
+  // A line's colors Belgard does not sell in Northern California start off.
+  if (key.endsWith(OUT_OF_AREA_KEY)) return false;
   gatedLines ??= new Set(MATERIALS.filter((m) => m.maker && m.line && GATED_SHELVES.has(m.shelf ?? '')).map((m) => approvalKeyOf(m)));
   if (!gatedLines.has(key)) return true;
   return OFFERED_LINES.has(key.slice(key.indexOf('|') + 1));
