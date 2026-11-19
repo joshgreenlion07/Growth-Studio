@@ -403,7 +403,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
-      // A waterfall set in a bed clears exactly its soil (the ground is cut there too, fourfall.ts).
+      // A waterfall set in a bed clears its soil, less the overlap (the ground is cut the same way, fourfall.ts).
       const bedCut = bedCuts.get(f.id);
       if (bedCut) {
         if (inGroundCut([bedCut], p)) return true;

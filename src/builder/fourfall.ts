@@ -64,7 +64,7 @@ export const CUT_FRONT = 0.12;
  * The bed a waterfall is set in: the zone under its placement's center, when that is a planting bed on the ground
  * (not a raised planter) in a catalog material. Then the module fades the edge of its soil into the bed's own color
  * and brings that edge up flush with it (its setGround), the site ground and the bed's loose stones and humus are cut
- * exactly on its soil rectangle, and the bed is levelled to the waterfall's grade around it (ground.ts). On lawn,
+ * on its soil rectangle (overlapping its border by BED_CUT_OVERLAP), and the bed is levelled to the waterfall's grade around it (ground.ts). On lawn,
  * paving or nothing it keeps its edges tucked under grade and the inset cut.
  */
 export function fourFallBed(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): Zone | null {
@@ -90,15 +90,23 @@ export interface GroundCut {
   hx: number;
   hz: number;
 }
-/** One waterfall's cut: its whole soil rectangle when it is set in a bed, else the inset one. */
-function groundCut(f: FeaturePlacement, spec: FeatureSpec, inBed: boolean): GroundCut {
+/**
+ * How far, meters, the cut of a waterfall set in a bed stays inside its soil rectangle on every side: the site ground
+ * (9 mm above the soil's border there) overlaps the border by this much, so from low inside the soil no sky shows in
+ * the gap between the border and the site ground's edge. The overlapped strip is the bed's own color anyway.
+ */
+export const BED_CUT_OVERLAP = 0.04;
+
+/** One waterfall's cut: its soil rectangle (less the overlap) when it is set in a bed, else the inset one. `exact`: the whole rectangle. */
+function groundCut(f: FeaturePlacement, spec: FeatureSpec, inBed: boolean, exact = false): GroundCut {
   const fr = fourFallFrame(f, spec), s = soilRect(fr.p), m = inBed ? 0 : SOIL_MARGIN;
   const x0 = (s.x0 + m) * FT, x1 = (s.x1 - m) * FT;
   const z0 = fr.outline[1] / 2 + (s.z0 + m) * FT, z1 = fr.outline[1] / 2 + (inBed ? s.z1 : CUT_FRONT) * FT;
   // Center of the cut in the feature's local frame, then in plan space.
   const lx = (x0 + x1) / 2, lz = (z0 + z1) / 2;
   const cx = f.position[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), cy = f.position[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a);
-  return { cx, cy, cos: Math.cos(fr.a), sin: Math.sin(fr.a), hx: (x1 - x0) / 2, hz: (z1 - z0) / 2 };
+  const lap = inBed && !exact ? BED_CUT_OVERLAP : 0;
+  return { cx, cy, cos: Math.cos(fr.a), sin: Math.sin(fr.a), hx: (x1 - x0) / 2 - lap, hz: (z1 - z0) / 2 - lap };
 }
 
 /** `zoneAt`: the ground model's (or the plan's) zone lookup, to tell which waterfalls are set in a bed (fourFallBed). */
@@ -112,7 +120,7 @@ export function fourFallGroundCuts(features: FeaturePlacement[], zoneAt: (p: Vec
   return out;
 }
 
-/** The cut of a waterfall set in a bed (its exact soil rectangle), or null when it is not in one. */
+/** The cut of a waterfall set in a bed (its soil rectangle less BED_CUT_OVERLAP), or null when it is not in one. */
 export function fourFallBedCut(f: FeaturePlacement, spec: FeatureSpec, zoneAt: (p: Vec2) => Zone | null): GroundCut | null {
   return fourFallBed(f, zoneAt) ? groundCut(f, spec, true) : null;
 }
@@ -131,7 +139,7 @@ export function fourFallLevelAreas(features: FeaturePlacement[], zoneAt: (p: Vec
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'fourFall' || !fourFallBed(f, zoneAt)) continue;
     const fr = fourFallFrame(f, spec), lz = fr.outline[1] / 2;
-    out.push({ ...groundCut(f, spec, true), front: [f.position[0] + lz * Math.sin(fr.a), f.position[1] + lz * Math.cos(fr.a)], y: 0 });
+    out.push({ ...groundCut(f, spec, true, true), front: [f.position[0] + lz * Math.sin(fr.a), f.position[1] + lz * Math.cos(fr.a)], y: 0 });
   }
   return out;
 }
