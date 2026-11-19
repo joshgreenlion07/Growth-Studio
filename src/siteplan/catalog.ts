@@ -14,7 +14,7 @@
  */
 import { BELGARD_LINES } from './belgard';
 import { NORCAL_REGION, PACIFIC_STOCKTON } from './belgard-regions';
-import { BASALITE_LINES, PREMIER_SMOOTH } from './basalite';
+import { BASALITE_LINES, PREMIER_SLATE, PREMIER_SMOOTH } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
@@ -91,7 +91,7 @@ export interface PaverPattern {
   /** Tumbled: worn, rounded edges. */
   tumbled?: boolean;
   /** Face texture. */
-  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate' | 'antiqued';
+  face?: 'smooth' | 'textured' | 'woodgrain' | 'slate' | 'antiqued' | 'cleft';
   /**
    * How the colors blend inside a piece. Left out, each piece takes one tone mottled with a second. 'cloud': all the
    * tones drift through every piece in broad, soft streaks (Basalite Premier Slab colors such as Midnight Terrace).
@@ -146,9 +146,10 @@ export function isAntiqued(spec: MaterialSpec | undefined): boolean {
 export function isPremierSlab(spec: MaterialSpec | undefined): boolean {
   return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Slab';
 }
-/** True for a Basalite Premier Smooth main-course paver (Basalite's own two published patterns). */
+/** True for a Basalite Premier Smooth or Premier Slate main-course paver (Basalite's own two published patterns, the same
+ * for both lines). */
 export function isPremierSmooth(spec: MaterialSpec | undefined): boolean {
-  return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Smooth';
+  return !!spec && spec.use === 'hardscape' && (spec.line === 'Premier Smooth' || spec.line === 'Premier Slate');
 }
 /** The laying patterns a paver offers, the default first; empty when it is laid one way only. */
 export function layingsFor(spec: MaterialSpec | undefined): LayingPattern[] {
@@ -924,15 +925,14 @@ for (const L of BASALITE_LINES) {
 }
 
 /*
- * Basalite Premier Smooth (basalite.ts): the 3-piece combo with the 12 x 18 for Pattern #4, laid in Basalite's own two
- * patterns, on its 11.79 in module; each field color also as its own 6 x 9 border (and the border that goes with it),
- * and Charcoal as a border only.
+ * Basalite Premier Smooth and Premier Slate (basalite.ts): the 3-piece combo with the 12 x 18 for Pattern #4, laid in
+ * Basalite's own two patterns, on its 11.79 in module; each field color also as its own 6 x 9 border (and the border that
+ * goes with it), and Charcoal as a border only. The two lines differ only in their face (smooth, or Premier Slate's cleft).
  */
-{
-  const L = PREMIER_SMOOTH;
+for (const L of [PREMIER_SMOOTH, PREMIER_SLATE]) {
   const tags = (n: string) => ({ matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers' as const, color: n });
-  const field = (mix: number[]): PaverPattern => ({ kind: 'ashlar', sizes: L.sizes, joint: L.joint, face: 'smooth', blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
-  const edge = (mix: number[]): PaverPattern => ({ kind: 'soldier', sizes: [L.border], joint: L.joint, face: 'smooth', blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
+  const field = (mix: number[]): PaverPattern => ({ kind: 'ashlar', sizes: L.sizes, joint: L.joint, face: L.face, blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
+  const edge = (mix: number[]): PaverPattern => ({ kind: 'soldier', sizes: [L.border], joint: L.joint, face: L.face, blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
   for (const [n, palette, mix] of L.colors) {
     MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: field(mix), thickness: L.thickness, ...tags(n) }));
     MATERIALS.push(M({ id: `border-of-${L.slug}-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: edge(mix), thickness: L.thickness, auto: true }));
@@ -1196,6 +1196,7 @@ export const OFFERED_LINES = new Set<string>([
   'Dimensions Slabs 24 x 24',
   'Premier Slab',
   'Premier Smooth',
+  'Premier Slate',
   'Catalina Grana',
   'Avalon Slate',
   'Melville Tandem Wall',
