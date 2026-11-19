@@ -21,7 +21,7 @@ import { SceneControls } from './scenecontrols';
 import logoUrl from './brand/logo-compact.png';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
-import { Studio } from '../engine/studio';
+import { Studio, type StartPose } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
 import { onTexturesChanged, setTextureRenderer } from '../engine/texture-jobs';
 import type { MeasureMode } from '../engine/measure';
@@ -149,6 +149,14 @@ if (EMBED_CLIENT) {
     if (e.key === 'Escape' && embedOrigin && !e.repeat) window.parent.postMessage({ source: 'growth-studio', type: 'key', key: 'Escape' }, embedOrigin);
     if (!CLIENT_MOVE_KEYS.has(e.key.toLowerCase()) || e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation();
   }, true);
+}
+/** A start spot from a message, checked: finite numbers only, else null. */
+function startPose(v: unknown): StartPose | null {
+  const p = v as { x?: unknown; z?: unknown; yaw?: unknown; pitch?: unknown } | null;
+  if (!p || typeof p !== 'object') return null;
+  const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1e5;
+  if (!n(p.x) || !n(p.z) || !n(p.yaw)) return null;
+  return { x: p.x as number, z: p.z as number, yaw: p.yaw as number, ...(n(p.pitch) ? { pitch: p.pitch as number } : {}) };
 }
 function clientTime(t: string) {
   if (!studio) return;
@@ -1326,15 +1334,33 @@ function onEmbedMessage(e: MessageEvent) {
     );
     return;
   }
+  if (d.type === 'pose') {
+    // Where the camera stands now (Area Planner's "Set client start here"): world meters, heading, pitch, mode.
+    const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 40) : '';
+    if (!studio || !embedBuilt) return window.parent.postMessage({ source: 'growth-studio', type: 'pose', id, ok: false, message: 'The 3D view is not ready yet.' }, origin);
+    return window.parent.postMessage({ source: 'growth-studio', type: 'pose', id, ok: true, ...studio.pose() }, origin);
+  }
+  if (d.type === 'start') {
+    // Client mode: the start spot the owner chose (null: the automatic start). Sent before the plan.
+    if (studio) studio.clientStart = startPose((d as { pose?: unknown }).pose);
+    return;
+  }
+  if (d.type === 'go-pose') {
+    // Stand at a start spot in Walk (Area Planner's "Change in 3D").
+    const p = startPose((d as { pose?: unknown }).pose);
+    const ok = !!(p && studio && embedBuilt && studio.goToPose(p));
+    window.parent.postMessage({ source: 'growth-studio', type: 'go-pose', ok }, e.origin);
+    return;
+  }
   if (d.type === 'shot') {
     // A rendering for a client page: one generated view under one light mood, 3:2 unless `aspect` says otherwise.
     // { view, mood, w, aspect, id } -> { type: 'shot', id, ok, data: Blob (JPEG) } or { ..., ok: false, message }.
-    const origin = e.origin, q = d as { view?: unknown; mood?: unknown; w?: unknown; aspect?: unknown; id?: unknown };
+    const origin = e.origin, q = d as { view?: unknown; mood?: unknown; w?: unknown; aspect?: unknown; id?: unknown; pose?: unknown };
     const id = typeof q.id === 'string' ? q.id.slice(0, 40) : '';
     const fail = (message: string) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: false, message }, origin);
     if (!studio || !embedBuilt) return fail('The 3D view is not ready yet.');
     const mood = MOODS.some((m) => m.id === q.mood) ? (q.mood as Mood) : undefined;
-    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5 }).then(
+    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5, pose: startPose(q.pose) ?? undefined }).then(
       (data) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: true, data }, origin),
       (err) => fail(err instanceof Error ? err.message : String(err)),
     );
