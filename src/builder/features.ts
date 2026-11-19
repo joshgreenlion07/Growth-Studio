@@ -13,6 +13,7 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { buildYard } from './yard';
 import { veneerColumn } from './veneercolumn';
 import { buildWaterRock } from './waterrock';
 import { buildFlagstone, flagLookOf } from './flagstone';
@@ -25,6 +26,7 @@ import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 import { buildFourFall, type FourFallInstance } from './fourfall';
+import { buildKitchenFeature } from './kitchen/island';
 import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
 
@@ -452,6 +454,27 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         light(-W * 0.18, Hc + 0.6, -(D - depth) / 2 + 0.5, '#ffd1a0', 1.5, 4);
         break;
       }
+      case 'kitchenIsland':
+      case 'kitchenPart': {
+        // An island assembled from the kitchen parts, or one part on its own (builder/kitchen/), inches to meters.
+        const yaw = (-f.rotationDeg * Math.PI) / 180;
+        buildKitchenFeature({
+          add,
+          hinge: (px, py, pz) => hinge(px, py, pz),
+          anchor: (parent, x, y, z) => anchorAt(parent ?? o, x, y, z),
+          act,
+          fire: (t, style) => fire(t, style),
+          light,
+          landLight: (l) => {
+            const w = { ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw) };
+            landLights.push(w);
+            return w;
+          },
+          glow: (m) => extraGlow.push(m),
+          own: (m) => owned.push(m),
+        }, spec, f.options, f.id);
+        break;
+      }
       case 'hotTub': {
         if (spec.model === 'ppz-743bc') {
           const water = (m: THREE.Material, g: THREE.BufferGeometry) => {
@@ -650,6 +673,31 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
         break;
       }
+      case 'shedResin':
+      case 'gardenBench':
+      case 'raisedBedCedar':
+      case 'potTrellis':
+      case 'slatScreen': {
+        // Side-yard pieces (siteplan/yard.ts, builder/yard/): on paving they stand on its top.
+        const turn = (-f.rotationDeg * Math.PI) / 180;
+        buildYard(kind, {
+          f, spec, add,
+          light: (x, y, z, color, intensity, distance) => light(x, y, z, color, intensity, distance),
+          glow: (m) => { owned.push(m); decorGlow.push(m); },
+          hinge: (px, py, pz) => {
+            const h = hinge(px, py, pz);
+            return { group: h.group, add: h.add, anchor: (x, y, z) => anchorAt(h.group, x - px, y - py, z - pz) };
+          },
+          act,
+          anchor: (x, y, z) => anchorAt(o, x, y, z),
+          plant(catalogId, x, y, z, heading = 0) {
+            const w = local(x, y, z);
+            raised.push({ id: `${f.id}-plant-${raised.length}`, source: f.source, catalogId, position: [w.x, w.z], baseY: w.y, heading: turn + heading });
+          },
+          option: (key) => featureOption(spec, f.options, key),
+        }, lift?.(f.position) ?? 0);
+        break;
+      }
       case 'mossRock':
       case 'canyonBoulder': {
         // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
@@ -715,7 +763,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'urnFountain': {
-        urnFountain(sink, spec.urn ?? 'glazed', f.id);
+        urnFountain(sink, spec.urn ?? 'glazed', f.id, { glaze: spec.glaze, ring: featureOption(spec, f.options, 'ring'), boulders: featureOption(spec, f.options, 'boulders'), uplight: featureOption(spec, f.options, 'uplight') });
         break;
       }
       case 'fireWaterBowl': {

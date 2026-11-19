@@ -86,6 +86,7 @@ import { build as dwarfMandarin } from './trees/dwarf-mandarin';
 import { build as pomegranate } from './trees/pomegranate';
 import { build as coprosmaTequilaSunrise } from './shrubs/coprosma-tequila-sunrise';
 import { build as starJasmineTrellis } from './shrubs/star-jasmine-trellis';
+import { build as starJasmineMetalTrellis } from './shrubs/star-jasmine-metal-trellis';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -178,4 +179,5 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'pomegranate': pomegranate,
   'coprosma-tequila-sunrise': coprosmaTequilaSunrise,
   'star-jasmine-trellis': starJasmineTrellis,
+  'star-jasmine-metal-trellis': starJasmineMetalTrellis,
 };

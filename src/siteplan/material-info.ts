@@ -205,6 +205,17 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
             : ['60 mm (2 3/8 in): 6 x 12, 9 x 12 and 12 x 12 combo pallet (96, 64, 32; 121.9 sq ft), 12 x 18 sold separately', 'Faces 5.83, 8.78 and 11.73 in on an 11.79 in module (spacer nubs set a 1/16 in joint)', 'Pedestrian and light-duty vehicular (combo); 12 x 18 pedestrian', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
         };
       }
+      if (m.line === 'Caldera porcelain') {
+        // MSI's product listings (msisurfaces.com), as given on the client's tile sheet.
+        const plank = m.id.includes('plank');
+        return {
+          group: 'Porcelain',
+          about: `MSI Caldera Blanca: a wood-look porcelain in white and whitewashed planks with soft gray grain and knots, matte. ${plank ? 'The 8 x 47 in plank, set in thinset over the existing slab as an overlay.' : 'The 16 x 47 in 2 cm outdoor paver, for an overlay on the slab or set on sand or pedestals.'} Laid staggered by a third.`,
+          spec: plank
+            ? ['8 x 47 in (20 x 120 cm), 3/8 in thick, rectified, matte (NCALBLA8X47)', 'Set in exterior thinset over the clean, sound slab; 1/8 in grout joints', 'Planks run the long way of the patio, offset by a third']
+            : ['16 x 47 in (40 x 120 cm), 2 cm thick outdoor paver (LPAVNCALBLA1647)', 'Over a slab: set in mortar or on pedestals; on grade: in sand over 4 to 6 in compacted base rock', 'Joints about 1/8 in, offset by a third'],
+        };
+      }
       const porcelain = m.group === 'Porcelain';
       const about = m.padSlab
         ? 'A large-format cast concrete slab poured or cast to the size of the pad: one solid slab with no joints. Used where no maker sells a paver that size.'

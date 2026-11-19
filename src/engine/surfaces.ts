@@ -441,7 +441,8 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
       const L = soldierTileIn(a, b);
       return runningLayout(a * s, b * s, 0, false, Math.round(L / b), Math.round(L / a), seed);
     }
-    case 'plank': return runningLayout(a, b, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
+    // A metric plank on a nominal module (MSI Caldera, 47.24 in on 48) is laid out at its real size (`scale`).
+    case 'plank': return runningLayout(a * s, b * s, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
     // A clouded blend repeats every 3 x 3 slabs, so its streaks do not repeat every second slab.
     case 'grid': return runningLayout(a, b, 0, false, p.blend ? 3 : 2, p.blend ? 3 : 2, seed);
     case 'herringbone': return herringboneLayout(a, b);
