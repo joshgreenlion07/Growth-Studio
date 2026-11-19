@@ -81,53 +81,108 @@ export function bedZoneAt(zones: Zone[]): (p: Vec2) => Zone | null {
   };
 }
 
-/** Plan points along a waterfall's soil rectangle border, where the blend into the bed shows: its corners and every 0.4 m or so along each edge. */
-export function fourFallBorderPoints(f: FeaturePlacement, spec: FeatureSpec): Vec2[] {
+/**
+ * How far past a waterfall's soil rectangle the bed is levelled to its grade (ground.ts: flat for 0.25 m, then easing
+ * back to the bed's own height by this distance), meters.
+ */
+export const LEVEL_REACH = 0.85;
+
+/**
+ * Plan points along a waterfall's soil rectangle border, where the blend into the bed shows: its corners and every
+ * 0.4 m or so along each edge. `out` (meters) samples a ring that far outside the border instead.
+ */
+export function fourFallBorderPoints(f: FeaturePlacement, spec: FeatureSpec, out = 0): Vec2[] {
   const fr = fourFallFrame(f, spec), s = soilRect(fr.p);
-  const x0 = s.x0 * FT, x1 = s.x1 * FT, z0 = fr.outline[1] / 2 + s.z0 * FT, z1 = fr.outline[1] / 2 + s.z1 * FT;
-  const toPlan = (lx: number, lz: number): Vec2 => [f.position[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), f.position[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a)];
-  const out: Vec2[] = [];
+  const x0 = s.x0 * FT - out, x1 = s.x1 * FT + out, z0 = fr.outline[1] / 2 + s.z0 * FT - out, z1 = fr.outline[1] / 2 + s.z1 * FT + out;
+  const pts: Vec2[] = [];
   const edge = (ax: number, az: number, bx: number, bz: number) => {
     const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.4));
-    for (let i = 0; i < n; i++) out.push(toPlan(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n));
+    for (let i = 0; i < n; i++) pts.push(toPlan(fr, ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n));
   };
   edge(x0, z0, x1, z0);
   edge(x1, z0, x1, z1);
   edge(x1, z1, x0, z1);
   edge(x0, z1, x0, z0);
-  return out;
+  return pts;
+}
+
+/** A point of the feature's local frame (meters, centered on the placement) in plan meters. */
+function toPlan(fr: FourFallFrame, lx: number, lz: number): Vec2 {
+  return [fr.at[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), fr.at[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a)];
 }
 
 /** Where a waterfall's module stands: the middle of its outline's front edge, in plan meters. */
 export function fourFallFront(f: FeaturePlacement, spec: FeatureSpec): Vec2 {
-  const fr = fourFallFrame(f, spec), lz = fr.outline[1] / 2;
-  return [f.position[0] + lz * Math.sin(fr.a), f.position[1] + lz * Math.cos(fr.a)];
+  const fr = fourFallFrame(f, spec);
+  return toPlan(fr, 0, fr.outline[1] / 2);
 }
 
 /**
  * The bed a waterfall is set in, decided once per waterfall by the ground model (ground.ts) and read by everything else.
- * - `bed`: the bed most points of its soil border fall in (bedZoneAt), or null. Its mound's cover is recoloured to it
- *   (fourFallMulch).
- * - `blend`: the edge of its soil fades into that bed and comes up flush with it (setGround), the site ground and the
- *   bed's loose stones, humus and turf are cut on its soil rectangle, and the bed is levelled to the waterfall's grade
- *   around it. Only when every border point lies in that bed, the bed is on the ground (not a raised planter) and in a
- *   catalog material. A border point outside every bed (the patio or lawn its basin runs up to) also passes when the
- *   ground there is already at the waterfall's grade (within 1 cm), since nothing is levelled there: otherwise the soil's
- *   border would stand proud of the ground or sink below it. Any other waterfall keeps its edges tucked under grade
- *   and the inset cut.
+ * - `mulch`: the bed material its mound's soil cover is recoloured to (fourFallMulch): the material most points of its
+ *   soil border lie in, by bedZoneAt (so a bed drawn as several shapes of one material still counts as one), or with
+ *   none on the border, the material most of five points inside its outline lie in (the center and four points 0.4 of
+ *   the way to its corners).
+ * - `bed`, `blend`: the edge of its soil fades into the bed zone `bed` and comes up flush with it (setGround), the site
+ *   ground and the bed's loose stones, humus and turf are cut on its soil rectangle, and the bed is levelled to the
+ *   waterfall's grade `y` around it (ground.ts). `bed` is the zone of that material on top at most border points; the
+ *   blend holds only when it is on the ground (not a raised planter), in a catalog material, and:
+ *   - every border point has that very zone on top (the ground model's zoneAt), or is already at the grade within 1 cm
+ *     (paving or lawn drawn over the bed or beside it is never levelled, so anything else leaves a step);
+ *   - every point of a ring LEVEL_REACH outside the border has a planting bed on the ground on top, or is at the grade,
+ *     so the levelling never reaches a bed edge that meets ground at another height (a cliff);
+ *   - it does not come within its levelling reach of another blended waterfall set at another grade (ground.ts).
+ *   Any other waterfall keeps its edges tucked under grade and the inset cut.
  */
 export interface FourFallBedChoice {
+  mulch?: string;
   bed: Zone | null;
   blend: boolean;
+  /** The grade it stands at: the ground's own height at its front middle (fourFallFront). */
+  y: number;
 }
-/** `grade`: the ground's height before any levelling; `level`: that height at the waterfall's front middle (fourFallFront). */
-export function fourFallBedChoice(f: FeaturePlacement, spec: FeatureSpec, bedAt: (p: Vec2) => Zone | null, grade: (p: Vec2) => number, level: number): FourFallBedChoice {
-  const pts = fourFallBorderPoints(f, spec), at = pts.map(bedAt);
-  const votes = new Map<Zone, number>();
-  for (const z of at) if (z) votes.set(z, (votes.get(z) ?? 0) + 1);
-  const bed = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const blend = !!bed && !bed.raised && materialById.has(bed.catalogId) && at.every((z, i) => z === bed || (!z && Math.abs(grade(pts[i]) - level) < 0.01));
-  return { bed, blend };
+
+/**
+ * `bedAt`: bedZoneAt over the plan's zones (for the material); `zoneAt`: the ground model's top zone at a point;
+ * `grade`: the ground's height before any levelling.
+ */
+export function fourFallBedChoice(f: FeaturePlacement, spec: FeatureSpec, bedAt: (p: Vec2) => Zone | null, zoneAt: (p: Vec2) => Zone | null, grade: (p: Vec2) => number): FourFallBedChoice {
+  const fr = fourFallFrame(f, spec), y = grade(fourFallFront(f, spec));
+  const vote = (pts: Vec2[]) => {
+    const n = new Map<string, number>();
+    for (const p of pts) {
+      const id = bedAt(p)?.catalogId;
+      if (id) n.set(id, (n.get(id) ?? 0) + 1);
+    }
+    return [...n].sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+  const border = fourFallBorderPoints(f, spec);
+  const [w, d] = fr.outline;
+  const mulch = vote(border) ?? vote([[0, 0], [-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]].map(([sx, sz]) => toPlan(fr, sx * w, sz * d)));
+  // The bed zone of that material on top at most border points.
+  const tops = border.map(zoneAt);
+  const n = new Map<Zone, number>();
+  for (const z of tops) if (z && z.kind === 'bed' && z.catalogId === mulch) n.set(z, (n.get(z) ?? 0) + 1);
+  const bed = [...n].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const atGrade = (p: Vec2) => Math.abs(grade(p) - y) < 0.01;
+  const blend = !!bed && !bed.raised && materialById.has(bed.catalogId) &&
+    tops.every((z, i) => z === bed || atGrade(border[i])) &&
+    fourFallBorderPoints(f, spec, LEVEL_REACH).every((p) => {
+      const z = zoneAt(p);
+      return (z?.kind === 'bed' && !z.raised) || atGrade(p);
+    });
+  return { mulch, bed, blend, y };
+}
+
+/** True when two waterfalls' soil rectangles, each grown by `pad` meters, overlap (turned rectangles, separating axes). */
+export function fourFallCutsOverlap(a: GroundCut, b: GroundCut, pad: number): boolean {
+  const axes: [number, number][] = [[a.cos, -a.sin], [a.sin, a.cos], [b.cos, -b.sin], [b.sin, b.cos]];
+  const half = (c: GroundCut, [ux, uy]: [number, number]) => (c.hx + pad) * Math.abs(c.cos * ux - c.sin * uy) + (c.hz + pad) * Math.abs(c.sin * ux + c.cos * uy);
+  for (const ax of axes) {
+    const dist = Math.abs((b.cx - a.cx) * ax[0] + (b.cy - a.cy) * ax[1]);
+    if (dist > half(a, ax) + half(b, ax)) return false;
+  }
+  return true;
 }
 
 /**

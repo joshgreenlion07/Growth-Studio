@@ -10,7 +10,7 @@ import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
 import type { Quality } from '../engine/post';
-import { bedZoneAt, fourFallBedChoice, fourFallCut, fourFallFront, fourFallGroundCuts, type FourFallBedChoice, type GroundCut } from './fourfall';
+import { LEVEL_REACH, bedZoneAt, fourFallBedChoice, fourFallCut, fourFallCutsOverlap, fourFallGroundCuts, type FourFallBedChoice, type GroundCut } from './fourfall';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -167,23 +167,35 @@ export function groundModel(plan: SitePlan): GroundModel {
     for (const a of levels) {
       const dx = p[0] - a.cx, dy = p[1] - a.cy;
       const lx = Math.abs(dx * a.cos - dy * a.sin) - a.hx, lz = Math.abs(dx * a.sin + dy * a.cos) - a.hz;
-      if (lx > 0.85 || lz > 0.85) continue;
+      if (lx > LEVEL_REACH || lz > LEVEL_REACH) continue;
       const out = Math.hypot(Math.max(lx, 0), Math.max(lz, 0));
-      const t = Math.min(1, Math.max(0, (out - 0.25) / 0.6));
+      const t = Math.min(1, Math.max(0, (out - 0.25) / (LEVEL_REACH - 0.25)));
       h = a.y + (h - a.y) * t * t * (3 - 2 * t);
     }
     return h;
   }
-  // Each waterfall's bed, and the level it is set at: the ground's own height at its front middle, where the module stands.
+  // Each waterfall's bed, and the grade it is set at: the ground's own height at its front middle, where the module stands.
   const bedAt = bedZoneAt(plan.zones);
+  const blended: { id: string; cut: GroundCut; y: number }[] = [];
   for (const f of plan.features) {
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'fourFall') continue;
-    const y = terrain(fourFallFront(f, spec), false);
-    const choice = fourFallBedChoice(f, spec, bedAt, (p) => terrain(p, false), y);
+    const choice = fourFallBedChoice(f, spec, bedAt, zoneAt, (p) => terrain(p, false));
     fourFalls.set(f.id, choice);
-    if (choice.blend) levels.push({ ...fourFallCut(f, spec, 'exact'), y });
+    if (choice.blend) blended.push({ id: f.id, cut: fourFallCut(f, spec, 'exact'), y: choice.y });
   }
+  // Two blended waterfalls within each other's levelling reach, set at different grades, would each level the other's
+  // ground: both keep their edges tucked instead.
+  for (let i = 0; i < blended.length; i++) {
+    for (let j = i + 1; j < blended.length; j++) {
+      const a = blended[i], b = blended[j];
+      if (Math.abs(a.y - b.y) >= 0.01 && fourFallCutsOverlap(a.cut, b.cut, LEVEL_REACH)) {
+        fourFalls.get(a.id)!.blend = false;
+        fourFalls.get(b.id)!.blend = false;
+      }
+    }
+  }
+  for (const b of blended) if (fourFalls.get(b.id)!.blend) levels.push({ ...b.cut, y: b.y });
   levelOn = true;
 
   return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater, fourFalls };

@@ -83,7 +83,7 @@ export interface SceneBuild {
 /**
  * What a four-fall waterfall takes from the bed it is set in, from its one bed choice (the ground model's fourFalls,
  * fourfall.ts fourFallBedChoice):
- * - `mulch`: the bed's material, which its mound's soil cover is recoloured to (fourFallMulch), whenever it has a bed.
+ * - `mulch`: the bed material its mound's soil cover is recoloured to (fourFallMulch), whenever it has one.
  * - `ground`: with its soil blended into the bed, the look its soil's edge fades into (setGround): the bed's painted
  *   texture's average color in linear light and its ground roughness (ground.ts groundLook). The fade keeps the
  *   module's bark chips (texture 1) in bark, mulch and stone beds, drawn at the bed's own chip size where its chips are
@@ -92,11 +92,10 @@ export interface SceneBuild {
  */
 export function fourFallBedFor(f: FeaturePlacement, gm: GroundModel): FourFallBedLook {
   const choice = gm.fourFalls.get(f.id);
-  const spec = choice?.bed ? materialById.get(choice.bed.catalogId) : undefined;
-  if (!spec) return { mulch: undefined, ground: null };
-  if (!choice!.blend) return { mulch: spec.id, ground: null };
+  const spec = choice?.blend && choice.bed ? materialById.get(choice.bed.catalogId) : undefined;
+  if (!spec) return { mulch: choice?.mulch, ground: null };
   const chip = materialChipSpacing(spec);
-  return { mulch: spec.id, ground: { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 } };
+  return { mulch: choice!.mulch, ground: { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 } };
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
