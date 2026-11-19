@@ -22,6 +22,9 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const G = 32.2, V0 = 2.1, GRADE = -0.05;
+// Newer three builds (seen in r186, not in r170) keep a second copy of the sheen colour, material.specularColorBlended, which
+// direct light reads instead of specularColor. Looked up in the build's own shader text, so no revision number is assumed.
+const SPEC_BLENDED = THREE.ShaderChunk.lights_physical_fragment.includes('specularColorBlended');
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const mix = (a, b, t) => a + (b - a) * t;
 const sstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
@@ -602,7 +605,8 @@ export function createWaterfall(options = {}) {
         // the sheen of the soil fades toward the host ground's own across the band (setGround specular); on a dark bed
         // the standard sheen reflects enough sky to show the band as a bluish strip
         float gSpecK = mix(1.0, uEdgeSpec, gEdge);
-        material.specularColor *= gSpecK; material.specularF90 *= gSpecK;`)
+        material.specularColor *= gSpecK; material.specularF90 *= gSpecK;` + (SPEC_BLENDED ? `
+        material.specularColorBlended *= gSpecK;` : ''))
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(mix(roughnessFactor, 0.3, gWI.x * 0.8), uEdgeRough, gEdge);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
