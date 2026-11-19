@@ -26,7 +26,7 @@ export class TapMarks {
     this.group.add(mesh);
     if (kind === 'hint') this.rings.push({ mesh, mat, t0: now, dur, r0: 0.16, r1: 0.26, a: 0.5 });
     // Client mode: a soft pulse under something that can be used (a fire, water, a light, a door).
-    else if (kind === 'beacon') this.rings.push({ mesh, mat, t0: now, dur, r0: 0.6, r1: 1.4, a: 0.6 });
+    else if (kind === 'beacon') this.rings.push({ mesh, mat, t0: now, dur, r0: 0.6, r1: 1.4, a: 0.45 });
     else this.rings.push({ mesh, mat, t0: now, dur, r0: 0.22, r1: 0.5, a: 0.9 });
     this.update(now);
   }

@@ -144,7 +144,11 @@ const CLIENT_QUALITY: Record<string, Quality> = { low: 'draft', medium: 'light',
 const CLIENT_MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
 if (EMBED_CLIENT) {
   // Only walking keys reach the studio: no full screen (F), measurements, labels, Library or other shortcuts.
-  window.addEventListener('keydown', (e) => { if (!CLIENT_MOVE_KEYS.has(e.key.toLowerCase()) || e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation(); }, true);
+  window.addEventListener('keydown', (e) => {
+    // Escape belongs to the parent page (its menu): the 3D view has the keyboard once clicked.
+    if (e.key === 'Escape' && embedOrigin && !e.repeat) window.parent.postMessage({ source: 'growth-studio', type: 'key', key: 'Escape' }, embedOrigin);
+    if (!CLIENT_MOVE_KEYS.has(e.key.toLowerCase()) || e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation();
+  }, true);
 }
 function clientTime(t: string) {
   if (!studio) return;
@@ -291,6 +295,8 @@ function bootStudio() {
     studio.handActive = true;
     studio.nav.client = true;
     studio.audio.setMuted(true);
+    // A controller's A or View uses what the view is on; the quick tools are never touched.
+    studio.onUse = () => { studio?.useAction(0); };
     const q = CLIENT_QUALITY[new URLSearchParams(location.search).get('quality') ?? ''];
     if (q) studio.setQuality(q);
   }

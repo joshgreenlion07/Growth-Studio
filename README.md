@@ -363,7 +363,7 @@ Messages use `window.postMessage`:
   spa view), else the house, and never leaves Walk. Walking is calm (1.1 m/s, no run); left and right (arrow keys, A/D,
   the joystick) turn instead of stepping sideways; wheel, pinch and lens zoom do nothing; only the walking keys reach
   the studio. A tap or click uses a door, fire, water or light, and a soft lime ring pulses now and then under each usable
-  thing within 14 m. Double tap or double click the ground walks there (450 ms between taps). No sound at all (not saved:
+  thing within 14 m, for 6 s after the camera last moved (a still view stops drawing). A controller gives only its sticks, A or View to use and Menu to go back to the start. Escape is sent to the parent as `{ type: 'key', key: 'Escape' }`. Double tap or double click the ground walks there (450 ms between taps). No sound at all (not saved:
   the person's own sound setting is kept). The parent sends `{ type: 'quality', quality }` (`low` = Draft at 0.75 pixel
   ratio, `medium` = Light, `high` = Balanced; also `quality=` on the address) and `{ type: 'time', time }` (`morning`
   9:30, `afternoon`, `sunset` = golden hour, `night`).

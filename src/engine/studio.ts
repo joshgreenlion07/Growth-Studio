@@ -213,6 +213,8 @@ export class Studio {
    */
   clientMode = false;
   private beaconAt = 0;
+  /** Client mode: when the camera last moved (the rings pulse only for a while after, so a still view stops drawing). */
+  private clientActiveAt = 0;
   /** Double tap timing: a little more time and room in client mode. */
   private dblMs() { return this.clientMode ? 450 : DOUBLE_TAP_MS; }
   private dblPx() { return this.clientMode ? 40 : DOUBLE_TAP_PX; }
@@ -1270,9 +1272,14 @@ export class Studio {
     this.onNavModeChanged(m);
   }
 
-  /** Client mode: every 2.6 s a soft ring on the ground under each usable thing within 14 m (see clientMode). */
+  /**
+   * Client mode: every 2.6 s a soft ring on the ground under each usable thing within 14 m (see clientMode), for 6 s
+   * after the camera last moved; then nothing, so a still view lets drawing pause (phones keep cool).
+   */
   private clientBeacons(now: number) {
-    if (!this.clientMode || this.navMode !== 'walk' || !this.build || now - this.beaconAt < 2600) return;
+    if (!this.clientMode) return;
+    if (this.camMoved || this.tween || !this.clientActiveAt) this.clientActiveAt = now;
+    if (this.navMode !== 'walk' || !this.build || now - this.clientActiveAt > 6000 || now - this.beaconAt < 2600) return;
     this.beaconAt = now;
     const seen = new Set<string>(), w = new THREE.Vector3();
     for (const a of this.build.features.actions) {
