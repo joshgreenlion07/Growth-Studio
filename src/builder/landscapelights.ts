@@ -5,7 +5,11 @@ import type { FeaturePlacement, SitePlan, Vec2, Zone } from '../siteplan/types';
 import { pointInPolygon } from '../siteplan/geometry';
 import { isBoardDeck } from '../siteplan/deckzone';
 import { FIXTURE_FINISHES, fixtureSetting, type FinishId, type FixtureSpec } from '../siteplan/truscapes';
-import { kelvinColor, type LandLight } from '../engine/landlights';
+import { lightColor, type LandLight } from '../engine/landlights';
+
+/** A fixture's light: a white in kelvin, or an RGB color '#rrggbb' (RGBCW lamps). */
+type Tone = number | string;
+const toneColor = (t: Tone) => (typeof t === 'string' ? lightColor(2700, t) : lightColor(t));
 import { boxUV } from './materials';
 import { zoneTop } from './hardscape';
 import { COVER_FLOOR_TOP, coverFloorAt } from './coverfloor';
@@ -18,7 +22,7 @@ import { linePath } from './linepath';
  * straight up toward +z by the placement's tilt; the yaw comes from the placement's rotation.
  *
  * Every fixture returns its beams (engine/landlights.ts) from its lens, and a lens material that glows at night in
- * the fixture's color temperature.
+ * the fixture's color temperature (or its RGB color, for a color-changing lamp set to one).
  */
 
 const IN = 0.0254;
@@ -44,8 +48,8 @@ export class FixtureMaterials {
   }
 
   /** A lens or glass that glows: `strength` scales its night glow (1 = a bare LED lens seen head on). */
-  lens(kelvin: number, strength = 1, frosted = false, deep = false): THREE.MeshStandardMaterial {
-    const key = `${kelvin}|${strength}|${frosted}|${deep}`;
+  lens(tone: Tone, strength = 1, frosted = false, deep = false): THREE.MeshStandardMaterial {
+    const key = `${tone}|${strength}|${frosted}|${deep}`;
     let m = this.lenses.get(key);
     if (!m) {
       // By day a lens reads as glass over a bright reflector, frosted acrylic as milky gray-white, and the glass of a
@@ -54,7 +58,7 @@ export class FixtureMaterials {
       const color = deep ? '#3a3c3d' : frosted ? '#cbc8c0' : '#b9bdbf';
       m = new THREE.MeshStandardMaterial({ color, roughness: frosted ? 0.55 : 0.1, metalness: frosted ? 0 : 0.35 });
       if (deep) strength *= 7 / 2.4;
-      m.emissive = kelvinColor(kelvin).multiplyScalar(strength);
+      m.emissive = toneColor(tone).multiplyScalar(strength);
       m.emissiveIntensity = 0;
       m.name = 'fixture-lens';
       this.lenses.set(key, m);
@@ -65,12 +69,12 @@ export class FixtureMaterials {
   }
 
   /** A dark surface next to the LED (hat underside, shroud inside) that picks up a faint glow at night. */
-  spill(kelvin: number, base: string, strength = 0.06): THREE.MeshStandardMaterial {
-    const key = `spill|${kelvin}|${base}|${strength}`;
+  spill(tone: Tone, base: string, strength = 0.06): THREE.MeshStandardMaterial {
+    const key = `spill|${tone}|${base}|${strength}`;
     let m = this.lenses.get(key);
     if (!m) {
       m = new THREE.MeshStandardMaterial({ color: base, roughness: 0.5, metalness: 0.2 });
-      m.emissive = kelvinColor(kelvin).multiplyScalar(strength);
+      m.emissive = toneColor(tone).multiplyScalar(strength);
       m.emissiveIntensity = 0;
       this.lenses.set(key, m);
       this.glow.push(m);
@@ -181,6 +185,10 @@ interface Ctx {
   finish: THREE.MeshStandardMaterial;
   m: FixtureMaterials;
   kelvin: number;
+  /** The lens glow's tone: the RGB color when one is set, else `kelvin`. */
+  tone: Tone;
+  /** RGB color '#rrggbb' of an RGBCW lamp set to a color. */
+  color?: string;
   beamDeg: number;
   tilt: number; // radians from straight up toward +z
   parts: Part[];
@@ -190,7 +198,7 @@ interface Ctx {
 const UP = new THREE.Vector3(0, 1, 0);
 
 function light(c: Ctx, at: THREE.Vector3, dir: THREE.Vector3, beamDeg: number, cutoffDeg: number, lumens: number, range: number) {
-  c.lights.push({ position: at.multiplyScalar(IN), direction: dir.normalize(), beamDeg, cutoffDeg, lumens, kelvin: c.kelvin, range });
+  c.lights.push({ position: at.multiplyScalar(IN), direction: dir.normalize(), beamDeg, cutoffDeg, lumens, kelvin: c.kelvin, ...(c.color ? { color: c.color } : {}), range });
 }
 
 /** The heavy-duty ground stake's top: a flange at grade with a short threaded riser (the rest is buried). */
@@ -236,7 +244,7 @@ function bullet(c: Ctx) {
   }
   head.push([c.finish, slantShroud(R + 0.03, 0.07, d.bodyL, d.shroudLong, d.shroudShort, 32)]);
   // Lens over the lamp, set just inside the shroud.
-  head.push([c.m.lens(c.kelvin, 1.3), disc(R - 0.12, d.bodyL + 0.02)]);
+  head.push([c.m.lens(c.tone, 1.3), disc(R - 0.12, d.bodyL + 0.02)]);
   // Pivot on the body's underside (+z before tilt), a quarter of the way up.
   const off = new THREE.Vector3(0, -d.bodyL * 0.25, -(R + 0.35));
   for (const [, g] of head) g.translate(off.x, off.y, off.z);
@@ -259,10 +267,10 @@ function floodHead(c: Ctx, wash: boolean) {
   if (wash) {
     // A half hood over the -z (upper) side of the lens, deeper at the top.
     head.push([c.finish, slantShroud(R + 0.04, 0.08, d.headL, d.hoodLong, d.hoodShort, 32)]);
-    head.push([c.m.lens(c.kelvin, 0.9, true), disc(R - 0.2, d.headL + 0.02, 32)]);
+    head.push([c.m.lens(c.tone, 0.9, true), disc(R - 0.2, d.headL + 0.02, 32)]);
   } else {
     head.push([c.finish, slantShroud(R + 0.04, 0.08, d.headL, d.hoodLong, d.hoodShort, 32)]);
-    head.push([c.m.lens(c.kelvin, 1.4), disc(R - 0.25, d.headL + 0.02, 32)]);
+    head.push([c.m.lens(c.tone, 1.4), disc(R - 0.25, d.headL + 0.02, 32)]);
   }
   // The wash head's face is an oval, as tall (head-local z, up and down once aimed) as `faceH`.
   const off = new THREE.Vector3(0, -d.headL * 0.35, -((d.faceH ?? d.headD) / 2 + 0.3));
@@ -291,11 +299,11 @@ function pathHat(c: Ctx) {
   // Lamp cup: a flared collar holding the glass.
   c.parts.push([c.finish, lathe([[d.stemD / 2, cupBot], [d.cupD / 2 * 0.62, cupBot + d.cupH * 0.35], [d.cupD / 2, cupBot + d.cupH * 0.5], [d.cupD / 2, cupBot + d.cupH * 0.55], [d.cupD / 2 * 0.8, cupBot + d.cupH * 0.55]], 24)]);
   // Glass enclosure round the G4 lamp (warm when lit), up into the hat.
-  c.parts.push([c.m.lens(c.kelvin, 0.75, true), cyl(d.cupD / 2 * 0.72, cupTop - (cupBot + d.cupH * 0.55) + 0.25, cupBot + d.cupH * 0.55, 20)]);
+  c.parts.push([c.m.lens(c.tone, 0.75, true), cyl(d.cupD / 2 * 0.72, cupTop - (cupBot + d.cupH * 0.55) + 0.25, cupBot + d.cupH * 0.55, 20)]);
   // Hat: a shallow cone with a rolled rim, its underside catching the lamp's glow.
   const R = d.hatD / 2, rc = d.collarD / 2;
   c.parts.push([c.finish, lathe([[R, hatRim - 0.06], [R + 0.02, hatRim], [rc, hatTop], [rc, hatTop + 0.001]], 40)]);
-  c.parts.push([c.m.spill(c.kelvin, '#2a2622', 0.09), lathe([[rc * 0.98, hatTop - 0.12], [R - 0.04, hatRim - 0.06]], 40)]);
+  c.parts.push([c.m.spill(c.tone, '#2a2622', 0.09), lathe([[rc * 0.98, hatTop - 0.12], [R - 0.04, hatRim - 0.06]], 40)]);
   // Enclosed top collar.
   c.parts.push([c.finish, lathe([[rc, hatTop - 0.05], [rc, H - 0.08], [rc - 0.08, H], [0, H]], 32)]);
   const at = new THREE.Vector3(0, cupBot + d.cupH * 0.85, 0);
@@ -319,11 +327,11 @@ function pathClassic(c: Ctx) {
   // Tapered body: metal cage at top and bottom, frosted glass between (it glows when lit).
   const rb = d.bodyBotD / 2, rt = d.bodyTopD / 2;
   c.parts.push([c.finish, lathe([[d.stemD / 2, bodyBot], [rb, bodyBot + 0.25], [rb + 0.02, bodyBot + 0.55]], 24)]);
-  c.parts.push([c.m.lens(c.kelvin, 0.7, true), lathe([[rb - 0.02, bodyBot + 0.5], [rt - 0.05, bodyTop - 0.35]], 24)]);
+  c.parts.push([c.m.lens(c.tone, 0.7, true), lathe([[rb - 0.02, bodyBot + 0.5], [rt - 0.05, bodyTop - 0.35]], 24)]);
   c.parts.push([c.finish, lathe([[rt - 0.1, bodyTop - 0.4], [rt, bodyTop - 0.3], [rt, bodyTop], [rt * 0.6, bodyTop + 0.05]], 24)]);
   const R = d.hatD / 2;
   c.parts.push([c.finish, lathe([[R, hatRim - 0.06], [R + 0.02, hatRim], [fin * 0.55, hatTop], [0.01, hatTop + 0.02]], 40)]);
-  c.parts.push([c.m.spill(c.kelvin, '#2a2622', 0.08), lathe([[0.05, hatTop - 0.1], [R - 0.04, hatRim - 0.06]], 40)]);
+  c.parts.push([c.m.spill(c.tone, '#2a2622', 0.08), lathe([[0.05, hatTop - 0.1], [R - 0.04, hatRim - 0.06]], 40)]);
   // Dome finial.
   const fr = fin / 2, fh = d.finialH ?? fr;
   c.parts.push([c.finish, lathe([[fr * 0.95, hatTop - 0.05], [fr, hatTop + fh * 0.3], [fr * 0.72, hatTop + fh * 0.8], [0, hatTop + fh]], 20)]);
@@ -357,10 +365,10 @@ function pathModern(c: Ctx, square: boolean) {
   const ly = H - t;
   if (square) {
     // A frosted panel in the underside of the block arm.
-    c.parts.push([c.m.lens(c.kelvin, 0.9, true), box(t * 0.7, 0.04, d.lensD * 2.2, 0, ly - 0.03, lz - d.lensD * 0.4)]);
+    c.parts.push([c.m.lens(c.tone, 0.9, true), box(t * 0.7, 0.04, d.lensD * 2.2, 0, ly - 0.03, lz - d.lensD * 0.4)]);
   } else {
     c.parts.push([c.finish, cyl(d.lensD / 2 + 0.06, 0.28, ly - 0.28, 16).translate(0, 0, lz)]);
-    c.parts.push([c.m.lens(c.kelvin, 1.2), discDown(d.lensD / 2, ly - 0.29).translate(0, 0, lz)]);
+    c.parts.push([c.m.lens(c.tone, 1.2), discDown(d.lensD / 2, ly - 0.29).translate(0, 0, lz)]);
   }
   const spread = d.spread ?? 130;
   light(c, new THREE.Vector3(0, ly - 0.35, lz), new THREE.Vector3(0, -1, 0), spread, d.cutoff ?? Math.min(172, spread * 1.35), c.spec.lumens, d.range ?? 4.5);
@@ -376,7 +384,7 @@ function well(c: Ctx) {
   const R = d.flangeD / 2;
   c.parts.push([c.finish, lathe([[R, 0.02], [R, 0.12], [R - 0.15, 0.22], [d.lensD / 2 + 0.05, 0.2], [d.lensD / 2, 0.05]], 36)]);
   // Clear glass over the lamp and its dark reflector.
-  c.parts.push([c.m.lens(c.kelvin, d.eyelid ? 0.4 : 0.3, false, true), disc(d.lensD / 2, 0.06, 32)]);
+  c.parts.push([c.m.lens(c.tone, d.eyelid ? 0.4 : 0.3, false, true), disc(d.lensD / 2, 0.06, 32)]);
   if (d.eyelid) c.parts.push([c.finish, slantShroud(d.lensD / 2 + 0.12, 0.08, 0.15, d.eyelid, d.eyelidShort ?? 0.3, 32)]);
   // The lamp inside tilts with the aim (up to about 15-20 degrees inside the can).
   const dir = UP.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), c.tilt);
@@ -397,7 +405,7 @@ function hardscape(c: Ctx) {
   c.parts.push([c.finish, box(L * 0.92, d.plateT, d.plateD, 0, -d.plateT, zf - d.plateD / 2)]);
   c.parts.push([c.finish, box(L, d.headH, d.headD, 0, -d.headH - d.plateT + 0.02, z0 + d.headD / 2, 0.08)]);
   // LED lens strip along the head's underside.
-  c.parts.push([c.m.lens(c.kelvin, 0.22, true), box(L * 0.8, 0.04, d.headD * 0.45, 0, -d.headH - d.plateT - 0.0, z0 + d.headD * 0.45)]);
+  c.parts.push([c.m.lens(c.tone, 0.22, true), box(L * 0.8, 0.04, d.headD * 0.45, 0, -d.headH - d.plateT - 0.0, z0 + d.headD * 0.45)]);
   const at = new THREE.Vector3(0, -d.headH - d.plateT - 0.7, z0 + d.headD * 0.6);
   // Down the wall face: aimed slightly back toward the wall (-z).
   light(c, at, new THREE.Vector3(0, -1, -0.18), c.beamDeg, Math.min(176, c.beamDeg * 1.35), c.spec.lumens, d.range ?? 2.6);
@@ -413,7 +421,7 @@ function riser(c: Ctx) {
   const n = d.leds ?? 1;
   for (let i = 0; i < n; i++) {
     const x = n === 1 ? 0 : -d.length * 0.38 + (i / (n - 1)) * d.length * 0.76;
-    c.parts.push([c.m.lens(c.kelvin, 0.3), box(n === 1 ? d.length * 0.18 : 0.22, 0.03, d.depth * 0.5, x, -d.height / 2 - 0.015, d.depth * 0.55)]);
+    c.parts.push([c.m.lens(c.tone, 0.3), box(n === 1 ? d.length * 0.18 : 0.22, 0.03, d.depth * 0.5, x, -d.height / 2 - 0.015, d.depth * 0.55)]);
   }
   light(c, new THREE.Vector3(0, -d.height / 2 - 0.3, d.depth + 0.5), new THREE.Vector3(0, -0.75, 1), c.beamDeg, Math.min(176, c.beamDeg * 1.4), c.spec.lumens, d.range ?? 2.2);
 }
@@ -426,7 +434,7 @@ function paver(c: Ctx) {
   const d = c.spec.dims;
   // An inverted T set between pavers: only the lens bar's top shows, flush with the paving, in a thin metal frame.
   c.parts.push([c.finish, box(d.length, 0.04, d.width, 0, -0.02, 0)]);
-  c.parts.push([c.m.lens(c.kelvin, 0.35, true), box(d.length - 0.16, 0.045, d.width - 0.16, 0, -0.02, 0)]);
+  c.parts.push([c.m.lens(c.tone, 0.35, true), box(d.length - 0.16, 0.045, d.width - 0.16, 0, -0.02, 0)]);
   light(c, new THREE.Vector3(0, 0.15, 0), new THREE.Vector3(0, 1, 0), c.beamDeg, 176, c.spec.lumens, d.range ?? 3);
 }
 
@@ -439,7 +447,7 @@ function dot(c: Ctx) {
   const d = c.spec.dims;
   const parts: Part[] = [];
   parts.push([c.finish, lathe([[d.faceD / 2, 0], [d.faceD / 2, 0.04], [d.faceD / 2 - 0.15, 0.1], [d.lensD / 2 + 0.04, 0.09], [d.lensD / 2, 0.02]], 32)]);
-  parts.push([c.m.lens(c.kelvin, 0.5, true), disc(d.lensD / 2, 0.03, 24)]);
+  parts.push([c.m.lens(c.tone, 0.5, true), disc(d.lensD / 2, 0.03, 24)]);
   if (d.eyebrow) parts.push([c.finish, slantShroud(d.lensD / 2 + 0.14, 0.06, 0.05, d.eyebrow, 0.02, 28)]);
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), c.tilt);
   for (const [mat, g] of parts) c.parts.push([mat, g.applyQuaternion(q)]);
@@ -455,7 +463,7 @@ function puck(c: Ctx) {
   const g = lathe([[R, 0], [R, d.depth - 0.1], [R * 0.9, d.depth], [0, d.depth]], 32).rotateX(Math.PI / 2);
   c.parts.push([c.finish, g]);
   // The slot under the hood.
-  c.parts.push([c.m.lens(c.kelvin, 0.3, true), box(R * 1.2, 0.05, d.depth * 0.6, 0, -R * 0.35, d.depth * 0.55)]);
+  c.parts.push([c.m.lens(c.tone, 0.3, true), box(R * 1.2, 0.05, d.depth * 0.6, 0, -R * 0.35, d.depth * 0.55)]);
   light(c, new THREE.Vector3(0, -R * 0.6, d.depth + 0.5), new THREE.Vector3(0, -1, 0.5), c.beamDeg, 176, c.spec.lumens, d.range ?? 2.2);
 }
 
@@ -470,7 +478,7 @@ function walkwayWash(c: Ctx) {
   const tilt = (12 * Math.PI) / 180;
   const head = box(d.length, d.headH, d.headD, 0, -d.headH / 2, 0, 0.1).rotateX(-tilt).translate(0, d.legH + d.headH / 2, 0);
   c.parts.push([c.finish, head]);
-  c.parts.push([c.m.lens(c.kelvin, 0.3, true), box(d.length * 0.78, 0.04, 0.5, 0, 0, d.headD * 0.25).rotateX(-tilt).translate(0, d.legH - 0.03, 0)]);
+  c.parts.push([c.m.lens(c.tone, 0.3, true), box(d.length * 0.78, 0.04, 0.5, 0, 0, d.headD * 0.25).rotateX(-tilt).translate(0, d.legH - 0.03, 0)]);
   light(c, new THREE.Vector3(0, d.legH - 0.2, d.headD * 0.3), new THREE.Vector3(0, -0.8, 1), c.beamDeg, 170, c.spec.lumens, d.range ?? 4);
 }
 
@@ -625,6 +633,8 @@ export function buildFixture(spec: FeatureSpec, f: FeaturePlacement, m: FixtureM
     finish: m.finish(set.finish),
     m,
     kelvin: set.kelvin,
+    tone: set.color ?? set.kelvin,
+    color: set.color,
     beamDeg: set.beamDeg,
     tilt: (set.tiltDeg * Math.PI) / 180,
     parts: [],

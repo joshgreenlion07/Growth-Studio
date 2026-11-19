@@ -32,6 +32,8 @@ export interface LandLight {
   lumens: number;
   /** Color temperature, kelvin. */
   kelvin: number;
+  /** RGB color '#rrggbb' of a color-changing fixture set to a color; it replaces `kelvin`. */
+  color?: string;
   /** Reach in meters, past which the light is dropped (it is faded out before). */
   range: number;
   /** Switched off by hand in the 3D view (builder/actions.ts): left out of the pool. */
@@ -151,6 +153,17 @@ export function kelvinColor(k: number, out = new THREE.Color()): THREE.Color {
   return out.multiplyScalar(1 / m);
 }
 
+/**
+ * Linear RGB of a fixture's light: its RGB color when set (an RGBCW lamp), else its white at `kelvin`. Scaled so the
+ * brightest channel is 1, as `kelvinColor` is.
+ */
+export function lightColor(kelvin: number, color?: string, out = new THREE.Color()): THREE.Color {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return kelvinColor(kelvin, out);
+  out.setStyle(color, THREE.SRGBColorSpace);
+  const m = Math.max(out.r, out.g, out.b);
+  return m > 1e-4 ? out.multiplyScalar(1 / m) : kelvinColor(kelvin, out);
+}
+
 /** Peak (center) candela of a beam carrying `lumens`, for the beam shape above. */
 export function peakCandela(lumens: number, beamDeg: number, cutoffDeg: number): number {
   const a = Math.max(1e-4, 1 - Math.cos((beamDeg * Math.PI) / 360));
@@ -179,7 +192,7 @@ export class LandLightPool {
       const cut = Math.max(half * 1.05, Math.min(178, l.cutoffDeg) / 2);
       const dir = l.direction.clone().normalize();
       const cd = peakCandela(l.lumens, l.beamDeg, l.cutoffDeg) * CANDELA_TO_SCENE;
-      kelvinColor(l.kelvin, col).multiplyScalar(cd);
+      lightColor(l.kelvin, l.color, col).multiplyScalar(cd);
       this.packed.set([l.position.x, l.position.y, l.position.z, l.range], o);
       this.packed.set([dir.x, dir.y, dir.z, Math.cos((cut * Math.PI) / 180)], o + 4);
       this.packed.set([col.r, col.g, col.b, 1 / Math.max(1e-4, 1 - Math.cos((half * Math.PI) / 180))], o + 8);
