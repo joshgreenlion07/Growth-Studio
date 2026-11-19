@@ -1,4 +1,5 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
+import { samplePremierSmooth } from './sample-premier-smooth';
 import { sampleWallVeneers } from './sample-wall-veneers';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
@@ -486,6 +487,7 @@ export const SAMPLES = [
   { id: 'frontyard', name: 'Front yard dry creek', make: sampleFrontYard },
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
+  { id: 'premier-smooth', name: 'Basalite Premier Smooth: six colors, two patterns', make: samplePremierSmooth },
   { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },
   { id: 'wall-veneers', name: 'Wall veneers: stacked stone and stucco, with columns', make: sampleWallVeneers },

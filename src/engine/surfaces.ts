@@ -98,6 +98,9 @@ interface PieceHit {
   rotated: boolean;
   /** Piece length in meters. */
   len: number;
+  /** Position inside the piece from its corner, meters (module patterns; a clouded blend is drawn in these). */
+  lx?: number;
+  ly?: number;
 }
 
 interface Layout {
@@ -181,7 +184,7 @@ function runningLayout(w: number, h: number, offsetFrac: number, randomOffsets: 
       const lx = xs - col * W, ly = y - Math.floor(y / H) * H;
       const cols = Math.round(tile / W);
       const id = row * 997 + (((col % cols) + cols) % cols);
-      return { id, edge: Math.min(lx, W - lx, ly, H - ly), along: lx / W, rotated: false, len: W };
+      return { id, edge: Math.min(lx, W - lx, ly, H - ly), along: lx / W, rotated: false, len: W, lx, ly };
     },
   };
 }
@@ -277,7 +280,16 @@ function cobbleLayout(sizes: [number, number][], seed: string): Layout {
  * pattern repeats over, so the texture tiles. Both use the pallet mix by area: 25% 6 x 12, 25% 9 x 12, 50% 12 x 12.
  * A: 12 in wide courses of 6, 9 and 12 in pieces, a 48 x 42 in module. B: a 36 x 30 in module mixing both directions.
  */
-interface PieceModule { pieces: [number, number, number, number][]; v1: [number, number]; v2: [number, number]; P: number; /** Laid at 45 degrees. */ diagonal?: boolean }
+interface PieceModule {
+  pieces: [number, number, number, number][];
+  v1: [number, number];
+  v2: [number, number];
+  P: number;
+  /** Laid at 45 degrees. */
+  diagonal?: boolean;
+  /** Real inches per inch of the drawing (a maker module a little under nominal, PaverPattern.scale); left out, 1. */
+  scale?: number;
+}
 const THREE_PIECE: Record<'a' | 'b', PieceModule> = {
   a: {
     pieces: [[0, 0, 12, 9], [0, 9, 12, 9], [12, 0, 12, 6], [12, 6, 12, 9], [12, 15, 12, 12], [12, 27, 12, 9], [12, 36, 12, 6], [24, 0, 12, 12], [24, 12, 12, 6], [24, 18, 12, 12], [24, 30, 12, 12], [36, 0, 12, 6], [36, 6, 12, 12], [36, 18, 12, 6], [36, 24, 12, 12], [36, 36, 12, 6]],
@@ -311,15 +323,37 @@ const ANTIQUED: Record<'a' | 'running3' | 'herringbone', PieceModule> = {
   herringbone: { pieces: [[0, 0, 9, 6], [-6, -3, 6, 9]], v1: [9, 9], v2: [-6, 6], P: 6 * 18 * Math.SQRT2, diagonal: true },
 };
 
+/*
+ * Basalite's two published Premier Smooth patterns, traced from the vector drawings of its Premier Smooth Pattern
+ * Brochure (CA, 2023/2025): the gray-shaded repeat of each, in nominal inches (Basalite's drawings are nominal, 55.3 pt
+ * to 12 in), on the lattice its copies sit on. Laid out at the real 11.79 in module (PaverPattern.scale).
+ * combo3: 3 Piece Combo Pattern, 100% combo: three 6 x 12, two 9 x 12, one 12 x 12, exactly the pallet's 3 : 2 : 1;
+ *         repeats on (18, 15) and (12, 42), square every 192 in.
+ * combo4: 4 Piece Pattern #4, 73% combo and 27% 12 x 18 by area (the brochure's own split): the same six pieces plus a
+ *         12 x 18 laid long side across; repeats on (18, 15) and (-6, 39), square every 264 in.
+ */
+const BASALITE_MODULES: Record<'combo3' | 'combo4', PieceModule> = {
+  combo3: {
+    pieces: [[12, 6, 12, 12], [12, 18, 12, 9], [12, 0, 12, 6], [0, 12, 12, 9], [0, 21, 12, 6], [6, 0, 6, 12]],
+    v1: [18, 15], v2: [12, 42], P: 192,
+  },
+  combo4: {
+    pieces: [[6, 0, 18, 12], [6, 12, 6, 12], [12, 18, 12, 12], [12, 30, 12, 9], [12, 12, 12, 6], [0, 24, 12, 9], [0, 33, 12, 6]],
+    v1: [18, 15], v2: [-6, 39], P: 264,
+  },
+};
+
 function moduleLayout(m: PieceModule): Layout {
   const det = m.v1[0] * m.v2[1] - m.v1[1] * m.v2[0];
   const P = m.P;
   const R = Math.SQRT1_2;
+  // Drawing inches to meters.
+  const U = IN * (m.scale ?? 1);
   return {
     module: m,
-    tile: P * IN,
+    tile: P * U,
     at(x: number, y: number) {
-      let X = x / IN, Y = y / IN;
+      let X = x / U, Y = y / U;
       // A diagonal pattern is drawn square and turned 45 degrees: its lattice holds (P, 0) and (0, P) once turned.
       if (m.diagonal) [X, Y] = [(X + Y) * R, (Y - X) * R];
       // Lattice coordinates of the point, then the copy of the module that holds it.
@@ -336,9 +370,9 @@ function moduleLayout(m: PieceModule): Layout {
             if (m.diagonal) [mx, my] = [(mx - my) * R, (mx + my) * R];
             const cx = (((mx % P) + P) % P), cy = (((my % P) + P) % P);
             const rotated = ph > pw;
-            const edge = Math.min(qx - px, px + pw - qx, qy - py, py + ph - qy) * IN;
+            const edge = Math.min(qx - px, px + pw - qx, qy - py, py + ph - qy) * U;
             const along = rotated ? (qy - py) / ph : (qx - px) / pw;
-            return { id: Math.round(cx * 2) * 1009 + Math.round(cy * 2), edge, along, rotated, len: Math.max(pw, ph) * IN };
+            return { id: Math.round(cx * 2) * 1009 + Math.round(cy * 2), edge, along, rotated, len: Math.max(pw, ph) * U, lx: (qx - px) * U, ly: (qy - py) * U };
           }
         }
       }
@@ -360,6 +394,9 @@ export function soldierTileIn(a: number, b: number): number {
 
 function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layout {
   const [a, b] = p.sizes[0];
+  const s = p.scale ?? 1;
+  // Basalite's own patterns (Premier Smooth), on the maker's real module.
+  if (laying === 'combo3' || laying === 'combo4') return moduleLayout({ ...BASALITE_MODULES[laying], scale: s });
   // 1-piece patterns of 6 x 9 (Antiqued Flat Top): half bond, 9 in along the course; or the 45 degree herringbone.
   if (laying === 'running') return runningLayout(9, 6, 0.5, false, 24, 16, seed);
   if (laying === 'herringbone') return moduleLayout(ANTIQUED.herringbone);
@@ -369,7 +406,7 @@ function layoutFor(p: PaverPattern, seed: string, laying?: LayingPattern): Layou
     case 'running': return runningLayout(a, b, 0.5, false, 12, 6, seed);
     case 'soldier': {
       const L = soldierTileIn(a, b);
-      return runningLayout(a, b, 0, false, Math.round(L / b), Math.round(L / a), seed);
+      return runningLayout(a * s, b * s, 0, false, Math.round(L / b), Math.round(L / a), seed);
     }
     case 'plank': return runningLayout(a, b, 0.33, true, Math.round(96 / b), Math.max(2, Math.round(96 / a)), seed);
     // A clouded blend repeats every 3 x 3 slabs, so its streaks do not repeat every second slab.
@@ -413,10 +450,66 @@ function cloudTone(colors: RGB[], lx: number, ly: number, id: number, r1: number
   return c;
 }
 
+/*
+ * A face mix (Basalite Premier Smooth): a base tone with drifts of the other tones through each piece, the way the
+ * maker's swatch photos show them: drifts a few inches wide and about a foot long running roughly along one side of the
+ * piece or the other, crisp, with powdery speckled edges. Each tone covers the share of the face `mix` gives it (read
+ * from the photo): tones are laid in order over the base, so tone i shows where its own field passes a threshold and no
+ * later tone covers it; the thresholds come from the fields' own spread (MIX_Q), so the shares come out as measured.
+ * Drawn in the piece's own coordinates (meters from its corner).
+ */
+const mixField = (su: number, sv: number, s: number) =>
+  vnoise(su, sv, 1e6, s) * 0.62 + vnoise(su * 2.2, sv * 2.2, 1e6, s + 1) * 0.26 + vnoise(su * 4.7, sv * 4.7, 1e6, s + 2) * 0.12;
+/** The fields' values, sorted: MIX_Q[k * (n - 1)] is their k-quantile. */
+const MIX_Q: number[] = (() => {
+  const r = rng('mix-q'), out: number[] = [];
+  for (let i = 0; i < 6000; i++) out.push(mixField(r() * 400, r() * 400, 300 + Math.floor(r() * 50) * 3));
+  return out.sort((a, b) => a - b);
+})();
+const mixQuantile = (k: number) => MIX_Q[Math.max(0, Math.min(MIX_Q.length - 1, Math.round(k * (MIX_Q.length - 1))))];
+const mixCuts = new Map<string, number[]>();
+/** Thresholds for tones 1.. so each covers its share: from the top tone down, the share of what is left uncovered. */
+function mixThresholds(mix: number[]): number[] {
+  const key = mix.join(',');
+  let cut = mixCuts.get(key);
+  if (!cut) {
+    cut = new Array(mix.length).fill(1);
+    let left = 1;
+    for (let i = mix.length - 1; i >= 1; i--) {
+      const p = Math.min(0.95, mix[i] / Math.max(1e-6, left));
+      cut[i] = mixQuantile(1 - p);
+      left -= mix[i];
+    }
+    mixCuts.set(key, cut);
+  }
+  return cut;
+}
+function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number): RGB {
+  const cut = mixThresholds(mix);
+  // Drifts run along one side of the piece or the other, leaning up to 5 degrees.
+  const th = (r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
+  const ca = Math.cos(th), sa = Math.sin(th);
+  const su = lx * ca + ly * sa, sv = -lx * sa + ly * ca;
+  const s = 300 + (id % 50) * 3;
+  // A powdery grain on every edge, a couple of millimeters: two scales on lattices turned off the piece's axes, so the
+  // grain's square cells never line up with a drift that runs along the piece (they would show as stair steps).
+  const g1x = lx * 0.81 - ly * 0.59, g1y = lx * 0.59 + ly * 0.81, g2x = lx * 0.38 + ly * 0.93, g2y = -lx * 0.93 + ly * 0.38;
+  const grain = (vnoise(g1x * 170, g1y * 170, 1e6, s + 90) - 0.5) * 0.06 + (vnoise(g2x * 410, g2y * 410, 1e6, s + 91) - 0.5) * 0.035;
+  const warp = (vnoise(su * 1.6, sv * 1.6, 1e6, s + 80) - 0.5) * 0.7;
+  let c = colors[0];
+  for (let i = 1; i < colors.length && i < mix.length; i++) {
+    // Patches about 20 to 50 cm along and 6 to 18 cm across.
+    const f = mixField(su * 2.3 + i * 7.3, sv * 6.5 + warp + i * 3.1, s + i * 11) + grain + (r2 - 0.5) * 0.03;
+    c = mixRGB(c, colors[i], smooth(cut[i] - 0.022, cut[i] + 0.022, f));
+  }
+  return c;
+}
+
 /**
  * The lines whose faces take the close-range detail (engine/paver-detail.ts): every Belgard paver line in the catalog,
  * with its field, its own border, its "same as main course" border (border-of-), its 6 x 9 paver edging (paver-edge-)
- * and every color. Basalite, the porcelain and generic tester looks are left as they were. A new line opts in by being
+ * and every color, and Basalite Premier Smooth (its own face mix, checked with the detail on). Other Basalite looks, the
+ * porcelain and generic tester looks are left as they were. A new line opts in by being
  * listed here once its look has been checked with the detail on (its face kind must have a detail recipe).
  *
  * The detail face is the line's own face in the catalog: smooth for Catalina Grana and the Dimensions lines (Belgard's
@@ -427,6 +520,7 @@ const DETAIL_SLUGS = [
   'avalon-slate', 'catalina-grana', 'antiqued-flat-top',
   'dimensions-6', 'dimensions-12-60mm', 'dimensions-12-80mm', 'dimensions-18', 'dimensions-antiqued',
   'dimensions-single-units', 'dimensions-slabs', 'dimensions-slab-24',
+  'premier-smooth',
 ];
 const DETAIL_LINES = new RegExp(`^(?:border-of-|paver-edge-)?(?:${DETAIL_SLUGS.join('|')})-`);
 function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
@@ -440,7 +534,8 @@ function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined 
  * Dimensions Antiqued, with the same face on a 8 ft random repeat, keeps 1024 (2.4 mm a texel; its close-up wear is
  * drawn by the detail overlay), so one color is not 64 MB of GPU memory.
  */
-const paverMapSize = (spec: MaterialSpec, p: PaverPattern, T: number) => (T > 5 || (p.face === 'antiqued' && /antiqued-flat-top-/.test(spec.id)) ? 2048 : 1024);
+// A face mix (Premier Smooth) has crisp, powdery drift edges that read as blocks up close at the small size.
+const paverMapSize = (spec: MaterialSpec, p: PaverPattern, T: number) => (T > 5 || p.blend === 'mix' || (p.face === 'antiqued' && /antiqued-flat-top-/.test(spec.id)) ? 2048 : 1024);
 
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
@@ -510,11 +605,12 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
     const D = m.diagonal ? [R, -R, R, R] : [1, 0, 0, 1]; // (X, Y) -> ((X + Y) R, (Y - X) R), column-major
     const mul = (a: number[], b: number[]) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3]];
     const LD = mul(L, D);
-    const M = mul(LD, [1 / IN, 0, 0, -1 / IN]);
-    const o: [number, number] = [-(LD[0] + LD[2]) * (h / IN), -(LD[1] + LD[3]) * (h / IN)];
-    const cell = Math.max(Math.hypot(m.v1[0], m.v1[1]), Math.hypot(m.v2[0], m.v2[1])) * IN;
+    const U = IN * (m.scale ?? 1);
+    const M = mul(LD, [1 / U, 0, 0, -1 / U]);
+    const o: [number, number] = [-(LD[0] + LD[2]) * (h / U), -(LD[1] + LD[3]) * (h / U)];
+    const cell = Math.max(Math.hypot(m.v1[0], m.v1[1]), Math.hypot(m.v2[0], m.v2[1])) * U;
     const n = Math.min(1024, Math.ceil(cell / EDGE_TEXEL));
-    const key = `mod:${laying}:${m.pieces.length}:${m.P}:${n}`;
+    const key = `mod:${laying}:${m.pieces.length}:${m.P}:${m.scale ?? 1}:${n}`;
     return { ...common, key, src, size: n, mapSize: size, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
   }
   const n = Math.min(2048, Math.ceil(T / EDGE_TEXEL));
@@ -552,7 +648,7 @@ function moduleEdges(m: PieceModule, n: number): Uint8Array {
         const X = s * m.v1[0] + t * m.v2[0] - x0, Y = s * m.v1[1] + t * m.v2[1] - y0;
         if (X < 0 || X >= pw || Y < 0 || Y >= ph) continue;
         done[k] = 1;
-        out[k] = encodeEdge(Math.min(X, pw - X, Y, ph - Y) * IN);
+        out[k] = encodeEdge(Math.min(X, pw - X, Y, ph - Y) * IN * (m.scale ?? 1));
       }
     }
   }
@@ -611,11 +707,16 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
     const bev = antiqued ? 0.12 + 0.88 * smooth(J, J + bevel, edge) : smooth(J, J + bevel, edge);
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
-    if (p.blend !== 'cloud') {
+    if (p.blend === 'mix' && p.mix && hit.lx !== undefined && hit.ly !== undefined) {
+      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2);
+    } else if (p.blend !== 'cloud') {
       const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
       c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
+    } else if (hit.lx !== undefined && hit.ly !== undefined) {
+      // A pattern of several sizes (Premier Smooth): the drifts in each piece's own coordinates.
+      c = cloudTone(colors, hit.lx, hit.ly, id, r1, r2);
     } else {
-      const S = p.sizes[0][0] * IN;
+      const S = p.sizes[0][0] * IN * (p.scale ?? 1);
       c = cloudTone(colors, x - Math.floor(x / S) * S, y - Math.floor(y / S) * S, id, r1, r2);
     }
     // DuraFusion blends cloud a third tone through the face in soft drifts.

@@ -33,7 +33,7 @@ export interface Zone extends ItemBase {
   /** Hardscape: a soldier-course border band around the edge. */
   border?: { catalogId: string; width: number; /** soldier (default): long side across the band. sailor: long side along the edge. */ course?: 'soldier' | 'sailor' };
   /** Hardscape in a paver that offers laying patterns (see LayingPattern and layingsFor in the catalog). Left out, the paver's first. */
-  laying?: 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone';
+  laying?: 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone' | 'combo3' | 'combo4';
   /**
    * Hardscape in a paver: a single rectangle up to 3 ft x 3 ft (sides within 37 in, or a size a slab is sold in) is by default one solid slab at its drawn size (see
    * siteplan/pads.ts). true makes any such rectangle a pad; false keeps it paving. Left out, the size decides.
