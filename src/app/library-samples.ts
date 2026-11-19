@@ -3,6 +3,7 @@
 // `target` and `dist`. Plan coordinates are meters [x, y]; in 3D, x stays x, plan y is world z, y is up.
 import { featureById, layingsFor, materialById, plantById, type LayingPattern, type MaterialSpec } from '../siteplan/catalog';
 import type { ExistingStructure, FeaturePlacement, LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
+import { sampleFourFall } from '../siteplan/sample-four-fall';
 
 export type LibraryItem =
   | { kind: 'material'; id: string } // a MaterialSpec id (paver, wall, curb, paver edge, turf, bed fill, concrete, porcelain, ...)
@@ -186,6 +187,14 @@ function plantSample(id: string, opts: SampleOptions): LibrarySample {
 function featureSample(id: string): LibrarySample {
   const f = featureById.get(id);
   if (!f) throw new Error(`Library sample: no feature "${id}" in the catalog`);
+  if (f.kind === 'fourFall') {
+    // The waterfall brings its own soil and sits below a patio's level: shown in its own sample's bed, patio in front.
+    const plan = sampleFourFall();
+    // The Library's Try it buttons are the actions of the item called 'sample'.
+    const wf = plan.features[0];
+    wf.id = 'sample';
+    return { plan, target: [wf.position[0], 1.0, wf.position[1] + 0.6], dist: 11.5 };
+  }
   const pad = 16 * FT;
   const L = Math.max(10, pad + 4), c = L / 2;
   const plan = lot(f.name, L);

@@ -26,6 +26,7 @@ const CSS = `
 .ss-chips i { width: 44px; height: 30px; border-radius: 3px; border: 1px solid var(--line); }
 .ss-chips code { font: 11px "IBM Plex Mono", ui-monospace, Menlo, monospace; color: var(--ink-2); }
 .ss dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; }
+.ss-notice { margin: 0; padding: 4px 0 4px 10px; border-left: 3px solid #c2410c; }
 .ss dt { color: var(--ink-2); }
 .ss dd { margin: 0; }
 .ss ul { margin: 0; padding-left: 18px; }
@@ -49,6 +50,7 @@ function lookHtml(look: Look): string {
     <div><h1>${esc(look.name)}</h1><p class="sub">${sub}</p></div>
     ${look.palette.length ? `<div class="ss-chips">${look.palette.map((c) => `<div><i style="background:${esc(c)}"></i><code>${esc(c)}</code></div>`).join('')}</div>` : ''}
     ${rows.length ? `<dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}
+    ${look.notice ? `<p class="ss-notice"><strong>${esc(look.notice)}</strong></p>` : ''}
     ${look.about ? `<p>${esc(look.about)}</p>` : ''}
     ${look.spec.length ? `<ul>${look.spec.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
   </div>`;

@@ -11,6 +11,8 @@ export const WATER_LAYER_SKIP = 1; // objects on this layer are left out of refl
 export const REFLECTION_ONLY_LAYER = 2;
 /** Shadow casters are also on this layer; the shadow map is drawn in a pass that sees only it. */
 export const SHADOW_PASS_LAYER = 3;
+/** What a four-fall waterfall's water looks through (its own rock, soil and cobbles), and the lights: the refraction pass sees only it. */
+export const REFRACTION_LAYER = 4;
 
 export class PlanarMirror {
   readonly target: THREE.WebGLRenderTarget;

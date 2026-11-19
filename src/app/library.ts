@@ -5,7 +5,7 @@
 // removed as real product lines replace them.
 import * as THREE from 'three';
 import type { Studio } from '../engine/studio';
-import { FEATURES, MATERIALS, PLANTS, approvalKeyOf, isApproved, isTester, layingName, layingsFor, materialById, type FeatureSpec, type LayingPattern, type MaterialSpec, type PlantSpec } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, approvalKeyOf, isApproved, isOutOfArea, isTester, layingName, layingsFor, materialById, outOfAreaNote, type FeatureSpec, type LayingPattern, type MaterialSpec, type PlantSpec } from '../siteplan/catalog';
 import { onApprovalsChanged } from '../siteplan/approval';
 import { sampleFor, scenesFor, type LibraryItem, type LibrarySample } from './library-samples';
 import { swatchFor } from './swatches';
@@ -94,7 +94,9 @@ function buildProducts(): Product[] {
       const lk = `${key}|${cat}`;
       let p = lines.get(lk);
       if (!p) {
-        p = { key, name: m.shelf === 'Paver edge' ? `${m.line} 6 × 9 edge` : m.line, sub: m.maker, cat, tester: false, variants: [], mat: m };
+        // A line's colors Belgard does not sell in Northern California are a product of their own, off by default.
+        const name = m.shelf === 'Paver edge' ? `${m.line} 6 × 9 edge` : m.line;
+        p = { key, name: isOutOfArea(m) ? `${name} (out of area)` : name, sub: isOutOfArea(m) ? `${m.maker} · not sold in Northern California` : m.maker, cat, tester: false, variants: [], mat: m };
         lines.set(lk, p);
         out.push(p);
       }
@@ -451,6 +453,7 @@ function detailHtml(): string {
     <button type="button" class="linklike" data-act="back">← All ${esc(CATEGORIES.find((c) => c.id === p.cat)?.label.toLowerCase() ?? 'products')}</button>
     <div class="lib-detail-head"><span class="lib-pic lib-big" id="lib-big" style="background:${v.swatch}"></span>
       <div><h3>${esc(p.name)}</h3><p class="muted">${esc(p.plant ? p.plant.botanical : p.sub)}</p></div></div>
+    ${m && outOfAreaNote(m) ? `<p class="lib-notice"><strong>${esc(outOfAreaNote(m)!)}</strong></p>` : ''}
     <div class="lib-approve">${approve}</div>
     ${p.variants.length > 1 ? `<h4>Colors</h4>${chips('variant', p.variants.map((x, i) => ({ val: String(i), label: x.label, on: x === v, sw: x.swatch })))}` : ''}
     ${lays.length ? `<h4>Laying pattern</h4>${chips('laying', lays.map((k) => ({ val: k, label: layingName(m, k), on: (s.laying ?? lays[0]) === k })))}` : ''}

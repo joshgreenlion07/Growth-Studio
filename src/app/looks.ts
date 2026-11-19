@@ -20,6 +20,11 @@ export interface Look {
   group: string;
   /** A sentence or two in plain language. */
   about: string;
+  /**
+   * A warning to show in bold above `about`: "Out of area product: Belgard does not sell ... in Northern California".
+   * Left out when there is none.
+   */
+  notice?: string;
   /** Typical install or plant facts, one line each ("3 in deep, raked even"). */
   spec: string[];
   /** Botanical name, for a plant. */
@@ -106,6 +111,7 @@ export function lookOf(m: MaterialSpec): Look {
     sw: m.palette[1] ?? m.palette[0],
     palette: m.palette.slice(0, 4),
   };
+  if (info.notice) look.notice = info.notice;
   if (m.fillType) {
     look.fillType = m.fillType;
     if (m.depthIn) look.depthIn = m.depthIn;

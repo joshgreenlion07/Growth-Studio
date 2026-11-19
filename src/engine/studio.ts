@@ -34,7 +34,8 @@ export interface PointHit {
 import { GpuFrameTimer, LONG_GPU_MS } from './gputimer';
 import { LandLightPool, initLandLights } from './landlights';
 import { generateViews, type CameraView } from './views';
-import { PlanarMirror, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
+import { PlanarMirror, REFRACTION_LAYER, SHADOW_PASS_LAYER, WATER_LAYER_SKIP } from './water';
+import { disposeWaterfallAssets, releaseFourFallAssets } from '../builder/fourfall';
 import { FrameBudget } from './framebudget';
 
 /**
@@ -352,6 +353,8 @@ export class Studio {
       this.pointLights.push(p);
       this.scene.add(p);
     }
+    // The four-fall waterfalls' refraction pass sees only their rock and soil, lit as in the view.
+    for (const l of [this.keyLight, this.fillLight, ...this.pointLights]) l.layers.enable(REFRACTION_LAYER);
     this.mirror = new PlanarMirror(WATER_LEVEL, 0.5);
 
     this.camera.layers.enable(WATER_LAYER_SKIP);
@@ -987,8 +990,93 @@ export class Studio {
       setFlames(this.build.features, s.sunElevation < 4 ? Math.min(1, 0.4 + s.night) : 0);
       this.pointLights.forEach((p) => (p.intensity = (p.userData.base ?? 0) * n));
       this.landLights.setGain(n);
+      this.fourFallNight = n;
+      this.feedFourFalls(s);
     }
     this.invalidate();
+  }
+
+  /** The four-fall waterfalls' look-through copy of the scene: color and depth at half size, without their water. */
+  private ffRT: THREE.WebGLRenderTarget | null = null;
+  private ffBox = new WeakMap<object, THREE.Box3>();
+  private ffFrustum = new THREE.Frustum();
+  private ffMat = new THREE.Matrix4();
+  private ffCam = new THREE.PerspectiveCamera();
+
+  /**
+   * Each frame drawn, before the main render: every waterfall is ticked (clock, night glow, spray size) and its frustum
+   * test kept for animating(). Then, when a waterfall that draws its water through a copy of the scene (Max and Balanced, see
+   * builder/fourfall.ts) is in view, its own rock, soil and cobbles (REFRACTION_LAYER, nothing else of the yard: that
+   * pass would cost as much as the view) are drawn once more without its water, at half size, into the same lower-left
+   * share of the buffer the main render will fill (post.scale), so the water's screen coordinates fall on the same
+   * spot of the copy.
+   */
+  private drawFourFalls(cam: THREE.PerspectiveCamera, post: PostPipeline, toTarget: boolean, devicePx: number, t: number) {
+    const all = this.build?.features.fourFalls ?? [];
+    const falls = all.filter((ff) => ff.wf.options.refraction);
+    // No waterfall left that looks through a copy of the scene: its buffers go.
+    if (!falls.length && this.ffRT) {
+      this.ffRT.depthTexture?.dispose();
+      this.ffRT.dispose();
+      this.ffRT = null;
+    }
+    if (!all.length) return;
+    const { w, h, scale } = post.drawArea(toTarget);
+    // The spray's points are sized for the share of the buffer actually drawn (the render scale drops while moving).
+    const pointScale = devicePx * scale * 0.5 * cam.projectionMatrix.elements[5];
+    this.ffMat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.ffFrustum.setFromProjectionMatrix(this.ffMat);
+    for (const ff of all) {
+      let b = this.ffBox.get(ff.wf);
+      if (!b) {
+        b = new THREE.Box3().setFromObject(ff.wf.group);
+        this.ffBox.set(ff.wf, b);
+      }
+      const seen = this.ffFrustum.intersectsBox(b);
+      if (!toTarget) ff.inView = seen;
+      ff.wf.update(t, { lightLevel: ff.lightsOn ? this.fourFallNight : 0, pointScale });
+    }
+    const seen = falls.filter((ff) => this.ffFrustum.intersectsBox(this.ffBox.get(ff.wf)!));
+    if (!seen.length) return;
+    const hw = Math.max(2, Math.ceil(w / 2)), hh = Math.max(2, Math.ceil(h / 2));
+    if (!this.ffRT) {
+      this.ffRT = new THREE.WebGLRenderTarget(hw, hh, { type: THREE.HalfFloatType, depthBuffer: true });
+      this.ffRT.depthTexture = new THREE.DepthTexture(hw, hh);
+    } else if (this.ffRT.width !== hw || this.ffRT.height !== hh) this.ffRT.setSize(hw, hh);
+    const rt = this.ffRT;
+    rt.viewport.set(0, 0, Math.max(1, Math.round((w * scale) / 2)), Math.max(1, Math.round((h * scale) / 2)));
+    const r = this.renderer, before = r.getRenderTarget();
+    try {
+      for (const ff of falls) ff.wf.water.visible = false;
+      r.setRenderTarget(rt);
+      r.clear();
+      this.ffCam.copy(cam, false);
+      this.ffCam.layers.set(REFRACTION_LAYER);
+      r.render(this.scene, this.ffCam);
+    } finally {
+      r.setRenderTarget(before);
+      for (const ff of falls) ff.wf.water.visible = true;
+    }
+    for (const ff of falls) ff.wf.setRefraction({ color: rt.texture, depth: rt.depthTexture!, width: w, height: h, near: cam.near, far: cam.far });
+  }
+
+  /** The night level the four-fall waterfalls' lights glow at (the other night accents' level). */
+  private fourFallNight = 0;
+  private fourFallEnv = { top: new THREE.Color(), hor: new THREE.Color(), amb: new THREE.Color(), tree: new THREE.Color(0.03, 0.045, 0.02) };
+
+  /** The sky and sun the four-fall waterfalls' water mirrors and is lit by (builder/fourfall.ts). */
+  private feedFourFalls(s: SkyState) {
+    const falls = this.build?.features.fourFalls;
+    if (!falls?.length) return;
+    const e = this.fourFallEnv;
+    e.top.copy(s.zenith);
+    e.hor.copy(s.horizon);
+    // Sky light on the white water: the fill light's color at about the strength the yard's materials get from the sky.
+    e.amb.copy(this.fillLight.color).multiplyScalar(this.fillLight.intensity * 0.9 + (s.envIntensity ?? 1) * 0.45 * (1 - s.night * 0.85));
+    const sunUp = THREE.MathUtils.clamp(s.sunElevation / 3, 0, 1);
+    for (const ff of falls) {
+      ff.wf.setEnvironment({ skyTop: e.top, skyHorizon: e.hor, treeline: e.tree, sunDir: s.keyDir, sunColor: s.keyColor, sunIntensity: s.keyIntensity, sunVisible: sunUp, ambient: e.amb });
+    }
   }
 
   private regenEnv(key: string) {
@@ -1723,6 +1811,8 @@ export class Studio {
     if (!this.state.motion || !this.build) return false;
     if (this.state.wind > 0.001 && (this.build.plantCount > 0 || this.build.root.getObjectByName('turf'))) return true;
     if (this.build.water.surfaces.length || this.build.fallMats.length) return true;
+    // A four-fall waterfall moves only while it was in view at the last frame drawn (a camera move redraws anyway).
+    if (this.build.features.fourFalls.some((ff) => ff.inView)) return true;
     if (this.build.features.actions.some((a) => a.on && a.frame)) return true;
     return this.pointLights.some((p) => p.userData.flicker && p.intensity > 0) || this.build.features.flames.some((f) => f.visible);
   }
@@ -1902,6 +1992,8 @@ export class Studio {
     if (this.retired.length) {
       for (const b of this.retired) b.dispose();
       this.retired.length = 0;
+      // A waterfall rock set (full or light detail) no yard on screen or on its way uses any more is freed.
+      releaseFourFallAssets([...(this.build?.features.fourFalls ?? []), ...(this.pending?.features.fourFalls ?? [])]);
     }
   }
 
@@ -1923,6 +2015,8 @@ export class Studio {
     // The shadow map is cast from the plants' still pose, so it is redrawn only when the yard, the sun or the
     // plants' size changed, never on a timer while leaves sway.
     if (this.shadowDirty) this.renderShadows();
+    // Four-fall waterfalls: their water and falls move with the yard's clock, the under-fall glow with the night.
+    this.drawFourFalls(cam, post, target !== null, devicePx, t);
     if (this.build && this.build.water.surfaces.length && this.mirror.enabled) {
       // The live view's reflection is drawn only while the water is in view and large enough, over the part of the
       // screen it covers, at the view's render scale: on a frame in two while moving at a reduced scale, and on a
@@ -2132,6 +2226,9 @@ export class Studio {
     this.assets.dispose();
     this.post.dispose();
     this.gpuTimer?.dispose();
+    this.ffRT?.depthTexture?.dispose();
+    this.ffRT?.dispose();
+    disposeWaterfallAssets();
     this.mirror.dispose();
     this.shadowPassTarget.dispose();
     this.envRT?.dispose();
