@@ -157,6 +157,26 @@ for (const rev of [false, true]) {
 const gm = mk('h', 'house', shapes.rect, 3, { openings: [{ kind: 'door', at: [6, 0], width: 4.88, style: 'garage' }] });
 const gp = planOpenings(gm, [gm], [6, 20]);
 if (!gp.placed.some((o) => o.type === 'garage') || !gp.placed.some((o) => o.type === 'window') || !gp.placed.some((o) => o.type === 'slider')) fail(`garage door only: ${gp.placed.map((o) => o.type).join(',')}`);
+// A flight drawn in two segments along one wall is one landing: one slider, sized to the whole run.
+const two = planOpenings(big, [big], [6, 20], [{ a: [4.6, 8.05], b: [6.0, 8.05], top: 0.3, src: 's1', kind: 'steps' }, { a: [6.0, 8.05], b: [7.34, 8.05], top: 0.3, src: 's1', kind: 'steps' }]);
+const twoS = two.placed.filter((o) => o.type === 'slider');
+if (twoS.length !== 1 || Math.abs(twoS[0].w - 2.74) > 1e-6) fail(`segmented step: ${JSON.stringify(twoS)}`);
+// One plan item makes at most one door per wall, even in two separate pieces.
+const apart = planOpenings(big, [big], [6, 20], [{ a: [1, 8.05], b: [3.2, 8.05], top: 0.3, src: 'z', kind: 'zone' }, { a: [8, 8.05], b: [10.2, 8.05], top: 0.3, src: 'z', kind: 'zone' }]);
+if (apart.placed.filter((o) => o.type === 'slider' || o.type === 'door').length !== 1) fail('one zone made two doors on a wall');
+// A raised landing gives way to a marked door anywhere on the house; drawn steps still get theirs.
+const markedElsewhere = mk('h', 'house', shapes.rect, 3, { openings: [{ kind: 'door', at: [0, 4], width: 0.9 }] });
+if (planOpenings(markedElsewhere, [markedElsewhere], [6, 20], [{ a: [4.6, 8.05], b: [7.34, 8.05], top: 0.3, src: 'z', kind: 'zone' }]).placed.some((o) => o.type === 'slider')) fail('landing door despite a marked door');
+if (!planOpenings(markedElsewhere, [markedElsewhere], [6, 20], [{ a: [4.6, 8.05], b: [7.34, 8.05], top: 0.3, src: 'st', kind: 'steps' }]).placed.some((o) => o.type === 'slider')) fail('drawn steps lost their door');
+// A step too narrow for a sliding door gets a plain door on its top.
+const narrow = planOpenings(big, [big], [6, 20], [{ a: [5.5, 8.05], b: [6.5, 8.05], top: 0.3, src: 'n', kind: 'steps' }]);
+if (!narrow.placed.some((o) => o.type === 'door' && Math.abs(o.h0 - 0.3) < 1e-6 && Math.abs(o.w - 0.91) < 1e-6)) fail(`narrow step: ${narrow.placed.map((o) => o.type).join(',')}`);
+// A marked entry on drawn steps stands on them and builds no steps of its own; with a walk drawn there it is at grade.
+const ent2 = mk('h', 'house', shapes.rect, 3, { openings: [{ kind: 'door', at: [6, 0], width: 1.9, style: 'entry' }] });
+const onSteps = planOpenings(ent2, [ent2], [6, 20], [{ a: [4.5, -0.05], b: [7.5, -0.05], top: 0.45, src: 'e', kind: 'steps' }]);
+if (!onSteps.entry || Math.abs(onSteps.entry.h0 - 0.45) > 1e-6 || onSteps.entry.steps) fail(`entry on steps: ${JSON.stringify(onSteps.entry)}`);
+const onWalk = planOpenings(ent2, [ent2], [6, 20], [], { zones: [[[5, -3], [7, -3], [7, 0], [5, 0]]] });
+if (!onWalk.entry || onWalk.entry.h0 > 0.05 || onWalk.entry.steps) fail(`entry on a walk: ${JSON.stringify(onWalk.entry)}`);
 // A chimney keeps its wall clear.
 const ch = mk('h', 'house', shapes.rect, 3, { chimney: true });
 const cp = planOpenings(ch, [ch], [6, 4]);

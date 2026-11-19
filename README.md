@@ -133,12 +133,21 @@ Messages use `window.postMessage`:
   one) on the wall facing away from the yard, always clear of wall ends, other
   buildings and cover walls and posts.
 - Where a flight of `steps` is drawn along a house wall (the house floor is then
-  its top: it goes down away from the house) or a small raised hardscape landing
-  (elevation 0.05 to 0.75 m, up to 5.2 m along the wall) meets it, a sliding
-  glass door is put there by itself: centered on the step, the widest of 12, 9,
-  8, 6 or 5 ft that the step and the wall allow, its threshold on the step's top.
-  A marked door there takes its place and stands on the step; `stepDoors: false`
-  turns it off.
+  its top: it goes down away from the house), a door is put there by itself: a
+  sliding glass door centered on the step, the widest of 12, 9, 8, 6 or 5 ft that
+  the step and the wall allow, its threshold on the step's top, or a 3 ft plain
+  door when no sliding door fits. Collinear pieces on one wall at the same top are
+  one run, and one plan item gets at most one door per wall. A small raised paving
+  stoop does the same (not a deck; 4 in to 2 1/2 ft up, no bigger than about 130
+  sq ft, an edge up to 5.2 m), but only while no door is marked on the house; a
+  raised patio or deck along the house gets no door of its own. A marked door
+  there takes its place and stands on the step; `stepDoors: false` turns it off.
+  The entry stands on a landing or drawn steps it meets (no steps of its own), and
+  at grade under a cover or where a zone is drawn in front of it.
+- Deploy order: Growth Studio must be deployed before an Area Planner that sends
+  house looks, door styles or steps against a house (older studios ignore the new
+  fields; Area Planner holds back the steps it rose to a house wall until the
+  studio's `ready` carries `houseLooks`).
 - The pointer's `point` message carries `sub` for a house: the part pointed at
   (`walls`, `roof`, `trim`, `windows`, `door`, `garage`, `chimney`, `steps`), and
   the look carries `house: { sub, look }` with every look key filled in.

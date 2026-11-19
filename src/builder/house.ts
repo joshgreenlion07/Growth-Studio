@@ -4,11 +4,12 @@ import { pointInPolygon } from '../siteplan/geometry';
 import { DEFAULT_EAVE, DEFAULT_PITCH, resolveLook, shade, snapPitch, type ResolvedLook } from '../siteplan/houselooks';
 import type { ExistingStructure, LineItem, Vec2, Zone } from '../siteplan/types';
 import { houseRoof, houseStucco, windowInteriorMaps } from '../engine/house-surfaces';
-import { boxUV, catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
+import { boxUV, catalogMaterial, pbrMaterial, plainMaterial, segmentBox, touchLookMaterials } from './materials';
 import { slab, zoneTop } from './hardscape';
 import { ENTRY_RISE, openingBoxes, planOpenings, recessOf, type Landing, type OpeningPlan, type WallSide } from './openingplan';
 import { cleanOutline, offsetOutline, signedArea, straightSkeleton, type Skeleton } from './roofskeleton';
 import { COVER_FLOOR_ID } from './coverfloor';
+import { isBoardDeck } from '../siteplan/deckzone';
 
 /**
  * A house, garage or shed (not a cover): stucco walls, a straight-skeleton roof (hip, gable or flat) with eaves, fascia
@@ -46,16 +47,18 @@ export function houseLandings(ground: HouseGround): Landing[] {
   const out: Landing[] = [];
   for (const l of ground.lines ?? []) {
     if (l.kind !== 'steps' || l.points.length < 2) continue;
-    for (let i = 0; i < l.points.length - 1; i++) out.push({ a: l.points[i], b: l.points[i + 1], top: l.height });
+    for (let i = 0; i < l.points.length - 1; i++) out.push({ a: l.points[i], b: l.points[i + 1], top: l.height, src: l.id, kind: 'steps' });
   }
+  // A raised zone counts only when it is a stoop: paving (not a deck) 4 in to 2 1/2 ft up and no bigger than about
+  // 130 sq ft. A raised patio or a deck along the house gets no door of its own; draw steps or mark the door for that.
   ground.zones.forEach((z, k) => {
     const e = z.elevation ?? 0;
-    if (z.kind !== 'hardscape' || e < 0.05 || e > 0.75) return;
+    if (z.kind !== 'hardscape' || isBoardDeck(z) || e < 0.1 || e > 0.75 || Math.abs(signedArea(z.polygon)) > 12) return;
     const top = zoneTop(z, k);
     const n = z.polygon.length;
     for (let i = 0; i < n; i++) {
       const a = z.polygon[i], b = z.polygon[(i + 1) % n];
-      if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= 5.2) out.push({ a, b, top });
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= 5.2) out.push({ a, b, top, src: z.id, kind: 'zone' });
     }
   });
   return out;
@@ -77,19 +80,26 @@ function lookMaterials(r: ResolvedLook) {
   const groove = plainMaterial(`house-groove:${r.garageSw}`, { color: shade(r.garageSw, 0.62), roughness: 0.8 });
   const handle = plainMaterial('house-handle', { color: '#2e2a26', roughness: 0.35, metalness: 0.6 });
   const flue = plainMaterial('house-flue', { color: '#3a3936', roughness: 0.5, metalness: 0.5 });
+  const wallKey = `house-wall:${r.wall.sw}`, roofKey = `house-roof:${r.roof.id}:${r.roofColor.id}`;
+  touchLookMaterials(JSON.stringify([r.wall.id, r.trimSw, r.window.id, r.roof.id, r.roofColor.id, r.door.id, r.garageSw]),
+    [wallKey, roofKey, `plain:house-trim:${r.trimSw}`, `plain:house-frame:${r.window.sw}`, `plain:house-track:${r.window.sw}`, `plain:house-door:${r.door.sw}`, `plain:house-garage:${r.garageSw}`, `plain:house-groove:${r.garageSw}`],
+    [roofKey]);
   return { wall, roof, trim, frame, track, door, garage, groove, handle, flue, metal };
 }
 
 /** Collects geometry by material, then makes one mesh per material. */
 class Buckets {
-  private m = new Map<THREE.Material, { sub: Sub; geos: THREE.BufferGeometry[]; shadow: boolean }>();
+  /** By material, part and shadow, so each mesh carries the right part name and casts shadows as its pieces should. */
+  private m = new Map<string, { mat: THREE.Material; sub: Sub; geos: THREE.BufferGeometry[]; shadow: boolean }>();
   put(mat: THREE.Material, sub: Sub, g: THREE.BufferGeometry, shadow = true) {
-    const b = this.m.get(mat) ?? { sub, geos: [], shadow };
+    const key = `${mat.uuid}|${sub}|${shadow}`;
+    const b = this.m.get(key) ?? { mat, sub, geos: [], shadow };
     b.geos.push(g.index ? g.toNonIndexed() : g);
-    this.m.set(mat, b);
+    this.m.set(key, b);
   }
   flush(out: HouseOut, id: string) {
-    for (const [mat, b] of this.m) {
+    for (const b of this.m.values()) {
+      const mat = b.mat;
       const keep = b.geos.map((g) => {
         // Every piece needs the same attributes to merge.
         if (!g.getAttribute('uv')) boxUV(g);
@@ -217,25 +227,45 @@ export function buildRoof(footprint: Vec2[], H: number, pitch: number, eave: num
   const fail: RoofResult = { ok: false, eaveY: H, mesh: null };
   if (poly.length < 3) return fail;
   const RAKE = 0.18;
-  let weights = poly.map(() => 1);
-  if (gable) {
-    const o = offsetOutline(poly, poly.map(() => eave));
-    const hip = o ? straightSkeleton(o) : null;
-    if (hip?.ok) weights = gableEdges(o!, hip).map((g) => (g ? 0 : 1));
-  }
-  let sk: Skeleton | null = null, outer: Vec2[] | null = null, e = eave;
-  for (const attempt of [0, 1]) {
-    if (attempt === 1) weights = poly.map(() => 1);   // a gable that would not close: a hip instead
-    for (const k of [1, 0.6, 0.3, 0]) {
-      e = eave * k;
-      outer = offsetOutline(poly, weights.map((w) => (w ? e : Math.min(RAKE, e))));
+  const n0 = poly.length, ccw0 = signedArea(poly) > 0;
+  const plen = (i: number) => Math.hypot(poly[(i + 1) % n0][0] - poly[i][0], poly[(i + 1) % n0][1] - poly[i][1]);
+  const reflex = (i: number) => {
+    const a = poly[(i - 1 + n0) % n0], b = poly[i], c = poly[(i + 1) % n0];
+    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    return ccw0 ? cr < 0 : cr > 0;
+  };
+  /** Each edge's overhang at scale k: a narrow slot (a short edge with reflex corners at both ends) only narrows the eaves of its own two sides, so they cannot cross. */
+  const eaves = (k: number, local: boolean) => poly.map((_, i) => {
+    let d = eave * k;
+    if (local) for (const j of [(i - 1 + n0) % n0, (i + 1) % n0]) {
+      if (reflex(j) && reflex((j + 1) % n0) && plen(j) < 2 * d + 0.1) d = Math.min(d, Math.max(0, (plen(j) - 0.1) / 2));
+    }
+    return d;
+  });
+  let sk: Skeleton | null = null, outer: Vec2[] | null = null, weights = poly.map(() => 1), dUsed: number[] = poly.map(() => eave);
+  search: for (const asGable of gable ? [true, false] : [false]) {
+    for (const [k, local] of [[1, false], [1, true], [0.6, true], [0.3, true], [0, false]] as const) {
+      const d = eaves(k, local);
+      weights = poly.map(() => 1);
+      if (asGable) {
+        // Gable ends are picked from the hip roof of the first outline that offsets at this overhang.
+        const o = offsetOutline(poly, d);
+        const hip = o ? straightSkeleton(o) : null;
+        if (!hip?.ok) continue;
+        weights = gableEdges(o!, hip).map((g) => (g ? 0 : 1));
+      }
+      dUsed = d.map((x, i) => (weights[i] ? x : Math.min(RAKE, x)));
+      outer = offsetOutline(poly, dUsed);
       if (!outer) continue;
       sk = straightSkeleton(outer, weights);
-      if (sk.ok) break;
+      if (sk.ok) break search;
     }
-    if (sk?.ok) break;
   }
   if (!sk?.ok || !outer) return fail;
+  // The roof meets the walls at H where the overhang is least; where it is deeper the roof rides a little above the wall
+  // top, which the soffit (the roof's underside, 0.16 m down) closes.
+  const sloped = dUsed.filter((_, i) => weights[i]);
+  const e = sloped.length ? Math.min(...sloped) : 0;
   const n = outer.length;
   const eaveY = H - e * pitch;
   const slopeK = Math.sqrt(1 + pitch * pitch);
@@ -386,7 +416,7 @@ export function buildHouse(s: ExistingStructure, structures: ExistingStructure[]
   const eave = s.eave ?? DEFAULT_EAVE;
 
   bk.put(mats.wall, 'walls', slab(poly, -0.1, H, 0));
-  const plan: OpeningPlan = planOpenings(s, structures, siteCenter, houseLandings(ground));
+  const plan: OpeningPlan = planOpenings(s, structures, siteCenter, houseLandings(ground), { zones: ground.zones.map((z) => z.polygon) });
   const sideOf = new Map(plan.sides.map((sd) => [sd.edge, sd]));
 
   // The roof.
@@ -427,18 +457,20 @@ export function buildHouse(s: ExistingStructure, structures: ExistingStructure[]
   }
 
   // The chimney chase: stucco from the ground to a meter above the roof, a cap and a spark arrestor.
-  if (plan.chimney && roof.mesh) {
+  if (plan.chimney) {
     const sd = sideOf.get(plan.chimney.edge)!;
     const c = plan.chimney;
     const depthOut = Math.max(0.75, eave + 0.25);
     const rect = wallRect(sd, c.t - c.w / 2, c.t + c.w / 2, -0.35, depthOut);
     const ray = new THREE.Raycaster();
-    let top = H;
-    roof.mesh.updateMatrixWorld();
-    for (const q of [...rect, ...wallRect(sd, c.t - c.w / 2, c.t + c.w / 2, -0.9, -0.9)]) {
-      ray.set(new THREE.Vector3(q[0], 50, q[1]), new THREE.Vector3(0, -1, 0));
-      const hit = ray.intersectObject(roof.mesh, false)[0];
-      if (hit) top = Math.max(top, hit.point.y);
+    let top = Math.max(H, roof.eaveY);
+    if (roof.mesh) {
+      roof.mesh.updateMatrixWorld();
+      for (const q of [...rect, ...wallRect(sd, c.t - c.w / 2, c.t + c.w / 2, -0.9, -0.9)]) {
+        ray.set(new THREE.Vector3(q[0], 50, q[1]), new THREE.Vector3(0, -1, 0));
+        const hit = ray.intersectObject(roof.mesh, false)[0];
+        if (hit) top = Math.max(top, hit.point.y);
+      }
     }
     top += 0.9;
     bk.put(mats.wall, 'chimney', slab(rect, -0.05, top, 0));
@@ -471,7 +503,7 @@ export function buildHouse(s: ExistingStructure, structures: ExistingStructure[]
   }
 
   // Two concrete steps up to the entry: a landing at the door's sill (filling a recess) and a step below it.
-  if (plan.entry && plan.entry.h0 >= ENTRY_RISE - 0.05) {
+  if (plan.entry && plan.entry.steps && plan.entry.h0 >= ENTRY_RISE - 0.05) {
     const sd = sideOf.get(plan.entry.edge)!;
     const depth = recessOf(sd, plan.sides);
     const recess = depth > 0.4;

@@ -172,12 +172,17 @@ export function straightSkeleton(poly: Vec2[], weights?: number[]): Skeleton {
   };
 
   let lavs: Vert[][] = [P.map((p, i) => make(p[0], p[1], (i - 1 + n) % n, i))];
+  /** Drop the parts of the wavefront that have closed (fewer than 3 corners), ending their corners' hip lines first. */
+  const prune = () => {
+    for (const l of lavs) if (l.length < 3) for (const v of l) retire(v);
+    lavs = lavs.filter((l) => l.length >= 3);
+  };
 
   /** Settle every pinch at once: the overlapping part of two facing edges is a ridge and leaves the wavefront. */
   const settle = (): boolean => {
     for (let guard = 0; guard < 4 * n + 20; guard++) {
       let found = false;
-      lavs = lavs.filter((l) => l.length >= 3);
+      prune();
       for (const lav of lavs) {
         const k = lav.findIndex((v) => v.pinch);
         if (k < 0) continue;
@@ -228,7 +233,7 @@ export function straightSkeleton(poly: Vec2[], weights?: number[]): Skeleton {
 
   for (let iter = 0; iter < 60 * n + 200; iter++) {
     if (!settle()) return fail;
-    lavs = lavs.filter((l) => l.length >= 3);
+    prune();
     if (!lavs.length) {
       const maxT = T;
       // Check: the swept pieces must cover the outline's area.

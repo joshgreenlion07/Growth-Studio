@@ -95,6 +95,38 @@ function touchStamp(id: string) {
   }
 }
 
+/**
+ * House looks (builder/house.ts): every look picked makes its own few materials, and previewing colors makes many.
+ * Only the most recently used few looks are kept; an older one's materials are released (their GPU textures too), and
+ * its roof texture set forgotten, unless a kept look or a look of the last two builds shares them.
+ * `keys` are material cache keys (pbrMaterial keys as given, plainMaterial keys as `plain:<key>`).
+ */
+const LOOK_KEEP = 3;
+const lookUse = new Map<string, { epoch: number; keys: string[]; sets: string[] }>();
+export function touchLookMaterials(look: string, keys: string[], sets: string[] = []) {
+  lookUse.delete(look);
+  lookUse.set(look, { epoch: buildEpoch, keys, sets });
+  if (lookUse.size <= LOOK_KEEP) return;
+  for (const [old, u] of lookUse) {
+    if (lookUse.size <= LOOK_KEEP) break;
+    if (u.epoch >= buildEpoch - 1) continue;
+    lookUse.delete(old);
+    const kept = new Set<string>(), keptSets = new Set<string>();
+    for (const v of lookUse.values()) { v.keys.forEach((k) => kept.add(k)); v.sets.forEach((k) => keptSets.add(k)); }
+    for (const k of u.keys) {
+      if (kept.has(k)) continue;
+      const m = cache.get(k);
+      if (!m) continue;
+      m.map?.dispose();
+      m.normalMap?.dispose();
+      m.roughnessMap?.dispose();
+      m.dispose();
+      cache.delete(k);
+    }
+    for (const k of u.sets) if (!keptSets.has(k)) forgetTextureSet(k);
+  }
+}
+
 /** A catalog material. `laying` is a zone's laying pattern, used by pavers that offer patterns (see layingsFor). */
 export function catalogMaterial(id: string, extra: THREE.MeshStandardMaterialParameters = {}, laying?: LayingPattern): THREE.MeshStandardMaterial {
   const spec = materialById.get(id) ?? materialById.get('concrete-broom')!;

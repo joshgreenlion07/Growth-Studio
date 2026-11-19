@@ -25,8 +25,13 @@ export interface Slot {
   blinds?: number;
 }
 export interface PlacedOpening extends Slot { edge: number }
-/** Where a step or a raised landing meets a house wall: a run in plan along the wall, and the step's top above grade. */
-export interface Landing { a: Vec2; b: Vec2; top: number }
+/**
+ * Where a step or a raised landing meets a house wall: a run in plan along the wall, the step's top above grade, the
+ * plan item it comes from, and whether it is a drawn flight of steps (`steps`) or the edge of a raised zone (`zone`).
+ */
+export interface Landing { a: Vec2; b: Vec2; top: number; src?: string; kind?: 'steps' | 'zone' }
+/** What else stands in front of the walls (house.ts): drawn zones, so the entry's own steps are not built over them. */
+export interface OpeningGround { zones?: Vec2[][] }
 export interface OpeningPlan {
   sides: WallSide[];
   /** Every opening that fit, by wall edge. */
@@ -34,8 +39,8 @@ export interface OpeningPlan {
   doorEdge: number;
   /** Centers of the door lights: (edge, t along it). */
   lights: { edge: number; t: number }[];
-  /** The front entry (door and sidelights together): its wall, center, whole width and threshold height. */
-  entry: { edge: number; t: number; w: number; h0: number } | null;
+  /** The front entry (door and sidelights together): its wall, center, whole width, threshold height, and whether its own two steps are built (not when it stands on a landing, under a cover or where a zone is drawn). */
+  entry: { edge: number; t: number; w: number; h0: number; steps: boolean } | null;
   /** A chimney chase on a wall (center and width along it), kept clear of the openings. */
   chimney: { edge: number; t: number; w: number } | null;
 }
@@ -205,7 +210,7 @@ export function recessOf(sd: WallSide, sides: WallSide[]): number {
   return 0;
 }
 
-export function planOpenings(s: ExistingStructure, all: ExistingStructure[], siteCenter: Vec2, landings: Landing[] = []): OpeningPlan {
+export function planOpenings(s: ExistingStructure, all: ExistingStructure[], siteCenter: Vec2, landings: Landing[] = [], ground: OpeningGround = {}): OpeningPlan {
   const poly = s.polygon, H = s.height;
   const sides = wallSides(poly);
   // Other buildings block the wall they stand against; a cover only blocks where its walls and posts are.
@@ -268,17 +273,23 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
 
   /** The entry: the door with a sidelight each side when the run holds them (two steps up to it). */
   const placeEntry = (sd: WallSide, tWant: number, total: number, runs: [number, number][], maxShift: number): boolean => {
-    const h0 = Math.max(0.02, Math.min(ENTRY_RISE, hts.doorMax - 2.03));
     for (const W of total >= ENTRY_DOOR + 2 * (SIDELIGHT + SIDE_GAP) ? [total, ENTRY_DOOR + 2 * (SIDELIGHT + SIDE_GAP), ENTRY_DOOR] : [Math.min(total, 1.07), ENTRY_DOOR]) {
       const t = fitInRuns(runs, tWant, W, maxShift);
       if (t === null || busy(sd, t, W, 0.25)) continue;
+      // On a landing or drawn steps: its top, and no steps of its own. Under a cover or where a zone is drawn: at grade.
+      const land = landingAt(sd, t, W);
+      const front: Vec2 = [sd.a[0] + sd.dir[0] * t + sd.out[0] * 0.3, sd.a[1] + sd.dir[1] * t + sd.out[1] * 0.3];
+      const flat = covers.some((c) => pointInPolygon(front, c.polygon)) || (ground.zones ?? []).some((z) => pointInPolygon(front, z));
+      const own = !land && !flat;
+      const h0 = land ? land.top : own ? Math.max(0.02, Math.min(ENTRY_RISE, hts.doorMax - 2.03)) : 0.02;
       const sideW = W >= ENTRY_DOOR + 2 * (0.25 + SIDE_GAP) ? Math.min(0.45, (W - ENTRY_DOOR - 2 * SIDE_GAP) / 2) : 0;
       const dw = W - 2 * (sideW ? sideW + SIDE_GAP : 0);
       const door = doorSlot(sd, t, dw, h0, 2.03, 'entry');
       if (!door) continue;
       add(sd, door);
       if (sideW) for (const d of [-1, 1]) add(sd, { t: t + d * (dw / 2 + SIDE_GAP + sideW / 2), w: sideW, h0: door.h0, h1: door.h1, type: 'sidelight' });
-      entry = { edge: sd.edge, t, w: W, h0: door.h0 };
+      entry = { edge: sd.edge, t, w: W, h0: door.h0, steps: own };
+      if (land) land.used = true;
       for (const d of [-1, 1]) lights.push({ edge: sd.edge, t: t + d * (W / 2 + 0.35) });
       return true;
     }
@@ -298,10 +309,17 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
   };
 
   // Steps and landings against the walls: the door at each one stands on its top.
-  const landed: { sd: WallSide; t0: number; t1: number; top: number }[] = [];
+  // Runs on one wall at the same top that touch or overlap are one landing (a flight drawn in several segments, a
+  // zone edge split at a point); each remembers the plan items it came from.
+  type Landed = { sd: WallSide; t0: number; t1: number; top: number; srcs: Set<string>; steps: boolean; used: boolean };
+  const landed: Landed[] = [];
   if (isHouse) for (const l of landings) for (const sd of sides) {
     const r = landingOn(sd, l);
-    if (r) landed.push({ sd, t0: r[0], t1: r[1], top: Math.max(0.02, Math.min(0.9, l.top)) });
+    if (!r) continue;
+    const top = Math.max(0.02, Math.min(0.9, l.top)), src = l.src ?? `${l.a}`;
+    const hit = landed.find((x) => x.sd.edge === sd.edge && Math.abs(x.top - top) < 0.01 && r[0] <= x.t1 + 0.1 && r[1] >= x.t0 - 0.1);
+    if (hit) { hit.t0 = Math.min(hit.t0, r[0]); hit.t1 = Math.max(hit.t1, r[1]); hit.srcs.add(src); hit.steps ||= l.kind !== 'zone'; }
+    else landed.push({ sd, t0: r[0], t1: r[1], top, srcs: new Set([src]), steps: l.kind !== 'zone', used: false });
   }
   const landingAt = (sd: WallSide, t: number, w: number) => landed.find((x) => x.sd.edge === sd.edge && t + w / 2 > x.t0 + 0.1 && t - w / 2 < x.t1 - 0.1);
 
@@ -342,8 +360,8 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
       else sl = doorSlot(sd, t, w, h0, 2.03, style === 'entry' ? 'entry' : 'door');
       if (!sl) continue;
       add(sd, sl);
-      if (land) land.t0 = land.t1 = -1;   // the marked door takes the landing
-      if (style === 'entry' && !entry) entry = { edge: sd.edge, t, w, h0: sl.h0 };
+      if (land) land.used = true;   // the marked door takes the landing
+      if (style === 'entry' && !entry) entry = { edge: sd.edge, t, w, h0: sl.h0, steps: false };
       if (!lit && style !== 'garage') {
         lit = true;
         for (const d of [-1, 1]) lights.push({ edge: sd.edge, t: t + d * (w / 2 + 0.4) });
@@ -352,24 +370,33 @@ export function planOpenings(s: ExistingStructure, all: ExistingStructure[], sit
     }
   }
 
-  // A sliding glass door at every step or landing left (centered on it, as wide as it allows).
+  // Marked windows replace the automatic ones; marked doors replace the automatic doors (a garage door alone does not).
+  const auto = !s.openings?.some((o) => o.kind === 'window');
+  const autoDoors = !s.openings?.some((o) => o.kind === 'door' && o.style !== 'garage');
+
+  // A door at every step or landing left: a sliding glass door centered on it, as wide as it allows, else a plain door.
+  // Drawn steps always get one; a raised landing only while no door is marked. At most one per plan item and wall.
   if (isHouse && s.stepDoors !== false) {
+    const usedSrc = new Set<string>();
     for (const ld of landed) {
-      if (ld.t1 - ld.t0 < 0.9) continue;
-      const span = ld.t1 - ld.t0;
-      const widths = SLIDER_WIDTHS.filter((w) => w <= span + 0.2);
-      if (!widths.length) continue;
-      const sl = placeSlider(ld.sd, (ld.t0 + ld.t1) / 2, widths, ld.top, 2.03, runsFor(ld.sd, MARKED_CLEAR), 0.6);
-      if (sl && doorEdge < 0) {
+      if (ld.used || ld.t1 - ld.t0 < 0.9 || (!ld.steps && !autoDoors)) continue;
+      if ([...ld.srcs].some((x) => usedSrc.has(`${ld.sd.edge}|${x}`))) continue;
+      const span = ld.t1 - ld.t0, mid = (ld.t0 + ld.t1) / 2, runs = runsFor(ld.sd, MARKED_CLEAR);
+      let sl = placeSlider(ld.sd, mid, SLIDER_WIDTHS.filter((w) => w <= span + 0.2), ld.top, 2.03, runs, 0.6);
+      if (!sl) {
+        const t = fitInRuns(runs, mid, 0.91, 0.6);
+        sl = t === null || busy(ld.sd, t, 0.91, 0.25) ? null : doorSlot(ld.sd, t, 0.91, ld.top, 2.03, 'door');
+        if (sl) add(ld.sd, sl);
+      }
+      if (!sl) continue;
+      ld.used = true;
+      for (const x of ld.srcs) usedSrc.add(`${ld.sd.edge}|${x}`);
+      if (doorEdge < 0) {
         doorEdge = ld.sd.edge;
         for (const d of [-1, 1]) lights.push({ edge: ld.sd.edge, t: sl.t + d * (sl.w / 2 + 0.4) });
       }
     }
   }
-
-  // Marked windows replace the automatic ones; marked doors replace the automatic doors (a garage door alone does not).
-  const auto = !s.openings?.some((o) => o.kind === 'window');
-  const autoDoors = !s.openings?.some((o) => o.kind === 'door' && o.style !== 'garage');
   if (autoDoors && hts.doorTop >= MIN_DOOR) {
     if (isHouse) {
       // The patio door goes on the wall facing the yard that has room for it (unless a step already has one).
