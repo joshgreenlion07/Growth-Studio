@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { featureById } from '../../siteplan/catalog';
 import { featureSize } from '../../siteplan/decor';
+import { raisedBedSoil } from '../../siteplan/yard';
 import { rng } from '../../siteplan/geometry';
 import type { FeaturePlacement, PlantPlacement, Vec2 } from '../../siteplan/types';
 import { box, IN, mat, type DecorContext } from './kit';
@@ -127,12 +128,17 @@ const PLANTING: { id: string; x: number; z: number; container?: PlantPlacement['
 ];
 const BASE_W = 36 * IN, BASE_D = 18 * IN;
 
+/** A planter or raised bed plants can stand in: its size, wall thickness and soil height, and its turn. */
 function planterOf(f: FeaturePlacement) {
   const spec = featureById.get(f.catalogId);
-  if (!spec || spec.kind !== 'cortenPlanterTall') return null;
-  const [W, D, H] = featureSize(spec, f.size, 24 * IN);
+  if (!spec) return null;
   const a = (-f.rotationDeg * Math.PI) / 180;
-  return { W, D, H, cos: Math.cos(a), sin: Math.sin(a) };
+  // A cedar raised bed (siteplan/yard.ts) has no planting of its own; plants put in it stand on its soil.
+  const bed = raisedBedSoil(spec, f.size);
+  if (bed) return { ...bed, corten: false, cos: Math.cos(a), sin: Math.sin(a) };
+  if (spec.kind !== 'cortenPlanterTall') return null;
+  const [W, D, H] = featureSize(spec, f.size, 24 * IN);
+  return { W, D, inset: PLATE, soil: H - SOIL_DROP, corten: true, cos: Math.cos(a), sin: Math.sin(a) };
 }
 
 /** The plants of every planted planter, as plant placements in plan space. */
@@ -140,7 +146,7 @@ export function planterPlants(features: FeaturePlacement[]): PlantPlacement[] {
   const out: PlantPlacement[] = [];
   for (const f of features) {
     const p = planterOf(f);
-    if (!p || f.planted === false) continue;
+    if (!p || !p.corten || f.planted === false) continue;
     const sx = p.W / BASE_W, sz = p.D / BASE_D;
     const short = p.W < 30 * IN - 1e-6;
     PLANTING.forEach((it, k) => {
@@ -163,7 +169,7 @@ export function plantGround(features: FeaturePlacement[], height: (p: Vec2) => n
     for (const { f, p } of boxes) {
       const dx = q[0] - f.position[0], dz = q[1] - f.position[1];
       const lx = dx * p!.cos - dz * p!.sin, lz = dx * p!.sin + dz * p!.cos;
-      if (Math.abs(lx) < p!.W / 2 - PLATE && Math.abs(lz) < p!.D / 2 - PLATE) return height(f.position) + lift(f.position) + p!.H - SOIL_DROP + 0.012;
+      if (Math.abs(lx) < p!.W / 2 - p!.inset && Math.abs(lz) < p!.D / 2 - p!.inset) return height(f.position) + lift(f.position) + p!.soil + 0.012;
     }
     return height(q);
   };

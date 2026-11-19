@@ -24,8 +24,6 @@ export class StageLabels {
   private labels: Placed[] = [];
   private v = new THREE.Vector3();
   private obstacles: OverlayObstacles;
-  /** With the yard cut away, labels on the cut-away side are hidden. */
-  clip: THREE.Plane | null = null;
 
   constructor(container: HTMLElement) {
     this.layer = document.createElement('div');
@@ -75,10 +73,6 @@ export class StageLabels {
       const hide = () => {
         if (l.el.style.visibility !== 'hidden') l.el.style.visibility = 'hidden';
       };
-      if (this.clip && this.clip.distanceToPoint(l.pos) < -0.05) {
-        hide();
-        continue;
-      }
       this.v.copy(l.pos).project(camera);
       const x = (this.v.x * 0.5 + 0.5) * width - l.w / 2;
       const y = (-this.v.y * 0.5 + 0.5) * height - l.h / 2;

@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Arimo:wght@400;700&family=Tinos:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a site-plan workbench. Plan and inspector on the left, the 3D scene fills the rest,
    with one solid control dock along its bottom edge. */
@@ -139,9 +139,6 @@ table.mini th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06
 
 section.scene-pane { position: relative; min-width: 0; min-height: 0; background: var(--scene); display: grid; grid-template-rows: 1fr auto; }
 #scene { position: relative; min-height: 0; overflow: hidden; }
-#views { position: absolute; z-index: 3; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
-.view-btn { pointer-events: auto; border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; }
-.view-btn:hover, .view-btn[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
 #updating { position: absolute; z-index: 3; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
 #loading, #scene-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); padding: 24px; text-align: center; }
 #scene-error { background: var(--paper); }
@@ -203,23 +200,176 @@ html.library-open section.scene-pane { display: grid !important; height: auto; }
 .lib-facts dd { margin: 0; }
 .lib-foot { margin: 6px 0 0; }
 .linklike { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-align: left; }
+/* The Library in full screen: an overlay inside the full-screen element (full screen stays), drawn as the open left
+   page of the Green Lion design book: Warm white paper whatever the color scheme, a Deep green spine on its right
+   edge, the title in Tinos. The 3D sample fills the rest. */
+section.scene-pane.fs .library { --panel: #F5F2EA; --paper: #FBF8F1; --ink: #202321; --ink-2: #5b5a52; --line: #dcd5c6; --accent: #244A1C; --accent-ink: #F5F2EA; --accent-soft: #e2ebd6; --warn-soft: #f3e6cc; border-right: 0; box-shadow: inset -9px 0 0 #244A1C, inset -10px 0 0 rgba(0, 0, 0, 0.25), 8px 0 28px rgba(0, 0, 0, 0.3); padding-right: 9px; color-scheme: light; }
+@media (min-width: 761px) { section.scene-pane.fs .library { width: min(470px, 42%); } }
+section.scene-pane.fs .library .lib-title { font: 700 22px/1.1 var(--font-book); color: #244A1C; }
+section.scene-pane.fs .library .lib-head { padding: 14px 16px 12px; }
+section.scene-pane.fs .library .lib-tabs, section.scene-pane.fs .library .lib-body { padding-left: 16px; padding-right: 16px; }
+.library.lib-hold { visibility: hidden; }
+.library.lib-over { z-index: 8; }
+/* While the book plays, the buttons step out of the way as they do when idle. */
+html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #nav-hint, html.lib-anim #height-meter, html.lib-anim .tc-root { opacity: 0; visibility: hidden; pointer-events: none; }
+.lib-book { position: absolute; inset: 0; z-index: 7; pointer-events: none; overflow: hidden; }
+.lib-book[hidden] { display: none; }
+.bk-scrim { position: absolute; inset: 0; background: rgba(32, 35, 33, 0.6); opacity: 0; }
+.bk-stage { position: absolute; inset: 0; opacity: 0; }
+.bk-persp { position: absolute; inset: 0; perspective: 2000px; perspective-origin: 50% 40%; }
+.bk-book { position: absolute; left: 50%; top: 50%; width: calc(var(--bk-p) * 2); height: var(--bk-h); margin-left: calc(var(--bk-p) * -1); margin-top: calc(var(--bk-h) / -2); transform-style: preserve-3d; }
+.bk-page, .bk-cover { position: absolute; top: 0; left: 50%; width: 50%; height: 100%; }
+.bk-right { box-sizing: border-box; padding: 9% 10% 8%; background: #F5F2EA; color: #202321; border-radius: 2px 9px 9px 2px; box-shadow: inset 16px 0 20px -14px rgba(32, 35, 33, 0.4), 2px 2px 0 #e7e0d2, 4px 4px 0 #d9d1c1, 6px 6px 0 #cfc6b4, 0 24px 50px rgba(0, 0, 0, 0.45); }
+.bk-cover { transform-origin: 0 50%; transform-style: preserve-3d; }
+.bk-face { position: absolute; inset: 0; box-sizing: border-box; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.bk-front { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--bk-p) * 0.05); padding: 12% 11%; background: #244A1C; color: #F5F2EA; border-radius: 2px 10px 10px 2px; box-shadow: inset 12px 0 0 rgba(0, 0, 0, 0.2), inset 13px 0 0 rgba(245, 242, 234, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 24px 50px rgba(0, 0, 0, 0.5); }
+/* The logo sits on a solid Charcoal plate (the brand's logo background), never on the green or over the scene. */
+.bk-plate { width: 64%; box-sizing: border-box; padding: 8% 9%; background: #202321; border-radius: 6px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.bk-plate img { display: block; width: 100%; height: auto; }
+.bk-title { font: 700 calc(var(--bk-p) * 0.115)/1.05 var(--font-book); text-align: center; color: #F5F2EA; }
+.bk-title-ink { color: #244A1C; text-align: left; }
+.bk-rule { width: 26%; height: 3px; background: #7DC00F; }
+.bk-sub { font: 700 calc(var(--bk-p) * 0.036)/1.3 var(--font-brand); letter-spacing: 0.2em; text-transform: uppercase; color: rgba(245, 242, 234, 0.78); text-align: center; }
+.bk-back { transform: rotateY(180deg); padding: 11% 10%; background: #F5F2EA; color: #202321; border-radius: 9px 2px 2px 9px; box-shadow: inset -16px 0 20px -14px rgba(32, 35, 33, 0.4), -2px 2px 0 #e7e0d2, -4px 4px 0 #d9d1c1, 0 24px 50px rgba(0, 0, 0, 0.4); }
+.bk-kicker { margin: 0 0 6%; font: 700 calc(var(--bk-p) * 0.032)/1.2 var(--font-brand); letter-spacing: 0.2em; text-transform: uppercase; color: #5b5a52; }
+.bk-note { margin: 6% 0 0; font: 400 calc(var(--bk-p) * 0.045)/1.45 var(--font-book); color: #3a3c38; }
+.bk-toc { margin: 0; padding: 0; list-style: none; font: 400 calc(var(--bk-p) * 0.041)/1.6 var(--font-book); color: #202321; }
+.bk-toc li { display: flex; align-items: center; gap: 0.6em; border-bottom: 1px solid #e3dccd; }
+.bk-toc li::before { content: ""; width: 0.42em; height: 0.42em; border-radius: 50%; background: #7DC00F; flex: none; }
 @media (max-width: 760px) {
   .library { top: auto; height: 58%; width: 100%; border-right: 0; border-top: 1px solid var(--line); }
   .lib-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
 
-/* Full screen: the scene alone, with a height meter on the right edge. */
-.scene-tools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: calc(50% - 16px); }
-section.scene-pane.fs .scene-tools { max-width: calc(100% - 20px); }
-html.embed #btn-second { display: none; }
+/* Scene controls (owner's decision, 2026-11-19): grouped frosted-charcoal controls over the 3D view, icons from inline
+   SVG with short labels, Leaf green for the chosen segment and Lime for a switch that is on (Charcoal text on Leaf,
+   never Warm white). They fade and slide off after 2.5 s without mouse, touch or key input and come straight back on
+   any of them; controller input leaves them hidden (hold Menu to show them). See app/scenecontrols.ts. */
+:root {
+  --font-brand: "Arimo", "Liberation Sans", Arial, sans-serif;
+  --font-book: "Tinos", "Liberation Serif", Georgia, serif;
+  --gl-charcoal: #202321; --gl-warm: #F5F2EA; --gl-leaf: #7DC00F; --gl-lime: #AFE414; --gl-deep: #244A1C; --gl-stone: #B6AEA1; --gl-beige: #FBF8F1;
+  --sc-glass: rgba(32, 35, 33, 0.58);
+  --sc-ink: #F5F2EA;
+  --sc-ink-2: rgba(245, 242, 234, 0.72);
+  --sc-line: rgba(245, 242, 234, 0.14);
+  --sc-h: 38px;
+  --sc-r: 13px;
+  --sc-ms: 280ms;
+  --sc-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+#scene { container: scene / inline-size; }
+.sc-group { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--sc-r); background: var(--sc-glass); -webkit-backdrop-filter: blur(14px) saturate(1.25); backdrop-filter: blur(14px) saturate(1.25); border: 1px solid var(--sc-line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); color: var(--sc-ink); pointer-events: auto; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .sc-group, #nav-hint, .hm-read, .tc-seg, .tc-solo, .tc-hold { background: rgba(32, 35, 33, 0.86); } }
+.sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--sc-h); min-width: var(--sc-h); padding: 0 12px; border: 0; border-radius: calc(var(--sc-r) - 4px); background: transparent; color: var(--sc-ink); font: 400 13.5px/1 var(--font-brand); letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.16s, color 0.16s, transform 0.12s var(--sc-ease); }
+.sc-btn:hover { background: rgba(245, 242, 234, 0.13); }
+.sc-btn:active { transform: scale(0.94); }
+.sc-btn:focus-visible, #stage-pick select:focus-visible, #view-select:focus-visible { outline: 2px solid var(--gl-lime); outline-offset: 1px; }
+.ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ic .ic-off { display: none; }
+/* A switch that is on: a lime icon on a faint lime wash; off, the label steps back. */
+.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"]:not(#btn-fullscreen) { background: rgba(175, 228, 20, 0.14); }
+.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"]:not(#btn-fullscreen) .ic { color: var(--gl-lime); }
+.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="false"] .lbl { color: var(--sc-ink-2); }
+/* The chosen segment (movement, measurements, camera view): Leaf green with Charcoal text. */
+.sc-seg .sc-btn[aria-pressed="true"], #views .sc-btn[aria-pressed="true"] { background: var(--gl-leaf); color: var(--gl-charcoal); }
+#btn-sound[aria-pressed="false"] .ic-on, #btn-fullscreen[aria-pressed="true"] .ic-on { display: none; }
+#btn-sound[aria-pressed="false"] .ic-off, #btn-fullscreen[aria-pressed="true"] .ic-off { display: inline; }
+.sc-cap, .sc-cap-txt { display: inline-flex; align-items: center; gap: 6px; color: var(--sc-ink-2); font: 700 10.5px/1 var(--font-brand); letter-spacing: 0.09em; text-transform: uppercase; white-space: nowrap; }
+.sc-cap { padding: 0 7px 0 9px; }
+.sc-sep { width: 1px; align-self: stretch; margin: 7px 3px; background: var(--sc-line); }
+#measure-modes { display: flex; align-items: center; gap: 2px; }
+#stage-pick { gap: 7px; padding-left: 11px; cursor: pointer; }
+#stage-pick > .ic { color: var(--sc-ink-2); }
+#stage-pick select, #view-select { -webkit-appearance: none; appearance: none; height: var(--sc-h); border: 0; border-radius: calc(var(--sc-r) - 4px); padding: 0 30px 0 12px; background: rgba(245, 242, 234, 0.09) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23F5F2EA' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center / 12px; color: var(--sc-ink); font: 400 13.5px/1 var(--font-brand); cursor: pointer; transition: background-color 0.16s; }
+#stage-pick select:hover, #view-select:hover { background-color: rgba(245, 242, 234, 0.16); }
+#stage-pick select option, #view-select option { color: var(--gl-charcoal); background: var(--gl-warm); }
+
+/* Where the groups sit: camera views top left, everything else top right. */
+#views { position: absolute; z-index: 3; top: 12px; left: 12px; max-width: calc(42% - 18px); flex-wrap: wrap; }
+#views:empty { display: none; }
+#views > .sc-cap { padding-right: 4px; }
+#view-select { display: none; }
+.scene-tools { position: absolute; top: 12px; right: 12px; z-index: 3; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; gap: 8px; max-width: calc(58% - 18px); pointer-events: none; }
+html.embed #btn-second, html.embed #btn-touch { display: none; }
 /* View-only embed (?viewer=1 or the parent's mode message): no Library. */
 html.viewer #btn-library { display: none; }
+html.embed.viewer .scene-tools > .sc-group:first-child { display: none; }
+
+/* Narrower views: the switches keep their icon and drop the word (the title still names them); the camera views
+   become one menu. */
+@container scene (max-width: 1700px) {
+  #btn-second .lbl, #btn-touch .lbl, #btn-focus .lbl, #btn-wind .lbl, #btn-sound .lbl, #btn-plants .lbl, #btn-fullscreen .lbl, #measure-modes .sc-cap .lbl, #stage-pick .sc-cap-txt { display: none; }
+  #btn-second, #btn-touch, #btn-focus, #btn-wind, #btn-sound, #btn-plants, #btn-fullscreen { padding: 0; width: var(--sc-h); }
+  #measure-modes .sc-cap { padding: 0 4px 0 8px; }
+}
+@container scene (max-width: 1300px) {
+  #views > .sc-btn { display: none; }
+  #view-select { display: block; }
+}
+@container scene (max-width: 900px) {
+  #views { max-width: 40%; }
+  #nav-modes .lbl, #btn-library .lbl { display: none; }
+  #nav-modes .sc-btn, #btn-library { padding: 0; width: var(--sc-h); }
+  .scene-tools { max-width: calc(60% - 18px); gap: 6px; }
+}
+
+/* Auto-hide (app/scenecontrols.ts sets html.ui-idle): off the top, off the bottom, off the right edge. */
+#views, .scene-tools, #nav-hint, #height-meter { transition: opacity var(--sc-ms) ease, transform var(--sc-ms) var(--sc-ease), visibility 0s linear 0s; }
+html.ui-idle #views, html.ui-idle .scene-tools, html.ui-idle #nav-hint, html.ui-idle #height-meter { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--sc-ms) ease, transform var(--sc-ms) var(--sc-ease), visibility 0s linear var(--sc-ms); }
+html.ui-idle #views, html.ui-idle .scene-tools { transform: translateY(calc(-100% - 16px)); }
+html.ui-idle #nav-hint { transform: translateY(calc(100% + 16px)); }
+html.ui-idle #height-meter { transform: translateX(calc(100% + 18px)); }
+html.ui-idle #scene { cursor: none; }
+@media (prefers-reduced-motion: reduce) { html.ui-idle #views, html.ui-idle .scene-tools, html.ui-idle #nav-hint, html.ui-idle #height-meter { transform: none; } }
+
+/* Full screen: the scene alone, the key hint along the bottom and a height meter on the right edge. */
+#nav-hint { position: absolute; z-index: 3; left: 12px; bottom: 12px; display: none; flex-direction: column; gap: 3px; max-width: calc(100% - 140px); padding: 8px 12px 9px; border-radius: var(--sc-r); background: var(--sc-glass); -webkit-backdrop-filter: blur(14px) saturate(1.25); backdrop-filter: blur(14px) saturate(1.25); border: 1px solid var(--sc-line); color: var(--sc-ink-2); font: 400 12px/1.6 var(--font-brand); pointer-events: none; }
+section.scene-pane.fs #nav-hint { display: flex; }
+#nav-hint kbd { display: inline-block; min-width: 1.5em; padding: 0 5px; border-radius: 5px; background: rgba(245, 242, 234, 0.12); border: 1px solid rgba(245, 242, 234, 0.18); color: var(--sc-ink); font: 500 11px/1.45 var(--font-mono); text-align: center; }
+section.scene-pane.fs #stage-card { bottom: 86px; }
+#height-meter { position: absolute; z-index: 3; right: 14px; top: 128px; bottom: 64px; width: 78px; display: none; pointer-events: none; color: var(--sc-ink); font-family: var(--font-mono); font-size: 11px; }
+section.scene-pane.fs #height-meter { display: block; }
+.hm-scale { position: absolute; right: 0; top: 0; bottom: 46px; width: 6px; background: rgba(32, 35, 33, 0.55); border-radius: 3px; box-shadow: inset 0 0 0 1px var(--sc-line); }
+.hm-tick { position: absolute; right: 12px; transform: translateY(50%); white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75); }
+.hm-tick::after { content: ""; position: absolute; right: -12px; top: 50%; width: 7px; border-top: 1px solid rgba(245, 242, 234, 0.8); }
+.hm-mark { position: absolute; right: -4px; width: 14px; height: 4px; border-radius: 2px; background: var(--gl-lime); transform: translateY(50%); box-shadow: 0 0 0 1px rgba(32, 35, 33, 0.6); transition: bottom 0.08s linear; }
+.hm-read { position: absolute; right: 0; bottom: 0; padding: 6px 9px; border-radius: 10px; text-align: right; line-height: 1.25; background: var(--sc-glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--sc-line); }
+.hm-read b { display: block; font-size: 16px; font-weight: 500; }
+.hm-read span { font: 700 10px/1 var(--font-brand); text-transform: uppercase; letter-spacing: 0.09em; color: var(--sc-ink-2); }
+
+/* A TV across the room: everything a size up. */
+@media (min-width: 1800px) and (min-height: 900px) {
+  :root { --sc-h: 46px; --sc-r: 15px; }
+  .sc-btn, #stage-pick select, #view-select { font-size: 16px; }
+  .ic { width: 21px; height: 21px; }
+  .sc-cap, .sc-cap-txt { font-size: 12px; }
+  #nav-hint { font-size: 14px; }
+  #nav-hint kbd { font-size: 13px; }
+  .hm-read b { font-size: 19px; }
+}
+
+/* Touch mode (iPad): 44 px targets everywhere; its own Orbit / Walk / Fly bar at the bottom replaces the top one. */
+html.touch-ui { --sc-h: 44px; }
+html.touch-ui #nav-hint, html.touch-ui #nav-modes { display: none !important; }
+.tc-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; pointer-events: auto; max-width: calc(100% - 24px); }
+.tc-seg, .tc-solo, .tc-hold { background: var(--sc-glass); -webkit-backdrop-filter: blur(14px) saturate(1.25); backdrop-filter: blur(14px) saturate(1.25); border: 1px solid var(--sc-line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); }
+.tc-seg { display: flex; gap: 2px; padding: 3px; border-radius: 15px; }
+.tc-btn { min-width: 44px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; background: transparent; color: var(--sc-ink); font: 700 15px/1 var(--font-brand); cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; transition: background-color 0.16s, transform 0.12s var(--sc-ease); }
+.tc-btn:active { transform: scale(0.94); }
+.tc-btn.tc-solo, .tc-btn.tc-hold { background: var(--sc-glass); }
+.tc-solo { min-height: 50px; border-radius: 15px; }
+.tc-btn[aria-pressed="true"] { background: var(--gl-leaf); color: var(--gl-charcoal); }
+.tc-hold.on { background: var(--gl-lime); color: var(--gl-charcoal); }
+.tc-stick { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 70px); width: 132px; height: 132px; border-radius: 50%; background: rgba(32, 35, 33, 0.4); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1.5px solid rgba(245, 242, 234, 0.5); pointer-events: auto; touch-action: none; display: none; }
+.tc-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: rgba(245, 242, 234, 0.88); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 0 0 3px rgba(125, 192, 15, 0.55); pointer-events: none; }
+.tc-rise { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 70px); display: none; flex-direction: column; gap: 10px; pointer-events: auto; }
+.tc-hold { width: 64px; min-height: 64px; padding: 0; font-size: 22px; touch-action: none; border-radius: 50%; }
+@media (max-width: 380px) { .tc-bar { gap: 4px; } .tc-btn { padding: 0 10px; font-size: 14px; } }
 /* Second screen, when no window can be opened: the panel floats over the right of the 3D view. */
 .ss-float { position: absolute; z-index: 5; right: 10px; bottom: 10px; top: 96px; width: min(360px, calc(100% - 20px)); overflow-y: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
 .ss-float-head { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
 @media (max-width: 760px) { .ss-float { top: auto; height: 55%; } }
-.scene-tools button { border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; padding: 4px 9px; border-radius: 3px; font-size: 12px; cursor: pointer; white-space: nowrap; }
-.scene-tools button:hover, .scene-tools button[aria-pressed="true"] { background: #f4f3ef; color: #1e2621; }
 /* Touch mode (iPad, no keyboard; `html.touch-ui` from ?touch=1, the parent's touch message, a coarse pointer or the Touch
    button; see app/touchcontrols.ts). Off, none of this applies. */
 .tc-root { display: none; }
@@ -227,42 +377,12 @@ html.touch-ui .tc-root { display: block; position: absolute; inset: 0; z-index: 
 html.library-open .tc-root { display: none !important; }
 html.touch-ui, html.touch-ui body { touch-action: manipulation; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 html.touch-ui #scene canvas { touch-action: none; }
-html.touch-ui #nav-hint, html.touch-ui #nav-modes { display: none !important; }
-html.touch-ui #stage-card, html.touch-ui section.scene-pane.fs #stage-card { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); max-width: calc(100% - 24px); }
+html.touch-ui #stage-card, html.touch-ui section.scene-pane.fs #stage-card { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 72px); max-width: calc(100% - 24px); }
 html.touch-ui.tc-first #stage-card { display: none; }
-html.touch-ui .quick-hud { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); }
-html.touch-ui .scene-tools button, html.touch-ui #views button { min-height: 44px; padding: 0 14px; font-size: 14px; }
-.tc-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; pointer-events: auto; max-width: calc(100% - 24px); }
-.tc-seg { display: flex; gap: 1px; }
-.tc-btn { min-width: 44px; min-height: 44px; padding: 0 16px; border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font: 600 15px/1 var(--font-ui); cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
-.tc-seg .tc-btn:first-child { border-radius: 22px 0 0 22px; }
-.tc-seg .tc-btn:last-child { border-radius: 0 22px 22px 0; }
-.tc-solo, .tc-hold { border-radius: 22px; }
-.tc-btn[aria-pressed="true"], .tc-hold.on { background: #f4f3ef; color: #1e2621; }
-.tc-stick { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); width: 132px; height: 132px; border-radius: 50%; background: rgba(20, 24, 22, 0.42); border: 2px solid rgba(244, 243, 239, 0.55); pointer-events: auto; touch-action: none; display: none; }
-.tc-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: rgba(244, 243, 239, 0.8); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); pointer-events: none; }
-.tc-rise { position: absolute; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 66px); display: none; flex-direction: column; gap: 10px; pointer-events: auto; }
-.tc-hold { width: 64px; min-height: 64px; padding: 0; font-size: 22px; touch-action: none; border-radius: 50%; }
+html.touch-ui .quick-hud { bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 72px); }
 .tc-root:not([data-mode="orbit"]) .tc-stick { display: block; }
 .tc-root[data-mode="fly"] .tc-rise { display: flex; }
 section.scene-pane.fs .tc-rise { right: calc(max(18px, env(safe-area-inset-right, 0px)) + 84px); }
-@media (max-width: 380px) { .tc-bar { gap: 4px; } .tc-btn { padding: 0 10px; font-size: 14px; } }
-html.embed #btn-touch { display: none; }
-#nav-modes { display: none; gap: 1px; }
-#measure-modes { display: flex; gap: 1px; align-items: stretch; }
-#measure-modes span { background: rgba(20, 24, 22, 0.72); color: #c9cec8; font-size: 11px; padding: 4px 7px; border-radius: 3px 0 0 3px; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; }
-#measure-modes button { border-radius: 0; }
-#stage-pick { display: flex; gap: 1px; align-items: stretch; }
-#stage-pick span { background: rgba(20, 24, 22, 0.72); color: #c9cec8; font-size: 11px; padding: 4px 7px; border-radius: 3px 0 0 3px; text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; }
-#stage-pick select { border: 0; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 0 3px 3px 0; cursor: pointer; }
-#stage-pick select option { color: #1e2621; background: #f4f3ef; }
-#measure-modes button:last-child { border-radius: 0 3px 3px 0; }
-#nav-modes button:first-child { border-radius: 3px 0 0 3px; }
-#nav-modes button:last-child { border-radius: 0 3px 3px 0; }
-section.scene-pane.fs #nav-modes { display: flex; }
-#nav-hint { position: absolute; z-index: 3; left: 12px; bottom: 12px; display: none; max-width: calc(100% - 130px); background: rgba(20, 24, 22, 0.72); color: #e7e9e4; font-size: 11px; line-height: 1.5; padding: 5px 9px; border-radius: 3px; pointer-events: none; }
-section.scene-pane.fs #nav-hint { display: block; }
-#nav-hint kbd { font-family: var(--font-mono); font-size: 10px; color: #fff; }
 /* Quick tools (D-pad): a chip at the bottom center naming the tool, what up and down do, and the result. Big enough
    to read on a TV across the room; shows on each change for 2 s. Shown and hidden by visibility, never by display or
    an opacity fade, so the layers over the WebGL canvas stay the same (see .measure-layer). */
@@ -290,7 +410,6 @@ section.scene-pane.fs #nav-hint { display: block; }
 #stage-card { position: absolute; left: 10px; bottom: 10px; z-index: 3; max-width: min(460px, calc(100% - 150px)); background: rgba(20, 24, 22, 0.8); color: #eceee9; font-size: 12px; line-height: 1.45; padding: 7px 10px 8px; border-radius: 3px; border-left: 3px solid #7dc00f; pointer-events: none; }
 #stage-card b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #fff; margin-bottom: 2px; }
 #stage-card p { margin: 0; }
-section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label.stage-label { font-family: var(--font-ui); font-weight: 600; font-size: 11px; padding: 3px 7px; border-left: 3px solid #5d6a62; }
 .measure-label.stage-label span { font-family: var(--font-mono); font-weight: 400; }
 .measure-label.sl-trench { border-left-color: #b8821a; }
@@ -326,17 +445,6 @@ section.scene-pane.fs #stage-card { bottom: 52px; }
 .measure-label.ml-ruler span { font-family: var(--font-mono); font-weight: 400; }
 section.scene-pane.fs { position: fixed; inset: 0; z-index: 30; display: grid !important; height: auto !important; min-height: 0 !important; grid-template-rows: minmax(0, 1fr); }
 section.scene-pane.fs .dock { display: none; }
-#views { right: calc(50% + 6px); }
-section.scene-pane.fs #views { display: none; }
-#height-meter { position: absolute; z-index: 3; right: 14px; top: 50px; bottom: 50px; width: 74px; display: none; pointer-events: none; color: #f4f3ef; font-family: var(--font-mono); font-size: 11px; }
-section.scene-pane.fs #height-meter { display: block; }
-.hm-scale { position: absolute; right: 0; top: 0; bottom: 34px; width: 6px; background: rgba(20, 24, 22, 0.55); border-radius: 3px; }
-.hm-tick { position: absolute; right: 10px; transform: translateY(50%); white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
-.hm-tick::after { content: ""; position: absolute; right: -10px; top: 50%; width: 6px; border-top: 1px solid rgba(244, 243, 239, 0.8); }
-.hm-mark { position: absolute; right: -3px; width: 12px; height: 3px; background: #f4f3ef; transform: translateY(50%); box-shadow: 0 0 0 1px rgba(20, 24, 22, 0.6); transition: bottom 0.08s linear; }
-.hm-read { position: absolute; right: 0; bottom: 0; background: rgba(20, 24, 22, 0.78); padding: 4px 7px; border-radius: 3px; text-align: right; line-height: 1.25; }
-.hm-read b { display: block; font-size: 15px; font-weight: 500; }
-.hm-read span { font-family: var(--font-ui); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #c9cec8; }
 
 #mobile-tabs { display: none; }
 #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--panel); padding: 9px 14px; border-radius: 4px; max-width: min(560px, calc(100% - 32px)); font-size: 13px; z-index: 20; }
@@ -446,34 +554,44 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
         <div id="scene">
           <div id="loading">Building the yard…</div>
           <div id="scene-error" hidden></div>
-          <div id="views" aria-label="Camera views"></div>
+          <div id="views" class="sc-group" role="group" aria-label="Camera views"></div>
           <div id="embed-note" role="status" hidden><p></p></div>
           <div id="updating" hidden>Updating 3D…</div>
           <div id="stage-card" role="status" aria-live="polite" hidden><b id="stage-title"></b><p id="stage-note"></p></div>
           <div id="library" class="library" hidden aria-label="Library"></div>
-          <div class="scene-tools">
-            <button id="btn-library" type="button" aria-pressed="false" title="Product library: every plant, material and feature in 3D">Library</button>
-            <button id="btn-second" type="button" aria-pressed="false" title="Second screen: a window (best on a second display) showing what the pointer is on">Second screen</button>
-            <button id="btn-touch" type="button" aria-pressed="false" title="Touch mode: on-screen controls for a tablet (fingers only, no keyboard): joystick, look by dragging, pinch to zoom">Touch</button>
-            <button id="btn-focus" type="button" aria-pressed="true" title="Focus blur on or off">Focus</button>
-            <button id="btn-wind" type="button" aria-pressed="true" title="Wind on or off">Wind</button>
-            <button id="btn-sound" type="button" aria-pressed="true" title="Sound on or off: ambience for the time of day, water, fire and spa. Sound effects generated with ElevenLabs.">Sound</button>
-            <div id="nav-modes" role="group" aria-label="Movement">
-              <button type="button" data-mode="walk" aria-pressed="true" title="Walk at eye height (V or controller A)">Walk</button>
-              <button type="button" data-mode="fly" aria-pressed="false" title="Fly freely (V or controller A)">Fly</button>
+          <div id="library-book" class="lib-book" hidden aria-hidden="true"></div>
+          <div class="scene-tools" id="scene-tools">
+            <div class="sc-group" role="group" aria-label="Library and screens">
+              <button id="btn-library" class="sc-btn" type="button" aria-label="Library" aria-pressed="false" title="Product library: every plant, material and feature in 3D (controller: hold View)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10.2 5.2 7.6 4.6 4 4.8v13c3.6-.2 6.2.4 8 1.7 1.8-1.3 4.4-1.9 8-1.7v-13c-3.6-.2-6.2.4-8 1.7z"/><path d="M12 6.5v13"/></svg><span class="lbl">Library</span></button>
+              <button id="btn-second" class="sc-btn" type="button" aria-label="Second screen" aria-pressed="false" title="Second screen: a window (best on a second display) showing what the pointer is on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/></svg><span class="lbl">Second screen</span></button>
+              <button id="btn-touch" class="sc-btn" type="button" aria-label="Touch mode" aria-pressed="false" title="Touch mode: on-screen controls for a tablet (fingers only, no keyboard): joystick, look by dragging, pinch to zoom"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10m0-1.5a1.5 1.5 0 0 1 3 0V11m0-1a1.5 1.5 0 0 1 3 0v4.5c0 3.3-2.4 6-5.7 6-2.2 0-3.6-1-4.8-2.7L5 15.2a1.5 1.5 0 0 1 2.3-1.9L9 15"/></svg><span class="lbl">Touch</span></button>
             </div>
-            <div id="measure-modes" role="group" aria-label="Measurements" title="Measurements (M or controller X steps through them)">
-              <span>Measure</span>
-              <button type="button" data-mode="off" aria-pressed="true" title="No measurements">Off</button>
-              <button type="button" data-mode="totals" aria-pressed="false" title="Area of each surface, total length of each run, wall height">Totals</button>
-              <button type="button" data-mode="edges" aria-pressed="false" title="Every edge length as well">Every edge</button>
+            <div id="nav-modes" class="sc-group sc-seg" role="group" aria-label="Movement" title="Movement (V or controller A switches walk and fly)">
+              <button type="button" class="sc-btn" data-mode="orbit" aria-label="Orbit" aria-pressed="true" title="Orbit around the yard with the mouse"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="9" ry="4"/><circle cx="12" cy="12" r="2.2"/></svg><span class="lbl">Orbit</span></button>
+              <button type="button" class="sc-btn" data-mode="walk" aria-label="Walk" aria-pressed="false" title="Walk at eye height (V or controller A)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="1.8"/><path d="m9.5 21 2.2-6.2 2.8 2.7V21M8 11.5l2.6-3.4 3.6.5 2 3 2.3.9M11.7 14.8 10.6 8.1"/></svg><span class="lbl">Walk</span></button>
+              <button type="button" class="sc-btn" data-mode="fly" aria-label="Fly" aria-pressed="false" title="Fly freely (V or controller A)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4 3 11.2l6.8 2.4L12.2 21 21 4z"/><path d="m9.8 13.6 4.4-4"/></svg><span class="lbl">Fly</span></button>
             </div>
-            <button id="btn-plants" type="button" aria-pressed="false" title="Plant labels: each plant's name, height and spread, on their own apart from the measurements (N or controller B)">Plants</button>
-            <label id="stage-pick" title="Build stage: demo, excavation, trenches, backfill, base rock, sand, finished ([ and ] step through them)"><span>Stage</span><select id="stage-select" aria-label="Build stage"></select></label>
-            <button id="btn-cutaway" type="button" aria-pressed="false" title="Cut away the near side of the yard at the point you are looking at, to see trenches, pipes and layers from the side (C)">Cut away</button>
-            <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F)">Full screen</button>
+            <div class="sc-group" role="group" aria-label="Measurements and labels">
+              <div id="measure-modes" class="sc-seg" role="group" aria-label="Measurements" title="Measurements (M or controller X steps through them)">
+                <span class="sc-cap"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m3.5 15.5 12-12 5 5-12 12z"/><path d="m7.5 11.5 2 2M10.5 8.5l1.5 1.5M13.5 5.5l2 2"/></svg><span class="lbl">Measure</span></span>
+                <button type="button" class="sc-btn" data-mode="off" aria-pressed="true" title="No measurements">Off</button>
+                <button type="button" class="sc-btn" data-mode="totals" aria-pressed="false" title="Area of each surface, total length of each run, wall height">Totals</button>
+                <button type="button" class="sc-btn" data-mode="edges" aria-pressed="false" title="Every edge length as well">Every edge</button>
+              </div>
+              <span class="sc-sep" aria-hidden="true"></span>
+              <button id="btn-plants" class="sc-btn" type="button" aria-label="Plant labels" aria-pressed="false" title="Plant labels: each plant&#39;s name, height and spread, on their own apart from the measurements (N or controller B)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z"/><path d="M5 19 13 11"/></svg><span class="lbl">Plants</span></button>
+            </div>
+            <div class="sc-group" role="group" aria-label="Look and sound">
+              <button id="btn-focus" class="sc-btn" type="button" aria-label="Focus blur" aria-pressed="true" title="Focus blur on or off"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5 15 12M20.5 12 12 15M12 20.5 9 12M3.5 12 12 9"/></svg><span class="lbl">Focus</span></button>
+              <button id="btn-wind" class="sc-btn" type="button" aria-label="Wind" aria-pressed="true" title="Wind on or off"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/></svg><span class="lbl">Wind</span></button>
+              <button id="btn-sound" class="sc-btn" type="button" aria-label="Sound" aria-pressed="true" title="Sound on or off: ambience for the time of day, water, fire and spa. Sound effects generated with ElevenLabs."><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="ic-on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="ic-off" d="m16 9.5 5 5m0-5-5 5"/></svg><span class="lbl">Sound</span></button>
+            </div>
+            <label id="stage-pick" class="sc-group" title="Build stage: demo, excavation, trenches, backfill, base rock, sand, finished ([ and ] step through them)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 9 4.5-9 4.5L3 8z"/><path d="m3 12 9 4.5 9-4.5M3 16l9 4.5 9-4.5"/></svg><span class="sc-cap-txt">Stage</span><select id="stage-select" aria-label="Build stage"></select></label>
+            <div class="sc-group" role="group" aria-label="Full screen">
+              <button id="btn-fullscreen" class="sc-btn" type="button" aria-label="Enter full screen" aria-pressed="false" title="Full screen (F)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path class="ic-on" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="ic-off" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><span class="lbl">Full screen</span></button>
+            </div>
           </div>
-          <div id="nav-hint"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements (off, totals, every edge) · <kbd>N</kbd> plant labels · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>,</kbd> <kbd>.</kbd> pick a quick tool · <kbd>=</kbd> <kbd>-</kbd> use it · <kbd>Esc</kbd> exit<br>Controller: <kbd>X</kbd> measurements · <kbd>B</kbd> plant labels · <kbd>Y</kbd> pointer · <kbd>A</kbd> walk / fly · <kbd>Menu</kbd> home · D-pad <kbd>◀ ▶</kbd> quick tool (dig layers, mark, tape, light, growth, views) · <kbd>▲ ▼</kbd> use it</div>
+          <div id="nav-hint"><span class="nh-row"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements · <kbd>N</kbd> plant labels · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>,</kbd> <kbd>.</kbd> pick a quick tool · <kbd>=</kbd> <kbd>-</kbd> use it · <kbd>Esc</kbd> exit · move the mouse to bring the buttons back</span><span class="nh-row">Controller: <kbd>X</kbd> measurements · <kbd>B</kbd> plant labels · <kbd>Y</kbd> pointer · <kbd>A</kbd> walk / fly · <kbd>Menu</kbd> home, hold to show the buttons · <kbd>View</kbd> use, hold for the Library · D-pad <kbd>◀ ▶</kbd> quick tool · <kbd>▲ ▼</kbd> use it</span></div>
           <div id="height-meter" aria-hidden="true">
             <div class="hm-scale" id="hm-scale"><div class="hm-mark" id="hm-mark"></div></div>
             <div class="hm-read" role="status" aria-live="off"><span>Height</span><b id="hm-value">0 ft</b></div>

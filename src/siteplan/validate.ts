@@ -133,6 +133,11 @@ function unretire(it: Record<string, unknown>): Record<string, unknown> {
 
 function pickFeature(raw: unknown, warnings: string[]): string | null {
   const id = legacy(raw);
+  // Kitchen parts are building blocks for islands, drawn only in the Library: no plan carries one.
+  if (typeof id === 'string' && featureById.get(id)?.kind === 'kitchenPart') {
+    warnings.push(`"${featureById.get(id)!.name}" is a kitchen part, not a feature to place, and was left out.`);
+    return null;
+  }
   if (typeof id === 'string' && featureById.has(id)) return id;
   if (typeof id === 'string') {
     const lower = id.toLowerCase().replace(/[\s_]/g, '-');

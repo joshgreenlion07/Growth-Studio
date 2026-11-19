@@ -92,6 +92,7 @@ import { build as euonymusEmeraldGaiety } from './shrubs/euonymus-emerald-gaiety
 import { build as lamiumWhiteNancy } from './groundcover/lamium-white-nancy';
 import { build as oliveLittleOllie } from './shrubs/olive-little-ollie';
 import { build as feijoaStandard } from './trees/feijoa-standard';
+import { build as starJasmineMetalTrellis } from './shrubs/star-jasmine-metal-trellis';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -190,4 +191,5 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'lamium-white-nancy': lamiumWhiteNancy,
   'olive-little-ollie': oliveLittleOllie,
   'feijoa-standard': feijoaStandard,
+  'star-jasmine-metal-trellis': starJasmineMetalTrellis,
 };

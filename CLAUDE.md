@@ -39,6 +39,12 @@ finished-work photos in `reference/green-lion-style/`.
   `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and
   keeps a generic builder per plant form as the fallback for a new catalog
   plant that has no file yet.
+  Outdoor kitchens (`siteplan/kitchen.ts`) are built like water features: a library of
+  parametric parts (grills, griddles, burners, pizza ovens, sinks, cold units, doors, drawers,
+  propane cabinet, stools, counter and veneer finishes; Library shelf "Kitchen parts", never
+  offered in a plan: they are in `featureById` but not in FEATURES) and islands assembled from
+  them as bays left to right (`KitchenIsland`, kind `kitchenIsland`), drawn by `builder/kitchen/`
+  (layout test `scripts/kitchen.test.ts`).
   Lighting fixtures (Tru-Scapes, `siteplan/truscapes.ts`) are built by
   `landscapelights.ts` and lit through `engine/landlights.ts`.
   Composite decks (a hardscape zone in a maker's deck board, `siteplan/decking.ts`)
@@ -53,10 +59,11 @@ finished-work photos in `reference/green-lion-style/`.
   backfill, base, bedding) from the plan's paving, walls and
   `plan.utilities`: pits cut from a distance field (marching squares; the
   same field opens the ground mesh), pipes, layers, marking paint,
-  equipment and the cutaway face. Depth rules and names live in
+  equipment and a section face (unused since Cut away was removed). Depth rules and names live in
   `siteplan/utilities.ts`.
 - `src/app/` — the UI: page markup and styles (`page.html`), app logic
-  (`main.ts`), the 2D plan editor (`planeditor.ts`), the plan reader prompt
+  (`main.ts`), the controls' auto-hide (`scenecontrols.ts`), the Library's
+  full-screen book animation (`librarybook.ts`), the 2D plan editor (`planeditor.ts`), the plan reader prompt
   (`reader.ts`) and PDF import (`pdf.ts`).
 - Embed mode (`?embed=1`) — the 3D view alone in an iframe, fed a SitePlan by
   the parent page (Area Planner) over `postMessage`. `main.ts` puts `embed` on
@@ -82,6 +89,8 @@ finished-work photos in `reference/green-lion-style/`.
   live from the maker's site by its address (`siteplan/belgard-media.ts`, `siteplan/basalite-media.ts`,
   Trex deck swatches in `siteplan/decking.ts`); the
   photo is never copied into the app or used as a texture.
+  The other exception is Green Lion's own approved logo (`app/brand/logo-compact.png`, copied from Website-Main
+  `img/`), shown only on the Library's book cover on a Charcoal plate (logo rules in Website-Main `docs/BRAND.md`).
 - Use only real Green Lion content. Plant sizes and the catalog are starting
   values until Green Lion's own plant and material list replaces them. Never
   invent prices, reviews or project details.
@@ -101,6 +110,10 @@ finished-work photos in `reference/green-lion-style/`.
 - UI: plain, professional, calm. No gradients, glassmorphism, pill buttons,
   glowing or floating elements, heavy animation or generic SaaS layouts. The
   3D scene is the hero.
+  The one exception (owner's request, 2026-11-19): the controls over the 3D view are frosted Charcoal groups that
+  auto-hide (`app/scenecontrols.ts`), and the Library opens in full screen with a short book animation
+  (`app/librarybook.ts`). Keep them in Green Lion's palette (Charcoal, Warm white, Leaf, Lime, Deep green; never
+  Warm white text on Leaf green) and keep the rest of the app plain.
 - The Anthropic API key lives on the server only.
 
 ## Commands

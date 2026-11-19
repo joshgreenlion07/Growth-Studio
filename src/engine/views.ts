@@ -148,7 +148,7 @@ export function generateViews(plan: SitePlan, height: (p: Vec2) => number): Came
     if (spec?.kind === 'firePit' || spec?.kind === 'fireTable') focusItems.push({ p: f.position, label: 'Fire feature', id: `f-${f.id}`, r: 1.4 });
     if (spec?.kind === 'pergolaWood' || spec?.kind === 'pergolaLouvered') focusItems.push({ p: f.position, label: 'Under the pergola', id: `f-${f.id}`, r: 2.2 });
     if (spec?.kind === 'waterWallPlaster' || spec?.kind === 'waterWallPorcelain' || spec?.kind === 'waterWallStucco') focusItems.unshift({ p: f.position, label: 'Water wall', id: `f-${f.id}`, r: 2.2 });
-    if (spec?.kind === 'kitchenL' || spec?.kind === 'kitchenStraight') focusItems.push({ p: f.position, label: 'Outdoor kitchen', id: `f-${f.id}`, r: 1.8 });
+    if (spec?.kind === 'kitchenL' || spec?.kind === 'kitchenStraight' || spec?.kind === 'kitchenIsland') focusItems.push({ p: f.position, label: 'Outdoor kitchen', id: `f-${f.id}`, r: 1.8 });
     if (spec?.kind === 'hotTub') focusItems.push({ p: f.position, label: 'Hot tub', id: `f-${f.id}`, r: 1.5 });
   }
   const seen = new Set<string>();

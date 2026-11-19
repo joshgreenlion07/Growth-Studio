@@ -21,6 +21,8 @@ import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
 import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
+import { KITCHEN_ISLAND_FEATURES, KITCHEN_PART_FEATURES, type KitchenIsland } from './kitchen';
+import { YARD_FEATURES, YARD_SWAP, type UrnGlaze, type YardKind } from './yard';
 
 export type PlantForm =
   | 'shadeTree'
@@ -430,6 +432,8 @@ export type FeatureKind =
   | 'pergolaLouvered'
   | 'kitchenStraight'
   | 'kitchenL'
+  | 'kitchenIsland'
+  | 'kitchenPart'
   | 'hotTub'
   | 'saunaBarrel'
   | 'saunaCube'
@@ -452,6 +456,7 @@ export type FeatureKind =
   | 'cortenPlanter'
   | DecorKind
   | WaterRockKind
+  | YardKind
   | 'blackPlanter'
   | 'boulder'
   | 'pathLight'
@@ -474,8 +479,14 @@ export interface FeatureSpec {
   kind: FeatureKind;
   /** A veneer column's finish: the wall veneer look (shelf 'Wall veneer') its faces are clad in. */
   veneer?: string;
-  /** An urn fountain's urn (builder/urnfountain.ts): the glazed ceramic urn or the chiseled stone jar. */
-  urn?: 'glazed' | 'jar';
+  /** An urn fountain's urn (builder/urnfountain.ts): the glazed ceramic urn, the chiseled stone jar, or the 24 in bubbler. */
+  urn?: 'glazed' | 'jar' | 'bubbler';
+  /** The bubbler urn's glaze color (siteplan/yard.ts URN_GLAZES). */
+  glaze?: UrnGlaze;
+  /** An outdoor kitchen island assembled from kitchen parts (kind 'kitchenIsland', siteplan/kitchen.ts). */
+  island?: KitchenIsland;
+  /** A kitchen part shown on its own (kind 'kitchenPart'): its KITCHEN_PARTS id. Parts are never offered in a plan. */
+  kitchenPart?: string;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
   /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
@@ -579,6 +590,9 @@ export const PLANTS: PlantSpec[] = [
     about: 'A dense, mounding evergreen with small rounded leaves, glossy deep green edged in white; the white edges blush pink in winter. Slow and tidy, good as a low hedge or edging.' }),
   P({ id: 'olive-little-ollie', name: 'Dwarf olive \'Little Ollie\'', botanical: 'Olea europaea \'Montra\'', group: 'Shrubs', form: 'shrub', installHeight: 0.6, installSpread: 0.5, matureHeight: 1.8, matureSpread: 1.8, yearsToMature: 10, foliage: '#2c4326', foliage2: '#9ea795', evergreen: true, spacing: 1.5, container: '5 gal',
     about: 'Little Ollie, a dwarf olive grown as a dense, rounded shrub: small, narrow leaves deep green above and silvery below on many branching stems. It sets little or no fruit and takes shearing as a low hedge.' }),
+  // The same vine as a 2 gal staked plant trained on a 48 in metal pot trellis (siteplan/yard.ts POT_TRELLIS), in a tall
+  // pot or in the ground at a fence; kept pruned to about 6 in over the trellis.
+  P({ id: 'star-jasmine-metal-trellis', name: 'Star jasmine, on a metal trellis', botanical: 'Trachelospermum jasminoides', group: 'Shrubs', form: 'floweringShrub', installHeight: 0.7, installSpread: 0.3, matureHeight: 1.0, matureSpread: 0.5, yearsToMature: 3, foliage: '#1f4a1c', foliage2: '#4c7a2a', flower: '#fbfaf2', flower2: '#f0e2a0', evergreen: true, spacing: 0.6, container: '2 gal' }),
   // Grasses
   P({ id: 'blue-fescue', name: 'Blue fescue', botanical: 'Festuca glauca', group: 'Grasses', form: 'grass', installHeight: 0.15, installSpread: 0.15, matureHeight: 0.3, matureSpread: 0.35, yearsToMature: 2, foliage: '#7f9fb2', foliage2: '#98b4c2', flower: '#c9b27c', evergreen: true, spacing: 0.35, container: '1 gal' }),
   P({ id: 'ornamental-grass', name: 'Ornamental grass', botanical: 'Calamagrostis x acutiflora \'Karl Foerster\'', group: 'Grasses', form: 'grass', installHeight: 0.4, installSpread: 0.3, matureHeight: 1.5, matureSpread: 0.75, yearsToMature: 2, foliage: '#628e3a', foliage2: '#7fa648', flower: '#d2b676', evergreen: false, spacing: 0.7, container: '5 gal' }),
@@ -835,6 +849,15 @@ export const MATERIALS: MaterialSpec[] = [
   // Porcelain
   M({ id: 'porcelain-plank-gray', name: 'Porcelain plank, mixed gray', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#d9d6cf', '#bfbbb3', '#a6a29b', '#8d8a85'], pattern: { kind: 'plank', sizes: [[48, 8]], joint: 0.08, face: 'woodgrain' }, thickness: 0.05 }),
   M({ id: 'porcelain-plank-light', name: 'Porcelain plank, light', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#e2ddd2', '#d4cdbf', '#c6beaf'], pattern: { kind: 'plank', sizes: [[48, 12]], joint: 0.08, face: 'woodgrain' }, thickness: 0.05 }),
+  /*
+   * MSI Caldera Blanca porcelain (msisurfaces.com), the wood-look porcelain on a client's covered patio: white and
+   * whitewashed planks with gray grain and knots, matte, laid staggered by a third. Two formats: the 8 x 47 in plank
+   * (NCALBLA8X47, 3/8 in, rectified; set in thinset over the slab) and the 16 x 47 in 2 cm outdoor paver
+   * (LPAVNCALBLA1647). Both are metric (20 x 120 and 40 x 120 cm): drawn on a 48 in nominal module scaled to 47.24 in.
+   * Tones from MSI's photos, as the Caldera Blanca coping below.
+   */
+  M({ id: 'msi-caldera-blanca-plank-8x47', name: 'MSI Caldera Blanca porcelain plank, 8 x 47', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#ede7db', '#e4ddd0', '#e2dace', '#d6cfc3'], pattern: { kind: 'plank', sizes: [[48, 8]], joint: 0.125, face: 'woodgrain', jointSand: '#c9c4bb', scale: 47.24 / 48, sold: [[47, 8]] }, thickness: 0.02, matches: 'MSI Caldera Blanca 8x47 porcelain plank (NCALBLA8X47)', maker: 'MSI', line: 'Caldera porcelain', color: 'Caldera Blanca, 8 x 47 plank' }),
+  M({ id: 'msi-caldera-blanca-paver-16x47', name: 'MSI Caldera Blanca porcelain paver, 16 x 47, 2 cm', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#ede7db', '#e4ddd0', '#e2dace', '#d6cfc3'], pattern: { kind: 'plank', sizes: [[48, 16]], joint: 0.125, face: 'woodgrain', jointSand: '#c9c4bb', scale: 47.24 / 48, sold: [[47, 16]] }, thickness: 0.02, matches: 'MSI Caldera Blanca 16x47 2 cm outdoor porcelain paver (LPAVNCALBLA1647)', maker: 'MSI', line: 'Caldera porcelain', color: 'Caldera Blanca, 16 x 47 2 cm paver' }),
   M({ id: 'porcelain-24-light', name: 'Porcelain 24x48, light stone', use: 'hardscape', group: 'Porcelain', recipe: 'paver', palette: ['#e4e1da', '#d9d5cc'], pattern: { kind: 'grid', sizes: [[48, 24]], joint: 0.08, face: 'smooth' }, thickness: 0.05 }),
   // Concrete: Green Lion's own lines (CONCRETE_LINES below), one look per integral color. The old ids stay: saved plans use them.
   ...concreteLooks(),
@@ -1112,6 +1135,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'umbrella', name: 'Market umbrella', group: 'Shade', kind: 'umbrella', footprint: [2.7, 2.7] }),
   F({ id: 'kitchen-l', name: 'Outdoor kitchen, L-shaped', group: 'Kitchens', kind: 'kitchenL', footprint: [3.6, 2.6] }),
   F({ id: 'kitchen-straight', name: 'Outdoor kitchen, straight', group: 'Kitchens', kind: 'kitchenStraight', footprint: [3.0, 0.8] }),
+  // Islands assembled from the kitchen parts library (siteplan/kitchen.ts, builder/kitchen/).
+  ...KITCHEN_ISLAND_FEATURES,
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
   // Cal Spas Tropical Plus PPZ-743BC, Patio Plus series (Cal Spas spec sheet and product page): 84 x 84 x 37 in, 43 jets,
   // 6 seats with a cool-off seat. Built by builder/spa-ppz743bc.ts in the finish Green Lion installs; a placement's
@@ -1203,6 +1228,9 @@ export const FEATURES: FeatureSpec[] = [
   // Moss rock, Canyon Tech boulders and flagstone pieces for water features (siteplan/waterrocks.ts).
   ...WATER_ROCK_FEATURES,
   ...FLAGSTONE_FEATURES,
+  // Side-yard pieces from a client job (siteplan/yard.ts): resin shed, garden bench, cedar raised bed, pot with trellis
+  // and jasmine, A/C screen, and the 24 in bubbling urn in its glazes.
+  ...YARD_FEATURES,
   F({ id: 'trellis-cable', name: 'Cable trellis', group: 'Accents', kind: 'trellisCable', footprint: [1.8, 0.05] }),
   F({ id: 'trellis-grid', name: 'Steel grid trellis', group: 'Accents', kind: 'trellisGrid', footprint: [0.9, 0.05] }),
   F({ id: 'stepping-pad', name: 'Stepping pad, 24 in', group: 'Accents', kind: 'steppingPad', footprint: [0.6, 0.6] }),
@@ -1252,7 +1280,8 @@ function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | '
 for (const m of MATERIALS) if (m.use === 'bed') Object.assign(m, bedFill(m));
 
 export const materialById = new Map(MATERIALS.map((m) => [m.id, m]));
-export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
+// Kitchen parts are drawn by id (the Library) but are not in FEATURES: they are never offered in a plan.
+export const featureById = new Map([...FEATURES, ...KITCHEN_PART_FEATURES].map((f) => [f.id, f]));
 
 /**
  * The kind of thing a feature is, as a plural noun the parent shows ("Pergolas and gazebos"): a placed feature can be
@@ -1262,7 +1291,7 @@ export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
 const SWAP_CLASS: Record<FeatureKind, string> = {
   pergolaWood: 'Pergolas and gazebos', pergolaLouvered: 'Pergolas and gazebos', gazebo: 'Pergolas and gazebos', umbrella: 'Umbrellas',
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
-  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
+  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens', kitchenIsland: 'Outdoor kitchens', kitchenPart: 'Kitchen parts',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
   waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
@@ -1272,6 +1301,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   bench: 'Seating', loungeSofa: 'Seating', loungeOttoman: 'Ottomans', deckBox: 'Deck boxes',
   loungeSet: 'Furniture sets', bistroSet: 'Furniture sets', diningSet: 'Furniture sets', diningSling: 'Furniture sets',
   patioHeater: 'Patio heaters', ceilingFan: 'Ceiling fans',
+  ...YARD_SWAP,
 };
 
 /** The class a feature switches within (see SWAP_CLASS). */

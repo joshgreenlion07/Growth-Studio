@@ -813,6 +813,8 @@ export interface RaisedPlacement extends PlantPlacement {
    * its feature (an agave in a bowl planter) keeps its full rosette, where fewer leaves would show as gaps.
    */
   detail?: number;
+  /** A vine trained on its feature's support (a pot's trellis): its heading, so it stands with the feature, not the nearest fence. */
+  heading?: number;
 }
 
 export interface PlantBuildOptions {
@@ -1012,7 +1014,7 @@ export function buildPlants(placements: PlantPlacement[], groundHeight: (p: Vec2
       let heading = r() * Math.PI * 2;
       const tall = same ? 1 : 0.92 + r() * 0.16;
       // A trained vine stands with its trellis's flat side to the nearest fence or wall, else facing plan +y.
-      if (look.trained) heading = options.backing?.(p.position) ?? 0;
+      if (look.trained) heading = (p as Partial<RaisedPlacement>).heading ?? options.backing?.(p.position) ?? 0;
       if (look.hedge) {
         // Face along the row: toward the nearest placement of the same plant.
         let best = Infinity;
