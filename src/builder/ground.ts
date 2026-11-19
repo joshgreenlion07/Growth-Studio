@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { materialById } from '../siteplan/catalog';
+import { featureById, materialById } from '../siteplan/catalog';
 import { bounds, distToPolyline, fallProfile, projectOnPolyline, type Bounds } from '../siteplan/geometry';
 import { PolygonIndex, PolygonSet, inBounds } from '../siteplan/spatial';
 import type { SitePlan, Vec2, Zone } from '../siteplan/types';
@@ -10,7 +10,7 @@ import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
 import type { Quality } from '../engine/post';
-import { fourFallGroundCuts, fourFallLevelAreas, type GroundCut } from './fourfall';
+import { bedZoneAt, fourFallBedChoice, fourFallCut, fourFallFront, fourFallGroundCuts, type FourFallBedChoice, type GroundCut } from './fourfall';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -28,6 +28,8 @@ export interface GroundModel {
   /** The zone on top at a point (later zones win), or null. */
   zoneAt(p: Vec2): Zone | null;
   inWater(p: Vec2, pad?: number): boolean;
+  /** Each four-fall waterfall's bed, by feature id (fourfall.ts fourFallBedChoice): decided here once, read by every part. */
+  fourFalls: Map<string, FourFallBedChoice>;
 }
 
 /** Texture units a fragment shader may use on this GPU; the Studio sets it from the renderer (WebGL's minimum is 16). */
@@ -68,9 +70,10 @@ export function groundModel(plan: SitePlan): GroundModel {
     const i = zoneSet.lastContaining(p[0], p[1]);
     return i < 0 ? null : plan.zones[i];
   };
-  // A four-fall waterfall set in a bed meets the bed's ground flush along the edge of its soil (fourfall.ts): the bed's
-  // mound is levelled to the waterfall's own grade there.
-  const levels = fourFallLevelAreas(plan.features, zoneAt);
+  // A four-fall waterfall blended into its bed meets the bed's ground flush along the edge of its soil (fourfall.ts):
+  // the bed's mound is levelled to the waterfall's own grade there (`levels`, filled in below once terrain exists).
+  const levels: (GroundCut & { y: number })[] = [];
+  const fourFalls = new Map<string, FourFallBedChoice>();
   let levelOn = false;
   const siteIdx = new PolygonIndex(plan.site.boundary);
   const bedIdx = new Map(beds.map((z) => [z, zoneSet.items[plan.zones.indexOf(z)]]));
@@ -171,11 +174,19 @@ export function groundModel(plan: SitePlan): GroundModel {
     }
     return h;
   }
-  // The level each waterfall is set at: the bed's own height at its front middle, where the module stands.
-  for (const a of levels) a.y = terrain(a.front, false);
+  // Each waterfall's bed, and the level it is set at: the ground's own height at its front middle, where the module stands.
+  const bedAt = bedZoneAt(plan.zones);
+  for (const f of plan.features) {
+    const spec = featureById.get(f.catalogId);
+    if (spec?.kind !== 'fourFall') continue;
+    const y = terrain(fourFallFront(f, spec), false);
+    const choice = fourFallBedChoice(f, spec, bedAt, (p) => terrain(p, false), y);
+    fourFalls.set(f.id, choice);
+    if (choice.blend) levels.push({ ...fourFallCut(f, spec, 'exact'), y });
+  }
   levelOn = true;
 
-  return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater };
+  return { area, height: (p) => terrain(p, true), grade: (p) => terrain(p, false), zoneAt, inWater, fourFalls };
 }
 
 /* ------------------------------------------------------------------ */
@@ -586,7 +597,7 @@ export function* groundSteps(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
   yield 'ground splats';
   const stage = stageUniforms();
-  const mat = splatMaterial(layers, area, splats, pools, stage, fourFallGroundCuts(plan.features, gm.zoneAt));
+  const mat = splatMaterial(layers, area, splats, pools, stage, fourFallGroundCuts(plan.features, gm.fourFalls));
   yield 'ground material';
   const step = quality === 'draft' ? 0.3 : 0.18;
   const site = new THREE.Mesh(yield* gridGeometry(area, step, gm.grade), mat);

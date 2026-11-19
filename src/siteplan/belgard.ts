@@ -21,22 +21,36 @@ export interface MakerLine {
   border?: boolean;
   /** Wall lines: the face and the unit's real sizes (see WallUnit in the catalog). */
   wall?: { face: 'smoothUnit' | 'roughHewn' | UnitFace; unit: WallUnit };
-  colors: [string, string[]][];
+  /**
+   * A face mix for the colors that give their tones' shares (a third entry per color): the drifts' spatial frequency
+   * (cycles per meter, along and across), their soft edge and break-up, and each piece's end-to-end shading and lean
+   * (see PaverPattern's mix fields in the catalog).
+   */
+  mix?: { scale: [number, number]; edge: [number, number]; shade: [number, number] };
+  /** Color name, its tones (photo colors) and, for a face mix, each tone's share of the face (the first is the base). */
+  colors: [string, string[], number[]?][];
 }
 
 export const BELGARD_LINES: MakerLine[] = [
   // Avalon Slate: 3-piece set, 2 3/8 in thick, "natural slate texture with a unique rippled face" (belgard.com). Colors with a
   // swatch on Belgard's product page (Rainier and Victorian read from the swatch photos the color picker loads).
-  { slug: 'avalon-slate', name: "Avalon Slate", shelf: 'Pavers', sizes: [[6, 12], [9, 12], [12, 12]], face: 'slate', joint: 0.12, border: true, colors: [
+  // Toscana and Victorian, the two colors Belgard's Pacific (Stockton) region sells, are re-read from Belgard's full-size
+  // photos (Toscana's Pattern A modular photo, Victorian's swatch): 5-means in CIELAB over 6 px cells in linear light,
+  // joints masked, with each tone's share of the face. The stones cloud through those tones in soft patches 10 to 25 cm
+  // across (Toscana: mocha brown with charcoal-gray and tan patches; Victorian: taupe gray with golden ochre and dark
+  // gray patches), and each stone shades from end to end. The tones are spread 25% wider than the cluster means (the
+  // soft blend averages them back) and set so the stone renders at the photo's mean color in the default afternoon
+  // light (the sun warmed it about 6 b* over the photo).
+  { slug: 'avalon-slate', name: "Avalon Slate", shelf: 'Pavers', sizes: [[6, 12], [9, 12], [12, 12]], face: 'slate', joint: 0.12, border: true, mix: { scale: [3, 3], edge: [0.16, 0], shade: [0.08, 0.06] }, colors: [
     ["Autumn", ['#806d5a', '#736356', '#665a52', '#554b45']],
     ["Bella", ['#8d7b66', '#837260', '#7a6b5b', '#6e6355']],
     ["Midnight", ['#4f4e4c', '#4a4947', '#474644', '#434240']],
     ["Rio", ['#78746e', '#6d6a65', '#63605b', '#54514d']],
     ["Sierra", ['#7c6c5f', '#746458', '#6c5d52', '#584e45']],
     ["Sonoran Gray", ['#817b77', '#77706c', '#6c6561', '#595450']],
-    ["Toscana", ['#877462', '#7c6b5b', '#736456', '#685c50']],
+    ["Toscana", ['#766a63', '#6e645e', '#7e7169', '#655e59', '#877a70'], [0.286, 0.254, 0.227, 0.137, 0.096]],
     ["Rainier", ['#736455', '#6d6052', '#665c51', '#5f574f']],
-    ["Victorian", ['#888074', '#7e7466', '#746a5d', '#5d564d']],
+    ["Victorian", ['#746f6b', '#817d7b', '#67625d', '#736a60', '#7f756b'], [0.334, 0.182, 0.18, 0.153, 0.151]],
   ] },
   // Antiqued Flat Top (Heritage Collection), from Belgard's Pacific (Stockton) cut sheet, 01/2025: a 60 mm (2 3/8 in)
   // 3-piece set of 6 x 9, 9 x 9 and 9 x 12, and a 6 x 9 accent piece for borders. "Gently weathered smooth face".

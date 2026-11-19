@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { featureById, materialById, plantById, type FeatureSpec } from '../siteplan/catalog';
+import { pointInPolygon } from '../siteplan/geometry';
 import { FOUR_FALL_BACK_SLOPE, FOUR_FALL_SOIL_BEHIND, FOUR_FALL_SOIL_BESIDE, FOUR_FALL_WIDTH, FT, fourFallDepthFt, fourFallOutlineFt, fourFallParams, type FourFallParams } from '../siteplan/fourfall';
 import type { FeaturePlacement, PlantPlacement, Vec2, Zone } from '../siteplan/types';
 import type { Quality } from '../engine/post';
@@ -60,21 +61,73 @@ export function toModule(fr: FourFallFrame, q: Vec2): [number, number] {
 export const SOIL_MARGIN = 0.78;
 export const CUT_FRONT = 0.12;
 
-/**
- * The bed a waterfall is set in: the zone under its placement's center, when that is a planting bed on the ground
- * (not a raised planter) in a catalog material. Then the module fades the edge of its soil into the bed's own color
- * and brings that edge up flush with it (its setGround), the site ground and the bed's loose stones and humus are cut
- * on its soil rectangle (overlapping its border by BED_CUT_OVERLAP), and the bed is levelled to the waterfall's grade around it (ground.ts). On lawn,
- * paving or nothing it keeps its edges tucked under grade and the inset cut.
- */
-export function fourFallBed(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): Zone | null {
-  const z = zoneAt(f.position);
-  return z && z.kind === 'bed' && !z.raised && materialById.has(z.catalogId) ? z : null;
-}
-
 /** The module's soil rectangle (its `soil`), feet, without building it. */
 export function soilRect(p: FourFallParams) {
-  return { x0: -(FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE), x1: FOUR_FALL_WIDTH / 2 + FOUR_FALL_SOIL_BESIDE, z0: -fourFallDepthFt(p) - FOUR_FALL_BACK_SLOPE - 0.8, z1: 0.4 };
+  const w = p.width ?? FOUR_FALL_WIDTH;
+  return { x0: -(w / 2 + FOUR_FALL_SOIL_BESIDE), x1: w / 2 + FOUR_FALL_SOIL_BESIDE, z0: -fourFallDepthFt(p) - FOUR_FALL_BACK_SLOPE - 0.8, z1: 0.4 };
+}
+
+/**
+ * The topmost planting bed at a plan point, passing over any paving or lawn drawn above it; raised planters count.
+ * The one bed lookup for a waterfall's soil (its mound's cover and the blend of its soil's edge, fourFallBedChoice).
+ */
+export function bedZoneAt(zones: Zone[]): (p: Vec2) => Zone | null {
+  return (p) => {
+    for (let i = zones.length - 1; i >= 0; i--) {
+      const z = zones[i];
+      if (z.kind === 'bed' && pointInPolygon(p, z.polygon)) return z;
+    }
+    return null;
+  };
+}
+
+/** Plan points along a waterfall's soil rectangle border, where the blend into the bed shows: its corners and every 0.4 m or so along each edge. */
+export function fourFallBorderPoints(f: FeaturePlacement, spec: FeatureSpec): Vec2[] {
+  const fr = fourFallFrame(f, spec), s = soilRect(fr.p);
+  const x0 = s.x0 * FT, x1 = s.x1 * FT, z0 = fr.outline[1] / 2 + s.z0 * FT, z1 = fr.outline[1] / 2 + s.z1 * FT;
+  const toPlan = (lx: number, lz: number): Vec2 => [f.position[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), f.position[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a)];
+  const out: Vec2[] = [];
+  const edge = (ax: number, az: number, bx: number, bz: number) => {
+    const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.4));
+    for (let i = 0; i < n; i++) out.push(toPlan(ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n));
+  };
+  edge(x0, z0, x1, z0);
+  edge(x1, z0, x1, z1);
+  edge(x1, z1, x0, z1);
+  edge(x0, z1, x0, z0);
+  return out;
+}
+
+/** Where a waterfall's module stands: the middle of its outline's front edge, in plan meters. */
+export function fourFallFront(f: FeaturePlacement, spec: FeatureSpec): Vec2 {
+  const fr = fourFallFrame(f, spec), lz = fr.outline[1] / 2;
+  return [f.position[0] + lz * Math.sin(fr.a), f.position[1] + lz * Math.cos(fr.a)];
+}
+
+/**
+ * The bed a waterfall is set in, decided once per waterfall by the ground model (ground.ts) and read by everything else.
+ * - `bed`: the bed most points of its soil border fall in (bedZoneAt), or null. Its mound's cover is recoloured to it
+ *   (fourFallMulch).
+ * - `blend`: the edge of its soil fades into that bed and comes up flush with it (setGround), the site ground and the
+ *   bed's loose stones, humus and turf are cut on its soil rectangle, and the bed is levelled to the waterfall's grade
+ *   around it. Only when every border point lies in that bed, the bed is on the ground (not a raised planter) and in a
+ *   catalog material. A border point outside every bed (the patio or lawn its basin runs up to) also passes when the
+ *   ground there is already at the waterfall's grade (within 1 cm), since nothing is levelled there: otherwise the soil's
+ *   border would stand proud of the ground or sink below it. Any other waterfall keeps its edges tucked under grade
+ *   and the inset cut.
+ */
+export interface FourFallBedChoice {
+  bed: Zone | null;
+  blend: boolean;
+}
+/** `grade`: the ground's height before any levelling; `level`: that height at the waterfall's front middle (fourFallFront). */
+export function fourFallBedChoice(f: FeaturePlacement, spec: FeatureSpec, bedAt: (p: Vec2) => Zone | null, grade: (p: Vec2) => number, level: number): FourFallBedChoice {
+  const pts = fourFallBorderPoints(f, spec), at = pts.map(bedAt);
+  const votes = new Map<Zone, number>();
+  for (const z of at) if (z) votes.set(z, (votes.get(z) ?? 0) + 1);
+  const bed = [...votes].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const blend = !!bed && !bed.raised && materialById.has(bed.catalogId) && at.every((z, i) => z === bed || (!z && Math.abs(grade(pts[i]) - level) < 0.01));
+  return { bed, blend };
 }
 
 /**
@@ -97,49 +150,29 @@ export interface GroundCut {
  */
 export const BED_CUT_OVERLAP = 0.04;
 
-/** One waterfall's cut: its soil rectangle (less the overlap) when it is set in a bed, else the inset one. `exact`: the whole rectangle. */
-function groundCut(f: FeaturePlacement, spec: FeatureSpec, inBed: boolean, exact = false): GroundCut {
-  const fr = fourFallFrame(f, spec), s = soilRect(fr.p), m = inBed ? 0 : SOIL_MARGIN;
+/**
+ * One waterfall's cut, a turned rectangle in plan meters: 'inset' (no blend: its soil's edges are tucked under grade, so
+ * the cut stays SOIL_MARGIN inside and CUT_FRONT past the rockwork), 'bed' (blend: the soil rectangle less
+ * BED_CUT_OVERLAP on every side) or 'exact' (the whole soil rectangle).
+ */
+export function fourFallCut(f: FeaturePlacement, spec: FeatureSpec, mode: 'inset' | 'bed' | 'exact'): GroundCut {
+  const fr = fourFallFrame(f, spec), s = soilRect(fr.p), inset = mode === 'inset', m = inset ? SOIL_MARGIN : 0;
   const x0 = (s.x0 + m) * FT, x1 = (s.x1 - m) * FT;
-  const z0 = fr.outline[1] / 2 + (s.z0 + m) * FT, z1 = fr.outline[1] / 2 + (inBed ? s.z1 : CUT_FRONT) * FT;
+  const z0 = fr.outline[1] / 2 + (s.z0 + m) * FT, z1 = fr.outline[1] / 2 + (inset ? CUT_FRONT : s.z1) * FT;
   // Center of the cut in the feature's local frame, then in plan space.
   const lx = (x0 + x1) / 2, lz = (z0 + z1) / 2;
   const cx = f.position[0] + lx * Math.cos(fr.a) + lz * Math.sin(fr.a), cy = f.position[1] - lx * Math.sin(fr.a) + lz * Math.cos(fr.a);
-  const lap = inBed && !exact ? BED_CUT_OVERLAP : 0;
+  const lap = mode === 'bed' ? BED_CUT_OVERLAP : 0;
   return { cx, cy, cos: Math.cos(fr.a), sin: Math.sin(fr.a), hx: (x1 - x0) / 2 - lap, hz: (z1 - z0) / 2 - lap };
 }
 
-/** `zoneAt`: the ground model's (or the plan's) zone lookup, to tell which waterfalls are set in a bed (fourFallBed). */
-export function fourFallGroundCuts(features: FeaturePlacement[], zoneAt: (p: Vec2) => Zone | null): GroundCut[] {
+/** The site ground's (and the beds' loose stones' and humus') cut for each waterfall, by its bed choice (the ground model's fourFalls). */
+export function fourFallGroundCuts(features: FeaturePlacement[], choices: Map<string, FourFallBedChoice>): GroundCut[] {
   const out: GroundCut[] = [];
   for (const f of features) {
     const spec = featureById.get(f.catalogId);
     if (spec?.kind !== 'fourFall') continue;
-    out.push(groundCut(f, spec, !!fourFallBed(f, zoneAt)));
-  }
-  return out;
-}
-
-/** The cut of a waterfall set in a bed (its soil rectangle less BED_CUT_OVERLAP), or null when it is not in one. */
-export function fourFallBedCut(f: FeaturePlacement, spec: FeatureSpec, zoneAt: (p: Vec2) => Zone | null): GroundCut | null {
-  return fourFallBed(f, zoneAt) ? groundCut(f, spec, true) : null;
-}
-
-/**
- * Where the bed is levelled to a waterfall set in it (ground.ts): its soil rectangle, and the point at the middle of
- * its front edge whose bed height becomes the level (`y`, filled in by the ground model).
- */
-export interface LevelArea extends GroundCut {
-  front: Vec2;
-  y: number;
-}
-export function fourFallLevelAreas(features: FeaturePlacement[], zoneAt: (p: Vec2) => Zone | null): LevelArea[] {
-  const out: LevelArea[] = [];
-  for (const f of features) {
-    const spec = featureById.get(f.catalogId);
-    if (spec?.kind !== 'fourFall' || !fourFallBed(f, zoneAt)) continue;
-    const fr = fourFallFrame(f, spec), lz = fr.outline[1] / 2;
-    out.push({ ...groundCut(f, spec, true, true), front: [f.position[0] + lz * Math.sin(fr.a), f.position[1] + lz * Math.cos(fr.a)], y: 0 });
+    out.push(fourFallCut(f, spec, choices.get(f.id)?.blend ? 'bed' : 'inset'));
   }
   return out;
 }
@@ -218,12 +251,38 @@ export interface FourFallBuilt {
 }
 
 /**
- * `ground`: the yard's ground height at a point of the feature's local frame (meters), relative to the placement's.
- * `bed`: the look of the bed it is set in (fourFallBed, ground.ts groundLook), or null on lawn, paving or nothing.
+ * The mound's soil cover matched to the bed the waterfall stands in (`bed`, a bed look's id), so it reads as the same
+ * fill: black humus, compost or dirt as their crumbs' darkest and lightest soil tones, finer than bark; bark mulch as
+ * its own palette. Any other bed (rock, gravel) or none keeps the module's own shredded bark.
  */
-export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Quality, ground: (x: number, z: number) => number, bed: WaterfallGround | null = null): FourFallBuilt {
+export function fourFallMulch(bed: string | undefined): { dark: [number, number, number]; light: [number, number, number]; grain: number } | null {
+  const m = bed ? materialById.get(bed) : undefined;
+  if (!m) return null;
+  const lin = (hex: string): [number, number, number] => {
+    const c = new THREE.Color(hex);
+    return [c.r, c.g, c.b];
+  };
+  const lum = (hex: string) => {
+    const c = new THREE.Color(hex);
+    return c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+  };
+  const span = (hexes: string[]) => {
+    const s = [...hexes].sort((a, b) => lum(a) - lum(b));
+    return { dark: lin(s[0]), light: lin(s[s.length - 1]) };
+  };
+  if (m.crumb) return { ...span(m.crumb.soil.map((x) => x.c)), grain: 1.7 };
+  if (m.recipe === 'mulch' && m.palette.length) return { ...span(m.palette), grain: 1 };
+  return null;
+}
+
+/**
+ * `ground`: the yard's ground height at a point of the feature's local frame (meters), relative to the placement's.
+ * `mulch`: the bed look the waterfall stands in, for its soil cover (fourFallMulch).
+ * `bedGround`: the look of the bed its soil border fades into (setGround), or null to keep its edges tucked under grade.
+ */
+export function buildFourFall(f: FeaturePlacement, spec: FeatureSpec, quality: Quality, ground: (x: number, z: number) => number, mulch?: string, bedGround: WaterfallGround | null = null): FourFallBuilt {
   const frame = fourFallFrame(f, spec), { p } = frame;
-  const opts = { unit: FT, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality), ground: bed };
+  const opts = { unit: FT, width: p.width ?? FOUR_FALL_WIDTH, topFall: p.topFall ?? null, height: p.height, lowest: p.lowest, level: p.level, refraction: fourFallRefraction(quality), plants: false, lights: 'data' as const, detail: fourFallDetail(quality), mulch: fourFallMulch(mulch), ground: bedGround };
   const wf = createWaterfall(opts);
   // The plan outline and the module must agree on the size.
   const ms = waterfallSize(opts), [ow, od] = fourFallOutlineFt(p);

@@ -164,6 +164,26 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       }
       return { group: 'Decking', about: m.id === 'wood-deck' ? 'A cedar deck: warm natural wood boards on a wood frame.' : 'A composite deck: boards that look like wood and need no staining.', spec: ['Boards on joists at 16 in on center', 'Hidden fasteners', 'Frame on concrete footings'] };
     case 'paver': {
+      if (m.line === 'Premier Slab') {
+        // Basalite's own words for the line, and its cut sheet and pattern brochure (CA).
+        return {
+          group: 'Pavers',
+          about: `Basalite Premier Slab 24 x 24: a "smooth cleanlined paver" (Basalite) whose face mix clouds ${m.color ?? 'its colors'} through every slab. Used on its own as a stepping stone or laid as a patio in Basalite's Stacked Bond, Running Bond or 45 degree Running Bond.`,
+          spec: ['594 x 594 x 60 mm (23.54 in with its spacer nubs), 3 mm chamfer, 106 lb', '32 per pallet, 123 sq ft; pedestrian use only', 'Special order only in some regions', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
+        };
+      }
+      if (m.line === 'Premier Smooth') {
+        // Basalite's own words for the line, and its cut sheet (BA-CA 5/24/2024).
+        return {
+          group: 'Pavers',
+          about: m.use === 'border'
+            ? `Basalite Premier Smooth 6 x 9 border${m.color ? ` in ${m.color}` : ''}: the line's smooth-faced border stone, set as a soldier course along the edge of the field.${m.color === 'Charcoal' ? ' Charcoal is sold as the border only.' : ''}`
+            : `Basalite Premier Smooth: smooth, cleanlined pavers with "polished contemporary lines and the look of real stone" (Basalite), a face mix that clouds ${m.color ?? 'its colors'} through every piece. Laid in Basalite's 3 Piece Combo Pattern, or Pattern #4 with the 12 x 18.`,
+          spec: m.use === 'border'
+            ? ['6 x 9 x 60 mm (5.83 x 8.78 in face), 280 per pallet, 100 sq ft', 'Spacer nubs set a 1/16 in joint', 'Edge restraint behind the border']
+            : ['60 mm (2 3/8 in): 6 x 12, 9 x 12 and 12 x 12 combo pallet (96, 64, 32; 121.9 sq ft), 12 x 18 sold separately', 'Faces 5.83, 8.78 and 11.73 in on an 11.79 in module (spacer nubs set a 1/16 in joint)', 'Pedestrian and light-duty vehicular (combo); 12 x 18 pedestrian', '4 to 6 in compacted base rock, 1 in bedding sand, joints filled with polymeric sand'],
+        };
+      }
       const porcelain = m.group === 'Porcelain';
       const about = m.padSlab
         ? 'A large-format cast concrete slab poured or cast to the size of the pad: one solid slab with no joints. Used where no maker sells a paver that size.'
@@ -182,6 +202,20 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
       return { group: porcelain ? 'Porcelain' : 'Pavers', about, spec };
     }
     case 'wall':
+      if (m.shelf === 'Wall veneer') {
+        const v = m.wall?.face;
+        return {
+          group: 'Wall veneer',
+          about: v === 'ledgerPanel'
+            ? `${m.matches ?? m.name}: split-face natural stone ledger panels set over a block wall or column, "cool whites with warm creams" (MSI). Grout free: the strips butt tight, some standing proud of the rest.`
+            : v === 'santaBarbara'
+              ? `Santa Barbara stucco: a smooth hand-troweled finish coat with soft, cloudy mottling and burnished trowel sweeps, over a block wall or column, the finish of Green Lion\'s three-pillar water feature${m.color ? `, in Sherwin-Williams ${m.color}` : ''}.`
+              : `Sand finish stucco: the finish coat floated to an even, fine sand texture, over a block wall or column${m.color ? `, in Sherwin-Williams ${m.color}` : ''}.`,
+          spec: v === 'ledgerPanel'
+            ? ['6 x 24 in panels, 3/4 in thick, with 6 x 12 x 6 in L corners', 'Set on 1/2 in of stone veneer mortar over the block (or lath and scratch coat)', 'Cap: Basalite 2 in cap or the wall\'s own']
+            : ['Three coats over lath or block: scratch, brown and the finish coat, about 7/8 in', 'Color in the finish coat', 'Top finished in the same stucco'],
+        };
+      }
       return {
         group: 'Walls',
         about: m.maker ? `${m.maker} ${m.line} wall block.` : m.wall?.face === 'plaster' ? 'A block wall finished with smooth plaster or stucco.' : m.wall?.face === 'ledgestone' || m.wall?.face === 'stackedStone' ? 'A block wall faced with stone veneer.' : 'A segmental block wall with a cap.',

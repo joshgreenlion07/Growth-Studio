@@ -225,7 +225,14 @@ Messages use `window.postMessage`:
   takes `'a' | 'running3' | 'running' | 'herringbone'`: its own 3-Piece
   Pattern A, 3-Piece Running Bond, and the 1-Piece Running Bond and 45 degree
   Herringbone of 6 x 9 (Midnight is sold in 6 x 9 only, so it takes the last
-  two). Left out, or not one the paver offers, the paver's first. The looks in
+  two). Basalite Premier Smooth takes `'combo3' | 'combo4'`: Basalite's 3 Piece
+  Combo Pattern and 4 Piece Pattern #4 (the combo with the 12 x 18), traced from
+  its pattern brochure and laid on the line's real 11.79 in module (11.73 in
+  faces plus spacer joints). Basalite Premier Slab takes
+  `'stack' | 'halfBond' | 'halfBond45'`: Stacked Bond, Running Bond (half bond)
+  and 45 degree Running Bond, the three patterns in its brochure, laid on the
+  24 x 24 slab's real 23.54 in module (cut sheet: 594 x 594 x 60 mm with
+  spacers, 3 mm chamfer). Left out, or not one the paver offers, the paver's first. The looks in
   the `ready` message carry `laying: true` and `layings: { id, name }[]` (the
   default first) when they take a laying pattern.
 - The material pointer (controller Y, or P) marks the center of the view. In
@@ -249,7 +256,18 @@ Messages use `window.postMessage`:
   parent can send `{ source: 'area-planner', type: 'point-lock', locked }`.
 - Looks (in `ready` and `point`) are `{ id, name, kind, use, group, about,
   spec, maker, line, shelf, color, sw, palette, sizes?, sizeText?,
-  thicknessIn?, face?, image?, page?, laying?, botanical?, swatch? }`:
+  thicknessIn?, face?, image?, page?, laying?, layings?, mix?, pallets?,
+  botanical?, swatch? }`. For ordering pavers: each of `layings` (`{ id, name,
+  mix? }`) and a paver laid one way only (`mix`) give the share of the area
+  each piece size covers, `[short side, long side, share]` in nominal inches,
+  read from the pattern's own drawn module (`layingMix` in
+  `src/engine/surfaces.ts`; left out for random ashlar and plain multi-size
+  lines, which are laid as the pallet comes); `pallets` (`{ label, sqft,
+  pieces: [short, long, count][], lb?, source }`) is how the maker
+  palletizes it, from its cut sheet, for the lines listed in
+  `src/siteplan/pallets.ts` (Avalon Slate, Catalina Grana and their 6 x 9
+  borders, Dimensions 12 60mm, Premier Slab, Premier Smooth). Area Planner
+  counts pieces and pallets from these. The other fields:
   `kind` is `material`, `plant`, `water`, `structure`, `feature` or `model`
   (the last five have ids `<kind>:<id>`, such as `plant:lavender` or
   `water:pool`); `group` is what the panel shows above the name (Concrete,
@@ -322,6 +340,11 @@ Messages use `window.postMessage`:
 - The cedar slat water wall (`cedar-slat-travertine-water-wall`, 12 x 2 1/2 ft footprint, its back on the footprint's
   back edge) offers the option `pots` (default on: a potted Gardenia 'Veitchii' in front of each cedar wing). Its stone
   panel is MSI Silver Travertine ledger (`ww-ledger-silver` texture), its sconces Tru-Scapes Traditional Up/Down.
+- The four-fall rock waterfall (`rock-waterfall-4-fall`) comes in sizes. A placement's `size` is
+  [outline width, outline depth, height] in meters, and its `position` is the middle of that outline, which includes the
+  planted soil behind the top stones. One size is a wider build: a 17 ft front, a 7 1/2 ft basin, and a short 1 ft top
+  fall (top stones about 6 1/2 ft up). Its mound's soil takes the bed the waterfall stands in: black humus, compost or
+  dirt by their crumb colors, bark by its palette. Any other bed keeps the module's own bark.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;
@@ -463,6 +486,16 @@ Messages use `window.postMessage`:
   no private data. `built` goes only to the origin that sent the plan.
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
+- Wall veneers (shelf 'Wall veneer') are wall looks like any other, so a wall changes finish by its look:
+  `msi-arctic-golden-ledger` (MSI Arctic Golden Splitface Panel 6x24, split quartzite, on a 10 1/2 in veneered
+  block wall capped with MSI Arterra Caldera Blanca 13 x 24 x 2 cm coping, `msi-caldera-blanca-coping`; Coala is
+  `msi-caldera-coala-coping`; a Midnight or matching cap choice still overrides),
+  `stucco-santa-barbara-sw-agreeable-gray` and `stucco-sand-finish-sw-agreeable-gray` (Green Lion's stucco finishes in
+  Sherwin-Williams SW 7029 Agreeable Gray, #D1CBC1, LRV 60; the old `-warm-gray` ids load as these; a stucco wall's cap
+  is the same stucco). Columns are features, one per finish
+  (`veneer-column-<look id>`): a Basalite 16 in column block core clad in the veneer under a Basalite Column Cap
+  24 x 24 x 2 in, heights in whole 8 in block courses (`sizes`), option `pewterCap`. They share the swap class
+  'Columns', so a placed column switches finish like any feature. Sample: "Wall veneers".
 - A wall's cap overhangs both faces and its open ends by the same amount: the
   maker's own overhang where its cap and block sizes give one (`capOver` on
   the line's wall unit), else 2 1/2 in (the usual 2 to 3 in). Raised planters

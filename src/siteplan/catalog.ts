@@ -14,7 +14,7 @@
  */
 import { BELGARD_LINES } from './belgard';
 import { NORCAL_REGION, PACIFIC_STOCKTON } from './belgard-regions';
-import { BASALITE_LINES } from './basalite';
+import { BASALITE_LINES, PREMIER_SMOOTH } from './basalite';
 import { DECK_LINES, type DeckBoardSpec } from './decking';
 import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
@@ -95,10 +95,40 @@ export interface PaverPattern {
   /**
    * How the colors blend inside a piece. Left out, each piece takes one tone mottled with a second. 'cloud': all the
    * tones drift through every piece in broad, soft streaks (Basalite Premier Slab colors such as Midnight Terrace).
+   * 'mix': a base tone with crisp, powdery-edged drifts of the others at the shares in `mix` (Premier Smooth).
    */
-  blend?: 'cloud';
+  blend?: 'cloud' | 'mix';
+  /**
+   * With blend 'mix' (Basalite Premier Smooth's face mix): the share of the face each palette tone covers, in palette
+   * order (the first is the base, the rest drift through it). Read from the maker's swatch photo.
+   */
+  mix?: number[];
+  /** With blend 'mix': the drifts' spatial frequency along and across them, cycles per meter (default 2.3, 6.5). */
+  mixScale?: [number, number];
+  /** Face mix: the half-width of the band where one tone fades into the next, and how strongly a centimeter-scale
+   * break-up frays the drifts' edges into speckled wisps (Premier Slab); left out, crisp drifts with powdery edges. */
+  mixEdge?: [number, number];
+  /** Face mix: every piece's drifts run the same way, along its x side, as the pieces are laid in the maker's install
+   * photos (Premier Slab); left out, each piece's run along one side or the other at random. */
+  mixAlong?: boolean;
+  /** Face mix: each piece shades from end to end and leans lighter or darker as a whole: [end-to-end strength, per-piece
+   * lean], in the drift field's units (about 0.1 is a clear shift). Avalon Slate's photo colors. */
+  mixShade?: [number, number];
   /** The line's own joint sand as photographed (sRGB hex), when it differs from the usual sand (Premier Slab). */
   jointSand?: string;
+  /** The maker's chamfer on the face's edges, meters, when its cut sheet gives one (Premier Slab: 3 mm). */
+  chamfer?: number;
+  /**
+   * Real inches per nominal inch, when the maker's pieces lay out on a module a little under the nominal size (Basalite
+   * Premier Smooth: 11.79 in per nominal 12, its 11.73 in faces plus spacer joints). The layout is drawn in nominal
+   * inches and scaled by this; left out, 1.
+   */
+  scale?: number;
+  /**
+   * The sizes the maker sells and lists the pieces as, nominal inches, when `sizes` are the laying module instead
+   * (Premier Slab: sold as 24 x 24, laid on its 23.54 in module). For naming and ordering; the layout uses `sizes`.
+   */
+  sold?: [number, number][];
 }
 
 /**
@@ -108,9 +138,9 @@ export interface PaverPattern {
  * 3-Piece Running Bond, and 'running' and 'herringbone' the 1-Piece Running Bond and 45 degree Herringbone of 6 x 9.
  * Left out, the first pattern the paver offers.
  */
-export type LayingPattern = 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone';
-export const LAYING_PATTERNS: LayingPattern[] = ['a', 'b', 'random', 'running3', 'running', 'herringbone'];
-export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar', running3: '3-piece running bond', running: '1-piece running bond (6 x 9)', herringbone: '1-piece herringbone (6 x 9)' };
+export type LayingPattern = 'a' | 'b' | 'random' | 'running3' | 'running' | 'herringbone' | 'combo3' | 'combo4' | 'stack' | 'halfBond' | 'halfBond45';
+export const LAYING_PATTERNS: LayingPattern[] = ['a', 'b', 'random', 'running3', 'running', 'herringbone', 'combo3', 'combo4', 'stack', 'halfBond', 'halfBond45'];
+export const LAYING_NAMES: Record<LayingPattern, string> = { a: 'Pattern A (12 in courses)', b: 'Pattern B', random: 'Random ashlar', running3: '3-piece running bond', running: '1-piece running bond (6 x 9)', herringbone: '1-piece herringbone (6 x 9)', combo3: '3 Piece Combo Pattern', combo4: '4 Piece Pattern #4 (with 12 x 18)', stack: 'Stacked Bond', halfBond: 'Running Bond', halfBond45: '45° Running Bond' };
 const sameSizes = (s: [number, number][] | undefined, want: number[][]) => !!s && s.length === want.length && want.every(([a, b], i) => s[i][0] === a && s[i][1] === b);
 /** True for a paver whose pieces are the 6 x 12, 9 x 12 and 12 x 12 set Pattern A and B are drawn for. */
 export function isThreePiece(spec: MaterialSpec | undefined): boolean {
@@ -120,8 +150,19 @@ export function isThreePiece(spec: MaterialSpec | undefined): boolean {
 export function isAntiqued(spec: MaterialSpec | undefined): boolean {
   return !!spec && spec.use === 'hardscape' && spec.line === 'Antiqued Flat Top';
 }
+/** True for a Basalite Premier Slab 24 x 24 paver (Basalite's three published patterns). */
+export function isPremierSlab(spec: MaterialSpec | undefined): boolean {
+  return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Slab';
+}
+/** True for a Basalite Premier Smooth main-course paver (Basalite's own two published patterns). */
+export function isPremierSmooth(spec: MaterialSpec | undefined): boolean {
+  return !!spec && spec.use === 'hardscape' && spec.line === 'Premier Smooth';
+}
 /** The laying patterns a paver offers, the default first; empty when it is laid one way only. */
 export function layingsFor(spec: MaterialSpec | undefined): LayingPattern[] {
+  if (isPremierSmooth(spec)) return ['combo3', 'combo4'];
+  // Basalite's three Premier Slab patterns; Stacked Bond first, as plans drawn before the patterns were laid.
+  if (isPremierSlab(spec)) return ['stack', 'halfBond', 'halfBond45'];
   if (isAntiqued(spec)) return spec!.pattern?.kind === 'ashlar' ? ['a', 'running3', 'running', 'herringbone'] : ['running', 'herringbone'];
   if (isThreePiece(spec)) return ['a', 'b', 'random'];
   return [];
@@ -137,7 +178,34 @@ export function layingName(spec: MaterialSpec | undefined, k: LayingPattern): st
 }
 
 export type FenceStyle = 'boardOnBoard' | 'grayLattice' | 'grayBoardLattice' | 'dogEar' | 'horizontal' | 'vinyl' | 'steelPicket' | 'chainlinkSlat' | 'metalPicket';
-export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | UnitFace;
+export type WallFace = 'splitFace' | 'smoothBlock' | 'plaster' | 'ledgestone' | 'stackedStone' | 'smoothUnit' | 'roughHewn' | 'ledgerPanel' | 'santaBarbara' | 'sandStucco' | UnitFace;
+/** A wall finished in stucco (plaster, Santa Barbara smooth trowel, sand finish): its cap is the same stucco. */
+export function isStuccoFace(face: WallFace | undefined): boolean {
+  return face === 'plaster' || face === 'santaBarbara' || face === 'sandStucco';
+}
+/**
+ * A wall veneer (shelf 'Wall veneer'): a finish over a block wall or column core. Ledger panels (face 'ledgerPanel'):
+ * the share of strips in each palette tone, strip heights and lengths (inches), how often a strip is a double course,
+ * and iron staining (0..1). Stucco: the average albedo (linear) when it is taken from a finished job's photos.
+ */
+export interface WallVeneer {
+  weights?: number[];
+  rowIn?: [number, number];
+  tallRow?: number;
+  pieceIn?: [number, number];
+  rust?: number;
+  /** Split quartzite (flatter, crisper strips with a fine sparkle), not travertine. */
+  quartz?: boolean;
+  albedo?: [number, number, number];
+  /** Thickness of the veneer with its setting bed (stone and mortar, or the stucco coats), inches. */
+  thicknessIn: number;
+  /** The whole wall's thickness with the veneer on both faces, inches (a veneered 8 in block wall). */
+  wallIn?: number;
+  /** The coping it is capped with (a coping look's id), its thickness and how far it runs past each face, inches. */
+  cap?: string;
+  capIn?: number;
+  capOverIn?: number;
+}
 /**
  * Maker wall faces drawn by their own recipes in src/engine/wallfaces (one file each), laid in real units (WallUnit):
  * 'tumbled' (Castlemanor Grana), 'tumbledRough' (Castlemanor Rustic), 'ashlar' (Ashlar Tandem), 'lamina' (Lamina
@@ -274,6 +342,8 @@ export interface MaterialSpec {
   /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
   fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
+  /** A wall veneer's own details (face 'ledgerPanel', 'santaBarbara', 'sandStucco'). */
+  veneer?: WallVeneer;
   /** Hardscape thickness above grade, meters. */
   thickness?: number;
   /** Manufacturer line this look is modeled on, if any. */
@@ -281,7 +351,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
@@ -323,6 +393,7 @@ export type FeatureKind =
   | 'waterWallStucco'
   | 'copperBowl'
   | 'pillarFountain'
+  | 'veneerColumn'
   | 'cedarWaterWall'
   | 'patinaBowl'
   | 'fireWaterBowl'
@@ -355,6 +426,8 @@ export interface FeatureSpec {
   name: string;
   group: FeatureGroup;
   kind: FeatureKind;
+  /** A veneer column's finish: the wall veneer look (shelf 'Wall veneer') its faces are clad in. */
+  veneer?: string;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
   /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
@@ -413,7 +486,7 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'blue-point-juniper', name: 'Blue point juniper', botanical: 'Juniperus chinensis \'Blue Point\'', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.6, matureHeight: 3.6, matureSpread: 2.4, yearsToMature: 10, foliage: '#5f7d74', foliage2: '#86a297', evergreen: true, spacing: 2, container: '15 gal' }),
   P({ id: 'blue-juniper-column', name: 'Blue juniper, columnar', botanical: 'Juniperus scopulorum \'Blue Arrow\'', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.4, matureHeight: 4.3, matureSpread: 0.7, yearsToMature: 10, foliage: '#7d9aa6', foliage2: '#a3bcc6', evergreen: true, spacing: 0.9, container: '15 gal' }),
   P({ id: 'blue-spruce', name: 'Blue spruce', botanical: 'Picea pungens', group: 'Trees', form: 'conifer', installHeight: 1.5, installSpread: 0.9, matureHeight: 7.5, matureSpread: 3.6, yearsToMature: 15, foliage: '#6f8c9a', foliage2: '#a4bcc8', evergreen: true, spacing: 3.5, container: '15 gal' }),
-  // Lambert legend plants (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
+  // Plants from a client planting legend (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'photinia-standard', name: 'Photinia, tree standard', botanical: 'Photinia x fraseri', group: 'Trees', form: 'standardTree', installHeight: 1.8, installSpread: 0.7, matureHeight: 4.5, matureSpread: 3.6, yearsToMature: 10, foliage: '#2d4a24', foliage2: '#b02a26', flower: '#f1ecd8', flower2: '#e2dcc0', evergreen: true, spacing: 3.5, container: '15 gal' }),
   P({ id: 'red-maple-autumn-blaze', name: 'Red maple \'Autumn Blaze\'', botanical: 'Acer x freemanii \'Jeffersred\'', group: 'Trees', form: 'shadeTree', installHeight: 2.4, installSpread: 0.9, matureHeight: 12.0, matureSpread: 9.0, yearsToMature: 15, foliage: '#3a6526', foliage2: '#5d8a3a', evergreen: false, spacing: 9, container: '15 gal' }),
   P({ id: 'meyer-lemon', name: 'Meyer lemon, tree', botanical: 'Citrus x meyeri \'Improved Meyer\'', group: 'Trees', form: 'standardTree', installHeight: 1.5, installSpread: 0.75, matureHeight: 3.0, matureSpread: 2.7, yearsToMature: 7, foliage: '#2a5224', foliage2: '#6d9838', flower: '#f2c418', flower2: '#ffffff', evergreen: true, spacing: 3, container: '15 gal' }),
@@ -700,6 +773,33 @@ export const MATERIALS: MaterialSpec[] = [
   M({ id: 'wall-stucco', name: 'Stucco wall, tan', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#b3a58f', '#a29480'], wall: { face: 'plaster', cap: '#a89a84' } }),
   M({ id: 'wall-dark-stacked', name: 'Dark stacked stone veneer', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#3d3b39', '#2e2d2c', '#24231f', '#46423d'], wall: { face: 'ledgestone', cap: '#2e2d2c' } }),
   M({ id: 'wall-stacked-stone', name: 'Stacked stone veneer, brown', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#a88a6c', '#8a6e55', '#6e5745', '#b9a184'], wall: { face: 'stackedStone', cap: '#b9a58a' } }),
+  /*
+   * Wall veneers (shelf 'Wall veneer'): finishes over a block wall, picked like any wall look, and the faces of the
+   * veneer columns. MSI Arctic Golden: MSI's Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624, quartzite, split face,
+   * grout free) with its 6x12x6 "L" corner (LPNLQARCGLD618COR); strips about 1 1/2 in tall (now and then a double)
+   * and 3 to 12 in long, cool whites and warm creams with golden veins. Tones and shares read from MSI's panel photo
+   * (6 px cells, the darkest tenth dropped as joints and shadow, k-means in CIELAB); its average albedo is the photo's
+   * mean over the whole panel, joints and all, through the wall calibration (WALL_GAIN). Set 3/4 in proud on 1/2 in of
+   * mortar, on an 8 in block wall (10 1/2 in in all), capped with MSI Caldera Blanca coping. Stucco: Green Lion's own finishes, the Santa Barbara smooth trowel
+   * (as photographed on the three-pillar job, builder/pillarfountain.ts) and the sand (float) finish, in SW 7029 Agreeable Gray.
+   */
+  M({ id: 'msi-arctic-golden-ledger', name: 'MSI Arctic Golden stacked stone', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#e1d4cf', '#d3c6c2', '#d7c7bc', '#c6b8b1', '#eee3dd', '#e7d7c8', '#cbb8a7', '#dbc8b3'], wall: { face: 'ledgerPanel', cap: '#e4ddd1' }, veneer: { weights: [0.207, 0.15, 0.141, 0.134, 0.124, 0.106, 0.079, 0.06], rowIn: [1.25, 1.75], tallRow: 0.06, pieceIn: [3, 12], rust: 0.25, quartz: true, albedo: [0.403, 0.328, 0.262], thicknessIn: 1.25, wallIn: 10.5, cap: 'msi-caldera-blanca-coping', capIn: 0.79, capOverIn: 1.25 }, matches: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624)', maker: 'MSI', line: 'Arctic Golden Stacked Stone', shelf: 'Wall veneer', color: 'Arctic Golden' }),
+  /*
+   * The coping Green Lion caps veneer walls with (on its supplier bills): MSI Arterra Caldera, 13 x 24 x 2 cm matte
+   * porcelain pool coping with one long bullnose edge, a wood-look face. Blanca (LCOPNCALBLA1324, white-warm) and Coala
+   * (LCOPNCALCOA1324, light gray), colors read from MSI's product photos (the top face, in quarters by lightness). Laid
+   * as one course of 24 in pieces along the wall top, grouted 1/8 in (the texture's course is drawn a little deeper than
+   * the 13 in piece, so no joint runs along the cap's edges). Not offered as paving.
+   */
+  M({ id: 'msi-caldera-blanca-coping', name: 'MSI Arterra Caldera Blanca coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#ede7db', '#e4ddd0', '#e2dace', '#dcd3c7'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#c9c4bb' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Blanca 13x24x2cm bullnose coping (LCOPNCALBLA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Blanca' }),
+  M({ id: 'msi-caldera-coala-coping', name: 'MSI Arterra Caldera Coala coping, 13 x 24', use: 'border', group: 'Porcelain', recipe: 'paver', palette: ['#8d8785', '#7e7774', '#7d7573', '#79706f'], pattern: { kind: 'soldier', sizes: [[24, 13.5]], joint: 0.125, face: 'woodgrain', jointSand: '#a8a39c' }, thickness: 0.02, auto: true, matches: 'MSI Arterra Caldera Coala 13x24x2cm bullnose coping (LCOPNCALCOA1324)', maker: 'MSI', line: 'Arterra Caldera coping', color: 'Caldera Coala' }),
+  // Stucco color: Sherwin-Williams SW 7029 Agreeable Gray (the owner's pick of a common Sherwin-Williams stucco color,
+  // sold at every Sherwin-Williams store in Northern California): #D1CBC1, LRV 60.4 (sherwin-williams.com). The swatch
+  // is taken like a maker wall's swatch photo: its color in linear light through the wall calibration (WALL_GAIN in
+  // engine/surfaces.ts), so the wall renders back to the swatch in the default light; the tones only shade the trowel
+  // or float marks around it.
+  M({ id: 'stucco-santa-barbara-sw-agreeable-gray', name: 'Santa Barbara smooth trowel stucco, SW 7029 Agreeable Gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d8d2c8', '#bcb7ae', '#c7c3bf'], wall: { face: 'santaBarbara', cap: '#d1cbc1' }, veneer: { albedo: [0.38, 0.337, 0.267], thicknessIn: 0.875 }, matches: 'Sherwin-Williams SW 7029 Agreeable Gray', maker: 'Green Lion', line: 'Santa Barbara stucco', shelf: 'Wall veneer', color: 'SW 7029 Agreeable Gray' }),
+  M({ id: 'stucco-sand-finish-sw-agreeable-gray', name: 'Sand finish stucco, SW 7029 Agreeable Gray', use: 'wall', group: 'Walls', recipe: 'wall', palette: ['#d6d0c6', '#c2bdb3'], wall: { face: 'sandStucco', cap: '#d1cbc1' }, veneer: { albedo: [0.38, 0.337, 0.267], thicknessIn: 0.875 }, matches: 'Sherwin-Williams SW 7029 Agreeable Gray', maker: 'Green Lion', line: 'Sand finish stucco', shelf: 'Wall veneer', color: 'SW 7029 Agreeable Gray' }),
   // Fences
   M({ id: 'fence-board-on-board', name: 'Board-on-board, natural cedar', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#b08a63', '#9a7552', '#86643f'], fence: 'boardOnBoard' }),
   M({ id: 'fence-gray-lattice', name: 'Gray board, cedar lattice top', use: 'fence', group: 'Fences', recipe: 'fence', palette: ['#7d8083', '#6d7073', '#5d6063'], fence: 'grayLattice' }),
@@ -766,16 +866,18 @@ const BELGARD: MaterialSpec[] = [
   // Every Catalina Grana color as its own 6 x 9 border, offered on its own (not only as "same as the main course").
   ...CATALINA_GRANA.map(([n, palette]) => M({ id: `catalina-grana-border-${slugOf(n)}`, name: `Catalina Grana border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, face: 'smooth' }, thickness: 0.06, matches: 'Belgard Catalina Grana', maker: 'Belgard', line: 'Catalina Grana', shelf: 'Pavers', color: n })),
   // The generated lines (belgard.ts): pavers with a matching border each, walls and curb.
-  ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette]): MaterialSpec[] => {
+  ...BELGARD_LINES.flatMap((L): MaterialSpec[] => L.colors.flatMap(([n, palette, shares]): MaterialSpec[] => {
     const id = `${L.slug}-${slugOf(n)}`;
+    // A color read with its tones' shares clouds them through each piece (Avalon Slate Toscana and Victorian).
+    const mix: Partial<PaverPattern> = shares && L.mix ? { blend: 'mix', mix: shares, mixScale: L.mix.scale, mixEdge: L.mix.edge, mixShade: L.mix.shade } : {};
     const tags = { matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: L.shelf, color: n };
     if (L.shelf === 'Pavers') {
       const sizes = L.colorSizes?.[n] ?? L.sizes ?? CATALINA_SIZES;
       return [
-        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured' }, thickness: 0.06, ...tags }),
-        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, ...(L.face ? { face: L.face } : {}) }, thickness: 0.06, auto: true }),
+        M({ id, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: sizes.length > 1 ? 'ashlar' : 'running', sizes, joint: L.joint ?? 0.2, face: L.face ?? 'textured', ...mix }, thickness: 0.06, ...tags }),
+        M({ id: `border-of-${id}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: 0.15, ...(L.face ? { face: L.face } : {}), ...mix }, thickness: 0.06, auto: true }),
         // A line that sells its own border stone (Avalon Slate) offers every color as a border on its own too.
-        ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured' }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
+        ...(L.border ? [M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'soldier', sizes: [[6, 9]], joint: L.joint ?? 0.15, face: L.face ?? 'textured', ...mix }, thickness: 0.06, matches: `Belgard ${L.name}`, maker: 'Belgard', line: L.name, shelf: 'Pavers', color: n })] : []),
       ];
     }
     if (L.shelf === 'Curb') return [M({ id, name: `${L.name}, ${n}`, use: 'edging', group: 'Edging', recipe: 'curb', palette: palette.slice(1, 3), ...tags })];
@@ -815,8 +917,9 @@ export const FLAGSTONES: { id: string; name: string; sold: string; stone: FlagSt
 MATERIALS.push(...FLAGSTONES.map((g): MaterialSpec => M({ id: g.id, name: `${g.name} flagstone`, use: 'hardscape', group: 'Natural stone', recipe: 'flagstone', palette: g.palette, thickness: g.thicknessIn * 0.0254, matches: `${g.name} flagstone (${g.sold})`, line: `${g.name} flagstone`, color: g.name, auto: true, flag: { stone: g.stone, thicknessIn: g.thicknessIn } })));
 
 /*
- * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm (23 1/2 in) square slab, 60 mm thick, laid in a grid on
- * its spacer joints. Its colors are clouded blends. Basalite sells no border stone for it, so it has no matching border.
+ * Basalite lines (basalite.ts): Premier Slab, a smooth 594 mm square slab, 60 mm thick, on a 23.54 in module with its
+ * spacer joints and a 3 mm chamfer, laid in Basalite's Stacked Bond, Running Bond or 45 degree Running Bond. Its colors
+ * are face-mix blends. Basalite sells no border stone for it, so it has no matching border.
  */
 // Composite deck boards (siteplan/decking.ts), one look per color.
 for (const L of DECK_LINES) {
@@ -825,8 +928,27 @@ for (const L of DECK_LINES) {
   }
 }
 for (const L of BASALITE_LINES) {
-  for (const [n, palette] of L.colors) {
-    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'cloud', jointSand: L.jointSand }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+  for (const [n, palette, mix] of L.colors) {
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], ...(L.sold ? { sold: [L.sold] } : {}), joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [0.9, 12], mixEdge: [0.1, 0.2], mixAlong: true, jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+  }
+}
+
+/*
+ * Basalite Premier Smooth (basalite.ts): the 3-piece combo with the 12 x 18 for Pattern #4, laid in Basalite's own two
+ * patterns, on its 11.79 in module; each field color also as its own 6 x 9 border (and the border that goes with it),
+ * and Charcoal as a border only.
+ */
+{
+  const L = PREMIER_SMOOTH;
+  const tags = (n: string) => ({ matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers' as const, color: n });
+  const field = (mix: number[]): PaverPattern => ({ kind: 'ashlar', sizes: L.sizes, joint: L.joint, face: 'smooth', blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
+  const edge = (mix: number[]): PaverPattern => ({ kind: 'soldier', sizes: [L.border], joint: L.joint, face: 'smooth', blend: 'mix', mix, jointSand: L.jointSand, scale: L.module });
+  for (const [n, palette, mix] of L.colors) {
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name}, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: field(mix), thickness: L.thickness, ...tags(n) }));
+    MATERIALS.push(M({ id: `border-of-${L.slug}-${slugOf(n)}`, name: `${L.name} border, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: edge(mix), thickness: L.thickness, auto: true }));
+  }
+  for (const [n, palette, mix] of [...L.colors, ...L.borderOnly]) {
+    MATERIALS.push(M({ id: `${L.slug}-border-${slugOf(n)}`, name: `${L.name} border 6 x 9, ${n}`, use: 'border', group: 'Pavers', recipe: 'paver', palette, pattern: edge(mix), thickness: L.thickness, ...tags(n) }));
   }
 }
 
@@ -948,6 +1070,19 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water wall: a 6 x 6 ft panel of MSI Silver Travertine ledger stone framed by horizontal cedar slats that run 3 ft out on each side under a cedar cap beam. A copper box scupper pours a lit sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble. A Tru-Scapes up and down sconce lights each cedar wing, and a gardenia in a PMD cement egg pot stands in front of each (an option).',
     facts: ['12 ft long x 6 ft 8 in tall, 2 ft 6 in from the back of the wall to the front of the pebbles (a 6 in wall and a 24 in pebble strip)', 'Stone panel 6 x 6 ft: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), split face', 'Clear cedar 1x4 slats, 5/8 in gaps, dark backer, cedar returns and a 4 in cedar cap beam', '12 in copper box scupper, lip 49 in up, LED lit; two 1 in copper spouts 36 in up, 24 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 60 in up: 10 W, 802 lm', 'Black Mexican beach pebble 1-2 in, no open water; LED pucks where the water lands', 'PMD 24 x 22 in Cement Egg Pot, White, with a Gardenia \'Veitchii\', one each side (option)'],
   }),
+  /*
+   * Veneer columns: a Basalite 225 Lightweight 16 x 8 x 16 column block core (16 in square, 8 in courses; on Green Lion's
+   * supplier bills) clad in a wall veneer, under a Basalite Column Cap (CA: 24 x 24 x 2 in, chiseled edges, flat top,
+   * Sand or Pewter). One per finish, so a placed column can be switched to another finish like any feature; heights in
+   * whole block courses. (Basalite lists the cap as coming soon in California.)
+   */
+  ...([['msi-arctic-golden-ledger', 'MSI Arctic Golden stacked stone'], ['stucco-santa-barbara-sw-agreeable-gray', 'Santa Barbara stucco, SW 7029 Agreeable Gray'], ['stucco-sand-finish-sw-agreeable-gray', 'sand finish stucco, SW 7029 Agreeable Gray']] as const).map(([veneer, label]) => F({
+    id: `veneer-column-${veneer}`, name: `Column, ${label}`, group: 'Accents', kind: 'veneerColumn', footprint: [24 * 0.0254, 24 * 0.0254], veneer,
+    sizes: [24, 32, 40, 48, 56].map((h) => ({ label: `${h} in of block, ${h + 2} in tall with the cap`, size: [24 * 0.0254, 24 * 0.0254, (h + 2) * 0.0254] as [number, number, number] })), size: 2,
+    options: [{ key: 'pewterCap', label: 'Pewter cap (Sand when off)', default: false }],
+    about: `A 16 in square column of Basalite column block, clad in ${label}, under a Basalite Column Cap 24 x 24 x 2 in.`,
+    facts: ['Core: Basalite 225 Lightweight 16 x 8 x 16 column block, 8 in courses', veneer === 'msi-arctic-golden-ledger' ? 'Veneer: MSI Arctic Golden Splitface Panel 6x24 with the 6x12x6 L corner, set on 1/2 in of mortar (18 1/2 in finished)' : 'Stucco over lath, 7/8 in (17 3/4 in finished)', 'Cap: Basalite Column Cap, 24 x 24 x 2 in, Sand or Pewter'],
+  })),
   F({
     id: 'patina-bowl-planter', name: 'Patina bowl planter, 23 in', group: 'Accents', kind: 'patinaBowl', plantable: true, footprint: [23 * 0.0254, 23 * 0.0254],
     about: 'A wide, shallow bowl planter, 23 in across and 9 in tall: a verdigris-teal band over the shoulder and rim, a dark bronze body, gray gravel top dressing, planted with a blue agave (or left empty).',
@@ -1022,7 +1157,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
@@ -1039,6 +1174,11 @@ export function swapClassOf(f: FeatureSpec): string {
 
 /** Old ids from earlier saved plans. */
 export const LEGACY_IDS: Record<string, string> = {
+  // The stucco looks were first drawn in the three-pillar job's warm gray; they are now SW 7029 Agreeable Gray.
+  'stucco-santa-barbara-warm-gray': 'stucco-santa-barbara-sw-agreeable-gray',
+  'stucco-sand-finish-warm-gray': 'stucco-sand-finish-sw-agreeable-gray',
+  'veneer-column-stucco-santa-barbara-warm-gray': 'veneer-column-stucco-santa-barbara-sw-agreeable-gray',
+  'veneer-column-stucco-sand-finish-warm-gray': 'veneer-column-stucco-sand-finish-sw-agreeable-gray',
   'accent-tree-red': 'japanese-maple-red',
   'columnar-tree': 'italian-cypress',
   'rounded-shrub': 'boxwood',
@@ -1065,6 +1205,7 @@ export const OFFERED_LINES = new Set<string>([
   'Large-format slab',
   'Dimensions Slabs 24 x 24',
   'Premier Slab',
+  'Premier Smooth',
   'Catalina Grana',
   'Avalon Slate',
   'Melville Tandem Wall',

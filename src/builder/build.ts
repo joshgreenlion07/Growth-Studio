@@ -3,14 +3,14 @@ import { beginMaterialBuild } from './materials';
 import { featureById, plantById } from '../siteplan/catalog';
 import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
-import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2, Zone } from '../siteplan/types';
+import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
 import { WATER_LAYER_SKIP } from '../engine/water';
 import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
-import { buildFeatures, type FeatureBuild, type NightLight } from './features';
-import { fourFallBed, fourFallBedCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
+import { buildFeatures, type FeatureBuild, type FourFallBedLook, type NightLight } from './features';
+import { fourFallCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { GROUND_SPECULAR, groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
@@ -81,22 +81,22 @@ export interface SceneBuild {
 }
 
 /**
- * The ground a four-fall waterfall's soil fades into: the look of the bed it is set in (fourfall.ts fourFallBed; its
- * painted texture's average color in linear light and its ground roughness, ground.ts groundLook), or null on lawn,
- * paving or nothing, where it keeps its edges tucked under grade. The fade keeps the module's bark chips (texture 1)
- * in bark, mulch and stone beds; in a soil fill (humus, compost, dirt: spec.crumb) chips would read as gravel, so it
- * fades to the bed's color flat (texture 0).
+ * What a four-fall waterfall takes from the bed it is set in, from its one bed choice (the ground model's fourFalls,
+ * fourfall.ts fourFallBedChoice):
+ * - `mulch`: the bed's material, which its mound's soil cover is recoloured to (fourFallMulch), whenever it has a bed.
+ * - `ground`: with its soil blended into the bed, the look its soil's edge fades into (setGround): the bed's painted
+ *   texture's average color in linear light and its ground roughness (ground.ts groundLook). The fade keeps the
+ *   module's bark chips (texture 1) in bark, mulch and stone beds, drawn at the bed's own chip size where its chips are
+ *   round (bark mulch); a soil fill (humus, compost, dirt: spec.crumb) fades to its color flat (texture 0), since chips
+ *   there read as gravel, and takes the ground's toned-down sheen. Null without the blend.
  */
-export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; specular: number; texture: number; chipSize: number } | null {
-  const bed = fourFallBed(f, zoneAt);
-  const spec = bed ? materialById.get(bed.catalogId) : undefined;
-  if (!spec) return null;
-  // Bark mulch beds also give their chip spacing (feet), so the fade draws the bed's own chips at their size; other
-  // beds pass 0 and the band uses the module's chips.
+export function fourFallBedFor(f: FeaturePlacement, gm: GroundModel): FourFallBedLook {
+  const choice = gm.fourFalls.get(f.id);
+  const spec = choice?.bed ? materialById.get(choice.bed.catalogId) : undefined;
+  if (!spec) return { mulch: undefined, ground: null };
+  if (!choice!.blend) return { mulch: spec.id, ground: null };
   const chip = materialChipSpacing(spec);
-  // A soil fill also takes the ground's toned-down sheen: with the soil's full sheen the flat band reads as a pale,
-  // bluish strip on the dark fill. Bark, mulch and stone beds keep the full sheen (1), which matched them best.
-  return { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 };
+  return { mulch: spec.id, ground: { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 } };
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
@@ -373,7 +373,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedLook(f, gm.zoneAt));
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, (f) => fourFallBedFor(f, gm));
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -387,8 +387,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   const bedCuts = new Map<string, GroundCut>();
   for (const f of plan.features) {
     const spec = featureById.get(f.catalogId);
-    const cut = spec?.kind === 'fourFall' ? fourFallBedCut(f, spec, gm.zoneAt) : null;
-    if (cut) bedCuts.set(f.id, cut);
+    if (spec?.kind === 'fourFall' && gm.fourFalls.get(f.id)?.blend) bedCuts.set(f.id, fourFallCut(f, spec, 'exact'));
   }
   const blocked = (p: Vec2) => {
     if (gm.inWater(p, 0.2)) return true;
@@ -403,7 +402,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water features and the bowls clear only their own footprint (a circle would bald the lawn around it).
-      // A waterfall set in a bed clears its soil, less the overlap (the ground is cut the same way, fourfall.ts).
+      // A waterfall blended into its bed clears exactly its soil rectangle (the site ground overlaps the border by
+      // BED_CUT_OVERLAP, but its lawn blades would stand in the waterfall's soil there, fourfall.ts).
       const bedCut = bedCuts.get(f.id);
       if (bedCut) {
         if (inGroundCut([bedCut], p)) return true;
@@ -423,7 +423,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   yield 'turf';
   // Inside a four-fall waterfall's soil there is no bed of the yard's own: loose stones and humus pieces are left out
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
-  const fallCuts = fourFallGroundCuts(plan.features, gm.zoneAt);
+  const fallCuts = fourFallGroundCuts(plan.features, gm.fourFalls);
   const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
   const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
   yield 'pebbles';
@@ -573,16 +573,8 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       ensureStanding();
     },
     restyleHardscape(next: SitePlan) {
-      // A waterfall set in a bed takes the bed's color again (the same zones, maybe a new material).
-      for (const ff of features.fourFalls) {
-        const f = next.features.find((x) => x.id === ff.itemId);
-        if (!f) continue;
-        const look = fourFallBedLook(f, (q) => {
-          const z = gm.zoneAt(q);
-          return z ? next.zones[plan.zones.indexOf(z)] ?? z : null;
-        });
-        if (look && ff.wf.options.ground) ff.wf.setGround(look);
-      }
+      // A waterfall's bed look (setGround) is not touched here: a restyle only ever changes paving and lines
+      // (hardscapeOnlyChange), and any bed change rebuilds the yard, which gives each waterfall its bed's look anew.
       // A restyle (a new color picked) is a build of its own for the materials' keep-the-last-few rules (stamped looks,
       // paver edge maps): without it nothing picked in a run of restyles would ever be released.
       beginMaterialBuild();

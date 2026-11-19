@@ -378,13 +378,24 @@ export const WATERFALL_DEFAULTS = {
   detail: 'full',   // 'light': rocks with about a third of the triangles (phones, tablets); same layout, sizes within a percent or so
   shading: null,    // 'full' | 'light'. Left out, it follows `detail`. 'light' drops the finest grain, speckle and lichen from rock and cobble (set at creation)
   ground: null,     // { color, roughness, width, tint, sink }: blend the edge of the soil into the host's ground (see setGround)
+  topFall: null,    // feet: the top fall's drop (head pool to the next pool) when shorter than the model's own share;
+                    // the lower pools stay where `height` puts them and the top stones come down with the head pool
+  mulch: null,      // { dark, light, grain }: the soil cover's two tones (linear RGB arrays) and how fine it is (1 = bark chips;
+                    // higher is finer), to match the bed around it; null keeps the model's own shredded bark
 };
-// average colour of the feature's own bark mulch (linear), used when tinting it toward the host's ground
-const MULCH_MEAN = [0.15, 0.068, 0.034];
+// the feature's own shredded bark (linear): its dark and light tones, and its average colour once the chips are drawn.
+// The average is what setGround's tint works from; with options.mulch it is rescaled to the tones given.
+const MULCH_DARK = [0.085, 0.036, 0.02], MULCH_LIGHT = [0.27, 0.125, 0.06], MULCH_MEAN = [0.15, 0.068, 0.034];
 /** Overall size in feet for a set of options, without building anything. */
 export function waterfallSize(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options }, head = 1.5 + (o.level - 3) * 0.25;
-  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: o.height, soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: topHeight(o.height, o.topFall), soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+}
+/** Patio level to the top stones: `height`, or with a short top fall, the next pool's level plus that fall plus the head stones. */
+function topHeight(height, topFall) {
+  if (!topFall) return height;
+  const top = height - 0.95, wl1 = top - 0.30 * (top + 0.15);
+  return wl1 + topFall + 0.95;
 }
 export function createWaterfall(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options };
@@ -423,7 +434,22 @@ export function createWaterfall(options = {}) {
   const GU = {
     uEdgeCol: { value: new THREE.Color(0.15, 0.068, 0.034) }, uEdgeRough: { value: 0.95 }, uEdgeAmt: { value: 0 }, uEdgeW: { value: 2.5 },
     uTintK: { value: new THREE.Vector3(1, 1, 1) }, uSoilRect: { value: new THREE.Vector4(-1, -1, 1, 1) }, uEdgeTex: { value: 1 }, uEdgeChip: { value: 0 }, uEdgeSpec: { value: 1 },
+    uEdgePat: { value: new THREE.Vector2(0.46, 1.539) },   // the cover's dark and light tone over its middle tone (see below)
   };
+  // the soil cover: the model's own shredded bark unless the host matches it to the bed around it (options.mulch)
+  const MU = { uMulchA: { value: new THREE.Color(...MULCH_DARK) }, uMulchB: { value: new THREE.Color(...MULCH_LIGHT) }, uGrain: { value: 1 } };
+  let mulchMean = MULCH_MEAN;
+  if (o.mulch) {
+    MU.uMulchA.value.setRGB(...o.mulch.dark); MU.uMulchB.value.setRGB(...o.mulch.light); MU.uGrain.value = o.mulch.grain || 1;
+    // the dirt line at the foot of the rocks takes the same soil
+    WI.uSoil.value.copy(MU.uMulchA.value).lerp(MU.uMulchB.value, 0.35);
+    // the edge blend (setGround) follows the new cover: its average colour for the tint, and the contrast of its two
+    // tones for the chips drawn in the faded band (the pair still averages 1, so the band still averages the host's colour)
+    const A = MU.uMulchA.value, B = MU.uMulchB.value, lum = c => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    mulchMean = ['r', 'g', 'b'].map((k, i) => Math.max(1e-4, MULCH_MEAN[i] * (A[k] + B[k]) / (MULCH_DARK[i] + MULCH_LIGHT[i])));
+    const mid = Math.max((lum(A) + lum(B)) / 2, 1e-6);
+    GU.uEdgePat.value.set(lum(A) / mid, lum(B) / mid);
+  }
   const group = new THREE.Group(); group.name = 'four-fall-waterfall';
   const body = new THREE.Group(); group.add(body);
   let soil = null;
@@ -492,7 +518,7 @@ export function createWaterfall(options = {}) {
         roughnessFactor = clamp(mix(roughnessFactor, 0.2, rkWI.x * (1.0 - rkMoss)) + rkMoss * 0.1 + rkDirt * 0.1, 0.05, 1.0);`);
   };
   if (LIGHT) rockMat.defines = { ...rockMat.defines, WF_LIGHT: 1 };
-  rockMat.customProgramCacheKey = () => 'wf-rock-v4' + (LIGHT ? '-light' : '');
+  rockMat.customProgramCacheKey = () => 'wf-rock-v5' + (LIGHT ? '-light' : '');
 
   // ---- cobbles and pebbles: dry and matte on the bank, dark and glossy where the water reaches them
   const pebbleMat = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0 });
@@ -521,18 +547,19 @@ export function createWaterfall(options = {}) {
         roughnessFactor = mix(roughnessFactor, 0.16, pbWI.x);`);
   };
   if (LIGHT) pebbleMat.defines = { ...pebbleMat.defines, WF_LIGHT: 1 };
-  pebbleMat.customProgramCacheKey = () => 'wf-pebble-v4' + (LIGHT ? '-light' : '');
+  pebbleMat.customProgramCacheKey = () => 'wf-pebble-v5' + (LIGHT ? '-light' : '');
 
   // ---- ground: shredded bark mulch, stream gravel and lawn drawn in world space; darker and mossier near water
   const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
   groundMat.onBeforeCompile = sh => {
     bindWI(sh);
     for (const k in GU) sh.uniforms[k] = GU[k];
+    for (const k in MU) sh.uniforms[k] = MU[k];
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW; varying vec3 vGN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vGN = normal; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip, uEdgeSpec; uniform vec4 uSoilRect;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW; varying vec3 vGN;\nuniform vec3 uEdgeCol, uTintK; uniform float uEdgeRough, uEdgeAmt, uEdgeW, uEdgeTex, uEdgeChip, uEdgeSpec; uniform vec4 uSoilRect;\nuniform vec3 uMulchA, uMulchB; uniform float uGrain; uniform vec2 uEdgePat;\n' + NOISE3 + VORO2 + WATER_INFO + GCHIPS)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
         // bark chips are drawn from above on flat soil and from the side on steep banks, and the drawings are blended;
@@ -540,13 +567,13 @@ export function createWaterfall(options = {}) {
         vec2 gp = vTW.xz;
         vec3 gTw = pow(abs(normalize(vGN)), vec3(4.0)); gTw /= gTw.x + gTw.y + gTw.z;
         vec2 gChip = vec2(0.0); float gCw = 0.0;
-        if (gTw.y > 0.02) { gChip += gTw.y * gChips(gp); gCw += gTw.y; }
-        if (gTw.x > 0.02) { gChip += gTw.x * gChips(vTW.zy + 3.7); gCw += gTw.x; }
-        if (gTw.z > 0.02) { gChip += gTw.z * gChips(vTW.xy + 9.1); gCw += gTw.z; }
+        if (gTw.y > 0.02) { gChip += gTw.y * gChips(gp * uGrain); gCw += gTw.y; }
+        if (gTw.x > 0.02) { gChip += gTw.x * gChips(vTW.zy * uGrain + 3.7); gCw += gTw.x; }
+        if (gTw.z > 0.02) { gChip += gTw.z * gChips(vTW.xy * uGrain + 9.1); gCw += gTw.z; }
         gChip /= max(gCw, 0.001);
         float chipH = mix(0.55, gChip.x, gFade);
         float chipC = mix(0.5, gChip.y, gFade);
-        vec3 mulch = mix(vec3(0.085, 0.036, 0.02), vec3(0.27, 0.125, 0.06), chipC) * (0.5 + 0.7 * chipH) * uTintK;
+        vec3 mulch = mix(uMulchA, uMulchB, chipC) * (0.5 + 0.7 * chipH) * uTintK;
         #ifdef WF_LIGHT
           // same pixels, less work: gravel is only worked out where there is gravel, and the unused lawn layer is skipped
           vec4 g1 = vMat.x > 0.002 ? voro(gp * 10.0) : vec4(1.0, 1.0, 0.0, 0.0);
@@ -575,7 +602,7 @@ export function createWaterfall(options = {}) {
         float gEdge = uEdgeAmt * (1.0 - smoothstep(uEdgeW * 0.25, uEdgeW, gEdgeD * (0.6 + 0.8 * gNz))) * (1.0 - vMat.x);
         // the fade keeps the bark chips: their light and dark (scaled to average 1) multiply the host's colour, so the band
         // reads as bark in that colour and not as a smooth strip. uEdgeTex 0 gives a flat colour instead.
-        float gPat = mix(0.46, 1.539, chipC) * (0.5 + 0.7 * chipH) / 0.883;
+        float gPat = mix(uEdgePat.x, uEdgePat.y, chipC) * (0.5 + 0.7 * chipH) / 0.883;
         float gBandHt = chipH * 0.035;   // chip relief inside the band, feet
         vec2 gHp = vTW.xz / max(uEdgeChip, 0.001);
         float gHpW = max(fwidth(gHp.x), fwidth(gHp.y));   // how many host chips one pixel covers
@@ -613,7 +640,7 @@ export function createWaterfall(options = {}) {
         normal = rkPerturb(-vViewPosition, normal, vec2(dFdx(gHt), dFdy(gHt)) * uUnit, faceDirection);`);
   };
   if (LIGHT) groundMat.defines = { ...groundMat.defines, WF_LIGHT: 1 };
-  groundMat.customProgramCacheKey = () => 'wf-ground-v4' + (LIGHT ? '-light' : '');
+  groundMat.customProgramCacheKey = () => 'wf-ground-v5' + (LIGHT ? '-light' : '');
 
   function plantMaterial(o) {
     const m = new THREE.MeshStandardMaterial({ vertexColors: !o.map, map: o.map || null, alphaTest: o.map ? 0.5 : 0, side: THREE.DoubleSide, roughness: 0.8, metalness: 0 });
@@ -646,11 +673,14 @@ export function createWaterfall(options = {}) {
   const MATS = { grass: grassMat, vgrass: grassMat, fern: leafyMat, hosta: leafyMat, lavender: shrubMat, catmint: shrubMat, pink: shrubMat, white: shrubMat, box: shrubMat, moss: shrubMat, cypress: shrubMat };
 
   let L = null;
-  function makeLayout(H, base, lvl) {
+  function makeLayout(H, base, lvl, topFall) {
     const head = 1.5 + (lvl - 3) * 0.25, lv = [lvl * 1.08, lvl * 0.92, lvl];   // source pool, then three upper levels, a little unequal
     const D = base + lv[0] + lv[1] + lv[2] + head;
-    const top = H - 0.95, basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
+    let top = H - 0.95;
+    const basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
     const wl = [top]; for (let i = 0; i < 4; i++) wl.push(wl[i] - fr[i] * total); wl[4] = basin;
+    // a short top fall: the head pool only topFall above the next pool, the top stones the same height above it as before
+    if (topFall) { wl[0] = wl[1] + topFall; top = wl[0]; H = topHeight(H, topFall); }
     // lips from the front: fall 4 at the back of the lowest level, then one level further back each time
     const z4 = -base, z3 = z4 - lv[2], z2 = z3 - lv[1], z1 = z2 - lv[0], fzs = [z1, z2, z3, z4];
     const wander = 1 + clamp((lvl - 3) / 2, 0, 1) * 0.35;
@@ -1247,7 +1277,7 @@ export function createWaterfall(options = {}) {
     GU.uEdgeChip.value = on && g.chipSize > 0 ? g.chipSize : 0;
     GU.uEdgeSpec.value = on ? Math.max(0, g.specular ?? 1) : 1;
     const t = on ? clamp(g.tint ?? 0, 0, 1) : 0, c = GU.uEdgeCol.value;
-    GU.uTintK.value.set(mix(1, clamp(c.r / MULCH_MEAN[0], 0.2, 5), t), mix(1, clamp(c.g / MULCH_MEAN[1], 0.2, 5), t), mix(1, clamp(c.b / MULCH_MEAN[2], 0.2, 5), t));
+    GU.uTintK.value.set(mix(1, clamp(c.r / mulchMean[0], 0.2, 5), t), mix(1, clamp(c.g / mulchMean[1], 0.2, 5), t), mix(1, clamp(c.b / mulchMean[2], 0.2, 5), t));
   }
   /**
    * Blend the edge of the feature's soil into the host's ground, so no line shows where the two meet. Pass null to switch it off.
@@ -1259,7 +1289,8 @@ export function createWaterfall(options = {}) {
    *             so the band averages the colour given. 0 fades to that colour flat, with no chips.
    *   chipSize : spacing of the host's own bark chips, feet (for example 0.096). When given, the host side of the fade is drawn
    *             as round chips that far apart, dissolving into this feature's shards. Left out, the band uses this feature's chips.
-   *   tint : 0..1, how far the whole mound's bark is shifted toward that colour (0 keeps the feature's own bark), default 0
+   *   tint : 0..1, how far the whole mound's bark is shifted toward that colour (0 keeps the feature's own bark), default 0.
+   *          With options.mulch it works from that cover's average colour, not from the feature's own bark.
    *   sink : how far below the host's ground level the border of the soil sits, feet, default 0.03 (it is 0.3 with no ground set)
    * The first quarter of the width stays fully that colour, then it fades into the feature's own bark.
    * Colour, roughness, specular, width, texture, chipSize and tint apply at once. A changed sink, or switching the blend on or off, rebuilds the feature.
@@ -1284,7 +1315,7 @@ export function createWaterfall(options = {}) {
   function rebuild(next) {
     if (next) Object.assign(o, next);
     W = o.width;
-    L = makeLayout(o.height, o.lowest, o.level);
+    L = makeLayout(o.height, o.lowest, o.level, o.topFall);
     clearWorld();
     rnd = mulberry32(o.seed);
     rocks = []; bermRocks = [];

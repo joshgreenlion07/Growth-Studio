@@ -13,6 +13,7 @@ import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelig
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
 import { anchorAt, swing, swings, type FeatureAction } from './actions';
 import { buildDecor } from './decor';
+import { veneerColumn } from './veneercolumn';
 import { buildWaterRock } from './waterrock';
 import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
@@ -25,6 +26,14 @@ import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireSt
 import { buildFourFall, type FourFallInstance } from './fourfall';
 import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
+
+/** What a four-fall waterfall takes from the bed it is set in (build.ts fourFallBedFor). */
+export interface FourFallBedLook {
+  /** The bed's material id, for its mound's soil cover (fourfall.ts fourFallMulch). */
+  mulch?: string;
+  /** The look its soil's edge fades into (setGround), or null to keep its edges tucked under grade. */
+  ground: WaterfallGround | null;
+}
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -130,7 +139,7 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', bedLook?: (f: FeaturePlacement) => WaterfallGround | null): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light', fourFallBed?: (f: FeaturePlacement) => FourFallBedLook): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -622,6 +631,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.soil, box(W - 0.04, 0.02, D - 0.04, 0, 0.66, 0));
         break;
       }
+      case 'veneerColumn': {
+        // A block column clad in a wall veneer under a Basalite column cap (builder/veneercolumn.ts).
+        veneerColumn({ f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, lift: lift?.(f.position) });
+        break;
+      }
       case 'cortenPlanterTall':
       case 'cortenTreePanel':
       case 'firePitLinear':
@@ -662,8 +676,10 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       }
       case 'fourFall': {
         // The four-fall rock waterfall (builder/fourfall.ts): its own rock, soil, water and falls, in one module.
-        // Set in a bed, the edge of its soil fades into the bed's color and meets the bed flush (fourfall.ts fourFallBed).
-        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bedLook?.(f) ?? null);
+        // Its soil takes the bed it is set in (one lookup, build.ts fourFallBedFor): the mound's cover recoloured to the
+        // bed, and, where its whole soil border lies in that bed, the edge of its soil faded into the bed and flush with it.
+        const bed = fourFallBed?.(f);
+        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; }, bed?.mulch, bed?.ground ?? null);
         o.add(ff.group);
         surfaces.push(...ff.surfaces);
         fourFalls.push(ff.inst);

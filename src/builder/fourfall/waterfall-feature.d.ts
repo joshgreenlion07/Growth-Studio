@@ -10,6 +10,11 @@ export interface WaterfallOptions {
   lowest?: number;
   /** Each of the three upper levels, front to back. Owner's range 3 to 5. Default 3. */
   level?: number;
+  /**
+   * The top fall's drop (head pool to the pool below it), when shorter than the model's own share of the height. The
+   * lower pools stay where `height` puts them; the top stones come down with the head pool. Default null.
+   */
+  topFall?: number | null;
   /** How far the planted soil runs behind the top stones before it is back at grade. Default 4.5. */
   backSlope?: number;
   /** Raise the whole feature. Use about 0.6 when the host cannot open its ground under it. Default 0. */
@@ -32,6 +37,13 @@ export interface WaterfallOptions {
   shading?: 'full' | 'light' | null;
   /** Blend the edge of the soil into the host's ground. See setGround. Default null (off). */
   ground?: WaterfallGround | null;
+  /**
+   * The soil cover's two tones (linear RGB) and how fine it is (1 = shredded bark chips, higher = finer, e.g. 1.7 for
+   * crumbly humus), to match the bed around the feature; it also colors the dirt line at the foot of the rocks.
+   * Default null: the model's own shredded bark. With `ground` set, the edge blend follows these tones too (the tint
+   * works from their average, the chips in the faded band take their contrast). Cannot change after creation.
+   */
+  mulch?: { dark: [number, number, number]; light: [number, number, number]; grain?: number } | null;
 }
 
 export interface WaterfallFall { i: number; x: number; z: number; w: number; top: number; bot: number; drop: number; land: number }
