@@ -33,7 +33,7 @@ const BORDER_69 = (lb?: number, line = 'Belgard'): Pallet => ({ label: '6 x 9 bo
 
 /** The pallets a paver or border look is sold on (the first is the one a pattern is mostly laid from), or none. */
 export function palletsFor(m: MaterialSpec, maker: string, line: string): Pallet[] {
-  const sizes = m.pattern?.sizes ?? [];
+  const sizes = m.pattern?.sold ?? m.pattern?.sizes ?? [];
   const has = (a: number, b: number) => sizes.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
   const border = m.use === 'border';
   if (maker === 'Belgard') {

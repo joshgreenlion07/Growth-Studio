@@ -105,7 +105,8 @@ export function lookOf(m: MaterialSpec): Look {
   // A line made from part of a Belgard line (the 24 x 24 slab of Dimensions Slabs) shares that line's page and photos.
   const mediaLine = MEDIA_LINE[line] ?? line;
   const media = maker === 'Belgard' ? BELGARD_MEDIA[mediaLine] : maker === 'Basalite' ? BASALITE_MEDIA[mediaLine] : undefined;
-  const sizes = m.pattern?.sizes;
+  // The sizes as sold (Premier Slab 24 x 24), not the module it is laid on (23.54 in).
+  const sizes = m.pattern?.sold ?? m.pattern?.sizes;
   const border = m.use === 'border';
   // Belgard lists every set of a line together (the main set, a small set, the border stone); keep the listing whose
   // pieces are exactly this material's pieces, compared without order.

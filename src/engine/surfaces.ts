@@ -358,11 +358,12 @@ export function layingMix(spec: MaterialSpec | undefined, laying?: LayingPattern
   const one = (a: number, b: number): [number, number, number][] => [[...norm(a, b), 1]];
   let m: PieceModule | undefined;
   if (k === 'combo3' || k === 'combo4') m = BASALITE_MODULES[k];
-  else if (k === 'stack' || k === 'halfBond' || k === 'halfBond45') return one(p.sizes[0][0], p.sizes[0][1]);
-  else if (k === 'running' || k === 'herringbone') return one(6, 9);
+  const s0 = (p.sold ?? p.sizes)[0];   // named by the size it is sold as (Premier Slab 24 x 24), not its laying module
+  if (k === 'stack' || k === 'halfBond' || k === 'halfBond45') return one(s0[0], s0[1]);
+  if (k === 'running' || k === 'herringbone') return one(6, 9);
   else if (k === 'running3' || (k === 'a' && p.face === 'antiqued')) m = ANTIQUED[k];
   else if ((k === 'a' || k === 'b') && p.kind === 'ashlar') m = THREE_PIECE[k];
-  else if (p.sizes.length === 1) return one(p.sizes[0][0], p.sizes[0][1]);
+  else if (p.sizes.length === 1) return one(s0[0], s0[1]);
   if (!m) return undefined;
   const by = new Map<string, number>();
   let total = 0;
