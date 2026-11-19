@@ -1,6 +1,7 @@
 import type { FeaturePlacement, SitePlan, Vec2 } from './types';
 import { samplePremierSlab } from './sample-premier-slab';
 import { samplePremierSmooth } from './sample-premier-smooth';
+import { samplePremierSlate } from './sample-premier-slate';
 import { sampleWallVeneers } from './sample-wall-veneers';
 import { sampleCompositeDeck } from './sample-deck';
 import { samplePillarFountain } from './sample-pillar-fountain';
@@ -490,6 +491,7 @@ export const SAMPLES = [
   { id: 'putting', name: 'Putting green', make: samplePuttingGreen },
   { id: 'pavers', name: 'Paver comparison', make: samplePaverCompare },
   { id: 'premier-smooth', name: 'Basalite Premier Smooth: six colors, two patterns', make: samplePremierSmooth },
+  { id: 'premier-slate', name: 'Basalite Premier Slate: six colors, two patterns', make: samplePremierSlate },
   { id: 'premier-slab', name: 'Basalite Premier Slab: five colors, three patterns', make: samplePremierSlab },
   { id: 'stratus', name: 'SunVilla Stratus on Basalite Midnight Terrace', make: sampleStratusPremier },
   { id: 'walls', name: 'Wall comparison', make: sampleWallCompare },

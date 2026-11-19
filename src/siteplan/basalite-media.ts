@@ -33,6 +33,19 @@ export const BASALITE_MEDIA: Record<string, MakerMedia> = {
       SeaScape: '2025/06/premier-smooth-seascape.jpg',
     },
   },
+  // Premier Slate: Basalite's California page, read for the Sacramento region (Northern California).
+  'Premier Slate': {
+    page: 'https://basalite.com/products/premier-slate-ca/',
+    sizes: ['6 x 12: 148 x 298 x 60 mm (5.83 x 11.73 in)', '9 x 12: 223 x 298 x 60 mm (8.78 x 11.73 in)', '12 x 12: 298 x 298 x 60 mm (11.73 x 11.73 in)', '12 x 18: 298 x 448 x 60 mm (11.73 x 17.64 in), sold separately', '6 x 9 border: 148 x 223 x 60 mm (5.83 x 8.78 in), sold separately'],
+    images: {
+      Positano: '2023/02/premier-slate-positano.jpg',
+      Torino: '2023/02/premier-slate-torino.jpg',
+      'Bodega Dunes': '2023/01/premier-slate-bodega-dunes.jpg',
+      'Midnight Terrace': '2025/02/premier-slate-midnight-terrace.jpg',
+      Oceanside: '2023/01/premier-slate-oceanside.jpg',
+      SeaScape: '2025/06/premier-slate-seascape.jpg',
+    },
+  },
 };
 
 /** The swatch photo URL for a Basalite line and color, if Basalite has one. */

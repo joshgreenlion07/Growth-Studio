@@ -13,6 +13,8 @@
  *   Basalite Premier Slab (CA cut sheet): 32 slabs, 123 sq ft, 3442 lb.
  *   Basalite Premier Smooth (cut sheet BA-CA 5/24/2024): the combo pallet of 96 6 x 12, 64 9 x 12 and 32 12 x 12,
  *     121.9 sq ft; the 12 x 18 on its own pallet, 64 pieces, 92 sq ft; the 6 x 9 border, 280 pieces, 100 sq ft.
+ *   Basalite Premier Slate (its own cut sheet, BA-CA 5/24/2024): the same pallets, the combo 3,378 lb; its 6 x 9 border
+ *     pallet is printed as 280 pieces, 120 sq ft.
  */
 import type { MaterialSpec } from './catalog';
 
@@ -47,6 +49,13 @@ export function palletsFor(m: MaterialSpec, maker: string, line: string): Pallet
   }
   if (maker === 'Basalite') {
     if (line === 'Premier Slab' && !border && sizes.length === 1) return [{ label: 'Pallet', sqft: 123, pieces: [[Math.min(...sizes[0]), Math.max(...sizes[0]), 32]], lb: 3442, source: 'Basalite Premier Slab CA cut sheet: 32 a pallet, 123 sq ft' }];
+    if (line === 'Premier Slate') {
+      if (border) return [{ label: '6 x 9 border pallet', sqft: 120, pieces: [[6, 9, 280]], source: 'Basalite Premier Slate cut sheet (BA-CA 5/24/2024): 280 a pallet, 120 sq ft' }];
+      return [
+        { label: '3-piece combo pallet', sqft: 121.9, pieces: [[6, 12, 96], [9, 12, 64], [12, 12, 32]], lb: 3378, source: 'Basalite Premier Slate cut sheet (BA-CA 5/24/2024): 96 + 64 + 32, 121.9 sq ft, 3,378 lb' },
+        { label: '12 x 18 pallet', sqft: 92, pieces: [[12, 18, 64]], source: 'Basalite Premier Slate cut sheet (BA-CA 5/24/2024): 64 a pallet, 92 sq ft' },
+      ];
+    }
     if (line === 'Premier Smooth') {
       if (border) return [{ label: '6 x 9 border pallet', sqft: 100, pieces: [[6, 9, 280]], source: 'Basalite Premier Smooth cut sheet (BA-CA 5/24/2024): 280 a pallet, 100 sq ft' }];
       return [
