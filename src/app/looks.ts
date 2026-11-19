@@ -215,7 +215,7 @@ export function lookOfPoint(catalogId: string, plan: SitePlan | null, itemId: st
       p.evergreen ? 'Evergreen' : 'Deciduous: loses its leaves in winter',
     ];
     const look = base(p.name, 'plant', p.group, [p.foliage, p.foliage2, ...(p.flower ? [p.flower] : []), ...(p.flower2 ? [p.flower2] : [])].slice(0, 4),
-      `${p.name} (${p.botanical}). ${p.evergreen ? 'Evergreen' : 'Deciduous'}${p.flower ? ', with flowers' : ''}. Sizes are typical for the Central Valley.`, spec);
+      `${p.name} (${p.botanical}). ${p.about ?? `${p.evergreen ? 'Evergreen' : 'Deciduous'}${p.flower ? ', with flowers' : ''}.`} Sizes are typical for the Central Valley.`, spec);
     look.botanical = p.botanical;
     return look;
   }

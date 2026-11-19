@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { GeoBuilder, UP, V, clamp, col, deflect, jitter, leafQuad, leafTexture, lerp, perp, rng, tube, type SpeciesBuilder } from '../kit';
 import { cellClip, hardenAlpha, tone } from '../shrubs/shared-shrubs-b';
 import { bloom, leafFace, paintGlossLeaf, type GlossLeaf } from '../shrubs/shared-glossy';
-import { WOOD_BEND, fitBuilders, limbAt, type Limb } from './shared-trees-a';
-import { citrusBark, growHead, headWood, trunkWood, type Head } from './shared-standards';
+import { WOOD_BEND, fitBuilders, limbAt } from './shared-trees-a';
+import { citrusBark, growHead, headSkeleton, headWood, laterBelow, trunkWood } from './shared-standards';
 
 /**
  * Gardenia jasminoides 'Veitchii' (everblooming gardenia) trained as a
@@ -214,121 +214,6 @@ function flowerTex(white: string, cream: string): THREE.Texture {
     g.restore();
     hardenAlpha(g, 1024, 1024);
   });
-}
-
-/** Birth for wood or leaves below the trunk top: the head settles lower as the tree ages. */
-function laterBelow(head: Head): (y: number) => number {
-  const span = Math.max(0.05, head.trunkTop - head.H * 0.39);
-  return (y) => (y >= head.trunkTop - head.H * 0.02 ? 0 : lerp(0.3, 0.8, clamp((head.trunkTop - y) / span)));
-}
-
-/**
- * The head's wood, grown to fill its envelope evenly. Shoot tips are spread over the head's surface (a Fibonacci
- * lattice), each reached by a twig from a side branch, the side branches from the scaffolds that leave the trunk top.
- * (growHead's own branching left gaps and lopsided heads at this small size with single leaves; its envelope, trunk
- * and sway are kept.) Branch levels: 0 scaffolds, 1 side branches, 2 twigs, which end where the leafy shoot begins.
- */
-function headSkeleton(head: Head, r: () => number, nTips: number, early: number): Limb[] {
-  const { H, trunkTop, center } = head;
-  const lowBirth = laterBelow(head);
-  const limbs: Limb[] = [];
-  const add = (pts: THREE.Vector3[], r0: number, r1: number, level: number, birth: number, parent: number, rParent: number) => {
-    let length = 0;
-    for (let i = 1; i < pts.length; i++) length += pts[i].distanceTo(pts[i - 1]);
-    limbs.push({ pts, rad: pts.map((_, i) => lerp(r0, r1, i / (pts.length - 1))), level, birth, parent, length, rParent });
-    return limbs.length - 1;
-  };
-  // A stem from a to b in `segs` segments, bowed sideways and a little up in the middle.
-  const bent = (a: THREE.Vector3, b: THREE.Vector3, segs: number, bow: number) => {
-    const d = b.clone().sub(a);
-    const L = d.length();
-    const side = perp(d.clone().normalize()).applyAxisAngle(d.clone().normalize(), r() * 6.28);
-    const k = (r() - 0.3) * bow * L;
-    return Array.from({ length: segs + 1 }, (_, i) => {
-      const t = i / segs, w = Math.sin(Math.PI * t);
-      return a.clone().addScaledVector(d, t).addScaledVector(side, w * k).add(V(0, w * Math.abs(k) * 0.5, 0));
-    });
-  };
-  /** Distance from p along u to the envelope surface. */
-  const reach = (p: THREE.Vector3, u: THREE.Vector3) => {
-    let d = 0;
-    while (d < H && head.depth(p.clone().addScaledVector(u, d)) < 0.96) d += 0.01;
-    return d;
-  };
-  const nearest = (l: Limb, q: THREE.Vector3, from: number) => {
-    let best = l.pts[l.pts.length - 1], bi = l.pts.length - 1, bd = Infinity;
-    for (let i = Math.max(1, Math.floor(from * (l.pts.length - 1))); i < l.pts.length; i++) {
-      const d = l.pts[i].distanceToSquared(q);
-      if (d < bd) { bd = d; best = l.pts[i]; bi = i; }
-    }
-    return { p: best.clone(), r: l.rad[bi] };
-  };
-
-  // Scaffolds: evenly around the trunk top, the last a near-vertical leader; each reaches part way to the surface.
-  const top = V(0, trunkTop, 0);
-  const nS = 7, scaff: number[] = [];
-  for (let i = 0; i < nS; i++) {
-    const leader = i === nS - 1;
-    const az = (i / (nS - 1)) * Math.PI * 2 + (r() - 0.5) * 0.5;
-    const lean = leader ? 0.1 + r() * 0.1 : lerp(0.5, 1.2, (i * 0.618 + r() * 0.15) % 1);
-    const dir = V(Math.cos(az) * Math.sin(lean), Math.cos(lean), Math.sin(az) * Math.sin(lean));
-    const base = V(0, trunkTop - H * 0.01 + r() * H * 0.03, 0);
-    const end = base.clone().addScaledVector(dir, reach(base, dir) * (leader ? 0.62 : 0.55));
-    const r0 = head.trunkR * (leader ? 0.66 : 0.55 + r() * 0.1);
-    scaff.push(add(bent(base, end, 5, 0.12), r0, r0 * 0.45, 0, 0, -1, head.trunkR));
-  }
-
-  // Shoot tips on the surface, a little inside it here and there; none on the underside next to the trunk.
-  const tips: THREE.Vector3[] = [];
-  for (let k = 0; k < nTips; k++) {
-    const y = 1 - (2 * (k + 0.5)) / nTips;
-    if (y < -0.72) continue;
-    const ph = k * 2.39996 + (r() - 0.5) * 0.3, c = Math.sqrt(1 - y * y);
-    const u = V(Math.cos(ph) * c, y, Math.sin(ph) * c).normalize();
-    // A few leggy shoots stand out past the head, as on a standard a while after its last trim.
-    const out = r() < 0.1 ? 1.02 + r() * 0.1 : 0.74 + 0.26 * Math.sqrt(r());
-    tips.push(center.clone().addScaledVector(u, reach(center, u) * out));
-  }
-  // Each tip goes to the scaffold pointing most its way.
-  const groups: THREE.Vector3[][] = scaff.map(() => []);
-  for (const t of tips) {
-    const u = t.clone().sub(top).normalize();
-    let bi = 0, bd = -2;
-    scaff.forEach((si, i) => {
-      const l = limbs[si];
-      const d = l.pts[l.pts.length - 1].clone().sub(top).normalize().dot(u);
-      if (d > bd) { bd = d; bi = i; }
-    });
-    groups[bi].push(t);
-  }
-  groups.forEach((g, gi) => {
-    if (!g.length) return;
-    const sl = limbs[scaff[gi]];
-    const sEnd = sl.pts[sl.pts.length - 1];
-    const axis = sEnd.clone().sub(top).normalize();
-    const e1 = perp(axis), e2 = V().crossVectors(axis, e1);
-    // Side branches: the group's tips in runs around the scaffold, about five tips each.
-    g.sort((a, b) => {
-      const da = a.clone().sub(sEnd), db = b.clone().sub(sEnd);
-      return Math.atan2(da.dot(e2), da.dot(e1)) - Math.atan2(db.dot(e2), db.dot(e1));
-    });
-    const nb = Math.max(1, Math.round(g.length / 5));
-    for (let b = 0; b < nb; b++) {
-      const run = g.slice(Math.floor((b * g.length) / nb), Math.floor(((b + 1) * g.length) / nb));
-      if (!run.length) continue;
-      const c = run.reduce((acc, t) => acc.add(t), V()).multiplyScalar(1 / run.length);
-      const s = nearest(sl, c, 0.35);
-      const e = s.p.clone().lerp(c, 0.62);
-      const births = run.map((t) => Math.max(r() < early ? 0 : lerp(0.15, 0.85, r()), lowBirth(t.y)));
-      const r0 = Math.min(s.r * 0.85, 0.009);
-      const side = add(bent(s.p, e, 3, 0.16), r0, r0 * 0.55, 1, Math.min(...births), scaff[gi], s.r);
-      run.forEach((t, k) => {
-        const q = nearest(limbs[side], t, 0.3);
-        add(bent(q.p, q.p.clone().lerp(t, 0.84), 2, 0.12), 0.0042, 0.0026, 2, births[k], side, q.r);
-      });
-    }
-  });
-  return limbs;
 }
 
 const UV4 = (i: number): [number, number, number, number] => {
