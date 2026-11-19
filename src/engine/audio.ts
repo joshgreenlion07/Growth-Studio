@@ -223,6 +223,16 @@ export class SceneAudio {
     this.onChange();
   }
 
+  /**
+   * Client mode (Area Planner's client page): no sound at all, ambience, water, fire and spa included, and the
+   * person's own sound setting is left as it was (nothing is saved). While muted no audio context is even made.
+   */
+  setMuted(m: boolean) {
+    this.muted = m;
+    this.apply();
+  }
+  private muted = false;
+
   /** The planner hides the 3D tab (`pause`) or shows it again (`resume`). */
   setPaused(p: boolean) {
     this.paused = p;
@@ -253,7 +263,7 @@ export class SceneAudio {
    * gesture listeners go, only once it is really running; until then every activation tries again.
    */
   private unlock() {
-    if (this.failed || this.disposed) return;
+    if (this.failed || this.disposed || this.muted) return;
     if (!this.ctx) {
       try {
         const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -286,7 +296,7 @@ export class SceneAudio {
 
   /** Whether sound should be running now. */
   private wantRunning(): boolean {
-    return this.prefs.on && !this.paused && !document.hidden && this.ctx !== null;
+    return this.prefs.on && !this.muted && !this.paused && !document.hidden && this.ctx !== null;
   }
 
   private apply() {

@@ -203,9 +203,21 @@ export class Studio {
   handActive = false;
   /**
    * iPad (set by the app): in walk mode a double tap with one finger on the scene glides there, like a map's street
-   * view. A single tap then waits DOUBLE_TAP_MS before it acts, so the first of two never picks or uses anything.
+   * view. A single tap then waits DOUBLE_TAP_MS (450 ms in client mode) before it acts, so the first of two never picks or uses anything.
    */
   tapToWalk = false;
+  /**
+   * Client mode (Area Planner's client page): walk only (setNavMode refuses the others), double tap or double click
+   * the ground to walk there with a mouse too, a slower double tap, the Hand always on (a tap uses a door, fire,
+   * water or light), and a soft ring now and then under each usable thing nearby. Set by the app.
+   */
+  clientMode = false;
+  private beaconAt = 0;
+  /** Client mode: when the camera last moved (the rings pulse only for a while after, so a still view stops drawing). */
+  private clientActiveAt = 0;
+  /** Double tap timing: a little more time and room in client mode. */
+  private dblMs() { return this.clientMode ? 450 : DOUBLE_TAP_MS; }
+  private dblPx() { return this.clientMode ? 40 : DOUBLE_TAP_PX; }
   /** The rings that double-tap to walk leaves on the ground. */
   private tapMarks = new TapMarks();
   /** Forget a first tap still waiting for its second (a mode change, Home). Set in the constructor. */
@@ -461,10 +473,10 @@ export class Studio {
       // A second finger, or a mode change since: the first tap acts now. A second touch that may be the double tap
       // holds it until that touch lifts.
       // One held past its time (its timer already stopped) is stale: dropped, never run.
-      if (firstTap && !firstTap.live && downTs - firstTap.at >= DOUBLE_TAP_MS) dropFirst();
+      if (firstTap && !firstTap.live && downTs - firstTap.at >= this.dblMs()) dropFirst();
       if (firstTap) {
         if (!e.isPrimary || this.navMode !== 'walk') runFirst();
-        else if (downTs - firstTap.at < DOUBLE_TAP_MS) {
+        else if (downTs - firstTap.at < this.dblMs()) {
           window.clearTimeout(firstTap.timer);
           firstTap.live = false;
         } else runFirst();
@@ -501,9 +513,9 @@ export class Studio {
       // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
       const isTap = !!down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400);
       down = null;
-      if (this.tapToWalk && this.navMode === 'walk' && e.pointerType === 'touch' && e.isPrimary) {
+      if (this.tapToWalk && this.navMode === 'walk' && (e.pointerType === 'touch' || this.clientMode) && e.isPrimary) {
         const x = e.clientX, y = e.clientY;
-        if (firstTap && isTap && downTs - firstTap.at < DOUBLE_TAP_MS && Math.hypot(x - firstTap.x, y - firstTap.y) < DOUBLE_TAP_PX) {
+        if (firstTap && isTap && downTs - firstTap.at < this.dblMs() && Math.hypot(x - firstTap.x, y - firstTap.y) < this.dblPx()) {
           window.clearTimeout(firstTap.timer);
           firstTap = null;
           this.walkToTap(x, y);
@@ -519,7 +531,7 @@ export class Studio {
         }
         if (!isTap) return;
         const r = this.renderer.domElement.getBoundingClientRect();
-        firstTap = { x, y, at: e.timeStamp, timer: window.setTimeout(runFirst, DOUBLE_TAP_MS), live: true, w: r.width, h: r.height };
+        firstTap = { x, y, at: e.timeStamp, timer: window.setTimeout(runFirst, this.dblMs()), live: true, w: r.width, h: r.height };
         const hint = this.walkTargetAt(x, y, true);
         if (hint) this.tapMarks.show(hint, 'hint');
         this.invalidate();
@@ -961,6 +973,8 @@ export class Studio {
 
   private pixelRatioFor(q: Quality) {
     const dpr = window.devicePixelRatio || 1;
+    // Client mode's Low is for older phones: three quarters of a pixel per screen pixel.
+    if (q === 'draft' && this.clientMode) return Math.min(dpr, 0.75);
     return q === 'draft' || q === 'light' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
   }
 
@@ -1238,7 +1252,7 @@ export class Studio {
 
   /** orbit: the mouse orbit view. walk: first person at eye height. fly: first person, free height. */
   setNavMode(m: NavMode) {
-    if (m === this.navMode) return;
+    if (m === this.navMode || (this.clientMode && m !== 'walk')) return;
     const from = this.navMode;
     this.navMode = m;
     this.tween = null;
@@ -1256,6 +1270,26 @@ export class Studio {
       this.camera.updateProjectionMatrix();
     }
     this.onNavModeChanged(m);
+  }
+
+  /**
+   * Client mode: every 2.6 s a soft ring on the ground under each usable thing within 14 m (see clientMode), for 6 s
+   * after the camera last moved; then nothing, so a still view lets drawing pause (phones keep cool).
+   */
+  private clientBeacons(now: number) {
+    if (!this.clientMode) return;
+    if (this.camMoved || this.tween || !this.clientActiveAt) this.clientActiveAt = now;
+    if (this.navMode !== 'walk' || !this.build || now - this.clientActiveAt > 6000 || now - this.beaconAt < 2600) return;
+    this.beaconAt = now;
+    const seen = new Set<string>(), w = new THREE.Vector3();
+    for (const a of this.build.features.actions) {
+      const an = a.anchors[0];
+      if (!an || seen.has(a.itemId)) continue;
+      an.getWorldPosition(w);
+      if (Math.hypot(w.x - this.camera.position.x, w.z - this.camera.position.z) > 14) continue;
+      seen.add(a.itemId);
+      this.tapMarks.show(new THREE.Vector3(w.x, this.groundAt(w.x, w.z), w.z), 'beacon', now);
+    }
   }
 
   /** Menu, Home or the touch Home button: the first saved view, or back to the start point in first person. */
@@ -1286,6 +1320,13 @@ export class Studio {
     // Never start inside a house or shed: step forward until clear of every structure.
     const blocked = (x: number, z: number) => (this.plan?.structures ?? []).some((st) => st.kind !== 'cover' && st.polygon.length > 2 && (pointInPolygon([x, z], st.polygon) || distToEdge([x, z], st.polygon) < 0.8));
     for (let i = 0; i < 200 && blocked(eye.x, eye.z); i++) eye.addScaledVector(look, 0.25);
+    // Client mode faces the main feature (a water feature, fire, pergola, kitchen or spa view), else the house.
+    if (this.clientMode && this.plan) {
+      const fv = this.views.find((v) => /^[wf]-/.test(v.id));
+      const house = this.plan.structures.find((s) => s.kind === 'house' && s.polygon.length > 2);
+      const aim = fv ? { x: fv.target.x, z: fv.target.z } : house ? { x: house.polygon.reduce((a, p) => a + p[0], 0) / house.polygon.length, z: house.polygon.reduce((a, p) => a + p[1], 0) / house.polygon.length } : null;
+      if (aim && Math.hypot(aim.x - eye.x, aim.z - eye.z) > 1) look.set(aim.x - eye.x, 0, aim.z - eye.z).normalize();
+    }
     eye.y = this.groundAt(eye.x, eye.z) + EYE_HEIGHT;
     this.camera.position.copy(eye);
     this.controls.target.copy(eye).addScaledVector(look, 3);
@@ -1920,6 +1961,7 @@ export class Studio {
     this.audio.update(this.camera, this.sky.uniforms.uNight.value, this.mode === 'orbit' ? this.controls.target : null);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
+    this.clientBeacons(now);
     if (this.tapMarks.update(now)) this.dirty = true;
     // Something switched on by hand that moves by itself (a spa's bubbles and steam).
     if (this.build && this.state.motion) for (const a of this.build.features.actions) if (a.on && a.frame) a.frame(dt);

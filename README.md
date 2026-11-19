@@ -357,6 +357,16 @@ Messages use `window.postMessage`:
   1600 px JPEG of the yard from the Overview view, drawn off screen: the live
   view does not move, resize or blink),
   or `{ ..., ok: false, message }` before a plan is built.
+- **Client mode** (`?embed=1&viewer=1&client=1`, Area Planner's client page, for people new to 3D): only the 3D view
+  (and the joystick in touch mode, larger, with a lime knob); every studio control, label and toast is hidden. It starts in
+  Walk once the plan is built, standing at the walk start and facing the main feature (a water, fire, pergola, kitchen or
+  spa view), else the house, and never leaves Walk. Walking is calm (1.1 m/s, no run); left and right (arrow keys, A/D,
+  the joystick) turn instead of stepping sideways; wheel, pinch and lens zoom do nothing; only the walking keys reach
+  the studio. A tap or click uses a door, fire, water or light, and a soft lime ring pulses now and then under each usable
+  thing within 14 m, for 6 s after the camera last moved (a still view stops drawing). A controller gives only its sticks, A or View to use and Menu to go back to the start. Escape is sent to the parent as `{ type: 'key', key: 'Escape' }`. Double tap or double click the ground walks there (450 ms between taps). No sound at all (not saved:
+  the person's own sound setting is kept). The parent sends `{ type: 'quality', quality }` (`low` = Draft at 0.75 pixel
+  ratio, `medium` = Light, `high` = Balanced; also `quality=` on the address) and `{ type: 'time', time }` (`morning`
+  9:30, `afternoon`, `sunset` = golden hour, `night`).
 - Renderings (Area Planner's client link): the parent sends `{ source: 'area-planner', type: 'shot', id, view, mood, w, aspect }`
   and gets `{ source: 'growth-studio', type: 'shot', id, ok: true, data: Blob }`, a JPEG `w` px wide (320 to 2400,
   default 1600, never more than 2400 px high) and `aspect` (width / height, 0.5 to 3, default 1.5) from one generated view (`view`: `'overview'`, `'low'`
