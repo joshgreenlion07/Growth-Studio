@@ -496,6 +496,8 @@ html.embed .app > .body { display: grid; grid-template-rows: minmax(0, 1fr); min
 html.embed main.work { grid-template-columns: minmax(0, 1fr); min-height: 0; }
 html.embed section.scene-pane { display: grid !important; position: fixed; inset: 0; height: auto; min-height: 0; }
 html.embed .dock { max-height: 50vh; overflow: auto; }
+/* View-only embed on a phone (Area Planner's client page): the 3D view keeps most of the screen; the dock scrolls. */
+@media (max-width: 600px) { html.embed.viewer .dock { max-height: 30vh; max-height: 30dvh; } }
 .dock-end { margin-left: auto; }
 #embed-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; pointer-events: none; }
 #embed-note p { margin: 0; max-width: 34em; padding: 10px 16px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; text-align: center; }
