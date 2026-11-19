@@ -467,7 +467,9 @@ Messages use `window.postMessage`:
 - A wall, fence or curb drawn as a closed shape is a line whose last point
   repeats its first. Walls can be up to 6.5 m tall.
 - Wall veneers (shelf 'Wall veneer') are wall looks like any other, so a wall changes finish by its look:
-  `msi-arctic-golden-ledger` (MSI Arctic Golden Splitface Panel 6x24, split quartzite, its cap Basalite Sand),
+  `msi-arctic-golden-ledger` (MSI Arctic Golden Splitface Panel 6x24, split quartzite, on a 10 1/2 in veneered
+  block wall capped with MSI Arterra Caldera Blanca 13 x 24 x 2 cm coping, `msi-caldera-blanca-coping`; Coala is
+  `msi-caldera-coala-coping`; a Midnight or matching cap choice still overrides),
   `stucco-santa-barbara-warm-gray` and `stucco-sand-finish-warm-gray` (Green Lion's stucco finishes in the
   three-pillar job's warm gray; a stucco wall's cap is the same stucco). Columns are features, one per finish
   (`veneer-column-<look id>`): a Basalite 16 in column block core clad in the veneer under a Basalite Column Cap
