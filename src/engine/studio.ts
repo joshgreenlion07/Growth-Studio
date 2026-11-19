@@ -19,6 +19,7 @@ import { SceneAudio } from './audio';
 import type { BuildStage } from '../builder/construction';
 import { EYE_HEIGHT, Navigation, type NavMode, type QuickDir } from './navigation';
 import { Marks, Tape, ftIn, type MarkPoint } from './marks';
+import { TapMarks } from './tapmarks';
 import { pointName } from '../siteplan/material-info';
 
 /**
@@ -119,6 +120,13 @@ export function defaultQuality(): Quality {
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+/** Double tap to walk (iPad, walk mode): the second tap within this long (ms) of the first one's lift, and this near (px). */
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_PX = 30;
+/** How far short of a wall, tree, house or water the walk stops (m, about 2 ft), and the longest walk (m). */
+const WALK_STAND_OFF = 0.6;
+const WALK_MAX = 60;
+
 export class Studio {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -193,6 +201,13 @@ export class Studio {
   onAction: (a: FeatureAction) => void = () => {};
   /** The Hand quick tool is picked: a click on something that can be used uses it instead of picking it. */
   handActive = false;
+  /**
+   * iPad (set by the app): in walk mode a double tap with one finger on the scene glides there, like a map's street
+   * view. A single tap then waits DOUBLE_TAP_MS before it acts, so the first of two never picks or uses anything.
+   */
+  tapToWalk = false;
+  /** The rings that double-tap to walk leaves on the ground. */
+  private tapMarks = new TapMarks();
   /** States set by hand, kept across rebuilds while the plan still asks for what it did when they were set. */
   private handState = new Map<string, { on: boolean; base: boolean }>();
   private handMoving = false;
@@ -409,7 +424,7 @@ export class Studio {
     this.measure = new Measurements(container);
     this.measure.onRedraw = () => this.invalidate();
     this.tape = new Tape(this.measure);
-    this.scene.add(this.marks.group, this.tape.group);
+    this.scene.add(this.marks.group, this.tape.group, this.tapMarks.group);
     this.marks.onChange = (m) => {
       this.invalidate();
       this.onMarksChanged(m);
@@ -420,8 +435,27 @@ export class Studio {
     // Tap to focus.
     let down: { x: number; y: number } | null = null;
     let downAt = 0;
+    // Double tap to walk: the first tap, its single-tap action waiting until no second tap can come. Times are the
+    // events' own (when the finger moved, not when a busy frame let the handler run).
+    let downTs = 0;
+    let firstTap: { x: number; y: number; at: number; timer: number } | null = null;
+    const runFirst = () => {
+      if (!firstTap) return;
+      const f = firstTap;
+      firstTap = null;
+      window.clearTimeout(f.timer);
+      tap(f.x, f.y);
+    };
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
       downAt = performance.now();
+      downTs = e.timeStamp;
+      // A second finger, or a mode change since: the first tap acts now. A second touch that may be the double tap
+      // holds it until that touch lifts.
+      if (firstTap) {
+        if (!e.isPrimary || this.navMode !== 'walk') runFirst();
+        else if (downTs - firstTap.at < DOUBLE_TAP_MS) window.clearTimeout(firstTap.timer);
+        else runFirst();
+      }
       // A second finger makes it a pinch or pan, never a tap.
       down = e.isPrimary ? { x: e.clientX, y: e.clientY } : null;
       this.invalidate();
@@ -440,25 +474,44 @@ export class Studio {
     });
     this.renderer.domElement.addEventListener('pointerleave', () => this.measure.hover(null));
     window.addEventListener('keydown', this.onKey);
+    const tap = (x: number, y: number) => {
+      // A tap on a measurement label picks its run (and nothing else); a tap anywhere else lets it go. With the Hand
+      // picked, a door, lid, fire, water or light under the label wins over it.
+      const handHit = this.handActive && !!this.actionAt({ x, y });
+      if (!handHit && this.measure.tap(x, y)) return;
+      this.focusAt(x, y);
+      // With the Hand picked, a click on a door, lid, fire, water or light uses it.
+      if (this.handActive && this.useAction(0, { x, y })) return;
+      this.onPick(this.pickAt(x, y));
+    };
     this.renderer.domElement.addEventListener('pointerup', (e) => {
       // A finger wobbles more than a mouse does, but a tap is quick: a slow press or a small drag is not one.
-      if (down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400)) {
-        // A tap on a measurement label picks its run (and nothing else); a tap anywhere else lets it go. With the Hand
-        // picked, a door, lid, fire, water or light under the label wins over it.
-        const handHit = this.handActive && !!this.actionAt({ x: e.clientX, y: e.clientY });
-        if (!handHit && this.measure.tap(e.clientX, e.clientY)) {
-          down = null;
-          return;
-        }
-        this.focusAt(e.clientX, e.clientY);
-        // With the Hand picked, a click on a door, lid, fire, water or light uses it.
-        if (this.handActive && this.useAction(0, { x: e.clientX, y: e.clientY })) {
-          down = null;
-          return;
-        }
-        this.onPick(this.pickAt(e.clientX, e.clientY));
-      }
+      const isTap = !!down && e.isPrimary && Math.hypot(e.clientX - down.x, e.clientY - down.y) < (e.pointerType === 'touch' ? 8 : 4) && (e.pointerType !== 'touch' || performance.now() - downAt < 400);
       down = null;
+      if (this.tapToWalk && this.navMode === 'walk' && e.pointerType === 'touch' && e.isPrimary) {
+        const x = e.clientX, y = e.clientY;
+        if (firstTap && isTap && downTs - firstTap.at < DOUBLE_TAP_MS && Math.hypot(x - firstTap.x, y - firstTap.y) < DOUBLE_TAP_PX) {
+          window.clearTimeout(firstTap.timer);
+          firstTap = null;
+          this.walkToTap(x, y);
+          return;
+        }
+        // Not the second of two: a waiting first tap acts now (a drag after it drops it, as a look took over).
+        if (firstTap) {
+          if (isTap) runFirst();
+          else {
+            window.clearTimeout(firstTap.timer);
+            firstTap = null;
+          }
+        }
+        if (!isTap) return;
+        firstTap = { x, y, at: e.timeStamp, timer: window.setTimeout(runFirst, DOUBLE_TAP_MS) };
+        const hint = this.walkTargetAt(x, y, true);
+        if (hint) this.tapMarks.show(hint, 'hint');
+        this.invalidate();
+        return;
+      }
+      if (isTap) tap(e.clientX, e.clientY);
     });
 
     // WebGL can be taken away (Safari under memory pressure, GPU resets): say so, and rebuild when it comes back.
@@ -1376,6 +1429,100 @@ export class Studio {
     return new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
   }
 
+  /**
+   * Double tap to walk: where a walk to a screen point ends, on the ground (y is the ground there), or null for the sky
+   * or a spot too near to move to. Ground and paving are walked onto; a wall, tree, house, feature or water stops the
+   * walk WALK_STAND_OFF short of it, on the camera's side, and so does anything at waist height on the way (a low seat
+   * wall is stepped over). Never into a house or shed, never past the yard's edge (3 m out), never over WALK_MAX.
+   * `hitOnly`: just where the tap lands, on the ground (the first tap's ring).
+   */
+  walkTargetAt(cx: number, cy: number, hitOnly = false): THREE.Vector3 | null {
+    if (!this.build) return null;
+    const shown = (o: THREE.Object3D | null) => {
+      for (; o; o = o.parent) if (!o.visible) return false;
+      return true;
+    };
+    const hard = this.build.root.getObjectByName('hardscape');
+    const cons = this.build.root.getObjectByName('construction');
+    const solid = [...(hard ? [hard] : []), ...(cons ? [cons] : [])];
+    const water = this.build.water.surfaces;
+    this.raycaster.setFromCamera(this.clientNdc(cx, cy), this.camera);
+    const hit = this.raycaster.intersectObjects([...this.build.surfaces, ...solid, ...water], true).find((h) => h.distance < 400 && shown(h.object));
+    if (!hit) return null;
+    const p = hit.point;
+    if (hitOnly) {
+      // On the ground or paving where it lands; at the foot of a wall, tree or feature.
+      const g = this.groundAt(p.x, p.z);
+      return new THREE.Vector3(p.x, p.y - g < 0.5 ? Math.max(p.y, g) : g, p.z);
+    }
+    const cam = this.camera.position;
+    const dir = new THREE.Vector3(p.x - cam.x, 0, p.z - cam.z);
+    let dist = dir.length();
+    if (dist < 1e-3) return null;
+    dir.divideScalar(dist);
+    const up = (h: THREE.Intersection) => (h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld).y : 1);
+    const isIn = (o: THREE.Object3D | null, list: THREE.Object3D[]) => {
+      for (; o; o = o.parent) if (list.includes(o)) return true;
+      return false;
+    };
+    let plant = false;
+    for (let o: THREE.Object3D | null = hit.object; o && !plant; o = o.parent) plant = !!o.userData?.plantId;
+    const ground = !plant && !isIn(hit.object, water) && up(hit) > 0.7 && p.y - this.groundAt(p.x, p.z) < 0.5;
+    if (!ground) dist -= WALK_STAND_OFF;
+    dist = Math.min(dist, WALK_MAX);
+    // Something at waist height on the way (a wall, fence, house or feature; not the ground's own slope).
+    const g0 = this.groundAt(cam.x, cam.z);
+    this.raycaster.set(new THREE.Vector3(cam.x, g0 + 1, cam.z), dir);
+    this.raycaster.far = Math.max(0.01, dist + WALK_STAND_OFF);
+    const block = this.raycaster.intersectObjects([...this.focusSurfaces, ...solid], true).find((h) => shown(h.object) && up(h) < 0.7);
+    this.raycaster.far = Infinity;
+    if (block) dist = Math.min(dist, block.distance - WALK_STAND_OFF);
+    // Not past the yard's edge.
+    if (this.plan) {
+      const b = bounds(this.plan.site.boundary), pad = 3;
+      const lo = [b.minX - pad, b.minY - pad], hi = [b.maxX + pad, b.maxY + pad], o = [cam.x, cam.z], d = [dir.x, dir.z];
+      if (o[0] >= lo[0] && o[0] <= hi[0] && o[1] >= lo[1] && o[1] <= hi[1]) {
+        for (let i = 0; i < 2; i++) if (Math.abs(d[i]) > 1e-9) dist = Math.min(dist, ((d[i] > 0 ? hi[i] : lo[i]) - o[i]) / d[i]);
+      }
+    }
+    // Never into a house or shed, nor into water: back off toward the camera until clear.
+    const blocked = (x: number, z: number) => (this.plan?.structures ?? []).some((st) => st.kind !== 'cover' && st.polygon.length > 2 && (pointInPolygon([x, z], st.polygon) || distToEdge([x, z], st.polygon) < 0.8));
+    const down = new THREE.Vector3(0, -1, 0), from = new THREE.Vector3();
+    const wet = (x: number, z: number) => {
+      if (!water.length) return false;
+      this.raycaster.set(from.set(x, 200, z), down);
+      return this.raycaster.intersectObjects(water, true).some((h) => shown(h.object));
+    };
+    let backed = false;
+    for (let i = 0; i < 240 && dist > 0; i++) {
+      const x = cam.x + dir.x * dist, z = cam.z + dir.z * dist;
+      if (!blocked(x, z) && !wet(x, z)) break;
+      dist -= 0.25;
+      backed = true;
+    }
+    if (backed) dist -= 0.35;
+    if (dist < 0.3) return null;
+    const x = cam.x + dir.x * dist, z = cam.z + dir.z * dist;
+    return new THREE.Vector3(x, this.groundAt(x, z), z);
+  }
+
+  /** Double tap to walk: glide to where the tap points, at eye height, keeping the heading. False when it can't. */
+  walkToTap(cx: number, cy: number): boolean {
+    if (this.navMode !== 'walk') return false;
+    const dest = this.walkTargetAt(cx, cy);
+    if (!dest) return false;
+    const cam = this.camera.position;
+    const d = Math.hypot(dest.x - cam.x, dest.z - cam.z);
+    const eye = new THREE.Vector3(dest.x, dest.y + EYE_HEIGHT, dest.z);
+    const target = eye.clone().add(this.controls.target.clone().sub(cam));
+    // A short step is quick and a long walk takes longer, 0.4 to 1.2 s.
+    const ms = THREE.MathUtils.clamp(400 + d * 40, 400, 1200);
+    this.manualFocus = null;
+    this.tweenToPose({ eye, target, fov: this.camera.fov }, ms);
+    this.tapMarks.show(dest, 'target', performance.now(), ms + 500);
+    return true;
+  }
+
   /** Where the center of the view meets the yard (the ground, paving, walls, water), or null for sky. */
   aimPoint(): THREE.Vector3 | null {
     this.raycaster.setFromCamera(this.v2.set(0, 0), this.camera);
@@ -1747,6 +1894,7 @@ export class Studio {
     this.audio.update(this.camera, this.sky.uniforms.uNight.value, this.mode === 'orbit' ? this.controls.target : null);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
+    if (this.tapMarks.update(now)) this.dirty = true;
     // Something switched on by hand that moves by itself (a spa's bubbles and steam).
     if (this.build && this.state.motion) for (const a of this.build.features.actions) if (a.on && a.frame) a.frame(dt);
     // A door or lid swinging.

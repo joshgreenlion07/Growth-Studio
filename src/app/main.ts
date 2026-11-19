@@ -218,6 +218,8 @@ function bootStudio() {
   const host = $('#scene');
   try {
     studio = new Studio(host);
+    // iPad, walk mode: double tap the ground to walk there (Studio.walkToTap).
+    studio.tapToWalk = APPLE_TOUCH;
   } catch (e) {
     $('#scene-error').hidden = false;
     $('#scene-error').textContent = EMBED
