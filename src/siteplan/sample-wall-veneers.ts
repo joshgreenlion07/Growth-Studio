@@ -3,13 +3,13 @@ import type { SitePlan, Vec2 } from './types';
 /**
  * Wall veneers side by side: three 8 ft seat walls, 30 in tall, on a paver patio, each with a veneer column at both
  * ends in the same finish: MSI Arctic Golden stacked stone, Santa Barbara smooth trowel stucco and sand finish stucco
- * (Green Lion's warm gray from the three-pillar job). The columns are 40 in of column block under a 2 in cap.
+ * (in Sherwin-Williams SW 7029 Agreeable Gray). The columns are 40 in of column block under a 2 in cap.
  */
 export function sampleWallVeneers(): SitePlan {
   const S = 'sample' as const;
   const IN = 0.0254;
   const rect = (x0: number, y0: number, x1: number, y1: number): Vec2[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-  const finishes = ['msi-arctic-golden-ledger', 'stucco-santa-barbara-warm-gray', 'stucco-sand-finish-warm-gray'];
+  const finishes = ['msi-arctic-golden-ledger', 'stucco-santa-barbara-sw-agreeable-gray', 'stucco-sand-finish-sw-agreeable-gray'];
   const L = 96 * IN, col = 24 * IN, gap = 1.1, y = 3.0;
   const lines = finishes.map((id, i) => {
     const x0 = 1.0 + i * (L + 2 * col + gap) + col;

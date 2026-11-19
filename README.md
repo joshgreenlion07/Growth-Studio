@@ -470,8 +470,9 @@ Messages use `window.postMessage`:
   `msi-arctic-golden-ledger` (MSI Arctic Golden Splitface Panel 6x24, split quartzite, on a 10 1/2 in veneered
   block wall capped with MSI Arterra Caldera Blanca 13 x 24 x 2 cm coping, `msi-caldera-blanca-coping`; Coala is
   `msi-caldera-coala-coping`; a Midnight or matching cap choice still overrides),
-  `stucco-santa-barbara-warm-gray` and `stucco-sand-finish-warm-gray` (Green Lion's stucco finishes in the
-  three-pillar job's warm gray; a stucco wall's cap is the same stucco). Columns are features, one per finish
+  `stucco-santa-barbara-sw-agreeable-gray` and `stucco-sand-finish-sw-agreeable-gray` (Green Lion's stucco finishes in
+  Sherwin-Williams SW 7029 Agreeable Gray, #D1CBC1, LRV 60; the old `-warm-gray` ids load as these; a stucco wall's cap
+  is the same stucco). Columns are features, one per finish
   (`veneer-column-<look id>`): a Basalite 16 in column block core clad in the veneer under a Basalite Column Cap
   24 x 24 x 2 in, heights in whole 8 in block courses (`sizes`), option `pewterCap`. They share the swap class
   'Columns', so a placed column switches finish like any feature. Sample: "Wall veneers".
