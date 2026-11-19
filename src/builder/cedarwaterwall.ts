@@ -123,7 +123,7 @@ function potGeometry(): THREE.BufferGeometry {
  */
 const TRU_SCONCE = { body: 2.375, len: 5.375, stand: 3.25, plateH: 3.125, plateW: 2, plateT: 0.4, lens: 2.2 };
 
-function sconce(sink: FountainSink, x: number, y: number, z: number) {
+export function sconce(sink: FountainSink, x: number, y: number, z: number) {
   const s = TRU_SCONCE;
   const f = FIXTURE_FINISHES.bronze;
   const finish = plainMaterial('ww-sconce-bronze', { color: f.color, roughness: f.roughness, metalness: f.metalness });

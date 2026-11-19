@@ -444,6 +444,7 @@ export type FeatureKind =
   | 'pillarFountain'
   | 'veneerColumn'
   | 'cedarWaterWall'
+  | 'pillarWaterWall'
   | 'urnFountain'
   | 'patinaBowl'
   | 'fireWaterBowl'
@@ -1188,6 +1189,13 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless water wall: a 6 x 6 ft panel of MSI Silver Travertine ledger stone framed by horizontal cedar slats that run 3 ft out on each side under a cedar cap beam. A copper box scupper pours a lit sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble. A Tru-Scapes up and down sconce lights each cedar wing, and a gardenia in a PMD cement egg pot stands in front of each (an option).',
     facts: ['12 ft long x 6 ft 8 in tall, 2 ft 6 in from the back of the wall to the front of the pebbles (a 6 in wall and a 24 in pebble strip)', 'Stone panel 6 x 6 ft: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), split face', 'Clear cedar 1x4 slats, 5/8 in gaps, dark backer, cedar returns and a 4 in cedar cap beam', '12 in copper box scupper, lip 49 in up, LED lit; two 1 in copper spouts 36 in up, 24 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 60 in up: 10 W, 802 lm', 'Black Mexican beach pebble 1-2 in, no open water; LED pucks where the water lands', 'PMD 24 x 22 in Cement Egg Pot, White, with a Gardenia \'Veitchii\', one each side (option)'],
   }),
+  // Two-pillar stucco water wall with a Silver Travertine panel, from the owner's design drawing for a customer job, at
+  // the sizes it gives (builder/pillarwaterwall.ts).
+  F({
+    id: 'two-pillar-travertine-water-wall', name: 'Two-pillar stucco water wall, Silver Travertine', group: 'Water', kind: 'pillarWaterWall', footprint: [156 * 0.0254, 47 * 0.0254],
+    about: 'A pondless water wall 13 ft across: a 6 ft wall of MSI Silver Travertine ledger stone under Caldera Blanca coping between two 3 ft 6 in Santa Barbara stucco pillars with stucco crowns, 6 ft tall. A 36 in Majestic Mosegi copper spillway pours a sheet from the middle of the stone and two copper spouts pour beside it into black Mexican beach pebble, in a basin edged with a curved Belgard Melville Curb. A Tru-Scapes up and down sconce lights each pillar.',
+    facts: ['13 ft long x 6 ft tall at the pillars; 3 ft 11 in from the back of the pillars to the front of the basin', 'Pillars 42 x 24 in, Santa Barbara smooth trowel stucco, SW 7029 Agreeable Gray, stucco crown 72 in to the top', 'Wall 6 ft between the pillars, 10 1/2 in thick: MSI Silver Travertine Panel 6x24 (LPNLTSIL624), MSI Arterra Caldera Blanca 13 x 24 coping (LCOPNCALBLA1324), top 64 in up', 'Spillway: Majestic Water Spouts Mosegi, copper, Dark Brown Patina, 36 in wide (custom size), lip 50 in up', 'Two 1 in copper spouts 33 in up, 29 in either side of center', 'Two Tru-Scapes TSS-AS201 Dual Lamp (Traditional Up & Down) sconces, Bronze, 56 in up; LED pucks where the water lands', 'Basin: Belgard Melville Curb, Pearl, showing 5 1/2 in, on an arc 2 ft 6 in out from the wall; black Mexican beach pebble 1-2 in, no open water'],
+  }),
   // Urn fountains from the owner's design boards (builder/urnfountain.ts), drawn without the boards' plants.
   F({
     id: 'urn-fountain-glazed', name: 'Urn fountain, Blue Thumb glazed aqua-teal vase', group: 'Water', kind: 'urnFountain', urn: 'glazed', footprint: [68 * 0.0254, 60 * 0.0254],
@@ -1293,7 +1301,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens', kitchenIsland: 'Outdoor kitchens', kitchenPart: 'Kitchen parts',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
