@@ -86,6 +86,12 @@ import { build as dwarfMandarin } from './trees/dwarf-mandarin';
 import { build as pomegranate } from './trees/pomegranate';
 import { build as coprosmaTequilaSunrise } from './shrubs/coprosma-tequila-sunrise';
 import { build as starJasmineTrellis } from './shrubs/star-jasmine-trellis';
+import { build as heucheraMarmalade } from './perennials/heuchera-marmalade';
+import { build as salviaSpringKing } from './perennials/salvia-spring-king';
+import { build as euonymusEmeraldGaiety } from './shrubs/euonymus-emerald-gaiety';
+import { build as lamiumWhiteNancy } from './groundcover/lamium-white-nancy';
+import { build as oliveLittleOllie } from './shrubs/olive-little-ollie';
+import { build as feijoaStandard } from './trees/feijoa-standard';
 import { build as starJasmineMetalTrellis } from './shrubs/star-jasmine-metal-trellis';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
@@ -179,5 +185,11 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'pomegranate': pomegranate,
   'coprosma-tequila-sunrise': coprosmaTequilaSunrise,
   'star-jasmine-trellis': starJasmineTrellis,
+  'heuchera-marmalade': heucheraMarmalade,
+  'salvia-spring-king': salviaSpringKing,
+  'euonymus-emerald-gaiety': euonymusEmeraldGaiety,
+  'lamium-white-nancy': lamiumWhiteNancy,
+  'olive-little-ollie': oliveLittleOllie,
+  'feijoa-standard': feijoaStandard,
   'star-jasmine-metal-trellis': starJasmineMetalTrellis,
 };

@@ -12,7 +12,7 @@ night lighting, and a camera with focus blur.
 - **Plan editor.** Draw areas (pavers, porcelain, concrete, turf, beds),
   fences, walls, curbs, water, plants and features. Drag to move, drag corners
   to reshape, R to turn a feature, Delete to remove, Ctrl+Z to undo.
-- **Catalog from Green Lion's work:** 79 plants, 55 surfaces (multi-size
+- **Catalog from Green Lion's work:** 92 plants, 55 surfaces (multi-size
   pavers with charcoal soldier borders and inset lights, porcelain plank,
   stamped and broom concrete, artificial turf and putting green, black mulch,
   black pebble, cobble), 9 fence styles, raised planters with caps, 27
