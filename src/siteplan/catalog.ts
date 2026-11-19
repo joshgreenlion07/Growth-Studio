@@ -105,6 +105,12 @@ export interface PaverPattern {
   mix?: number[];
   /** With blend 'mix': the drifts' spatial frequency along and across them, cycles per meter (default 2.3, 6.5). */
   mixScale?: [number, number];
+  /** Face mix: the half-width of the band where one tone fades into the next, and how strongly a centimeter-scale
+   * break-up frays the drifts' edges into speckled wisps (Premier Slab); left out, crisp drifts with powdery edges. */
+  mixEdge?: [number, number];
+  /** Face mix: every piece's drifts run the same way, along its x side, as the pieces are laid in the maker's install
+   * photos (Premier Slab); left out, each piece's run along one side or the other at random. */
+  mixAlong?: boolean;
   /** The line's own joint sand as photographed (sRGB hex), when it differs from the usual sand (Premier Slab). */
   jointSand?: string;
   /** The maker's chamfer on the face's edges, meters, when its cut sheet gives one (Premier Slab: 3 mm). */
@@ -913,7 +919,7 @@ for (const L of DECK_LINES) {
 }
 for (const L of BASALITE_LINES) {
   for (const [n, palette, mix] of L.colors) {
-    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [1.6, 9], jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
+    MATERIALS.push(M({ id: `${L.slug}-${slugOf(n)}`, name: `${L.name} 24 x 24, ${n}`, use: 'hardscape', group: 'Pavers', recipe: 'paver', palette, pattern: { kind: 'grid', sizes: [L.size], joint: L.joint, face: 'smooth', blend: 'mix', mix, mixScale: [0.9, 12], mixEdge: [0.1, 0.2], mixAlong: true, jointSand: L.jointSand, chamfer: L.chamfer }, thickness: L.thickness, matches: `Basalite ${L.name}`, maker: 'Basalite', line: L.name, shelf: 'Pavers', color: n }));
   }
 }
 

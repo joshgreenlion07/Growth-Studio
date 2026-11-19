@@ -471,28 +471,46 @@ const MIX_Q: number[] = (() => {
   for (let i = 0; i < 6000; i++) out.push(mixField(r() * 400, r() * 400, 300 + Math.floor(r() * 50) * 3));
   return out.sort((a, b) => a - b);
 })();
-const mixQuantile = (k: number) => MIX_Q[Math.max(0, Math.min(MIX_Q.length - 1, Math.round(k * (MIX_Q.length - 1))))];
+/** The same with a break-up of amplitude b added (mixTone's `edge[1]`), which widens the spread the thresholds sit in. */
+const mixQs = new Map<number, number[]>();
+function mixQTable(b: number): number[] {
+  if (!b) return MIX_Q;
+  let q = mixQs.get(b);
+  if (!q) {
+    const r = rng('mix-q-' + b);
+    q = [];
+    for (let i = 0; i < 6000; i++) {
+      const up = (vnoise(r() * 400, r() * 400, 1e6, 92) - 0.5) * 0.45 + (vnoise(r() * 400, r() * 400, 1e6, 93) - 0.5) * 0.25 + (vnoise(r() * 400, r() * 400, 1e6, 94) - 0.5) * 0.5;
+      q.push(mixField(r() * 400, r() * 400, 300 + Math.floor(r() * 50) * 3) + up * b);
+    }
+    q.sort((a, c) => a - c);
+    mixQs.set(b, q);
+  }
+  return q;
+}
+const mixQuantile = (k: number, q = MIX_Q) => q[Math.max(0, Math.min(q.length - 1, Math.round(k * (q.length - 1))))];
 const mixCuts = new Map<string, number[]>();
 /** Thresholds for tones 1.. so each covers its share: from the top tone down, the share of what is left uncovered. */
-function mixThresholds(mix: number[]): number[] {
-  const key = mix.join(',');
+function mixThresholds(mix: number[], b = 0): number[] {
+  const key = mix.join(',') + '|' + b;
   let cut = mixCuts.get(key);
   if (!cut) {
+    const q = mixQTable(b);
     cut = new Array(mix.length).fill(1);
     let left = 1;
     for (let i = mix.length - 1; i >= 1; i--) {
       const p = Math.min(0.95, mix[i] / Math.max(1e-6, left));
-      cut[i] = mixQuantile(1 - p);
+      cut[i] = mixQuantile(1 - p, q);
       left -= mix[i];
     }
     mixCuts.set(key, cut);
   }
   return cut;
 }
-function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number, scale: [number, number] = [2.3, 6.5]): RGB {
-  const cut = mixThresholds(mix);
-  // Drifts run along one side of the piece or the other, leaning up to 5 degrees.
-  const th = (r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
+function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: number, r1: number, r2: number, scale: [number, number] = [2.3, 6.5], edge: [number, number] = [0.022, 0], along = false): RGB {
+  const cut = mixThresholds(mix, edge[1]);
+  // Drifts run along one side of the piece or the other (or, `along`, all the same way), leaning up to 5 degrees.
+  const th = (along || r1 < 0.5 ? 0 : Math.PI / 2) + (((r1 * 2) % 1) - 0.5) * 0.17;
   const ca = Math.cos(th), sa = Math.sin(th);
   const su = lx * ca + ly * sa, sv = -lx * sa + ly * ca;
   const s = 300 + (id % 50) * 3;
@@ -501,12 +519,17 @@ function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: numbe
   const g1x = lx * 0.81 - ly * 0.59, g1y = lx * 0.59 + ly * 0.81, g2x = lx * 0.38 + ly * 0.93, g2y = -lx * 0.93 + ly * 0.38;
   const grain = (vnoise(g1x * 170, g1y * 170, 1e6, s + 90) - 0.5) * 0.06 + (vnoise(g2x * 410, g2y * 410, 1e6, s + 91) - 0.5) * 0.035;
   const warp = (vnoise(su * 1.6, sv * 1.6, 1e6, s + 80) - 0.5) * 0.7;
+  // A cloudy break-up a centimeter or two across (mixEdge[1]), so the drifts fray into speckled wisps instead of
+  // ending on a clean line, and a wider blend band (mixEdge[0]) for their soft inner gradients (Premier Slab).
+  // Fine lines dragged along the drift (Basalite's install photos show them) fray it along its length too.
+  const breakup = edge[1] ? ((vnoise(g1x * 38, g1y * 38, 1e6, s + 92) - 0.5) * 0.45 + (vnoise(g2x * 85, g2y * 85, 1e6, s + 93) - 0.5) * 0.25 + (vnoise(su * 5, sv * 80, 1e6, s + 94) - 0.5) * 0.5) * edge[1] : 0;
   let c = colors[0];
   for (let i = 1; i < colors.length && i < mix.length; i++) {
     // Patches about 20 to 50 cm along and 6 to 18 cm across at the default scale (Premier Smooth); Premier Slab's run
-    // longer and narrower, about 60 cm by 4 to 12 cm (its mixScale).
-    const f = mixField(su * scale[0] + i * 7.3, sv * scale[1] + warp + i * 3.1, s + i * 11) + grain + (r2 - 0.5) * 0.03;
-    c = mixRGB(c, colors[i], smooth(cut[i] - 0.022, cut[i] + 0.022, f));
+    // most of the way across the slab and 3 to 10 cm wide, soft-edged and frayed (its mixScale and mixEdge), as
+    // Basalite's install photos show them.
+    const f = mixField(su * scale[0] + i * 7.3, sv * scale[1] + warp + i * 3.1, s + i * 11) + grain * (edge[1] ? 1.6 : 1) + breakup + (r2 - 0.5) * 0.03;
+    c = mixRGB(c, colors[i], smooth(cut[i] - edge[0], cut[i] + edge[0], f));
   }
   return c;
 }
@@ -714,7 +737,7 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
     let c = pick(colors, r1);
     // Real blends mix two tones inside one piece.
     if (p.blend === 'mix' && p.mix && hit.lx !== undefined && hit.ly !== undefined) {
-      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2, p.mixScale);
+      c = mixTone(colors, p.mix, hit.lx, hit.ly, id, r1, r2, p.mixScale, p.mixEdge, p.mixAlong);
     } else if (p.blend !== 'cloud') {
       const mott = fbm(u + r2 * 3.1, v + r3 * 2.7, Math.round(T * 4) || 4, 4, Math.floor(r2 * 50));
       c = mixRGB(c, pick(colors, r2), smooth(0.35, 0.75, mott) * (antiqued ? 0.7 : 0.55));
@@ -1661,7 +1684,7 @@ export function slabSet(spec: MaterialSpec, wIn = 24, dIn = wIn): PBRSet {
       let c: RGB;
       if (p?.blend === 'mix' && p.mix) {
         // A face-mix slab (Basalite Premier Slab) set as a one-slab pad: the same drifts as in its patio.
-        c = mixTone(colors, p.mix, x, y, 17, 0.31, 0.5, p.mixScale);
+        c = mixTone(colors, p.mix, x, y, 17, 0.31, 0.5, p.mixScale, p.mixEdge, p.mixAlong);
       } else {
         c = mixRGB(colors[0], colors[Math.min(n - 1, 1)], cloud);
         c = mixRGB(c, colors[Math.min(n - 1, 2)], smooth(0.55, 0.85, patch) * 0.5);

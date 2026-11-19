@@ -11,14 +11,14 @@
  *
  * Colors read from Basalite's swatch photo of each color (800 px; the slabs laid at 45 degrees, so the photo is turned
  * 45 degrees before the joints are found and masked, 9 px each side, with a 14 px inset from the photo's edge), in
- * 4 x 4 px cells: five tone groups by k-means in CIELAB, each tone its group's mean in linear light, with the share of
- * the face it covers, laid by the face-mix painter (blend 'mix', as Premier Smooth) in long, narrow streaks as the
- * photos show them (`mixScale`). Each color's tones are then scaled per channel so a top-down render in the default
- * light reads back that color's photo mean (the photos run a little cooler and the renderer's tone curve compresses the
- * lightest and darkest colors; before the correction Torino read 3 b* warmer and Oceanside 4.5 L* darker, and
- * Oceanside, the lightest, took a second pass). The joint
- * sand is the light half of the photos' joint pixels: light warm gray with dark grains. No Basalite image ships with
- * the app.
+ * 4 x 4 px cells: five tone groups by k-means in CIELAB, each tone its group's mean in linear light, with the share of the
+ * face it covers, laid by the face-mix painter (blend 'mix', as Premier Smooth) in long, narrow, soft streaks that fray
+ * into fine dragged lines (`mixScale`, `mixEdge`). Basalite's install photos show the streaks running parallel to one
+ * edge of each slab (its swatch photos are turned 45 degrees). Each color's tones are then scaled per channel so a
+ * top-down render in the default light reads back that color's photo mean (the photos run a little cooler and the
+ * renderer's tone curve compresses the lightest and darkest colors; before the correction Torino read 3 b* warmer and
+ * Oceanside 4.5 L* darker, and Oceanside, the lightest, took a second pass). The joint sand is the light half of the
+ * photos' joint pixels: light warm gray with dark grains. No Basalite image ships with the app.
  */
 export interface BasaliteLine {
   slug: string;
