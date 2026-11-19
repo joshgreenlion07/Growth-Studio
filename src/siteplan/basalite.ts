@@ -74,6 +74,7 @@ export const BASALITE_LINES: BasaliteLine[] = [
 export const PREMIER_SMOOTH = {
   slug: 'premier-smooth',
   name: 'Premier Smooth',
+  face: 'smooth' as 'smooth' | 'cleft',
   /** Real module per nominal inch: 11.73 in faces + 0.06 in of spacer joint on a nominal 12. */
   module: 11.79 / 12,
   joint: 0.06,
@@ -94,4 +95,24 @@ export const PREMIER_SMOOTH = {
   /** Sold as the 6 x 9 border only. */
   // Charcoal is nearly even in the photo: a soft mottle a few percent either side of its mean.
   borderOnly: [['Charcoal', ['#636363', '#686868', '#5f5f5f', '#5b5b5b'], [0.45, 0.25, 0.2, 0.1]]] as [string, string[], number[]][],
+};
+
+/**
+ * Premier Slate ("Pavers / Slate"), from Basalite's California product page, its cut sheet (BA-CA 5/24/2024) and pattern
+ * brochure (CA, 2025), read for the Sacramento region (Northern California). The same paver as Premier Smooth in every
+ * way but its face: the same sizes (6 x 12, 9 x 12, 12 x 12 combo pallet, 96 / 64 / 32, 121.9 sq ft; 12 x 18 and 6 x 9
+ * border sold separately), the same real faces and 0.06 in spacers (the 11.79 in module), the same 60 mm thickness, the
+ * same two patterns (3 Piece Combo Pattern and 4 Piece Pattern #4, the brochure's drawings match Premier Smooth's), and
+ * the same seven colors with Charcoal as the 6 x 9 border only. The owner confirmed the colors are Premier Smooth's
+ * (2026-11-18), so the face-mix tones and shares are Premier Smooth's.
+ *
+ *   Face      Basalite's slate finish (face 'cleft'): a nearly flat cast face with shallow cleft terraces, their wavy
+ *             step lines running across the piece roughly one way and fading in and out (Basalite's Torino and Midnight
+ *             Terrace swatch photos), soft broad hollows between them, and the same fine sandy paste as Premier Smooth.
+ */
+export const PREMIER_SLATE = {
+  ...PREMIER_SMOOTH,
+  slug: 'premier-slate',
+  name: 'Premier Slate',
+  face: 'cleft' as const,
 };

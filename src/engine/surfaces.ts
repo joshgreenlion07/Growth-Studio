@@ -587,12 +587,14 @@ const DETAIL_SLUGS = [
   'avalon-slate', 'catalina-grana', 'antiqued-flat-top',
   'dimensions-6', 'dimensions-12-60mm', 'dimensions-12-80mm', 'dimensions-18', 'dimensions-antiqued',
   'dimensions-single-units', 'dimensions-slabs', 'dimensions-slab-24',
-  'premier-smooth', 'premier-slab',
+  'premier-smooth', 'premier-slab', 'premier-slate',
 ];
 const DETAIL_LINES = new RegExp(`^(?:border-of-|paver-edge-)?(?:${DETAIL_SLUGS.join('|')})-`);
 function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
   if (!DETAIL_LINES.test(spec.id) || p.tumbled) return undefined;
   const f = p.face ?? 'textured';
+  // Premier Slate's cleft face is cast in Premier Smooth's paste: its close-range grain is the smooth face's.
+  if (f === 'cleft') return 'smooth';
   return f === 'slate' || f === 'smooth' || f === 'textured' || f === 'antiqued' ? f : undefined;
 }
 
@@ -651,7 +653,9 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
   // Antiqued Flat Top has no chamfer: its arris is worn round over about 7 mm, unevenly, with chips broken out of it
   // (drawn in the shader, `worn`), as the pattern texture draws it.
   const worn = p.face === 'antiqued';
-  const bevel = p.chamfer ?? (worn ? 0.007 : p.face === 'smooth' ? 0.0025 : 0.005);
+  // Premier Slate (cleft) has Premier Smooth's square arris and hairline chamfer.
+  const crisp = p.face === 'smooth' || p.face === 'cleft';
+  const bevel = p.chamfer ?? (worn ? 0.007 : crisp ? 0.0025 : 0.005);
   const common = {
     joint: (p.joint * IN) / 2,
     bevel,
@@ -661,7 +665,7 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
     push: bevel + (worn ? 0.016 : 0) + (1.5 * T) / size,
     // Steepest slope across the edge (normal x, y): the crisp chamfers are steep; the worn round of an antiqued arris
     // is gentle (about 2.5 mm over its 7 mm), so it shades softly instead of catching a bright line.
-    slope: worn ? 0.5 : p.face === 'smooth' ? 4 : 2.5,
+    slope: worn ? 0.5 : crisp ? 4 : 2.5,
     sand: p.jointSand ? hexRGB(photoAlbedo(p.jointSand)) : mulRGB(JOINT_SAND, 0.9),
   };
   const m = lay.module;
@@ -737,13 +741,13 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
   const T = lay.tile;
   const J = (p.joint * IN) / 2;
   const antiqued = p.face === 'antiqued';
-  const bevel = p.chamfer ?? (p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005);
+  const bevel = p.chamfer ?? (p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' || p.face === 'cleft' ? 0.0025 : 0.005);
   const size = paverMapSize(spec, p, T);
   // Noise frequencies per tile for the antiqued face, whole numbers so the texture stays seamless.
   const F = (m: number) => Math.max(2, Math.round(T / m));
   // The antiqued face's relief is set in real size (1 unit of height is about 4 mm), so a large patio texture and a small
   // border texture shade the same; the other faces keep their per-pixel strengths.
-  const relief = antiqued ? (0.004 * size) / T : p.tumbled ? 12 : p.face === 'slate' ? 15 : 9;
+  const relief = antiqued ? (0.004 * size) / T : p.tumbled ? 12 : p.face === 'slate' ? 15 : p.face === 'cleft' ? 12 : 9;
   const set = paint(size, T, relief, (u, v) => {
     const x = u * T, y = v * T;
     const hit = lay.at(x, y);
@@ -825,6 +829,38 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
       c = mixRGB(c, mulRGB(mixRGB(c, [0.62, 0.6, 0.56], 0.25), 1.04), broken * 0.35);
       h = bev * (0.9 + und * 0.1 + fineG * 0.03 - pit * 0.45 - pin * 0.3 - broken * 0.5);
       rough = 0.64 + fineG * 0.06 + pit * 0.12 + pin * 0.08 + broken * 0.18 - wear * 0.07;
+    } else if (p.face === 'cleft') {
+      // Basalite Premier Slate's slate finish: a nearly flat cast face with shallow cleft terraces. Their step lines run
+      // across the stone roughly one way (a different way on each stone), wavy, 9 to 17 cm apart, and fade in and out,
+      // so a stone shows a few partial lines and some stones almost none (Basalite's Torino and Midnight Terrace swatch
+      // photos); soft broad hollows lie between them, and the fine sandy paste is Premier Smooth's. The light catches
+      // each line's thin lip with a line of shadow beside it. Integer wave counts per tile keep the texture seamless.
+      const Fq = (m: number) => Math.max(2, Math.round(T / m));
+      const th = r2 * Math.PI;
+      const N = Math.max(3, Math.round((T / 0.13) * (0.7 + r1 * 0.6)));
+      const fu = Math.round(N * Math.cos(th)), fv = Math.round(N * Math.sin(th));
+      // Gentle waves along each line, a hand's width long, not wiggles.
+      const warp = (fbm(u + r3 * 1.9, v + r1 * 2.3, Fq(0.4), 3, 71 + (id % 13)) - 0.5) * 1.7;
+      const t = fu * u + fv * v + warp + r3 * 6.1;
+      const fr = t - Math.floor(t);
+      // Each line is a narrow ledge on an otherwise flat face: it rises over a couple of centimeters to its lip and
+      // drops just past it.
+      const tread = smooth(0.8, 0.95, fr) * (1 - smooth(0.95, 1, fr));
+      // The lines come and go: each shows over part of the stone only.
+      const on = smooth(0.52, 0.64, fbm(u + r1 * 3.1, v + r2 * 1.3, Fq(0.26), 3, 81 + (id % 7)));
+      // A sparser second set at another angle: short curved scallops where a thin layer broke away.
+      const fu2 = Math.round(N * 0.8 * Math.cos(th + 1.1)), fv2 = Math.round(N * 0.8 * Math.sin(th + 1.1));
+      const t2 = fu2 * u + fv2 * v + warp * 1.3 + r1 * 4.3;
+      const fr2 = t2 - Math.floor(t2);
+      const tread2 = smooth(0.82, 0.96, fr2) * (1 - smooth(0.96, 1, fr2));
+      const on2 = smooth(0.62, 0.74, fbm(u + r3 * 2.2, v + r1 * 1.8, Fq(0.1), 3, 87 + (id % 5)));
+      const und = fbm(u + r2 * 2.9, v + r3 * 3.7, Fq(0.18), 3, 91 + (id % 5));
+      const g = fine ? vnoise(u * 300, v * 300, 300, 5) : 0.5;
+      const cl = tread * on * 0.2 + tread2 * on2 * 0.08;
+      // The colors are Premier Smooth's, read from its photos for its smooth face: the same lift as that face.
+      c = mulRGB(c, 0.95 + g * 0.08);
+      h = bev * (0.6 + cl + und * 0.1 + g * 0.02);
+      rough = 0.74 + und * 0.06;
     } else if (p.face === 'slate') {
       // Cleft slate (Avalon Slate): each stone carries its own rippled cleft, ridges a few centimeters apart running
       // roughly along the stone and leaning a little differently on each, broken into a few shallow terraces.
