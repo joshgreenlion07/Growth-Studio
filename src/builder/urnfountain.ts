@@ -429,7 +429,7 @@ function glazedUrn(sink: FountainSink, seed: string) {
   foamRing(sink, s.foot / 2 + 0.5, s.foot / 2 + 4, s.bedTop + 0.4);
 
   // The bed over the AquaBox: Yosemite Tan; the jar's foot stands in it.
-  sink.add(plainMaterial('urn-basin-floor', { color: '#141311', roughness: 1 }), new THREE.CircleGeometry(s.bed[0] * IN, 40).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.5) * IN, 0).toNonIndexed());
+  sink.add(basinFloor(), new THREE.CircleGeometry(s.bed[0] * IN, 40).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.2) * IN, 0).toNonIndexed());
   sink.pebbles(GLAZED_PEBBLE, ovalIn(s.bed[0], s.bed[1], `${seed}-bed`), [circleIn(s.foot / 2 + 0.3)], s.bedTop, [0.85, 0.8, 0.76]);
 
   // Boulders: a dark one in front, off to the side, and a tan one behind on the other side.
@@ -471,7 +471,7 @@ function jarUrn(sink: FountainSink, seed: string) {
   foamRing(sink, s.foot / 2 + 0.5, s.foot / 2 + 4, s.bedTop + 0.3);
 
   // The bed over the 48 in Achelous basin: black Mexican beach pebble, wet round the vase.
-  sink.add(plainMaterial('urn-basin-floor', { color: '#141311', roughness: 1 }), new THREE.CircleGeometry(s.bed[0] * IN, 40).scale(1, s.bed[1] / s.bed[0], 1).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.5) * IN, 0).toNonIndexed());
+  sink.add(basinFloor(), new THREE.CircleGeometry(s.bed[0] * IN, 40).scale(1, s.bed[1] / s.bed[0], 1).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.2) * IN, 0).toNonIndexed());
   sink.pebbles('mexican-beach-pebble-1-2', ovalIn(s.bed[0], s.bed[1], `${seed}-bed`), [circleIn(s.foot / 2 + 0.3)], s.bedTop, [0.72, 0.6, 0.5]);
 
   // Three clean tan boulders round the basin, as on the board: a big one front left, a small one in front of it, one
@@ -654,7 +654,7 @@ function bubblerUrn(sink: FountainSink, seed: string, choice: BubblerChoice) {
   foamRing(sink, s.foot / 2 + 0.5, s.foot / 2 + 4.5, s.bedTop + 0.4);
 
   // The 7 ft circle of black Mexican beach pebble over the hidden 4 ft vault.
-  sink.add(plainMaterial('urn-basin-floor', { color: '#141311', roughness: 1 }), new THREE.CircleGeometry((s.bed[0] + 0.5) * IN, 48).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.5) * IN, 0).toNonIndexed());
+  sink.add(basinFloor(), new THREE.CircleGeometry((s.bed[0] + 0.5) * IN, 48).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.2) * IN, 0).toNonIndexed());
   sink.pebbles('mexican-beach-pebble-1-2', circleIn(s.bed[0], 64), [circleIn(s.foot / 2 + 0.3)], s.bedTop, [0.8, 0.74, 0.68]);
   if (choice.ring) paverRing(sink, s.bed[0], seed);
 
@@ -685,4 +685,12 @@ function bubblerUrn(sink: FountainSink, seed: string, choice: BubblerChoice) {
     // Its light on the urn's face, from just in front of it, warm 2700 K.
     sink.light(0, (s.bedTop + 14) * IN, 13 * IN, '#ffc283', 0.9, 2.2);
   }
+}
+
+/**
+ * The dark floor of a basin under its pebbles: 1.2 in under the bed's top, so with a shallow bed it still stands clear
+ * of the ground it covers, and drawn with a polygon offset so it never flickers against the ground or the bed.
+ */
+function basinFloor() {
+  return plainMaterial('urn-basin-floor', { color: '#141311', roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 }

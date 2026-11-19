@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { beginMaterialBuild } from './materials';
 import { featureById, featureOption, plantById } from '../siteplan/catalog';
-import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
+import { bounds, centroid, pointInPolygon, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
@@ -427,7 +427,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
         }
         continue;
       }
-      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
+      if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall' || spec.kind === 'slatScreen' || spec.kind === 'gardenBench' || spec.kind === 'shedResin' || spec.kind === 'raisedBedCedar') {
         // A waterfall clears its placed size's outline (its sizes run from 18 x 20 to 18 x 28 ft).
         if (inFootprint(p, f.position, f.rotationDeg, spec.kind === 'fourFall' ? fourFallFrame(f, spec).outline : spec.footprint, 0.05)) return true;
         continue;
@@ -442,7 +442,11 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Inside a four-fall waterfall's soil there is no bed of the yard's own: loose stones and humus pieces are left out
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
   const fallCuts = fourFallGroundCuts(plan.features, gm.fourFalls);
-  const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
+  // Nor inside a feature's own pebble bed (an urn bubbler's ring, a pillar basin): it is drawn stone by stone on its own,
+  // so the bed it is set in must not show its stones or clods through it.
+  const featBeds = features.pebbleBeds.map((b) => ({ poly: b.polygon, box: bounds(b.polygon) }));
+  const inFeatBed = (p: Vec2) => featBeds.some((b) => p[0] >= b.box.minX && p[0] <= b.box.maxX && p[1] >= b.box.minY && p[1] <= b.box.maxY && pointInPolygon(p, b.poly));
+  const gmBeds: GroundModel = fallCuts.length || featBeds.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) || inFeatBed(p) ? null : gm.zoneAt(p)) } : gm;
   // Bed pieces stay off the curbs: a piece whose center is within its curb's body by more than 60% of its own size.
   const curbs = bodyGrid(curbBodies(plan));
   const onCurb = curbs.list.length ? (x: number, z: number, r: number) => curbs.grid.someWithin(x, z, curbs.maxHalf + r, (k, d) => d < curbs.list[k].half + r * 0.4) : undefined;
