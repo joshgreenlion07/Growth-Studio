@@ -9,6 +9,7 @@ import { vnoise } from '../engine/noise';
 import { CURB, ROAD, SIDEWALK, streetCoords, streetFrame } from './context';
 import type { PoolLayout } from './pools';
 import type { Quality } from '../engine/post';
+import { fourFallGroundCuts, type GroundCut } from './fourfall';
 
 /**
  * Terrain for the property and its surroundings, plus the ground surface
@@ -389,7 +390,7 @@ const stageUniforms = (): GroundStageUniforms => ({
 });
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
-function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout, stage: GroundStageUniforms): THREE.MeshPhysicalMaterial {
+function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTexture[], pools: PoolLayout, stage: GroundStageUniforms, cuts: GroundCut[] = []): THREE.MeshPhysicalMaterial {
   const soil = soilTextures();
   const sets: PBRSet[] = [soil, ...layerIds.map((id) => materialTextures(materialById.get(id)!))];
   const roughK = [0.97, ...layerIds.map((id) => {
@@ -422,6 +423,10 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
       s.uniforms[`uT${i}`] = { value: 1 / l.tileMeters };
     });
     Object.assign(s.uniforms, stage);
+    if (cuts.length) {
+      s.uniforms.uFfCut = { value: cuts.map((c) => new THREE.Vector4(c.cx, c.cy, c.cos, c.sin)) };
+      s.uniforms.uFfExt = { value: cuts.map((c) => new THREE.Vector2(c.hx, c.hz)) };
+    }
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -440,11 +445,18 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
          varying vec3 vGW;
          uniform sampler2D uSplatA;${splatB ? ' uniform sampler2D uSplatB;' : ''} uniform vec4 uArea;
          uniform float uSoil; uniform sampler2D uCut; uniform vec4 uCutBox; uniform vec2 uCutCh;
+         ${cuts.length ? `uniform vec4 uFfCut[${cuts.length}]; uniform vec2 uFfExt[${cuts.length}];` : ''}
          ${decl}`,
       )
       .replace(
         '#include <map_fragment>',
-        `if (uCutCh.x + uCutCh.y > 0.5) {
+        `${cuts.length ? `// A four-fall waterfall brings its own soil (builder/fourfall.ts): the site ground is not drawn under it.
+         for (int i = 0; i < ${cuts.length}; i++) {
+           vec2 fd = vGW.xz - uFfCut[i].xy;
+           vec2 fl = vec2(fd.x * uFfCut[i].z - fd.y * uFfCut[i].w, fd.x * uFfCut[i].w + fd.y * uFfCut[i].z);
+           if (abs(fl.x) < uFfExt[i].x && abs(fl.y) < uFfExt[i].y) discard;
+         }` : ''}
+         if (uCutCh.x + uCutCh.y > 0.5) {
            vec2 cuv = (vGW.xz - uCutBox.xy) / uCutBox.zw;
            if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0 && dot(texture2D(uCut, cuv).rg, uCutCh) < 0.5) discard;
          }
@@ -473,7 +485,7 @@ function splatMaterial(layerIds: string[], area: Bounds, splats: THREE.DataTextu
     // The ground is opened along each pool's outline, so the pool's tiled shell shows.
     pools.patchGround(s);
   };
-  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}-n${withNormal}`;
+  mat.customProgramCacheKey = () => `ground-splat-stage-${layerIds.join(',')}${pools.pools.length ? '-pools' : ''}-n${withNormal}-ff${cuts.length}`;
   return mat;
 }
 
@@ -524,7 +536,7 @@ export function* groundSteps(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const splats = splatTextures(plan, area, quality === 'draft' ? 30 : 60, layers);
   yield 'ground splats';
   const stage = stageUniforms();
-  const mat = splatMaterial(layers, area, splats, pools, stage);
+  const mat = splatMaterial(layers, area, splats, pools, stage, fourFallGroundCuts(plan.features));
   yield 'ground material';
   const step = quality === 'draft' ? 0.3 : 0.18;
   const site = new THREE.Mesh(yield* gridGeometry(area, step, gm.grade), mat);

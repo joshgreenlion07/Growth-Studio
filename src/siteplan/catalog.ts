@@ -20,6 +20,7 @@ import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
+import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
 
 export type PlantForm =
   | 'shadeTree'
@@ -325,6 +326,7 @@ export type FeatureKind =
   | 'cedarWaterWall'
   | 'patinaBowl'
   | 'fireWaterBowl'
+  | 'fourFall'
   | 'spotLight'
   | 'steppingPad'
   | 'steppingStone'
@@ -914,6 +916,20 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'water-wall-plaster', name: 'Water wall, plaster and ledgestone', group: 'Water', kind: 'waterWallPlaster', footprint: [4.2, 1.2] }),
   F({ id: 'water-wall-porcelain', name: 'Water wall, porcelain panel', group: 'Water', kind: 'waterWallPorcelain', footprint: [2.6, 0.9] }),
   F({ id: 'water-wall-stucco', name: 'Water wall, stucco and dark stone', group: 'Water', kind: 'waterWallStucco', footprint: [3.4, 1.4] }),
+  // Four-fall rock waterfall (siteplan/fourfall.ts, builder/fourfall/): sized by its levels, outline includes its soil.
+  F({
+    id: 'rock-waterfall-4-fall', name: 'Four-fall rock waterfall', group: 'Water', kind: 'fourFall',
+    footprint: FOUR_FALL_SIZES[FOUR_FALL_DEFAULT_SIZE].size.slice(0, 2) as [number, number], sizes: FOUR_FALL_SIZES, size: FOUR_FALL_DEFAULT_SIZE,
+    options: [{ key: 'fallLights', label: 'Lights under the falls', default: true }],
+    about: 'A boulder waterfall built into a planted mound: four falls stepping down from a head pool between the top stones to a shallow cobble basin at the patio, the falls alternating left and right. Each fall pours over two or three flat lip stones set at slightly different heights, in front of a dark ledge face, framed by stacked stones. Blocky granite, river-worn stones and layered slabs are set a third to a half into the soil and lean into the slope; the bank between them is bark mulch for planting. A warm light sits under each fall.',
+    facts: [
+      'Front 12 ft wide, with all the rockwork inside it; 7, 7 1/2 or 8 ft from the patio to the top stone',
+      'Lowest level 5 to 6 ft front to back, each of the three upper levels 3 to 5 ft; 16 ft of rockwork front to back at 5 1/2 and 3 ft',
+      'The outline includes the planted soil it brings: 3.2 ft past each side and about 5 ft behind the top stones',
+      'Basin water about 2 in below the patio; four lights under the falls',
+      'Plants placed on the mound stand on its soil and are kept out of the rock and water',
+    ],
+  }),
   F({ id: 'copper-bowl', name: 'Copper bowl planter', group: 'Accents', kind: 'copperBowl', footprint: [0.75, 0.75] }),
   // Three-pillar stucco pondless water feature and its bowl planters, drawn to a finished Green Lion install
   // (builder/pillarfountain.ts has the sizes and how they were measured). The bowls on the pillars are an option; a
@@ -1006,7 +1022,7 @@ const SWAP_CLASS: Record<FeatureKind, string> = {
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
   kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
-  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features',
+  waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', fourFall: 'Waterfalls',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',
   cortenScreen: 'Screens and trellises', cortenTreePanel: 'Screens and trellises', trellisCable: 'Screens and trellises', trellisGrid: 'Screens and trellises',
   boulder: 'Boulders', mossRock: 'Boulders', canyonBoulder: 'Boulders', flagLedge: 'Flagstone pieces', flagLip: 'Flagstone pieces', flagEdge: 'Flagstone pieces', steppingPad: 'Stepping pads', steppingStone: 'Stepping stones', puttingCup: 'Putting cups',
