@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { swings } from '../actions';
 import type { FeatureSpec } from '../../siteplan/catalog';
-import { DEFAULT_BAR_LEDGE, FRONT_DROP, counterFinish, kitchenPartById, partStub, veneerFinish, type KitchenIsland, type KitchenPart } from '../../siteplan/kitchen';
+import { DEFAULT_BAR_LEDGE, counterFinish, frontLineIn, islandBaseOffsetIn, kitchenPartById, partStub, standsOnFloor, veneerFinish, type KitchenIsland, type KitchenPart } from '../../siteplan/kitchen';
 import { IN, bx, counterMaterial, kitchenMats, veneerMaterial, type KitchenSink, type Mover } from './kit';
-import { buildPart, notched, ownsInside, standsOnFloor, stool, type PartCtx } from './parts';
+import { buildPart, notched, ownsInside, stool, type PartCtx } from './parts';
 
 /*
  * An outdoor kitchen island from its bays (siteplan/kitchen.ts). Local space: the base centered on the origin, its
@@ -13,8 +13,8 @@ import { buildPart, notched, ownsInside, standsOnFloor, stool, type PartCtx } fr
  *             behind each opening (an open door shows the inside of the island); the deck under the counter is dark.
  *   Counter   one slab, notched at the front for front-panel drop-ins and cut for sinks, with an eased edge; overhangs
  *             at the front, back and finished ends.
- *   Fronts    the tops of all framed fronts line up 6 3/4 in under the counter's top, just under a grill's or griddle's
- *             front panel (its body hangs in the island behind the frame's top); cold units stand on the patio. Parts stacked in one bay go top down with 1 1/2 in between.
+ *   Fronts    framed fronts hang from 1 1/2 in under the counter's underside, or just under a grill's or griddle's front
+ *             panel (its body hangs in the island behind the frame's top) or a sink's bowl; cold units stand on the patio. Parts stacked in one bay go top down with 1 1/2 in between.
  *   Light     an LED strip under the counter's front overhang (not across the notches), lighting the veneer below it
  *             with a row of soft downward beams.
  *   Bar       the raised bar ledge option: a veneered wall behind the base, a bar top over it, stools behind.
@@ -74,14 +74,13 @@ export function buildIsland(sink: KitchenSink, isl: KitchenIsland, ch: IslandCho
     const fronts = (b.front ?? []).map((id) => kitchenPartById.get(id)).filter((p): p is KitchenPart => !!p);
     return { b, cx, x0: cx - b.widthIn / 2, x1: cx + b.widthIn / 2, topPart, fronts };
   });
-  const line = top - FRONT_DROP;
 
   // Where every front part goes, and the openings in the face.
   const holes: [number, number, number, number][] = [];
   const cavities: [number, number, number, number, number][] = [];
   const placed: { part: KitchenPart; bay: (typeof bays)[number]; y: number }[] = [];
   for (const bay of bays) {
-    let y = line;
+    let y = frontLineIn(isl, bay.b);
     for (const p of bay.fronts) {
       const cut = p.cutout ?? [p.overall[0] - 1.5, 21, p.overall[2] - 1.5];
       if (standsOnFloor(p)) {
@@ -241,7 +240,7 @@ export function buildIsland(sink: KitchenSink, isl: KitchenIsland, ch: IslandCho
 export function buildKitchenFeature(sink: KitchenSink, spec: FeatureSpec, options: Record<string, boolean> | undefined, seed: string) {
   const opt = (key: string) => options?.[key] ?? spec.options?.find((o) => o.key === key)?.default ?? false;
   if (spec.kind === 'kitchenIsland' && spec.island) {
-    buildIsland(sink, spec.island, { underLight: opt('underLight'), barLedge: opt('barLedge'), seed, options });
+    buildIsland(shifted(sink, islandBaseOffsetIn(spec.island)), spec.island, { underLight: opt('underLight'), barLedge: opt('barLedge'), seed, options });
     return;
   }
   const part = spec.kitchenPart ? kitchenPartById.get(spec.kitchenPart) : undefined;
@@ -250,5 +249,27 @@ export function buildKitchenFeature(sink: KitchenSink, spec: FeatureSpec, option
     stool(sink.add, kitchenMats(), part, 0, 0);
     return;
   }
-  buildIsland(sink, partStub(part), { underLight: false, barLedge: false, seed, options });
+  const stub = partStub(part);
+  buildIsland(shifted(sink, islandBaseOffsetIn(stub)), stub, { underLight: false, barLedge: false, seed, options });
+}
+
+/**
+ * A sink that moves everything by (dx, dz) inches: the island is built about its base and placed so its counter slab
+ * (the footprint) is centered on the placement.
+ */
+function shifted(sink: KitchenSink, [dxIn, dzIn]: [number, number]): KitchenSink {
+  const dx = dxIn * IN, dz = dzIn * IN;
+  if (!dx && !dz) return sink;
+  return {
+    ...sink,
+    add: (m, g) => sink.add(m, g.translate(dx, 0, dz)),
+    hinge: (px, py, pz) => {
+      const h = sink.hinge(px + dx, py, pz + dz);
+      return { group: h.group, add: (m, g) => h.add(m, g.translate(dx, 0, dz)) };
+    },
+    anchor: (parent, x, y, z) => (parent ? sink.anchor(parent, x, y, z) : sink.anchor(null, x + dx, y, z + dz)),
+    fire: (t, style) => sink.fire(t.map((g) => ({ ...g, x: g.x + dx, z: g.z + dz })), style),
+    light: (x, y, z, ...rest) => sink.light(x + dx, y, z + dz, ...rest),
+    landLight: (l) => sink.landLight({ ...l, position: l.position.clone().add(new THREE.Vector3(dx, 0, dz)) }),
+  };
 }

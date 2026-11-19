@@ -80,6 +80,10 @@ export const VENEER_FINISHES: VeneerFinish[] = [
   { id: 'msi-gold-rush', name: 'MSI Gold Rush ledger', kind: 'ledger', tones: ['#b69466', '#9c7650', '#c9ae86', '#7f6046', '#d8c6a6', '#8e7a66', '#a7835c', '#6b5442'], weights: [0.2, 0.16, 0.14, 0.12, 0.1, 0.1, 0.1, 0.08], rowIn: [1.25, 2], pieceIn: [3, 10], rust: 0.8, quartz: true, mean: [0.27, 0.19, 0.11], thicknessIn: 1.25, note: 'MSI Gold Rush Panel 6x24, split-face quartzite, gold and rust with cream and gray' },
   { id: 'msi-alaska-gray', name: 'MSI Alaska Gray ledger', kind: 'ledger', tones: ['#8a8b8c', '#6f7072', '#a3a3a2', '#55575a', '#b9b8b4', '#7b7a76', '#62615f', '#9a968f'], weights: [0.2, 0.17, 0.14, 0.13, 0.1, 0.1, 0.09, 0.07], rowIn: [1.25, 2], pieceIn: [3, 12], rust: 0.1, quartz: true, mean: [0.12, 0.12, 0.12], thicknessIn: 1.25, note: 'MSI Alaska Gray Panel 6x24, split-face quartzite, mid and charcoal gray with silver' },
   { id: 'msi-rustic-gold', name: 'MSI Rustic Gold ledger', kind: 'ledger', tones: ['#8c6a48', '#6d5038', '#a6845e', '#58412f', '#b99b74', '#7a654f', '#9a7550', '#4a3829'], weights: [0.2, 0.16, 0.14, 0.13, 0.1, 0.1, 0.09, 0.08], rowIn: [1.25, 2.25], pieceIn: [3, 10], rust: 0.9, mean: [0.17, 0.115, 0.07], thicknessIn: 1.25, note: 'MSI Rustic Gold Panel 6x24, split-face slate, gold and brown with rust' },
+  { id: 'msi-sierra-blue', name: 'MSI Sierra Blue ledger', kind: 'ledger', tones: ['#6f777c', '#5b6469', '#858c8f', '#4a5257', '#9aa0a0', '#7b7f7c', '#666c6e', '#8e8a80'], weights: [0.2, 0.17, 0.14, 0.13, 0.1, 0.1, 0.09, 0.07], rowIn: [1.25, 2], pieceIn: [3, 12], rust: 0.15, mean: [0.1, 0.11, 0.115], thicknessIn: 1.25, note: 'MSI Sierra Blue Panel 6x24, split-face slate, blue-gray with charcoal and a little tan' },
+  { id: 'msi-coal-canyon', name: 'MSI Coal Canyon ledger', kind: 'ledger', tones: ['#3a3a3a', '#2c2c2d', '#4a4948', '#232324', '#5a5855', '#36322f', '#414040', '#2f2e2c'], weights: [0.2, 0.17, 0.14, 0.13, 0.1, 0.1, 0.09, 0.07], rowIn: [1.25, 2], pieceIn: [3, 12], rust: 0.2, mean: [0.04, 0.04, 0.04], thicknessIn: 1.25, note: 'MSI Coal Canyon Panel 6x24, split-face slate, charcoal and near-black' },
+  { id: 'msi-golden-honey', name: 'MSI Golden Honey ledger', kind: 'ledger', tones: ['#c09a62', '#a8834f', '#d2b588', '#8f6c45', '#dcc7a2', '#b08f68', '#9c7a52', '#c7a77a'], weights: [0.2, 0.17, 0.14, 0.13, 0.1, 0.1, 0.09, 0.07], rowIn: [1.25, 2], pieceIn: [3, 10], rust: 0.6, quartz: true, mean: [0.3, 0.21, 0.11], thicknessIn: 1.25, note: 'MSI Golden Honey Panel 6x24, split-face quartzite, warm tan and honey' },
+  { id: 'msi-mountain-bluestone', name: 'MSI Mountain Bluestone ledger', kind: 'ledger', tones: ['#5f676d', '#4d555b', '#737a7e', '#3f464c', '#868b8c', '#6c6a66', '#585e62', '#7d7b74'], weights: [0.2, 0.17, 0.14, 0.13, 0.1, 0.1, 0.09, 0.07], rowIn: [1.3, 2.2], pieceIn: [4, 12], rust: 0.25, mean: [0.08, 0.09, 0.095], thicknessIn: 1.25, note: 'MSI Mountain Bluestone Panel 6x24, split-face bluestone, deep blue-gray' },
   { id: 'msi-arctic-golden', name: 'MSI Arctic Golden ledger', kind: 'ledger', look: 'msi-arctic-golden-ledger', thicknessIn: 1.25, note: 'MSI Arctic Golden Splitface Panel 6x24 (LPNLQARCGLD624), quartzite, cool white and cream with golden veins' },
   { id: 'stucco-santa-barbara', name: 'Santa Barbara stucco, SW 7029 Agreeable Gray', kind: 'stucco', look: 'stucco-santa-barbara-sw-agreeable-gray', thicknessIn: 0.875, note: 'Smooth trowel stucco over lath and cement board, painted (any color; shown in Sherwin-Williams SW 7029 Agreeable Gray)' },
 ];
@@ -90,9 +94,9 @@ export const veneerFinish = (id: string | undefined) => VENEER_FINISHES.find((v)
 /* ------------------------------------------------------------------ */
 
 export type KitchenPartType =
-  | 'grill' | 'griddle' | 'sideBurner' | 'pizzaCountertop' | 'pizzaDome' | 'sink'
-  | 'fridge' | 'iceMaker' | 'kegerator'
-  | 'door' | 'doubleDoor' | 'drawers' | 'propane' | 'trash' | 'towel'
+  | 'grill' | 'griddle' | 'sideBurner' | 'powerBurner' | 'pizzaCountertop' | 'pizzaDome' | 'sink'
+  | 'fridge' | 'iceMaker' | 'kegerator' | 'beverage'
+  | 'door' | 'doubleDoor' | 'drawers' | 'combo' | 'propane' | 'trash' | 'towel'
   | 'stool' | 'counter' | 'veneer';
 
 /**
@@ -125,6 +129,12 @@ export interface KitchenPart {
   bayIn: number;
   /** Burners (and knobs), drawers, door leaves. */
   burners?: number;
+  /** Control knobs, when they are not one a burner (as drawn on a design). */
+  knobs?: number;
+  /** A trash pull-out's bins. */
+  bins?: number;
+  /** A stool's seat height, inches. */
+  seatIn?: number;
   drawers?: number;
   leaves?: 1 | 2;
   /** The default hinge side of a single door, as you face it. */
@@ -175,8 +185,8 @@ const GRIDDLES: [number, [number, number, number], [number, number, number], num
 ];
 for (const [w, overall, cutout, burners, bay, model] of GRIDDLES) part({
   id: `kitchen-griddle-blackstone-${w}`, family: 'griddle', familyName: 'Blackstone built-in griddle', type: 'griddle', mount: 'dropIn', label: `${w} in`, name: `Blackstone built-in griddle, ${w} in`,
-  overall, cutout, bayIn: bay, burners, nameText: 'BLACKSTONE',
-  about: `Blackstone's ${w} in built-in griddle: a rolled steel cooktop in a stainless surround with a rear grease trough, a black powder-coated hood on a rear hinge, and a brushed stainless front with ${burners} black control knobs on chrome bezels. The name is shown as plain text on the hood.`,
+  overall, cutout, bayIn: bay, burners, knobs: w === 28 ? 4 : burners, nameText: 'BLACKSTONE',
+  about: `Blackstone's ${w} in built-in griddle: a rolled steel cooktop in a stainless surround with a rear grease trough, a black powder-coated hood on a rear hinge, and a brushed stainless front with ${w === 28 ? 4 : burners} black control knobs on chrome bezels (four as on the customer design; check the chosen model). The name is shown as plain text on the hood.`,
   facts: [model, `Cook surface about ${w === 28 ? '27 1/2 x 21 1/2' : '35 1/2 x 21 1/2'} in; ${burners} burners`, 'Hand tool: lift the hood'],
 });
 part({
@@ -190,6 +200,12 @@ part({
   overall: [27, 21, 10], cutout: [24.5, 20.5, 8.5], bayIn: 28, burners: 2,
   about: 'A drop-in double side burner: two burners under one cast iron grate, a flat stainless lid on a rear hinge, two knobs on the front.',
   facts: ['Typical 26 to 28 in wide, 21 in deep', 'Hand tool: lift the lid'],
+});
+part({
+  id: 'kitchen-power-burner', family: 'side-burner', familyName: 'Side burner, drop-in', type: 'powerBurner', mount: 'dropIn', label: 'Power burner', name: 'Power burner, drop-in, 24 in',
+  overall: [25, 21, 10], cutout: [22, 20, 8.5], bayIn: 26, burners: 1,
+  about: 'A drop-in high-output power burner for a wok or a large pot: one large brass ring burner under a heavy cast iron wok grate, a flat stainless lid on a rear hinge, one knob on the front.',
+  facts: ['Typical 24 to 26 in wide, 21 in deep', 'Hand tool: lift the lid'],
 });
 part({
   id: 'kitchen-pizza-oven-countertop', family: 'pizza-oven', familyName: 'Pizza oven', type: 'pizzaCountertop', mount: 'onCounter', label: 'Countertop, 16 in', name: 'Pizza oven, countertop gas, 16 in stone',
@@ -235,33 +251,59 @@ part({
   about: 'A 24 in outdoor kegerator: a stainless door with a bar handle and a front vent grille, a half-barrel keg inside, and a dual-tap stainless tower on the counter above with a drip tray.',
   facts: ['The tap tower stands about 16 in above the counter', 'Hand tool: open the door'],
 });
+part({
+  id: 'kitchen-beverage-center-24', family: 'beverage', familyName: 'Beverage centre', type: 'beverage', mount: 'front', label: '24 in', name: 'Beverage centre, 24 in outdoor, glass door',
+  overall: [24, 24, 34], cutout: [24.5, 24, 34.5], bayIn: 25, hinge: 'right',
+  about: 'A 24 in outdoor-rated beverage centre: a stainless-framed tinted glass door with a bar handle over a front vent grille, a lit liner with wire shelves of cans and bottles.',
+  facts: ['Front-vented', 'Hand tool: open the door'],
+});
 
 // Doors and drawers (flush-mount brushed stainless, overall size includes the frame).
-const DOORS: [number, number, number, number][] = [[14, 20, 12.5, 18.5], [17, 24, 15.5, 22.5], [20, 24, 18.5, 22.5]];
+const DOORS: [number, number, number, number][] = [[14, 20, 12.5, 18.5], [15, 20, 13.5, 18.5], [17, 24, 15.5, 22.5], [20, 24, 18.5, 22.5]];
 for (const [w, h, cw, ch] of DOORS) part({
   id: `kitchen-door-${w}`, family: 'door', familyName: 'Access door, single', type: 'door', mount: 'front', label: `${w} in`, name: `Access door, single, ${w} x ${h} in`,
   overall: [w, 2, h], cutout: [cw, 21, ch], bayIn: w + 1, leaves: 1, hinge: 'left',
   about: `A flush-mount ${w} x ${h} in brushed stainless access door: a 3/4 in frame flange around the opening, a double-walled door with a shadow gap all round, a concealed hinge and a vertical bar handle on standoffs. Left or right hinge.`,
   facts: ['Hand tool: open the door'],
 });
-const DOUBLES: [number, number, number, number][] = [[30, 20, 28.5, 18.5], [33, 22, 31.5, 20.5], [36, 20.5, 34.5, 19], [39, 20.5, 37.5, 19], [42, 21, 40.5, 19.5]];
+const DOUBLES: [number, number, number, number][] = [[30, 20, 28.5, 18.5], [32, 22, 30.5, 20.5], [33, 22, 31.5, 20.5], [36, 20.5, 34.5, 19], [39, 20.5, 37.5, 19], [42, 21, 40.5, 19.5]];
 for (const [w, h, cw, ch] of DOUBLES) part({
   id: `kitchen-double-door-${w}`, family: 'double-door', familyName: 'Access doors, double', type: 'doubleDoor', mount: 'front', label: `${w} in`, name: `Access doors, double, ${w} x ${h} in`,
   overall: [w, 2, h], cutout: [cw, 21, ch], bayIn: w, leaves: 2,
   about: `A flush-mount pair of ${w} x ${h} in brushed stainless doors meeting at the center, a vertical bar handle on each beside the seam${w === 39 ? '; the size that goes under a 40 to 42 in grill or a Blackstone 28 in griddle (38 1/2 in wide)' : ''}.`,
   facts: ['Hand tool: open the doors'],
 });
-const DRAWERS: [number, number, number, number, number][] = [[2, 17, 18, 15.5, 16.5], [2, 30, 13.5, 28.5, 12], [2, 32, 13.5, 30.5, 12], [3, 17, 22, 15.5, 20.5], [3, 30, 22, 28.5, 20.5], [3, 32, 22, 30.5, 20.5]];
+const DRAWERS: [number, number, number, number, number][] = [[2, 16, 18, 14.5, 16.5], [3, 16, 22, 14.5, 20.5], [2, 17, 18, 15.5, 16.5], [2, 30, 13.5, 28.5, 12], [2, 32, 13.5, 30.5, 12], [3, 17, 22, 15.5, 20.5], [3, 30, 22, 28.5, 20.5], [3, 32, 22, 30.5, 20.5]];
 for (const [n, w, h, cw, ch] of DRAWERS) part({
   id: `kitchen-drawers-${n}-${w}`, family: `drawers-${n}`, familyName: `${n === 2 ? 'Two' : 'Three'}-drawer unit`, type: 'drawers', mount: 'front', label: `${w} in`, name: `${n === 2 ? 'Two' : 'Three'}-drawer unit, ${w} x ${h} in`,
   overall: [w, 2, h], cutout: [cw, 23, ch], bayIn: w, drawers: n,
   about: `A flush-mount ${w} x ${h} in brushed stainless ${n}-drawer unit: ${n} equal drawers on full-extension slides in a frame flange, shadow gaps between the fronts, a bar pull across each.`,
   facts: ['About 23 in deep', 'Hand tool: open the drawers'],
 });
+// Taller sizes drawn to a customer design's proportions (its fronts run nearly the base's full height). Makers sell
+// tall drawer stacks and doors close to these; check the chosen unit's size before building.
+part({
+  id: 'kitchen-drawers-3-32-tall', family: 'drawers-3', familyName: 'Three-drawer unit', type: 'drawers', mount: 'front', label: '32 in, tall', name: 'Three-drawer unit, 32 x 28 in (tall)',
+  overall: [32, 2, 28], cutout: [30.5, 23, 26.5], bayIn: 32, drawers: 3,
+  about: 'A flush-mount 32 x 28 in brushed stainless three-drawer stack: three equal deep drawers on full-extension slides, shadow gaps between the fronts, a bar pull across each. Sized to the proportions of a customer design.',
+  facts: ['About 23 in deep', 'Hand tool: open the drawers'],
+});
+part({
+  id: 'kitchen-double-door-39-tall', family: 'double-door', familyName: 'Access doors, double', type: 'doubleDoor', mount: 'front', label: '39 in, tall', name: 'Access doors, double, 39 x 24 in (tall)',
+  overall: [39, 2, 24], cutout: [37.5, 21, 22.5], bayIn: 39, leaves: 2,
+  about: 'A flush-mount pair of 39 x 24 in brushed stainless doors meeting at the center, a vertical bar handle on each beside the seam: the width under a Blackstone 28 in griddle, as tall as the space under it allows.',
+  facts: ['Hand tool: open the doors'],
+});
 part({
   id: 'kitchen-propane-cabinet-20', family: 'propane', familyName: 'Propane tank cabinet, vented', type: 'propane', mount: 'front', label: '20 in', name: 'Propane tank cabinet, vented, 20 x 24 in',
   overall: [20, 2, 24], cutout: [18.5, 21, 22.5], bayIn: 20, leaves: 1, hinge: 'right',
-  about: 'A vented propane tank cabinet: a 20 x 24 in brushed stainless door with two rows of louvered vents low on the latch side and a vertical bar handle, over a pull-out tray holding one 20 lb tank (12 1/4 in across, 18 in tall).',
+  about: 'A vented propane tank cabinet: a 20 x 24 in brushed stainless door with two rows of louvered vents low on the hinge side and a vertical bar handle, over a pull-out tray holding one 20 lb tank (12 1/4 in across, 18 in tall).',
+  facts: ['Holds one 20 lb tank on a pull-out tray', 'Must be vented to the outside', 'Hand tool: open the door'],
+});
+part({
+  id: 'kitchen-propane-cabinet-20-tall', family: 'propane', familyName: 'Propane tank cabinet, vented', type: 'propane', mount: 'front', label: '20 in, tall', name: 'Propane tank cabinet, vented, 20 x 28 in (tall)',
+  overall: [20, 2, 28], cutout: [18.5, 21, 26.5], bayIn: 20, leaves: 1, hinge: 'right',
+  about: 'A vented propane tank cabinet with a taller 20 x 28 in brushed stainless door (two rows of louvered vents low on the hinge side, a vertical bar handle) over a pull-out tray holding one 20 lb tank. Sized to the proportions of a customer design.',
   facts: ['Holds one 20 lb tank on a pull-out tray', 'Must be vented to the outside', 'Hand tool: open the door'],
 });
 part({
@@ -269,6 +311,18 @@ part({
   overall: [17, 2, 24], cutout: [15.5, 22, 22.5], bayIn: 18,
   about: 'A brushed stainless trash pull-out: a door front with a bar pull across the top on full-extension slides, carrying a 32 qt bin.',
   facts: ['32 qt bin, 21 to 23 in deep', 'Hand tool: pull it out'],
+});
+part({
+  id: 'kitchen-trash-pullout-double-20', family: 'trash', familyName: 'Trash pull-out', type: 'trash', mount: 'front', label: '20 in, double', name: 'Trash and recycle pull-out, double, 20 x 24 in',
+  overall: [20, 2, 24], cutout: [18.5, 22, 22.5], bayIn: 20, bins: 2,
+  about: 'A brushed stainless trash and recycling pull-out: a door front with a bar pull across the top on full-extension slides, carrying two bins side by side.',
+  facts: ['Two bins, 21 to 23 in deep', 'Hand tool: pull it out'],
+});
+part({
+  id: 'kitchen-door-drawer-combo-30', family: 'combo', familyName: 'Door and drawer combo', type: 'combo', mount: 'front', label: '30 in', name: 'Door and drawer combo, 30 x 21 in',
+  overall: [30, 2, 21], cutout: [28.5, 21, 19.5], bayIn: 30, drawers: 1, leaves: 2,
+  about: 'A flush-mount 30 x 21 in brushed stainless combo: a full-width drawer across the top over a pair of doors, in one frame, shadow gaps between the fronts, bar pulls on each.',
+  facts: ['Hand tool: open the doors, open the drawer'],
 });
 part({
   id: 'kitchen-paper-towel-holder', family: 'towel', familyName: 'Paper towel holder', type: 'towel', mount: 'front', label: '13 in', name: 'Paper towel holder, flush mount, 13 in',
@@ -280,13 +334,13 @@ part({
 // Seating.
 part({
   id: 'kitchen-stool-counter', family: 'stool', familyName: 'Stool', type: 'stool', mount: 'free', label: 'Counter, 26 in', name: 'Counter stool, 26 in seat',
-  overall: [18, 19, 36], bayIn: 24,
+  overall: [18, 19, 36], bayIn: 24, seatIn: 26,
   about: 'An outdoor counter stool for a 36 in counter: a black powder-coated aluminum frame with a footrest, a teak slat seat 26 in high and a low slatted back.',
   facts: ['Seat 26 in high, about 18 in wide', 'Allow 24 in per stool'],
 });
 part({
   id: 'kitchen-stool-bar', family: 'stool', familyName: 'Stool', type: 'stool', mount: 'free', label: 'Bar, 30 in', name: 'Bar stool, 30 in seat',
-  overall: [18, 19, 41], bayIn: 24,
+  overall: [18, 19, 40], bayIn: 24, seatIn: 30,
   about: 'An outdoor bar stool for a 42 in bar ledge: the same frame and teak seat at 30 in.',
   facts: ['Seat 30 in high, about 18 in wide', 'Allow 24 in per stool'],
 });
@@ -370,34 +424,72 @@ export interface KitchenIsland {
   fuel: 'propane' | 'natural gas';
 }
 
-/** The tops of an island's framed fronts (doors, drawers) line up this far under the counter's top, inches. */
-export const FRONT_DROP = 6.75;
+/** A framed front's top under plain counter: this far under the counter slab's underside, inches. */
+export const FRONT_GAP = 1.5;
+
+/** Front parts that stand on the patio inside their opening (the cold units). */
+export const standsOnFloor = (p: KitchenPart) => p.type === 'fridge' || p.type === 'iceMaker' || p.type === 'kegerator' || p.type === 'beverage';
+/** How far a drop-in's front panel (grills, griddles, burners) or bowl (sinks) reaches under the counter's top, inches. */
+export function dropBelowTop(p: KitchenPart, thicknessIn: number): number {
+  if (p.type === 'grill' || p.type === 'griddle') return 6.5;
+  if (p.type === 'sideBurner' || p.type === 'powerBurner') return 4;
+  if (p.type === 'sink') return thicknessIn + (p.cutout?.[2] ?? 7);
+  return 0;
+}
+
+/**
+ * The top of a bay's framed fronts (y, inches): 1 1/2 in under the counter's underside, or just under a drop-in's front
+ * panel or bowl when the bay has one.
+ */
+export function frontLineIn(isl: KitchenIsland, bay: KitchenBay): number {
+  const t = isl.counter.thicknessIn ?? counterFinish(isl.counter.finish).thicknessIn;
+  const top = isl.counterHeightIn, base = top - t;
+  const tp = bay.top ? kitchenPartById.get(bay.top) : undefined;
+  const drop = tp?.mount === 'dropIn' ? dropBelowTop(tp, t) : 0;
+  return Math.min(base - FRONT_GAP, drop ? top - drop - 0.5 : Infinity);
+}
 
 /** Problems with an island's layout, in words (empty when it fits). */
 export function checkIsland(isl: KitchenIsland): string[] {
   const out: string[] = [];
   const top = isl.counterHeightIn;
+  const t = isl.counter.thicknessIn ?? counterFinish(isl.counter.finish).thicknessIn;
+  const o = isl.counter.overhangIn;
+  if (!(isl.depthIn > 0)) out.push('The depth must be more than 0');
+  if (!(t > 0) || t >= top) out.push(`The counter thickness (${t} in) must be more than 0 and less than the counter height`);
+  if (o.front < 0 || o.back < 0 || o.ends < 0) out.push('Overhangs cannot be negative');
+  const counterD = isl.depthIn + o.front + o.back;
   isl.runs.forEach((run, ri) => {
     const corner = ri > 0 ? isl.depthIn : 0;
     const sum = run.bays.reduce((s, b) => s + b.widthIn, 0) + corner;
     if (Math.abs(sum - run.lengthIn) > 0.01) out.push(`Run ${ri + 1}: bays add up to ${sum} in, the run is ${run.lengthIn} in`);
     for (const b of run.bays) {
-      const t = b.top ? kitchenPartById.get(b.top) : undefined;
-      if (b.top && !t) out.push(`Unknown part ${b.top}`);
-      if (t?.cutout && t.cutout[0] > b.widthIn + 0.01) out.push(`${t.name}: its ${t.cutout[0]} in cutout is wider than its ${b.widthIn} in bay`);
-      if (t?.cutout && t.cutout[1] > isl.depthIn + isl.counter.overhangIn.front) out.push(`${t.name}: its ${t.cutout[1]} in cutout is deeper than the counter`);
+      if (!(b.widthIn > 0)) { out.push(`Run ${ri + 1}: a bay of ${b.widthIn} in`); continue; }
+      const tp = b.top ? kitchenPartById.get(b.top) : undefined;
+      if (b.top && !tp) out.push(`Unknown part ${b.top}`);
+      if (tp && tp.mount !== 'dropIn' && tp.mount !== 'onCounter') out.push(`${tp.name} does not go in the counter`);
+      if (tp?.mount === 'dropIn') {
+        const w = Math.max(tp.overall[0], tp.cutout?.[0] ?? 0);
+        if (w > b.widthIn + 0.01) out.push(`${tp.name}: ${w} in wide in a ${b.widthIn} in bay`);
+        if (tp.cutout && tp.cutout[1] > counterD) out.push(`${tp.name}: its ${tp.cutout[1]} in cutout is deeper than the counter`);
+      }
+      if (tp?.mount === 'onCounter') {
+        if (tp.overall[0] > b.widthIn + 0.01) out.push(`${tp.name}: ${tp.overall[0]} in wide on a ${b.widthIn} in bay`);
+        if (tp.overall[1] > counterD + 0.01) out.push(`${tp.name}: ${tp.overall[1]} in deep on a ${counterD} in counter`);
+      }
       let h = 0, floor = false;
       for (const id of b.front ?? []) {
         const p = kitchenPartById.get(id);
         if (!p) { out.push(`Unknown part ${id}`); continue; }
+        if (p.mount !== 'front') out.push(`${p.name} does not go in the front`);
         if (p.overall[0] > b.widthIn + 0.01) out.push(`${p.name} is wider than its ${b.widthIn} in bay`);
-        if (p.type === 'fridge' || p.type === 'iceMaker' || p.type === 'kegerator') floor = true;
+        if (standsOnFloor(p)) floor = true;
         h += p.overall[2] + (h ? 1.5 : 0);
       }
-      // Framed fronts hang from a line FRONT_DROP under the counter's top; cold units stand on the patio under the counter.
-      const below = floor ? top - 1.25 : top - FRONT_DROP;
+      const below = floor ? top - t : frontLineIn(isl, b);
       if (h > below + 0.01) out.push(`Bay of ${b.widthIn} in: its fronts (${h} in) do not fit under the counter (${below.toFixed(2)} in)`);
       if (floor && (b.front?.length ?? 0) > 1) out.push(`Bay of ${b.widthIn} in: a cold unit takes the whole bay`);
+      if (floor && tp?.mount === 'dropIn') out.push(`Bay of ${b.widthIn} in: a cold unit cannot go under a drop-in`);
     }
   });
   if (isl.shape === 'straight' && isl.runs.length !== 1) out.push('A straight island has one run');
@@ -411,11 +503,11 @@ export function checkIsland(isl: KitchenIsland): string[] {
 const F = (s: Omit<FeatureSpec, 'placeholder'>): FeatureSpec => ({ ...s, placeholder: true });
 
 /**
- * A straight island of 10 ft 6 in from a customer design: left to right, 17 1/2 in of counter, a 32 in three-drawer unit,
- * a Blackstone 28 in built-in griddle (38 1/2 in wide, 38 3/4 x 27 1/2 x 8 in cutout) over 39 in double doors, a 20 in
- * vented propane cabinet, 17 1/2 in of counter. The design drew the griddle in a 28 in bay with 23 in counters; the
+ * A straight island of 10 ft 6 in from a customer design: left to right, 17 1/2 in of counter, a 32 x 28 in three-drawer
+ * unit, a Blackstone 28 in built-in griddle (38 1/2 in wide, 38 3/4 x 27 1/2 x 8 in cutout) over 39 x 24 in double doors,
+ * a 20 x 28 in vented propane cabinet, 17 1/2 in of counter (the taller fronts follow the design's proportions). The design drew the griddle in a 28 in bay with 23 in counters; the
  * real griddle needs 39 in, so the island stays 126 in and the end counters were shortened (the owner's decision).
- * Light gray granite with a 1 1/2 in overhang, MSI Silver Travertine ledger on all four sides, an LED strip under the
+ * Light gray granite, 1 1/2 in over the front and ends and 3/4 in at the back, MSI Silver Travertine ledger on all four sides, an LED strip under the
  * front overhang, propane.
  */
 export const LEDGERSTONE_GRIDDLE_ISLAND: KitchenIsland = {
@@ -424,15 +516,15 @@ export const LEDGERSTONE_GRIDDLE_ISLAND: KitchenIsland = {
     lengthIn: 126,
     bays: [
       { widthIn: 17.5 },
-      { widthIn: 32, front: ['kitchen-drawers-3-32'] },
-      { widthIn: 39, top: 'kitchen-griddle-blackstone-28', front: ['kitchen-double-door-39'] },
-      { widthIn: 20, front: ['kitchen-propane-cabinet-20'] },
+      { widthIn: 32, front: ['kitchen-drawers-3-32-tall'] },
+      { widthIn: 39, top: 'kitchen-griddle-blackstone-28', front: ['kitchen-double-door-39-tall'] },
+      { widthIn: 20, front: ['kitchen-propane-cabinet-20-tall'] },
       { widthIn: 17.5 },
     ],
   }],
   depthIn: 30,
   counterHeightIn: 36,
-  counter: { finish: 'granite-light-gray', overhangIn: { front: 1.5, back: 1.5, ends: 1.5 }, edge: 'eased' },
+  counter: { finish: 'granite-light-gray', overhangIn: { front: 1.5, back: 0.75, ends: 1.5 }, edge: 'eased' },
   veneer: 'msi-silver-travertine',
   light: { kelvin: 3000, lumensPerFt: 150 },
   ends: { left: 'finished', right: 'finished' },
@@ -444,18 +536,18 @@ export const DEFAULT_BAR_LEDGE: NonNullable<KitchenIsland['barLedge']> = { heigh
 
 export const KITCHEN_ISLAND_FEATURES: FeatureSpec[] = [
   F({
-    id: 'kitchen-island-ledgerstone-griddle-126', name: 'Ledgerstone griddle island, 10 ft 6 in', group: 'Kitchens', kind: 'kitchenIsland', footprint: [126 * IN, 30 * IN],
+    id: 'kitchen-island-ledgerstone-griddle-126', name: 'Ledgerstone griddle island, 10 ft 6 in', group: 'Kitchens', kind: 'kitchenIsland', footprint: islandFootprintIn(LEDGERSTONE_GRIDDLE_ISLAND).map((v) => v * IN) as [number, number],
     island: LEDGERSTONE_GRIDDLE_ISLAND,
-    options: [{ key: 'underLight', label: 'Under-counter light on', default: true }, { key: 'barLedge', label: 'Raised bar ledge behind, 42 in, with stools', default: false }],
+    options: [{ key: 'underLight', label: 'Under-counter light on', default: true }, { key: 'barLedge', label: 'Raised bar ledge behind, 42 in, with stools (extends about 2 ft behind the footprint)', default: false }],
     about: 'A straight 10 ft 6 in outdoor kitchen island: a Blackstone 28 in built-in griddle over double access doors, a three-drawer unit on its left and a vented propane cabinet on its right, light gray granite on a base clad in MSI Silver Travertine ledger stone on all four sides, with an LED strip under the counter\'s front edge.',
     facts: [
-      '126 in long x 30 in deep base, counter 36 in high (129 x 33 in of granite, 1 1/2 in overhang)',
+      '126 in long x 30 in deep base, counter 36 in high: 129 x 32 1/4 in of granite (1 1/2 in over the front and ends, 3/4 in at the back); the footprint is the counter',
       'Bays left to right: counter 17 1/2 in, three-drawer unit 32 in, griddle 39 in, propane cabinet 20 in, counter 17 1/2 in',
-      'Blackstone 28 in built-in griddle, 38 1/2 in wide (cutout 38 3/4 x 27 1/2 x 8 in), over 39 x 20 1/2 in double doors; propane',
-      'Three-drawer unit 32 x 22 in; propane cabinet 20 x 24 in, vented, 20 lb tank on a pull-out tray',
+      'Blackstone 28 in built-in griddle, 38 1/2 in wide (cutout 38 3/4 x 27 1/2 x 8 in), over 39 x 24 in double doors; propane',
+      'Three-drawer unit 32 x 28 in; propane cabinet 20 x 28 in, vented, 20 lb tank on a pull-out tray (the taller sizes, to the design\'s proportions: drawer and cabinet tops 1 1/2 in under the counter, the doors just under the griddle\'s front)',
       'Light gray granite, 3 cm, eased edge; MSI Silver Travertine Panel 6x24 (LPNLTSIL624) on all sides',
       'LED strip under the front overhang, 3000 K',
-      'Option: a 42 in raised bar ledge on a 6 in wall behind the base, 12 in overhang, four bar stools',
+      'Option: a 42 in raised bar ledge on a 6 in wall behind the base, 12 in overhang, four bar stools; it reaches about 2 ft behind the footprint',
       'Hand tool: griddle hood, doors, drawers, under-counter light',
     ],
   }),
@@ -470,7 +562,21 @@ export const KITCHEN_PART_FEATURES: FeatureSpec[] = parts.map((p) => {
 /** The stub of island a part is shown in (its Library sample), inches [length, depth]. */
 export function partFootprint(p: KitchenPart): [number, number] {
   if (p.mount === 'free') return [p.overall[0], p.overall[1]];
-  return [partStub(p).runs[0].lengthIn, 30];
+  return islandFootprintIn(partStub(p));
+}
+
+/** An island's footprint, inches [length, depth]: its counter slab's outer size (the base centered in it along x). */
+export function islandFootprintIn(isl: KitchenIsland): [number, number] {
+  const o = isl.counter.overhangIn;
+  const ends = (isl.ends.left === 'finished' ? o.ends : 0) + (isl.ends.right === 'finished' ? o.ends : 0);
+  return [isl.runs[0].lengthIn + ends, isl.depthIn + o.front + o.back];
+}
+
+/** How far the base's center sits from the footprint's center, inches [x, z] (the overhangs differ front to back). */
+export function islandBaseOffsetIn(isl: KitchenIsland): [number, number] {
+  const o = isl.counter.overhangIn;
+  const l = isl.ends.left === 'finished' ? o.ends : 0, r = isl.ends.right === 'finished' ? o.ends : 0;
+  return [(l - r) / 2, (o.back - o.front) / 2];
 }
 
 /** A short island a part is shown in on its own: its bay with a little counter each side. */
@@ -481,8 +587,12 @@ export function partStub(p: KitchenPart): KitchenIsland {
   else if (p.mount === 'dropIn' || p.mount === 'onCounter') bays = [{ widthIn: side }, { widthIn: p.bayIn, top: p.id }, { widthIn: side }];
   else bays = [{ widthIn: side }, { widthIn: p.bayIn, front: [p.id] }, { widthIn: side }];
   const lengthIn = bays.reduce((s, b) => s + b.widthIn, 0);
+  const o = LEDGERSTONE_GRIDDLE_ISLAND.counter.overhangIn;
+  // A part standing on the counter gets a base deep enough for it (a masonry dome is deeper than a usual island).
+  const depthIn = p.mount === 'onCounter' ? Math.max(30, Math.ceil(p.overall[1] + 2 - o.front - o.back)) : 30;
   return {
     ...LEDGERSTONE_GRIDDLE_ISLAND,
+    depthIn,
     runs: [{ lengthIn, bays }],
     counter: { ...LEDGERSTONE_GRIDDLE_ISLAND.counter, finish: p.type === 'counter' ? p.finish! : LEDGERSTONE_GRIDDLE_ISLAND.counter.finish },
     veneer: p.type === 'veneer' ? p.finish! : LEDGERSTONE_GRIDDLE_ISLAND.veneer,

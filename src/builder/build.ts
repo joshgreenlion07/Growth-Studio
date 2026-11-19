@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { beginMaterialBuild } from './materials';
-import { featureById, plantById } from '../siteplan/catalog';
+import { featureById, featureOption, plantById } from '../siteplan/catalog';
 import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { FeaturePlacement, PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
@@ -416,6 +416,15 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const bedCut = bedCuts.get(f.id);
       if (bedCut) {
         if (inGroundCut([bedCut], p)) return true;
+        continue;
+      }
+      if (spec.kind === 'kitchenIsland') {
+        // An island clears its counter's footprint; with its bar ledge, also the wall, bar top and stools behind it.
+        if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
+        if (featureOption(spec, f.options, 'barLedge')) {
+          const back = 0.66, a = (-f.rotationDeg * Math.PI) / 180, zc = -(spec.footprint[1] + back) / 2;
+          if (inFootprint(p, [f.position[0] + zc * Math.sin(a), f.position[1] + zc * Math.cos(a)], f.rotationDeg, [spec.footprint[0], back], 0.05)) return true;
+        }
         continue;
       }
       if (spec.kind === 'pillarFountain' || spec.kind === 'cedarWaterWall' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {

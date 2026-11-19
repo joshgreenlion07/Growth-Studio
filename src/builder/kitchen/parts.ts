@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { swing } from '../actions';
 import { tubeBurner } from '../fire';
-import type { KitchenPart } from '../../siteplan/kitchen';
+import { standsOnFloor, type KitchenPart } from '../../siteplan/kitchen';
 import { IN, barHandle, bx, cy, facePlane, namePlate, rbx, slide, stainless, tube, type KitchenMats, type KitchenSink, type Mover } from './kit';
 
 /*
@@ -181,9 +181,36 @@ function trash(k: PartCtx): Mover[] {
   // The bin on its frame.
   const bz = zf - t - 10;
   g.add(m.steel, bx(fw - 1.5, 0.3, 19, k.x, y0 + 0.5, bz));
-  g.add(m.bin, bx(Math.min(12, fw - 2.5), fh - 4, 17, k.x, y0 + 0.8, bz));
-  g.add(m.rubber, bx(Math.min(12.6, fw - 2), 0.5, 17.6, k.x, y0 + fh - 3.3, bz));
-  return [{ kind: 'drawer', label: 'Trash pull-out', rig: slide(g.group, 'z', 16 * IN, false, 0.8), anchor: k.sink.anchor(g.group, 0, (fh - 2.2) * IN, 0.03) }];
+  const nb = p.bins ?? 1, bw = nb > 1 ? (fw - 3) / nb - 0.6 : Math.min(12, fw - 2.5);
+  for (let i = 0; i < nb; i++) {
+    const bxx = nb > 1 ? k.x - (fw - 3) / 2 + ((i + 0.5) * (fw - 3)) / nb : k.x;
+    g.add(m.bin, bx(bw, fh - 4, 17, bxx, y0 + 0.8, bz));
+    g.add(m.rubber, bx(bw + 0.6, 0.5, 17.6, bxx, y0 + fh - 3.3, bz));
+  }
+  return [{ kind: 'drawer', label: nb > 1 ? 'Trash and recycle pull-out' : 'Trash pull-out', rig: slide(g.group, 'z', 16 * IN, false, 0.8), anchor: k.sink.anchor(g.group, 0, (fh - 2.2) * IN, 0.03) }];
+}
+
+/** A door and drawer combo: a full-width drawer over a pair of doors in one frame. */
+function combo(k: PartCtx): Mover[] {
+  const p = k.part, m = k.mats, [w, , h] = p.overall;
+  const o = frame(k.sink.add, m, k.x, k.y, w, h, k.face);
+  const zf = k.face + PROUD, t = 0.8;
+  const fw = o.x1 - o.x0 - 2 * GAP, dh = Math.min(6, (o.y1 - o.y0) * 0.3), y0 = o.y1 - GAP - dh;
+  const g = pivot(k, k.x, y0, zf);
+  g.add(m.steel, rbx(fw, dh, t, k.x, y0, zf - t / 2, 0.14));
+  barHandle(g.add, m.steel, 'x', Math.min(fw - 6, 18), k.x, y0 + dh * 0.55, zf, 1.3, 0.32);
+  const bw = fw - 1.5, depth = 16;
+  for (const s2 of [-1, 1]) g.add(m.steel, bx(0.08, dh - 1.4, depth, k.x + s2 * (bw / 2), y0 + 0.6, zf - t - depth / 2));
+  g.add(m.inside, bx(bw, 0.1, depth, k.x, y0 + 0.6, zf - t - depth / 2));
+  const mid = (o.x0 + o.x1) / 2, top = y0 - GAP;
+  const l = leaf(k, o.x0 + GAP, mid - GAP / 2, o.y0 + GAP, top, 'left');
+  const r = leaf(k, mid + GAP / 2, o.x1 - GAP, o.y0 + GAP, top, 'right');
+  const hy = (l.cy - o.y0) * IN;
+  return [
+    { kind: 'drawer', label: 'Drawers', rig: slide(g.group, 'z', 13 * IN, false, 0.7), anchor: k.sink.anchor(g.group, 0, dh * 0.55 * IN, 0.03) },
+    { kind: 'door', label: 'Doors', rig: l.rig, anchor: k.sink.anchor(l.group, (mid - o.x0 - 2) * IN, hy, 0.02) },
+    { kind: 'door', label: 'Doors', rig: r.rig, anchor: k.sink.anchor(r.group, (mid - o.x1 + 2) * IN, hy, 0.02) },
+  ];
 }
 
 function towel(k: PartCtx): Mover[] {
@@ -245,9 +272,18 @@ function coldUnit(k: PartCtx): Mover[] {
   const hingeSide = k.hinge;
   const px = hingeSide === 'left' ? x - dw / 2 : x + dw / 2;
   const g = pivot(k, px, dy, zf);
-  g.add(m.steel, rbx(dw, dh, 1.6, x, dy, zf - 0.8, 0.3));
+  if (p.type === 'beverage') {
+    // A stainless frame round a tinted glass panel: the lit shelves show through.
+    const fr = 2.2;
+    g.add(m.steel, rbx(dw, fr, 1.6, x, dy + dh - fr, zf - 0.8, 0.3));
+    g.add(m.steel, rbx(dw, fr + 0.8, 1.6, x, dy, zf - 0.8, 0.3));
+    for (const sx of [-1, 1]) g.add(m.steel, rbx(fr, dh - 2 * fr - 0.8, 1.6, x + sx * (dw / 2 - fr / 2), dy + fr + 0.8, zf - 0.8, 0.2));
+    g.add(m.glass, bx(dw - 2 * fr + 0.4, dh - 2 * fr, 0.3, x, dy + fr + 0.4, zf - 0.9));
+  } else {
+    g.add(m.steel, rbx(dw, dh, 1.6, x, dy, zf - 0.8, 0.3));
+    g.add(linerDoor(), bx(dw - 2.2, dh - 2.2, 0.4, x, dy + 1.1, zf - 2));
+  }
   g.add(m.rubber, bx(dw - 0.6, dh - 0.6, 0.25, x, dy + 0.3, zf - 1.7));
-  g.add(linerDoor(), bx(dw - 2.2, dh - 2.2, 0.4, x, dy + 1.1, zf - 2));
   if (p.type === 'fridge') {
     // Recessed pocket handle across the top.
     g.add(m.rubber, bx(dw - 3, 0.9, 0.2, x, dy + dh - 1.9, zf + 0.02));
@@ -258,7 +294,7 @@ function coldUnit(k: PartCtx): Mover[] {
   }
   if (p.type === 'kegerator') tapTower(k);
   const ax = (hingeSide === 'left' ? dw - 2 : -(dw - 2)) * IN;
-  return [{ kind: 'door', label: p.type === 'fridge' ? 'Fridge door' : p.type === 'iceMaker' ? 'Ice maker door' : 'Kegerator door', rig: swing(g.group, 'y', hingeSide === 'left' ? -1.75 : 1.75, false), anchor: k.sink.anchor(g.group, ax, dh * 0.6 * IN, 0.03) }];
+  return [{ kind: 'door', label: p.type === 'fridge' ? 'Fridge door' : p.type === 'iceMaker' ? 'Ice maker door' : p.type === 'beverage' ? 'Beverage centre door' : 'Kegerator door', rig: swing(g.group, 'y', hingeSide === 'left' ? -1.75 : 1.75, false), anchor: k.sink.anchor(g.group, ax, dh * 0.6 * IN, 0.03) }];
 }
 
 let linerInMat: THREE.MeshStandardMaterial | null = null;
@@ -411,14 +447,16 @@ function uvFromPositions(g: THREE.BufferGeometry) {
 
 function griddle(k: PartCtx): Mover[] {
   const p = k.part, m = k.mats, add = k.sink.add;
-  const [W, D, H] = p.overall, [cw, cd, ch] = p.cutout!;
-  const x = k.x, top = k.top, n = p.burners ?? 3;
+  const [W0, D, H] = p.overall, [cw, cd, ch] = p.cutout!;
+  // Front and surround at least as wide as the cutout, so no slot of the notch shows beside them.
+  const W = Math.max(W0, cw + 0.25);
+  const x = k.x, top = k.top, n = p.knobs ?? p.burners ?? 3;
   const zFront = k.edge + 0.5, zBack = zFront - D;
-  add(m.steel, bx(Math.min(cw, W) - 0.6, ch, zFront - 2.5 - (k.edge - cd + 0.5), x, top - ch, (zFront - 2.5 + k.edge - cd + 0.5) / 2));
+  add(m.steel, bx(Math.min(cw, W0) - 0.6, ch, zFront - 2.5 - (k.edge - cd + 0.5), x, top - ch, (zFront - 2.5 + k.edge - cd + 0.5) / 2));
   // Front: a brushed band with black knobs on chrome bezels.
-  const ph = 6.8, py = top - 5.3;
+  const ph = 8, py = top - 6.5;
   add(m.steel, rbx(W, ph, zFront - k.face, x, py, (zFront + k.face) / 2, 0.3));
-  knobs(add, m, spread(n, Math.min(W - 10, n * 7.5), x), py + 3.1, zFront, true);
+  knobs(add, m, spread(n, Math.min(W - 8, n * 7.5), x), py + 3.6, zFront, true);
   // The surround: a stainless deck round the cooktop, side and back walls, the rear grease trough.
   const sz0 = zBack + 1, sz1 = zFront - 1.8;
   add(m.steel, rbx(W - 0.4, 1.5, sz1 - sz0, x, top, (sz0 + sz1) / 2, 0.15));
@@ -429,20 +467,21 @@ function griddle(k: PartCtx): Mover[] {
   add(m.steel, rbx(pw + 0.8, 1.8, 0.35, x, top + 1.5, pz - pd / 2 - 0.2, 0.08));
   add(m.rubber, bx(pw * 0.9, 0.1, 1.1, x, top + 1.52, pz - pd / 2 - 1.1));
   // The hood: black powder-coated steel on a back hinge, the maker's name as a plain plate on its front.
-  const hw = W - 4, hd = sz1 - sz0 - 0.6, hh = H - ch - 1.6, hy = top + 1.6, hz0 = sz0 + 0.3;
+  // A full-width hood, about 7 in tall, as on the design.
+  const hw = W - 1.2, hd = sz1 - sz0 - 0.6, hh = Math.max(H - ch - 1.6, 7), hy = top + 1.6, hz0 = sz0 + 0.3;
   const hood = pivot(k, x, hy, hz0);
   hood.add(m.black, rbx(hw, hh, hd, x, hy, hz0 + hd / 2, 0.9));
   hood.add(m.inside, bx(hw - 1.8, 0.05, hd - 1.8, x, hy - 0.06, hz0 + hd / 2));
   hood.add(m.frame, rbx(hw * 0.5, 0.7, 0.9, x, hy + hh * 0.18, hz0 + hd + 0.25, 0.25));
   const label = p.nameText ? namePlate(p.nameText) : null;
-  if (label) hood.add(label, facePlane(10.5, 1.3, x, hy + hh * 0.62, hz0 + hd + 0.01));
+  if (label) hood.add(label, facePlane(11.5, 1.45, x, hy + hh * 0.62, hz0 + hd + 0.01));
   return [{ kind: 'hood', label: 'Griddle hood', rig: swing(hood.group, 'x', -1.3, false), anchor: k.sink.anchor(hood.group, 0, hh * 0.5 * IN, (hd + 1) * IN) }];
 }
 
 function sideBurner(k: PartCtx): Mover[] {
   const p = k.part, m = k.mats, add = k.sink.add;
   const [W, D] = p.overall, [cw, cd, ch] = p.cutout!;
-  const x = k.x, top = k.top, n = p.burners ?? 1;
+  const x = k.x, top = k.top, n = p.burners ?? 1, power = p.type === 'powerBurner';
   const zFront = k.edge + 0.5, zBack = zFront - D;
   add(m.steel, bx(cw - 0.4, ch, zFront - 2.5 - (k.edge - cd + 0.5), x, top - ch, (zFront - 2.5 + k.edge - cd + 0.5) / 2));
   add(m.steel, rbx(W, 5, zFront - k.face, x, top - 4, (zFront + k.face) / 2, 0.25));
@@ -452,13 +491,13 @@ function sideBurner(k: PartCtx): Mover[] {
   add(m.inside, bx(W - 1.5, 0.1, z1 - z0 - 1.5, x, top + 0.82, (z0 + z1) / 2));
   const cxs = spread(n, W - 2, x), cz = (z0 + z1) / 2;
   for (const bxx of cxs) {
-    const ring = new THREE.TorusGeometry(2.4 * IN, 0.45 * IN, 8, 28).rotateX(Math.PI / 2).translate(bxx * IN, (top + 1.4) * IN, cz * IN);
+    const ring = new THREE.TorusGeometry((power ? 4.4 : 2.4) * IN, (power ? 0.6 : 0.45) * IN, 8, 32).rotateX(Math.PI / 2).translate(bxx * IN, (top + 1.4) * IN, cz * IN);
     add(m.brass, ring.toNonIndexed());
-    add(m.castIron, cy(1.3, 1.5, 0.6, bxx, top + 0.9, cz, 'y', 20));
+    add(m.castIron, cy(power ? 2.2 : 1.3, power ? 2.5 : 1.5, 0.6, bxx, top + 0.9, cz, 'y', 20));
   }
   // Cast iron grate: a ring of bars over each burner and two rails.
   for (const bxx of cxs) for (let i = 0; i < 4; i++) {
-    const g = bx(9, 0.5, 0.5, bxx, top + 2.0, cz);
+    const g = bx(power ? 15 : 9, power ? 0.7 : 0.5, power ? 0.7 : 0.5, bxx, top + 2.0, cz);
     g.translate(-bxx * IN, 0, -cz * IN).rotateY((i * Math.PI) / 4).translate(bxx * IN, 0, cz * IN);
     add(m.castIron, g);
   }
@@ -569,7 +608,7 @@ function pizzaDome(k: PartCtx): Mover[] {
 
 /** A stool, its seat front facing +z, centered at (x, z) on the patio. */
 export function stool(add: Add, m: KitchenMats, part: KitchenPart, x: number, z: number) {
-  const seatY = part.overall[2] - 10, sw = 17, sd = 16;
+  const seatY = part.seatIn ?? part.overall[2] - 10, sw = 17, sd = 16;
   const leg = 1.1;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const lx = x + sx * (sw / 2 - 0.8), lz = z + sz * (sd / 2 - 0.8);
@@ -596,17 +635,20 @@ export function buildPart(k: PartCtx): Mover[] {
   switch (k.part.type) {
     case 'grill': return grill(k);
     case 'griddle': return griddle(k);
-    case 'sideBurner': return sideBurner(k);
+    case 'sideBurner':
+    case 'powerBurner': return sideBurner(k);
     case 'sink': return sink(k);
     case 'pizzaCountertop': return pizzaCountertop(k);
     case 'pizzaDome': return pizzaDome(k);
     case 'fridge':
     case 'iceMaker':
-    case 'kegerator': return coldUnit(k);
+    case 'kegerator':
+    case 'beverage': return coldUnit(k);
     case 'door':
     case 'propane': return singleDoor(k);
     case 'doubleDoor': return doubleDoor(k);
     case 'drawers': return drawers(k);
+    case 'combo': return combo(k);
     case 'trash': return trash(k);
     case 'towel': return towel(k);
     default: return [];
@@ -614,7 +656,6 @@ export function buildPart(k: PartCtx): Mover[] {
 }
 
 /** Front parts that stand on the patio inside their opening (the cold units). */
-export const standsOnFloor = (p: KitchenPart) => p.type === 'fridge' || p.type === 'iceMaker' || p.type === 'kegerator';
 /** Front parts whose builder makes its own inside (no cavity behind the opening). */
 export const ownsInside = (p: KitchenPart) => standsOnFloor(p) || p.type === 'towel';
 /** Drop-in parts whose front panel hangs over the counter's edge (their cutout is a notch open at the front). */
