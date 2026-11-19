@@ -337,6 +337,11 @@ export class PostPipeline {
     this.outMat.uniforms.uRes.value.set(w, h);
   }
 
+  /** The scene buffer's full size, and the share of it (each axis) the next render() draws into. */
+  drawArea(toTarget: boolean) {
+    return { w: this.w, h: this.h, scale: toTarget ? 1 : THREE.MathUtils.clamp(this.scale, 0.5, 1) };
+  }
+
   /** The drawn size at the current scale, and the uv transform from full-size coordinates into it. */
   private applyScale(s: number) {
     const w = this.w, h = this.h;

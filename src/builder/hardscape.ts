@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { materialById, type FenceStyle, type MaterialSpec } from '../siteplan/catalog';
+import { isStuccoFace, materialById, type FenceStyle, type MaterialSpec } from '../siteplan/catalog';
 import { padLook, padOf, type PadRect } from '../siteplan/pads';
 import { pointInPolygon, signedArea } from '../siteplan/geometry';
 import type { LineItem, SitePlan, Vec2, Zone } from '../siteplan/types';
@@ -657,7 +657,7 @@ const MIDNIGHT = '#4a4947';
 function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshStandardMaterial {
   const spec = materialById.get(wallId);
   const cap = choice === 'midnight' ? MIDNIGHT : choice === 'same' ? (spec?.palette[1] ?? spec?.palette[0] ?? '#8f8c87') : (spec?.wall?.cap ?? '#8f8c87');
-  if (spec?.wall?.face === 'plaster') return catalogMaterial(wallId);
+  if (isStuccoFace(spec?.wall?.face)) return catalogMaterial(wallId);
   // A rough-hewn (or chiseled, tumbled) wall's own cap: textured stone, unless a Midnight cap was chosen.
   if (spec?.wall && hasRoughCap(spec.wall.face) && choice !== 'midnight') return pbrMaterial(`cap:${wallId}`, wallCapTextures(spec));
   // A maker's cap color comes from its swatch photo, like its wall: render it at that color.
@@ -671,7 +671,7 @@ function capMaterial(wallId: string, choice?: 'same' | 'midnight'): THREE.MeshSt
  * is a thin plaster lip.
  */
 export function capOverhang(spec: MaterialSpec | undefined): number {
-  if (spec?.wall?.face === 'plaster') return 0.02;
+  if (isStuccoFace(spec?.wall?.face)) return 0.02;
   const own = spec?.wall?.unit?.capOver;
   return own !== undefined ? own * 0.0254 : CAP_OVER_IN * 0.0254;
 }
@@ -866,9 +866,9 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       put('wall', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, y0, path.pts.map(() => l.height)));
       // The cap overhangs both faces and the open ends by the same amount, wherever the wall stands
       // against the line (a wall moved onto the bed side still shows its overhang on the patio side).
-      const capTop = l.height + (face === 'plaster' ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : 0.06);
+      const capTop = l.height + (isStuccoFace(face) ? 0.05 : unit?.capIn !== undefined ? unit.capIn * 0.0254 : 0.06);
       const cap = bandGeometry(extendPath(path, over), (d) => d - half - over, (d) => d + half + over, path.pts.map(() => l.height), path.pts.map(() => capTop));
-      put('cap', face === 'plaster' ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
+      put('cap', isStuccoFace(face) ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
     } else {
       // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
       const rev = Math.max(0.004, Math.min(CURB_TALL, l.reveal ?? CURB_REVEAL));

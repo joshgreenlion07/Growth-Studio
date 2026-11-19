@@ -1,4 +1,4 @@
-import { runRecipe } from './texture-recipes';
+import { runEdgeRecipe, runRecipe } from './texture-recipes';
 import { clearTextureSets, paintCappedFrom, setPaintSizeCap, type PaintedPixels } from './textures';
 
 /**
@@ -10,6 +10,8 @@ import { clearTextureSets, paintCappedFrom, setPaintSizeCap, type PaintedPixels 
  *                   and only for a set larger than PREVIEW_SIZE that is not stored yet); the page asks again for the rest
  *                 { type: 'done', id, frames: [{ size, maps: [albedo, normal, roughness] }] }
  *                 { type: 'fail', id, message }
+ * Page -> worker  { type: 'edges', id, src } a detailed paver's edge map (engine/paver-detail.ts, PaverEdges.src)
+ * Worker -> page  { type: 'edges', id, data } its pixels (an ArrayBuffer, transferred; null when there is none)
  *
  * Each map is RGBA bytes (an ArrayBuffer, transferred), rows bottom first, so
  * the page uploads it as it is (no flip), followed by its mip levels (see withMips). The last frame is the painted set;
@@ -47,10 +49,38 @@ const BUILD = `${CACHE_FORMAT}:${self.location.pathname.split('/').pop()}`;
 
 let queue: Promise<void> = Promise.resolve();
 port.onmessage = (e: MessageEvent) => {
-  const d = e.data as PaintJob;
+  const d = e.data as PaintJob | EdgeJob;
+  if (d?.type === 'edges') {
+    queue = queue.then(() => runEdges(d));
+    return;
+  }
   if (d?.type !== 'paint') return;
   queue = queue.then(() => run(d));
 };
+
+interface EdgeJob {
+  type: 'edges';
+  id: number;
+  src: string;
+}
+
+/** An edge map, painted here so a line with an edge map per color (a random ashlar) never paints it on the page. */
+function runEdges(job: EdgeJob) {
+  // Never throws: a rejected job would stall the shared queue (and this worker) for good. On any error the page gets
+  // null and paints the map itself.
+  try {
+    const data = runEdgeRecipe(job.src);
+    clearTextureSets();
+    port.postMessage({ type: 'edges', id: job.id, data: data ? data.buffer : null }, data ? [data.buffer as ArrayBuffer] : []);
+  } catch {
+    try {
+      clearTextureSets();
+    } catch {
+      // Nothing held.
+    }
+    port.postMessage({ type: 'edges', id: job.id, data: null });
+  }
+}
 port.postMessage({ type: 'ready' });
 
 async function run(job: PaintJob) {

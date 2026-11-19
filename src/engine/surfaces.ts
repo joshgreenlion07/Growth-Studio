@@ -3,6 +3,7 @@ import { layingOf, type ConcreteFinish, type StampPattern, type FenceStyle, type
 import { rng } from '../siteplan/geometry';
 import { clamp01, fbm, smooth, vnoise, voronoi } from './noise';
 import { hash, hexRGB, maxAnisotropy, mixRGB, mulRGB, paint, paintPreviewing, textureSet, type PBRSet, type RGB } from './textures';
+import { ledgerPaint, sandStuccoPaint, santaBarbaraPaint } from './fountain-surfaces';
 import { WALL_FACES } from './wallfaces';
 import { CLOD_MAX, CLOD_TILE, clodField } from './humus-field';
 import { boardFaceSet } from './deckboards';
@@ -505,16 +506,36 @@ function mixTone(colors: RGB[], mix: number[], lx: number, ly: number, id: numbe
 }
 
 /**
- * The lines whose faces take the close-range detail (engine/paver-detail.ts) so far: field, border, edging and every
- * color of Belgard Avalon Slate, Catalina Grana and Antiqued Flat Top, and Basalite Premier Smooth. Any other line opts in by matching here once its
- * look has been checked with the detail on (its face kind must have a detail recipe).
+ * The lines whose faces take the close-range detail (engine/paver-detail.ts): every Belgard paver line in the catalog,
+ * with its field, its own border, its "same as main course" border (border-of-), its 6 x 9 paver edging (paver-edge-)
+ * and every color, and Basalite Premier Smooth (its own face mix, checked with the detail on). Other Basalite looks, the
+ * porcelain and generic tester looks are left as they were. A new line opts in by being
+ * listed here once its look has been checked with the detail on (its face kind must have a detail recipe).
+ *
+ * The detail face is the line's own face in the catalog: smooth for Catalina Grana and the Dimensions lines (Belgard's
+ * smooth finish, a crisp small chamfer), slate for Avalon Slate, antiqued for Antiqued Flat Top and Dimensions Antiqued
+ * (a gently weathered face whose edges are worn round and chipped instead of chamfered).
  */
-const DETAIL_LINES = /^(?:border-of-|paver-edge-)?(?:avalon-slate|catalina-grana|antiqued-flat-top|premier-smooth)-/;
+const DETAIL_SLUGS = [
+  'avalon-slate', 'catalina-grana', 'antiqued-flat-top',
+  'dimensions-6', 'dimensions-12-60mm', 'dimensions-12-80mm', 'dimensions-18', 'dimensions-antiqued',
+  'dimensions-single-units', 'dimensions-slabs', 'dimensions-slab-24',
+  'premier-smooth',
+];
+const DETAIL_LINES = new RegExp(`^(?:border-of-|paver-edge-)?(?:${DETAIL_SLUGS.join('|')})-`);
 function detailFor(spec: MaterialSpec, p: PaverPattern): DetailFace | undefined {
   if (!DETAIL_LINES.test(spec.id) || p.tumbled) return undefined;
   const f = p.face ?? 'textured';
   return f === 'slate' || f === 'smooth' || f === 'textured' || f === 'antiqued' ? f : undefined;
 }
+
+/**
+ * Side of a paver's pattern maps: a large repeat (a module pattern's 24 ft) and Antiqued Flat Top's face take 2048.
+ * Dimensions Antiqued, with the same face on a 8 ft random repeat, keeps 1024 (2.4 mm a texel; its close-up wear is
+ * drawn by the detail overlay), so one color is not 64 MB of GPU memory.
+ */
+// A face mix (Premier Smooth) has crisp, powdery drift edges that read as blocks up close at the small size.
+const paverMapSize = (spec: MaterialSpec, p: PaverPattern, T: number) => (T > 5 || p.blend === 'mix' || (p.face === 'antiqued' && /antiqued-flat-top-/.test(spec.id)) ? 2048 : 1024);
 
 function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
   const p = spec.pattern!;
@@ -531,6 +552,17 @@ function paverSet(spec: MaterialSpec, laying?: LayingPattern): PBRSet {
 /** True when a catalog look is drawn with the close-range detail (and its border with every texture row, hardscape.ts). */
 export const hasPaverDetail = (id: string) => DETAIL_LINES.test(id);
 
+/**
+ * The edge map of a detailed paver look, painted from its spec and laying pattern alone (no pattern maps): the texture
+ * worker paints edge maps this way, off the page (texture-recipes.ts, PaverEdges.src). Null for a look without it.
+ */
+export function paverEdgePixels(spec: MaterialSpec, laying?: LayingPattern): Uint8Array | null {
+  const p = spec.pattern;
+  if (!p || spec.recipe !== 'paver' || !detailFor(spec, p)) return null;
+  const lay = layoutFor(p, spec.id, laying);
+  return paverEdges(spec, p, lay, paverMapSize(spec, p, lay.tile), laying).paint();
+}
+
 /** Edge map texel: about 1.2 mm, finer than the narrowest half joint drawn with it (Avalon Slate's, 1.5 mm). */
 const EDGE_TEXEL = 0.0012;
 
@@ -546,6 +578,7 @@ const EDGE_TEXEL = 0.0012;
  */
 function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: number, laying?: LayingPattern): PaverEdges {
   const T = lay.tile, h = T / size / 2;
+  const src = `${spec.id}|${laying ?? ''}`;
   // Antiqued Flat Top has no chamfer: its arris is worn round over about 7 mm, unevenly, with chips broken out of it
   // (drawn in the shader, `worn`), as the pattern texture draws it.
   const worn = p.face === 'antiqued';
@@ -578,13 +611,13 @@ function paverEdges(spec: MaterialSpec, p: PaverPattern, lay: Layout, size: numb
     const cell = Math.max(Math.hypot(m.v1[0], m.v1[1]), Math.hypot(m.v2[0], m.v2[1])) * U;
     const n = Math.min(1024, Math.ceil(cell / EDGE_TEXEL));
     const key = `mod:${laying}:${m.pieces.length}:${m.P}:${m.scale ?? 1}:${n}`;
-    return { ...common, key, size: n, mapSize: size, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
+    return { ...common, key, src, size: n, mapSize: size, e: [M[0], M[1], M[2], M[3]], off: o, paint: () => moduleEdges(m, n) };
   }
   const n = Math.min(2048, Math.ceil(T / EDGE_TEXEL));
   const seeded = p.kind === 'ashlar' || p.kind === 'cobble' || p.kind === 'plank';
   const key = `lay:${p.kind}:${JSON.stringify(p.sizes)}:${p.blend ?? ''}:${laying ?? ''}:${seeded ? spec.id : ''}:${T.toFixed(4)}:${n}`;
   return {
-    ...common, key, size: n, mapSize: size, e: [1 / T, 0, 0, -1 / T], off: [-h / T, -h / T],
+    ...common, key, src, size: n, mapSize: size, e: [1 / T, 0, 0, -1 / T], off: [-h / T, -h / T],
     paint: () => {
       const out = new Uint8Array(n * n);
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) out[j * n + i] = encodeEdge(lay.at(((i + 0.5) / n) * T, ((j + 0.5) / n) * T).edge);
@@ -636,8 +669,7 @@ function paverMaps(spec: MaterialSpec, laying?: LayingPattern): { set: PBRSet; l
   const J = (p.joint * IN) / 2;
   const antiqued = p.face === 'antiqued';
   const bevel = p.tumbled ? 0.012 : antiqued ? 0.007 : p.face === 'woodgrain' || p.face === 'smooth' ? 0.0025 : 0.005;
-  // A face mix's drifts have crisp, powdery edges: at the small size they read as blocks up close.
-  const size = T > 5 || antiqued || p.blend === 'mix' ? 2048 : 1024;
+  const size = paverMapSize(spec, p, T);
   // Noise frequencies per tile for the antiqued face, whole numbers so the texture stays seamless.
   const F = (m: number) => Math.max(2, Math.round(T / m));
   // The antiqued face's relief is set in real size (1 unit of height is about 4 mm), so a large patio texture and a small
@@ -1376,6 +1408,15 @@ function stonesSet(spec: MaterialSpec, cells: number, tile: number, gloss: numbe
 
 function wallSet(spec: MaterialSpec, face: WallFace): PBRSet {
   const colors = pal(spec);
+  // Wall veneers (shelf 'Wall veneer'): a maker's ledger panels, or Green Lion's stucco finishes.
+  if (face === 'ledgerPanel') {
+    const v = spec.veneer;
+    const look = { tones: spec.palette, weights: v?.weights ?? spec.palette.map(() => 1 / spec.palette.length), rowIn: v?.rowIn ?? [1.5, 2] as [number, number], tallRow: v?.tallRow, pieceIn: v?.pieceIn ?? [4, 12] as [number, number], rust: v?.rust, quartz: v?.quartz };
+    // The photo's own average when the look has one (the panel photo, joints and all), else its tones' average.
+    return ledgerPaint(spec.id, look, v?.albedo ?? wallFaceMean(spec));
+  }
+  if (face === 'santaBarbara') return santaBarbaraPaint(spec.id, spec.palette, spec.veneer?.albedo ?? wallFaceMean(spec));
+  if (face === 'sandStucco') return sandStuccoPaint(spec.id, spec.palette, spec.veneer?.albedo ?? wallFaceMean(spec));
   if (face === 'plaster') {
     const [a, b] = colors;
     return paint(512, 2.4, 3, (u, v) => {

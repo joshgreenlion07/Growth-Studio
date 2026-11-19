@@ -14,7 +14,7 @@ const IN = 0.0254;
  * Average albedos (linear), fitted so a render from the front photo's camera, graded to the photo's exposure and white
  * balance by the paving (which matches its Belgard swatch), shows the pillars, stone and bowls as photographed.
  */
-const STUCCO_MEAN: RGB = [0.14, 0.118, 0.097];
+const STUCCO_MEAN: RGB = [0.14, 0.118, 0.097]; // the same as PF_STUCCO_MEAN, below
 const LEDGER_MEAN: RGB = [0.215, 0.146, 0.088];
 
 /**
@@ -23,10 +23,23 @@ const LEDGER_MEAN: RGB = [0.215, 0.146, 0.088];
  * sheen where it was burnished. 1.5 m repeat.
  */
 export function pillarStuccoSet(): PBRSet {
-  return textureSet('pf-stucco', () => {
+  return textureSet('pf-stucco', () => santaBarbaraPaint('pf-stucco-strokes', PF_STUCCO_TONES, STUCCO_MEAN));
+}
+
+/** The three-pillar job's stucco: a taupe gray, a little cooler in the darker smudges (light, dark, cool). */
+export const PF_STUCCO_TONES = ['#bfb9b4', '#98938f', '#a09f9f'];
+/** The three-pillar job's stucco, average albedo (linear), as fitted to its photos. */
+export const PF_STUCCO_MEAN: RGB = [0.14, 0.118, 0.097];
+
+/**
+ * Santa Barbara (smooth trowel) stucco in any color: `tones` light, dark and cool (sRGB hex), `mean` the average albedo
+ * the texture is scaled to. The strokes are seeded by `seed`.
+ */
+export function santaBarbaraPaint(seed: string, tones: string[], mean: RGB): PBRSet {
+  {
     const N = 1024, T = 1.5;
     const tone = new Float32Array(N * N), ridge = new Float32Array(N * N);
-    const r = rng('pf-stucco-strokes');
+    const r = rng(seed);
     // Sampled only for its stand-in color (see paintPreviewing): the strokes average out, skip them.
     const strokes = paintPreviewing() ? 0 : 300;
     // Trowel sweeps: arcs of 10-40 cm radius, 4-10 cm wide, painted in their own parameter space so each costs only its
@@ -54,8 +67,8 @@ export function pillarStuccoSet(): PBRSet {
         }
       }
     }
-    // Tones only: the average is set by STUCCO_MEAN. A taupe gray, a little cooler in the darker smudges.
-    const light = hexRGB('#bfb9b4'), dark = hexRGB('#98938f'), cool = hexRGB('#a09f9f');
+    // Tones only: the average is set by `mean`.
+    const [light, dark, cool] = [hexRGB(tones[0]), hexRGB(tones[1] ?? tones[0]), hexRGB(tones[2] ?? tones[1] ?? tones[0])];
     return paint(N, T, 2.5, (u, v) => {
       const o = Math.min(N - 1, Math.floor(v * N)) * N + Math.min(N - 1, Math.floor(u * N));
       const cloud = fbm(u, v, 3, 5, 31);
@@ -68,8 +81,26 @@ export function pillarStuccoSet(): PBRSet {
       c = mulRGB(c, 1 + tone[o] * 0.045 - smooth(0.6, 0.85, wisp) * 0.035 + (fine - 0.5) * 0.02 - (fleck > 0.94 ? 0.07 : 0));
       const h = 0.5 + blot * 0.1 + fine * 0.04 + ridge[o] * 0.06 - (fleck > 0.94 ? 0.15 : 0);
       return { h, c, r: 0.8 - Math.max(0, tone[o]) * 0.08 + fine * 0.05 };
-    }, STUCCO_MEAN);
-  });
+    }, mean);
+  }
+}
+
+/**
+ * Sand finish (float) stucco in any color: the finish coat floated so its sand stands up in an even, fine grain, a soft
+ * mottle where the color coat dried unevenly, and faint swirls of the float. Matte. `tones` light, dark (sRGB hex).
+ */
+export function sandStuccoPaint(seed: string, tones: string[], mean: RGB): PBRSet {
+  const light = hexRGB(tones[0]), dark = hexRGB(tones[1] ?? tones[0]);
+  const s = Math.abs(Math.floor(hashQ(seed.length * 7.7) * 40));
+  return paint(1024, 1.2, 4, (u, v) => {
+    const cloud = fbm(u, v, 3, 4, 61 + s);
+    const swirl = fbm(u * 1.3, v * 1.3, 7, 3, 67 + s);
+    // The sand: grains about 1 mm, each a tiny bump, some catching more light.
+    const g1 = vnoise(u * 900, v * 900, 900, 71 + s), g2 = vnoise(u * 450, v * 450, 450, 73 + s);
+    let c = mixRGB(dark, light, smooth(0.3, 0.75, cloud * 0.8 + swirl * 0.2));
+    c = mulRGB(c, 0.97 + (g1 - 0.5) * 0.07 + (g2 - 0.5) * 0.04);
+    return { h: 0.5 + g1 * 0.35 + g2 * 0.2 + swirl * 0.05, c, r: 0.92 - g1 * 0.04 };
+  }, mean);
 }
 
 /**
@@ -82,7 +113,7 @@ export function ledgerStoneSet(): PBRSet {
 }
 
 /** The golden travertine's tones (the three-pillar feature's panels): beige, tan, honey, taupe gray, a few cream and brown. */
-type LedgerLook = { tones: string[]; weights: number[]; rowIn: [number, number]; tallRow?: number; pieceIn: [number, number]; rust?: number };
+export type LedgerLook = { tones: string[]; weights: number[]; rowIn: [number, number]; tallRow?: number; pieceIn: [number, number]; rust?: number; /** Split quartzite: flatter, crisper strips, no pits, a fine sparkle of quartz. */ quartz?: boolean };
 const LEDGER_TONES: LedgerLook = {
   tones: ['#c9b8a2', '#c0a88c', '#b39a7e', '#aaa092', '#d3cbbf', '#a39282', '#94806c', '#bcab98'],
   weights: [0.2, 0.18, 0.13, 0.13, 0.08, 0.1, 0.06, 0.12],
@@ -111,7 +142,13 @@ const SILVER_MEAN: RGB = [0.232, 0.212, 0.182];
 const RUST_STAIN = hexRGB('#b08a68'), RUST_SPOT = hexRGB('#7c5236');
 
 function ledgerSet(key: string, look: LedgerLook, mean: RGB): PBRSet {
-  return textureSet(key, () => {
+  return textureSet(key, () => ledgerPaint(key, look, mean));
+}
+
+/** A split-face ledger panel veneer in `look`, scaled to the average albedo `mean`, its layout seeded by `seed`. */
+export function ledgerPaint(seed: string, look: LedgerLook, mean: RGB): PBRSet {
+  {
+    const key = seed;
     const T = 24 * IN, N = 1024;
     const r = rng(key);
     // Courses: heights in inches summing to the 24 in repeat.
@@ -143,12 +180,15 @@ function ledgerSet(key: string, look: LedgerLook, mean: RGB): PBRSet {
       return tones[0];
     };
     // The cleft face: rough relief at 1/4 to 3 in, sampled twice to light it from the sky above (the photos' look).
-    const cleftAt = (u: number, v: number) => fbm(u, v, 8, 5, 61) * 0.75 + vnoise(u * 72, v * 30, 72, 63) * 0.25;
+    // (Quartzite's cleft is finer and flatter: the coarse 1/3 in grain is left out, it reads as blocks on a pale stone.)
+    const cleftAt = look.quartz ? (u: number, v: number) => fbm(u, v, 8, 5, 61) : (u: number, v: number) => fbm(u, v, 8, 5, 61) * 0.75 + vnoise(u * 72, v * 30, 72, 63) * 0.25;
     return paint(N, T, 7, (u, v) => {
       // Canvas rows run top down and are flipped on upload: height in the panel is 1 - v.
       const X = u * 24, Y = (1 - v) * 24;
       // Ragged split edges: the joint lines wander with a coarse noise, up to about 1/4 in.
-      const ragY = (vnoise(u * 48, v * 24, 48, 69) - 0.5) * 0.45, ragX = (vnoise(u * 30, v * 60, 30, 70) - 0.5) * 0.5;
+      // Quartzite splits cleaner: its edges wander about a quarter as much.
+      const rag = look.quartz ? 0.28 : 1;
+      const ragY = (vnoise(u * 48, v * 24, 48, 69) - 0.5) * 0.45 * rag, ragX = (vnoise(u * 30, v * 60, 30, 70) - 0.5) * 0.5 * rag;
       const Yr = Y + ragY;
       const row = rows.find((rw) => Yr >= rw.y0 && Yr < rw.y1) ?? (Yr < 0 ? rows[rows.length - 1] : rows[0]);
       const lxAll = (((X + ragX - row.off) % 24) + 24) % 24;
@@ -158,17 +198,18 @@ function ledgerSet(key: string, look: LedgerLook, mean: RGB): PBRSet {
       const ly = clamp01((Yr - row.y0) / rowH);
       const jy = Math.min(ly * rowH, (1 - ly) * rowH);
       const jx = Math.min(lx, piece.len - lx);
-      const gap = 1 - smooth(0.04, 0.16, Math.min(jy, jx * 1.2));
+      const q = look.quartz ? 1 : 0;
+      const gap = 1 - smooth(0.04 - q * 0.015, 0.16 - q * 0.07, Math.min(jy, jx * 1.2));
       const d = 1 / N;
       const cl = cleftAt(u + piece.id * 0.37, v), up = cleftAt(u + piece.id * 0.37, v - d * 2), dn = cleftAt(u + piece.id * 0.37, v + d * 2);
       // Facets turned up to the sky are lighter, turned down darker.
-      const slope = (up - dn) * 9;
-      const pit = vnoise(u * 300, v * 300, 300, 65);
-      const bed = vnoise(u * 6 + piece.id * 13, v * 160, 1e6, 67);
+      const slope = (up - dn) * (q ? 5 : 9);
+      const pit = q ? 0 : vnoise(u * 300, v * 300, 300, 65);
+      const bed = look.quartz ? 0.5 : vnoise(u * 6 + piece.id * 13, v * 160, 1e6, 67);
       let c = pick(piece.id);
       // Travertine shades within a piece as much as between pieces: honey and gray clouds, bedding streaks, pits.
       const swirl = fbm(u + piece.id, v, 8, 3, 66);
-      c = mixRGB(c, pick(hashQ(piece.id * 7.3)), 0.5 * smooth(0.3, 0.75, swirl));
+      c = mixRGB(c, pick(hashQ(piece.id * 7.3)), (q ? 0.3 : 0.5) * smooth(0.3, 0.75, swirl));
       if (look.rust) {
         // Iron in the stone: a soft tan-rust stain across some strips and a few small rust-brown spots.
         const stained = hashQ(piece.id * 3.1) < 0.16 * look.rust;
@@ -176,14 +217,17 @@ function ledgerSet(key: string, look: LedgerLook, mean: RGB): PBRSet {
         const spot = vnoise(u * 110 + piece.id * 9, v * 110, 110, 73);
         c = mixRGB(c, RUST_SPOT, smooth(1 - 0.05 * look.rust, 1 - 0.02 * look.rust, spot) * 0.8);
       }
-      c = mulRGB(c, 0.88 + (cl - 0.5) * 0.24 + (bed - 0.5) * 0.12 + Math.max(-0.14, Math.min(0.14, slope)) - (pit > 0.88 ? 0.25 * smooth(0.88, 0.94, pit) : 0));
+      c = mulRGB(c, 0.88 + (cl - 0.5) * (q ? 0.1 : 0.24) + (bed - 0.5) * (q ? 0.05 : 0.12) + Math.max(-0.14, Math.min(0.14, slope)) - (pit > 0.88 ? 0.25 * smooth(0.88, 0.94, pit) : 0));
+      // Quartz grains catch the light here and there.
+      const glint = q ? vnoise(u * 320, v * 320, 320, 77) : 0;
+      if (glint > 0.95) c = mulRGB(c, 1 + (glint - 0.95) * 1.6);
       // Each strip's top edge catches the sky, its underside is in shade; joints are dark.
       c = mulRGB(c, 0.96 + smooth(0.6, 0.95, ly) * 0.07 - smooth(0.2, 0, ly) * 0.14);
-      c = mixRGB(c, mulRGB([0.36, 0.32, 0.29], c[1] / 0.6), gap * 0.6);
-      const h = (piece.id * 0.75 + cl * 0.6) * (1 - gap) + 0.02 - (pit > 0.88 ? 0.12 : 0);
-      return { h, c, r: 0.88 - cl * 0.08 };
+      c = mixRGB(c, mulRGB([0.36, 0.32, 0.29], c[1] / 0.6), gap * (q ? 0.78 : 0.6));
+      const h = (piece.id * 0.75 + cl * (q ? 0.22 : 0.6)) * (1 - gap) + 0.02 - (pit > 0.88 ? 0.12 : 0);
+      return { h, c, r: q ? 0.8 - (glint > 0.95 ? 0.3 : 0) : 0.88 - cl * 0.08 };
     }, mean);
-  });
+  }
 }
 
 const hashQ = (x: number) => {
