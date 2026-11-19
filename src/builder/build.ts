@@ -13,7 +13,7 @@ import { buildFeatures, type FeatureBuild, type NightLight } from './features';
 import { fourFallBed, fourFallBedCut, fourFallFrame, fourFallGroundCuts, inGroundCut, plantsOnFourFalls, type GroundCut } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
-import { groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
+import { GROUND_SPECULAR, groundLook, groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
 import { materialChipSpacing } from '../engine/surfaces';
 import { FT } from '../siteplan/fourfall';
 import { buildHardscape, stepsFootprint, zoneTop } from './hardscape';
@@ -94,7 +94,9 @@ export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone |
   // Bark mulch beds also give their chip spacing (feet), so the fade draws the bed's own chips at their size; other
   // beds pass 0 and the band uses the module's chips.
   const chip = materialChipSpacing(spec);
-  return { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0 };
+  // A soil fill also takes the ground's toned-down sheen: with the soil's full sheen the flat band reads as a pale,
+  // bluish strip on the dark fill. Bark, mulch and stone beds keep the full sheen (1), which matched them best.
+  return { ...groundLook(spec), texture: spec.crumb ? 0 : 1, chipSize: chip ? chip / FT : 0, specular: spec.crumb ? GROUND_SPECULAR : 1 };
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */

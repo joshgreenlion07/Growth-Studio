@@ -430,10 +430,10 @@ export function groundRoughness(spec: MaterialSpec): number {
 }
 
 /**
- * How a material reads on the ground from a few feet away: its painted texture's average albedo (linear), the
- * roughness its ground layer is drawn with and the ground's specular intensity. A four-fall waterfall fades the edge of its soil into this (fourfall.ts).
+ * How a material reads on the ground from a few feet away: its painted texture's average albedo (linear) and the
+ * roughness its ground layer is drawn with. A four-fall waterfall fades the edge of its soil into this (fourfall.ts).
  */
-export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness: number; specular: number } {
+export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness: number } {
   const avg = materialAverage(spec);
   let color: THREE.Color;
   if (avg) color = new THREE.Color(avg.color[0], avg.color[1], avg.color[2]);
@@ -443,7 +443,7 @@ export function groundLook(spec: MaterialSpec): { color: THREE.Color; roughness:
     for (const hex of spec.palette) color.add(new THREE.Color(hex));
     color.multiplyScalar(1 / Math.max(1, spec.palette.length));
   }
-  return { color, roughness: groundRoughness(spec), specular: GROUND_SPECULAR };
+  return { color, roughness: groundRoughness(spec) };
 }
 
 /** Ground material: a splat blend of soil plus the plan's surfaces, in world space. */
