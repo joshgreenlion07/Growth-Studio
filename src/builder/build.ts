@@ -81,12 +81,14 @@ export interface SceneBuild {
 /**
  * The ground a four-fall waterfall's soil fades into: the look of the bed it is set in (fourfall.ts fourFallBed; its
  * painted texture's average color in linear light and its ground roughness, ground.ts groundLook), or null on lawn,
- * paving or nothing, where it keeps its edges tucked under grade.
+ * paving or nothing, where it keeps its edges tucked under grade. The fade keeps the module's bark chips (texture 1)
+ * in bark, mulch and stone beds; in a soil fill (humus, compost, dirt: spec.crumb) chips would read as gravel, so it
+ * fades to the bed's color flat (texture 0).
  */
-export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number } | null {
+export function fourFallBedLook(f: FeaturePlacement, zoneAt: (p: Vec2) => Zone | null): { color: THREE.Color; roughness: number; texture: number } | null {
   const bed = fourFallBed(f, zoneAt);
   const spec = bed ? materialById.get(bed.catalogId) : undefined;
-  return spec ? groundLook(spec) : null;
+  return spec ? { ...groundLook(spec), texture: spec.crumb ? 0 : 1 } : null;
 }
 
 /** Fill beds that ask for mass planting, avoiding hand-placed plants and water. */
