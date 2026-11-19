@@ -365,11 +365,21 @@ export const WATERFALL_DEFAULTS = {
   lights: 'data',   // 'data': only report where the under-fall lights go; 'three': also add PointLights; false: none
   refraction: true, // water reads a colour + depth copy of the scene (see setRefraction)
   detail: 'full',   // 'light': rocks with about a third of the triangles (phones, tablets); same layout, sizes within a percent or so
+  topFall: null,    // feet: the top fall's drop (head pool to the next pool) when shorter than the model's own share;
+                    // the lower pools stay where `height` puts them and the top stones come down with the head pool
+  mulch: null,      // { dark, light, grain }: the soil cover's two tones (linear RGB arrays) and how fine it is (1 = bark chips;
+                    // higher is finer), to match the bed around it; null keeps the model's own shredded bark
 };
 /** Overall size in feet for a set of options, without building anything. */
 export function waterfallSize(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options }, head = 1.5 + (o.level - 3) * 0.25;
-  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: o.height, soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+  return { width: o.width, depth: o.lowest + 3 * o.level + head, height: topHeight(o.height, o.topFall), soilBehind: o.backSlope + 0.8, soilBeside: 3.2 };
+}
+/** Patio level to the top stones: `height`, or with a short top fall, the next pool's level plus that fall plus the head stones. */
+function topHeight(height, topFall) {
+  if (!topFall) return height;
+  const top = height - 0.95, wl1 = top - 0.30 * (top + 0.15);
+  return wl1 + topFall + 0.95;
 }
 export function createWaterfall(options = {}) {
   const o = { ...WATERFALL_DEFAULTS, ...options };
@@ -403,6 +413,13 @@ export function createWaterfall(options = {}) {
     uUnit: { value: o.unit },
   };
   const bindWI = sh => { for (const k in WI) sh.uniforms[k] = WI[k]; };
+  // the soil cover: the model's own shredded bark unless the host matches it to the bed around it (options.mulch)
+  const MU = { uMulchA: { value: new THREE.Color(0.085, 0.036, 0.02) }, uMulchB: { value: new THREE.Color(0.27, 0.125, 0.06) }, uGrain: { value: 1 } };
+  if (o.mulch) {
+    MU.uMulchA.value.setRGB(...o.mulch.dark); MU.uMulchB.value.setRGB(...o.mulch.light); MU.uGrain.value = o.mulch.grain || 1;
+    // the dirt line at the foot of the rocks takes the same soil
+    WI.uSoil.value.copy(MU.uMulchA.value).lerp(MU.uMulchB.value, 0.35);
+  }
   const group = new THREE.Group(); group.name = 'four-fall-waterfall';
   const body = new THREE.Group(); group.add(body);
   let soil = null;
@@ -485,20 +502,22 @@ export function createWaterfall(options = {}) {
   const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
   groundMat.onBeforeCompile = sh => {
     bindWI(sh);
+    for (const k in MU) sh.uniforms[k] = MU[k];
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aMat; varying vec2 vMat; varying vec3 vTW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vTW = transformed;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW;\n' + NOISE3 + VORO2 + WATER_INFO)
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMat; varying vec3 vTW;\nuniform vec3 uMulchA, uMulchB; uniform float uGrain;\n' + NOISE3 + VORO2 + WATER_INFO)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float gFade = 1.0 - smoothstep(22.0, 60.0, length(vViewPosition) / uUnit);
         float gSteep = smoothstep(0.45, 0.75, 1.0 - inverseTransformDirection(normalize(vNormal), viewMatrix).y);
         vec2 gp = mix(vTW.xz, vec2((vTW.x + vTW.z) * 0.7, vTW.y), gSteep);
-        vec4 c1 = voro(vec2(gp.x * 7.0 + gp.y * 3.0, gp.y * 17.0 - gp.x * 4.0));
-        vec4 c2 = voro(vec2(gp.x * 5.0 - gp.y * 13.0, gp.y * 6.0 + gp.x * 11.0) + 17.0);
+        vec2 gq = gp * uGrain;
+        vec4 c1 = voro(vec2(gq.x * 7.0 + gq.y * 3.0, gq.y * 17.0 - gq.x * 4.0));
+        vec4 c2 = voro(vec2(gq.x * 5.0 - gq.y * 13.0, gq.y * 6.0 + gq.x * 11.0) + 17.0);
         float chipH = mix(0.55, max(1.0 - c1.x * 1.35, (1.0 - c2.x * 1.35) * 0.92), gFade);
         float chipC = mix(0.5, c1.x < c2.x ? c1.z : c2.z, gFade);
-        vec3 mulch = mix(vec3(0.085, 0.036, 0.02), vec3(0.27, 0.125, 0.06), chipC) * (0.5 + 0.7 * chipH);
+        vec3 mulch = mix(uMulchA, uMulchB, chipC) * (0.5 + 0.7 * chipH);
         vec4 g1 = voro(gp * 10.0);
         vec3 gcol = mix(vec3(0.3, 0.25, 0.19), vec3(0.4, 0.22, 0.1), step(0.62, g1.z));
         gcol = mix(gcol, vec3(0.2, 0.2, 0.2), step(0.8, g1.w)) * (0.45 + 0.75 * (1.0 - g1.x));
@@ -518,7 +537,7 @@ export function createWaterfall(options = {}) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal = rkPerturb(-vViewPosition, normal, vec2(dFdx(gHt), dFdy(gHt)) * uUnit, faceDirection);`);
   };
-  groundMat.customProgramCacheKey = () => 'wf-ground-v3';
+  groundMat.customProgramCacheKey = () => 'wf-ground-v4';
 
   function plantMaterial(o) {
     const m = new THREE.MeshStandardMaterial({ vertexColors: !o.map, map: o.map || null, alphaTest: o.map ? 0.5 : 0, side: THREE.DoubleSide, roughness: 0.8, metalness: 0 });
@@ -551,11 +570,14 @@ export function createWaterfall(options = {}) {
   const MATS = { grass: grassMat, vgrass: grassMat, fern: leafyMat, hosta: leafyMat, lavender: shrubMat, catmint: shrubMat, pink: shrubMat, white: shrubMat, box: shrubMat, moss: shrubMat, cypress: shrubMat };
 
   let L = null;
-  function makeLayout(H, base, lvl) {
+  function makeLayout(H, base, lvl, topFall) {
     const head = 1.5 + (lvl - 3) * 0.25, lv = [lvl * 1.08, lvl * 0.92, lvl];   // source pool, then three upper levels, a little unequal
     const D = base + lv[0] + lv[1] + lv[2] + head;
-    const top = H - 0.95, basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
+    let top = H - 0.95;
+    const basin = -0.15, total = top - basin, fr = [0.30, 0.18, 0.27, 0.25];
     const wl = [top]; for (let i = 0; i < 4; i++) wl.push(wl[i] - fr[i] * total); wl[4] = basin;
+    // a short top fall: the head pool only topFall above the next pool, the top stones the same height above it as before
+    if (topFall) { wl[0] = wl[1] + topFall; top = wl[0]; H = topHeight(H, topFall); }
     // lips from the front: fall 4 at the back of the lowest level, then one level further back each time
     const z4 = -base, z3 = z4 - lv[2], z2 = z3 - lv[1], z1 = z2 - lv[0], fzs = [z1, z2, z3, z4];
     const wander = 1 + clamp((lvl - 3) / 2, 0, 1) * 0.35;
@@ -1144,7 +1166,7 @@ export function createWaterfall(options = {}) {
   function rebuild(next) {
     if (next) Object.assign(o, next);
     W = o.width;
-    L = makeLayout(o.height, o.lowest, o.level);
+    L = makeLayout(o.height, o.lowest, o.level, o.topFall);
     clearWorld();
     rnd = mulberry32(o.seed);
     rocks = []; bermRocks = [];

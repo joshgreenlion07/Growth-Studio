@@ -329,6 +329,11 @@ Messages use `window.postMessage`:
 - The cedar slat water wall (`cedar-slat-travertine-water-wall`, 12 x 2 1/2 ft footprint, its back on the footprint's
   back edge) offers the option `pots` (default on: a potted Gardenia 'Veitchii' in front of each cedar wing). Its stone
   panel is MSI Silver Travertine ledger (`ww-ledger-silver` texture), its sconces Tru-Scapes Traditional Up/Down.
+- The four-fall rock waterfall (`rock-waterfall-4-fall`) comes in sizes. A placement's `size` is
+  [outline width, outline depth, height] in meters, and its `position` is the middle of that outline, which includes the
+  planted soil behind the top stones. One size is a wider build: a 17 ft front, a 7 1/2 ft basin, and a short 1 ft top
+  fall (top stones about 6 1/2 ft up). Its mound's soil takes the bed the waterfall stands in: black humus, compost or
+  dirt by their crumb colors, bark by its palette. Any other bed keeps the module's own bark.
 - `plan.utilities` carries underground runs and the equipment they connect:
   `{ lines: { id, points, runs: { kind, label, od, cover, code?, tracer? }[], gap? }[], points: { id, kind, position, label?, rotationDeg? }[] }`.
   `kind` is `electrical`, `lighting`, `gas`, `irrigation`, `water` or `drain`;

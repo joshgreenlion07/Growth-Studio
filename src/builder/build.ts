@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { beginMaterialBuild } from './materials';
 import { featureById, plantById } from '../siteplan/catalog';
-import { bounds, centroid, scatterInPolygon } from '../siteplan/geometry';
+import { bounds, centroid, pointInPolygon, scatterInPolygon } from '../siteplan/geometry';
 import { PointGrid, PolygonIndex, PolygonSet, SegmentGrid, inBounds } from '../siteplan/spatial';
 import type { PlantPlacement, SitePlan, Vec2 } from '../siteplan/types';
 import type { PlanarMirror } from '../engine/water';
@@ -352,7 +352,15 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality);
+  // The bed look at a point: the topmost bed zone there (a waterfall's mound takes its soil from it).
+  const bedAt = (p: Vec2) => {
+    for (let i = plan.zones.length - 1; i >= 0; i--) {
+      const z = plan.zones[i];
+      if (z.kind === 'bed' && pointInPolygon(p, z.polygon)) return z.catalogId;
+    }
+    return undefined;
+  };
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality, bedAt);
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
