@@ -21,6 +21,7 @@ import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
 import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
 import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
+import { KITCHEN_ISLAND_FEATURES, KITCHEN_PART_FEATURES, type KitchenIsland } from './kitchen';
 
 export type PlantForm =
   | 'shadeTree'
@@ -428,6 +429,8 @@ export type FeatureKind =
   | 'pergolaLouvered'
   | 'kitchenStraight'
   | 'kitchenL'
+  | 'kitchenIsland'
+  | 'kitchenPart'
   | 'hotTub'
   | 'saunaBarrel'
   | 'saunaCube'
@@ -474,6 +477,10 @@ export interface FeatureSpec {
   veneer?: string;
   /** An urn fountain's urn (builder/urnfountain.ts): the glazed ceramic urn or the chiseled stone jar. */
   urn?: 'glazed' | 'jar';
+  /** An outdoor kitchen island assembled from kitchen parts (kind 'kitchenIsland', siteplan/kitchen.ts). */
+  island?: KitchenIsland;
+  /** A kitchen part shown on its own (kind 'kitchenPart'): its KITCHEN_PARTS id. Parts are never offered in a plan. */
+  kitchenPart?: string;
   /** Footprint in meters [width, depth] for the plan editor. */
   footprint: [number, number];
   /** Sizes a placed one can be set to (its `size`), and which of them it draws at when it has none (index). */
@@ -1094,6 +1101,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'umbrella', name: 'Market umbrella', group: 'Shade', kind: 'umbrella', footprint: [2.7, 2.7] }),
   F({ id: 'kitchen-l', name: 'Outdoor kitchen, L-shaped', group: 'Kitchens', kind: 'kitchenL', footprint: [3.6, 2.6] }),
   F({ id: 'kitchen-straight', name: 'Outdoor kitchen, straight', group: 'Kitchens', kind: 'kitchenStraight', footprint: [3.0, 0.8] }),
+  // Islands assembled from the kitchen parts library (siteplan/kitchen.ts, builder/kitchen/).
+  ...KITCHEN_ISLAND_FEATURES,
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
   // Cal Spas Tropical Plus PPZ-743BC, Patio Plus series (Cal Spas spec sheet and product page): 84 x 84 x 37 in, 43 jets,
   // 6 seats with a cool-off seat. Built by builder/spa-ppz743bc.ts in the finish Green Lion installs; a placement's
@@ -1234,7 +1243,8 @@ function bedFill(m: MaterialSpec): Pick<MaterialSpec, 'fillType' | 'depthIn' | '
 for (const m of MATERIALS) if (m.use === 'bed') Object.assign(m, bedFill(m));
 
 export const materialById = new Map(MATERIALS.map((m) => [m.id, m]));
-export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
+// Kitchen parts are drawn by id (the Library) but are not in FEATURES: they are never offered in a plan.
+export const featureById = new Map([...FEATURES, ...KITCHEN_PART_FEATURES].map((f) => [f.id, f]));
 
 /**
  * The kind of thing a feature is, as a plural noun the parent shows ("Pergolas and gazebos"): a placed feature can be
@@ -1244,7 +1254,7 @@ export const featureById = new Map(FEATURES.map((f) => [f.id, f]));
 const SWAP_CLASS: Record<FeatureKind, string> = {
   pergolaWood: 'Pergolas and gazebos', pergolaLouvered: 'Pergolas and gazebos', gazebo: 'Pergolas and gazebos', umbrella: 'Umbrellas',
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
-  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens',
+  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens', kitchenIsland: 'Outdoor kitchens', kitchenPart: 'Kitchen parts',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
   waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',

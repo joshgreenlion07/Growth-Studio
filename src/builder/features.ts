@@ -25,6 +25,7 @@ import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
 import { buildFourFall, type FourFallInstance } from './fourfall';
+import { buildKitchenFeature } from './kitchen/island';
 import type { WaterfallGround } from './fourfall/waterfall-feature.js';
 import type { Quality } from '../engine/post';
 
@@ -450,6 +451,27 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         add(mat.steel, box(0.45, 0.03, 0.36, W * 0.25, Hc + 0.01, -(D - depth) / 2));
         add(mat.steel, cyl(0.012, 0.012, 0.3, W * 0.25, Hc, -(D - depth) / 2 - 0.22, 8));
         light(-W * 0.18, Hc + 0.6, -(D - depth) / 2 + 0.5, '#ffd1a0', 1.5, 4);
+        break;
+      }
+      case 'kitchenIsland':
+      case 'kitchenPart': {
+        // An island assembled from the kitchen parts, or one part on its own (builder/kitchen/), inches to meters.
+        const yaw = (-f.rotationDeg * Math.PI) / 180;
+        buildKitchenFeature({
+          add,
+          hinge: (px, py, pz) => hinge(px, py, pz),
+          anchor: (parent, x, y, z) => anchorAt(parent ?? o, x, y, z),
+          act,
+          fire: (t, style) => fire(t, style),
+          light,
+          landLight: (l) => {
+            const w = { ...l, position: local(l.position.x, l.position.y, l.position.z), direction: l.direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw) };
+            landLights.push(w);
+            return w;
+          },
+          glow: (m) => extraGlow.push(m),
+          own: (m) => owned.push(m),
+        }, spec, f.options, f.id);
         break;
       }
       case 'hotTub': {

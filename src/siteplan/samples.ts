@@ -12,6 +12,7 @@ import { sampleSteelEdging } from './sample-steel-edging';
 import { sampleFourFall } from './sample-four-fall';
 import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
+import { sampleKitchenIsland } from './sample-kitchen-island';
 import { sampleRanch } from './sample-ranch';
 
 /**
@@ -512,6 +513,7 @@ export const SAMPLES = [
   { id: 'steel-edging', name: 'Black steel edging: 1/8 in and 3/16 in', make: sampleSteelEdging },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
+  { id: 'kitchen-island', name: 'Outdoor kitchen: ledgerstone griddle island', make: sampleKitchenIsland },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
   { id: 'ranch', name: 'Single-story ranch with hip roof', make: sampleRanch },
 ];

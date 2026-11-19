@@ -11,7 +11,7 @@ export type LibraryItem =
   | { kind: 'feature'; id: string } // a FeatureSpec id
   | { kind: 'structure'; id: 'cover' | 'calroom' };
 export interface SampleScene { id: string; label: string }
-export interface SampleOptions { scene?: string; laying?: LayingPattern; years?: number }
+export interface SampleOptions { scene?: string; laying?: LayingPattern; years?: number; /** A feature's on/off options (a kitchen part's). */ options?: Record<string, boolean> }
 export interface LibrarySample {
   plan: SitePlan;
   /** Camera target, world coordinates [x, y, z]. */
@@ -92,7 +92,7 @@ export function sampleFor(item: LibraryItem, opts: SampleOptions = {}): LibraryS
   switch (item.kind) {
     case 'material': return materialSample(item, opts);
     case 'plant': return plantSample(item.id, opts);
-    case 'feature': return featureSample(item.id);
+    case 'feature': return featureSample(item.id, opts.options);
     case 'structure': return structureSample(item.id);
     default: throw new Error(`Library sample: unknown item kind "${(item as { kind: string }).kind}"`);
   }
@@ -184,7 +184,7 @@ function plantSample(id: string, opts: SampleOptions): LibrarySample {
   return { plan, target: [c, p.matureHeight * 0.45, c], dist: Math.max(p.matureHeight, p.matureSpread) * 1.9 + 1.2, years };
 }
 
-function featureSample(id: string): LibrarySample {
+function featureSample(id: string, options?: Record<string, boolean>): LibrarySample {
   const f = featureById.get(id);
   if (!f) throw new Error(`Library sample: no feature "${id}" in the catalog`);
   if (f.kind === 'fourFall') {
@@ -199,7 +199,7 @@ function featureSample(id: string): LibrarySample {
   const L = Math.max(10, pad + 4), c = L / 2;
   const plan = lot(f.name, L);
   plan.zones = [lawn(L), { id: 'patio', source: S, kind: 'hardscape', catalogId: NEUTRAL_PAVER, polygon: rect(c, c, pad, pad) }];
-  const placed: FeaturePlacement = { id: 'sample', source: S, catalogId: f.id, position: [c, c], rotationDeg: 0 };
+  const placed: FeaturePlacement = { id: 'sample', source: S, catalogId: f.id, position: [c, c], rotationDeg: 0, ...(options ? { options } : {}) };
   plan.features = [placed];
   const [w, d] = f.footprint;
   return { plan, target: [c, f.group === 'Shade' ? 1.4 : 0.8, c], dist: Math.max(w, d) * 1.8 + 2.5 };

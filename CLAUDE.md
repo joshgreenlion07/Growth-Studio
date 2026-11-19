@@ -39,6 +39,12 @@ finished-work photos in `reference/green-lion-style/`.
   `species/kit.ts`; `plants.ts` turns them into instanced, growing meshes and
   keeps a generic builder per plant form as the fallback for a new catalog
   plant that has no file yet.
+  Outdoor kitchens (`siteplan/kitchen.ts`) are built like water features: a library of
+  parametric parts (grills, griddles, burners, pizza ovens, sinks, cold units, doors, drawers,
+  propane cabinet, stools, counter and veneer finishes; Library shelf "Kitchen parts", never
+  offered in a plan: they are in `featureById` but not in FEATURES) and islands assembled from
+  them as bays left to right (`KitchenIsland`, kind `kitchenIsland`), drawn by `builder/kitchen/`
+  (layout test `scripts/kitchen.test.ts`).
   Lighting fixtures (Tru-Scapes, `siteplan/truscapes.ts`) are built by
   `landscapelights.ts` and lit through `engine/landlights.ts`.
   Composite decks (a hardscape zone in a maker's deck board, `siteplan/decking.ts`)

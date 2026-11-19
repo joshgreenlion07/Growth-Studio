@@ -5,12 +5,13 @@
 // removed as real product lines replace them.
 import * as THREE from 'three';
 import type { Studio } from '../engine/studio';
-import { FEATURES, MATERIALS, PLANTS, approvalKeyOf, isApproved, isOutOfArea, isTester, layingName, layingsFor, materialById, outOfAreaNote, type FeatureSpec, type LayingPattern, type MaterialSpec, type PlantSpec } from '../siteplan/catalog';
+import { FEATURES, MATERIALS, PLANTS, approvalKeyOf, featureById, isApproved, isOutOfArea, isTester, layingName, layingsFor, materialById, outOfAreaNote, type FeatureSpec, type LayingPattern, type MaterialSpec, type PlantSpec } from '../siteplan/catalog';
 import { onApprovalsChanged } from '../siteplan/approval';
 import { sampleFor, scenesFor, type LibraryItem, type LibrarySample } from './library-samples';
 import { swatchFor } from './swatches';
 import { wantThumb } from './plantthumbs';
 import { wantFeatureThumb } from './featurethumbs';
+import { KITCHEN_PARTS, kitchenPartById } from '../siteplan/kitchen';
 
 const FT = 3.28084;
 const IN = 0.0254;
@@ -36,6 +37,8 @@ interface Product {
   mat?: MaterialSpec;
   plant?: PlantSpec;
   feature?: FeatureSpec;
+  /** A kitchen part (siteplan/kitchen.ts): a building block for islands, shown here only; nothing to approve. */
+  part?: boolean;
 }
 interface Category {
   id: string;
@@ -54,6 +57,7 @@ const CATEGORIES: Category[] = [
   { id: 'concrete', label: 'Concrete' },
   { id: 'shade', label: 'Shade and roofs' },
   { id: 'kitchens', label: 'Kitchens' },
+  { id: 'kitchen-parts', label: 'Kitchen parts' },
   { id: 'fire', label: 'Fire' },
   { id: 'water', label: 'Water and spa' },
   { id: 'accents', label: 'Accents and furniture' },
@@ -114,6 +118,19 @@ function buildProducts(): Product[] {
     if (!cat || f.kind === 'steppingStone') continue;
     out.push({ key: `feature:${f.id}`, name: f.name, sub: f.group, cat, tester: false, variants: [{ item: { kind: 'feature', id: f.id }, label: f.name, swatch: '#8a8f86' }], feature: f });
   }
+  // Kitchen parts: one card per part, its sizes or colors as its chips. Building blocks for islands, never offered in a
+  // plan, so they have no approval of their own.
+  const families = new Map<string, Product>();
+  for (const kp of KITCHEN_PARTS) {
+    let p = families.get(kp.family);
+    if (!p) {
+      const sub = { dropIn: 'Drops into the counter', front: 'Fits the island front', onCounter: 'Stands on the counter', free: 'Seating', finish: kp.type === 'counter' ? 'Countertop finish' : 'Base veneer' }[kp.mount];
+      p = { key: `kitchen-part:${kp.family}`, name: kp.familyName, sub, cat: 'kitchen-parts', tester: false, variants: [], part: true };
+      families.set(kp.family, p);
+      out.push(p);
+    }
+    p.variants.push({ item: { kind: 'feature', id: kp.id }, label: kp.label, swatch: '#9aa0a4' });
+  }
   for (const s of STRUCTURES) out.push({ key: `structure:${s.id}`, name: s.name, sub: s.sub, cat: 'shade', tester: false, variants: [{ item: { kind: 'structure', id: s.id }, label: s.name, swatch: '#b9b2a6' }] });
   return out;
 }
@@ -155,6 +172,15 @@ function facts(p: Product, v: Variant): [string, string][] {
   if (p.plant) {
     const s = p.plant;
     out.push(['Group', s.group], ['Mature size', `${ft(s.matureHeight)} tall, ${ft(s.matureSpread)} wide`], ['Years to mature', String(s.yearsToMature)], ['Nursery size', s.container], ['Spacing', ft(s.spacing)]);
+    return out;
+  }
+  if (p.part) {
+    const kp = v.item.kind === 'feature' ? kitchenPartById.get(v.item.id) : undefined;
+    if (kp) for (const f of kp.facts) {
+      const i = f.indexOf(' ');
+      const head = /^(Overall|Cutout|Opening|Bay) /.test(f) ? f.slice(0, i) : '';
+      out.push(head ? [head, f.slice(i + 1)] : ['', f]);
+    }
     return out;
   }
   if (p.feature) {
@@ -217,6 +243,8 @@ let state: {
   laying?: LayingPattern;
   scene?: string;
   years: number;
+  /** A kitchen part's options as chosen here (its sample is rebuilt with them). */
+  partOpts: Record<string, boolean>;
   pose: { eye: THREE.Vector3; target: THREE.Vector3; fov: number } | null;
   token: number;
   /** A sample is being built: the studio's actions are the previous item's until it resolves. */
@@ -230,7 +258,7 @@ export const libraryOpen = () => !!state;
 
 export function openLibrary(host: LibraryHost, root: HTMLElement) {
   if (state) return;
-  state = { host, root, products: buildProducts(), cat: 'pavers', query: '', showRemoved: false, product: null, variant: null, years: 3, pose: null, token: 0, waiting: new Map(), note: '', off: () => {} };
+  state = { host, root, products: buildProducts(), cat: 'pavers', query: '', showRemoved: false, product: null, variant: null, years: 3, partOpts: {}, pose: null, token: 0, waiting: new Map(), note: '', off: () => {} };
   state.off = onApprovalsChanged(() => {
     if (!state) return;
     for (const [k, w] of state.waiting) {
@@ -270,6 +298,7 @@ export function closeLibrary() {
 
 /** Approved, or waiting for Area Planner to confirm a change. */
 function approvedNow(p: Product): boolean {
+  if (p.part) return true;
   const w = state?.waiting.get(p.key);
   return w ? w.on : isApproved(p.key);
 }
@@ -286,6 +315,7 @@ function select(p: Product, v: Variant) {
     state.scene = scenes[0]?.id;
     state.laying = undefined;
     state.years = 3;
+    state.partOpts = {};
   }
   show();
 }
@@ -296,7 +326,7 @@ function show(reframe = true) {
   const { host, variant } = state;
   let smp: LibrarySample;
   try {
-    smp = sampleFor(variant.item, { scene: state.scene, laying: state.laying, years: state.years });
+    smp = sampleFor(variant.item, { scene: state.scene, laying: state.laying, years: state.years, ...(state.product?.part ? { options: state.partOpts } : {}) });
   } catch (err) {
     console.error(err);
     state.note = 'This item has no sample yet.';
@@ -376,6 +406,7 @@ function onClick(e: Event) {
     case 'remove': { const p = prod() ?? s.product; if (p) toggle(p, false); return; }
     case 'restore': { const p = prod() ?? s.product; if (p) toggle(p, true); return; }
     case 'removed': s.showRemoved = !s.showRemoved; return renderList();
+    case 'partopt': s.partOpts = { ...s.partOpts, [val]: !(s.partOpts[val] ?? featureById.get(s.variant?.item.id ?? '')?.options?.find((o) => o.key === val)?.default ?? false) }; show(false); return render();
     case 'useact': s.host.studio.toggleFeatureAction('sample', val); fillActions(); return;
     case 'reset': if (s.pose) s.host.studio.restorePose(s.pose); return;
   }
@@ -418,8 +449,8 @@ function renderList() {
   const removed = inCat.filter((p) => p.tester && !approvedNow(p)).length;
   grid.innerHTML = (list.length ? list.map((p, i) => {
     const on = approvedNow(p);
-    const badge = p.tester ? (on ? 'Tester' : 'Removed') : on ? 'Approved' : 'Not approved';
-    const count = p.variants.length > 1 ? `${p.variants.length} colors` : '';
+    const badge = p.part ? 'Kitchen part' : p.tester ? (on ? 'Tester' : 'Removed') : on ? 'Approved' : 'Not approved';
+    const count = p.variants.length > 1 ? `${p.variants.length} ${p.part && !/^(Countertop|Island veneer)/.test(p.name) ? 'sizes' : 'colors'}` : '';
     return `<div class="lib-card${on ? '' : ' is-off'}">
       <button type="button" class="lib-open" data-act="open" data-val="${esc(p.key + '|' + p.cat)}" aria-label="${esc(p.name)}">
         <span class="lib-pic" data-pic="${i}" style="background:${p.variants[0].swatch}"></span>
@@ -444,7 +475,9 @@ function detailHtml(): string {
   const m = v.item.kind === 'material' ? materialById.get(v.item.id) : undefined;
   const lays = m ? layingsFor(m) : [];
   const scenes = scenesFor(v.item);
-  const approve = p.tester
+  const approve = p.part
+    ? `<span class="muted">A building block for outdoor kitchen islands, kept in Growth Studio only (not offered in plans).</span>`
+    : p.tester
     ? `<button type="button" class="btn" data-act="${on ? 'remove' : 'restore'}">${on ? 'Remove this tester' : 'Bring it back'}</button>`
     : `<label class="lib-switch"><input type="checkbox" data-act="approve" ${on ? 'checked' : ''} ${s.host.canApprove() ? '' : 'disabled'}> <span>${waiting ? 'Saving…' : on ? 'Approved for Area Planner' : 'Not approved'}</span></label>`;
   const chips = (act: string, items: { val: string; label: string; on: boolean; sw?: string }[]) =>
@@ -455,11 +488,13 @@ function detailHtml(): string {
       <div><h3>${esc(p.name)}</h3><p class="muted">${esc(p.plant ? p.plant.botanical : p.sub)}</p></div></div>
     ${m && outOfAreaNote(m) ? `<p class="lib-notice"><strong>${esc(outOfAreaNote(m)!)}</strong></p>` : ''}
     <div class="lib-approve">${approve}</div>
-    ${p.variants.length > 1 ? `<h4>Colors</h4>${chips('variant', p.variants.map((x, i) => ({ val: String(i), label: x.label, on: x === v, sw: x.swatch })))}` : ''}
+    ${p.variants.length > 1 ? `<h4>${p.part && !/^(Countertop|Island veneer)/.test(p.name) ? 'Sizes' : 'Colors'}</h4>${chips('variant', p.variants.map((x, i) => ({ val: String(i), label: x.label, on: x === v, sw: x.swatch })))}` : ''}
     ${lays.length ? `<h4>Laying pattern</h4>${chips('laying', lays.map((k) => ({ val: k, label: layingName(m, k), on: (s.laying ?? lays[0]) === k })))}` : ''}
     ${scenes.length ? `<h4>Show it</h4>${chips('scene', scenes.map((c) => ({ val: c.id, label: c.label, on: (s.scene ?? scenes[0].id) === c.id })))}` : ''}
     ${p.plant ? `<h4>Age</h4>${chips('age', AGES.map((a) => ({ val: String(a.years), label: a.label, on: s.years === a.years })))}` : ''}
+    ${p.part && v.item.kind === 'feature' && featureById.get(v.item.id)?.options?.length ? `<h4>Options</h4>${chips('partopt', featureById.get(v.item.id)!.options!.map((o) => ({ val: o.key, label: o.label, on: s.partOpts[o.key] ?? o.default })))}` : ''}
     <div id="lib-acts"></div>
+    ${p.part ? `<p class="lib-about">${esc(featureById.get(v.item.id)?.about ?? '')}</p>` : ''}
     <dl class="lib-facts">${facts(p, v).map(([k, x]) => `<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join('')}</dl>
     <p class="muted lib-hint">Drag to turn, scroll or pinch to zoom, right-drag to move.</p>`;
 }
