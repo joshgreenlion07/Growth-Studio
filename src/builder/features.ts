@@ -21,6 +21,8 @@ import { patinaBowl, pillarFountain, type FountainSink } from './pillarfountain'
 import { calSpaTropicalPlus } from './spa-ppz743bc';
 import { cazoFireWaterBowl } from './cazo-fire-water-bowl';
 import { fireMaterial, fireMesh, lineBurner, ringBurner, tubeBurner, type FireStyle, type Tongue } from './fire';
+import { buildFourFall, type FourFallInstance } from './fourfall';
+import type { Quality } from '../engine/post';
 
 /**
  * Every placeable feature: fire, shade, kitchens, spas, saunas, water walls,
@@ -56,6 +58,8 @@ export interface FeatureBuild {
   plants: RaisedPlacement[];
   /** What can be used by hand in the 3D view: doors, lids, fires, water, lights (see builder/actions.ts). */
   actions: FeatureAction[];
+  /** Four-fall rock waterfalls (builder/fourfall.ts): the studio gives them the sky and ticks them every frame. */
+  fourFalls: FourFallInstance[];
   dispose(): void;
 }
 
@@ -122,7 +126,7 @@ function flagstonePiece(outline: Vec2[], flag: MaterialSpec, top: number, seed: 
 }
 
 /** `site`: the finished surface and wall faces lighting fixtures stand on or snap to (builder/landscapelights.ts). */
-export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite): FeatureBuild {
+export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) => number, ceiling?: (p: Vec2) => number | undefined, lift?: (p: Vec2) => number, site?: FixtureSite, quality: Quality = 'light'): FeatureBuild {
   const group = new THREE.Group();
   group.name = 'features';
   const surfaces: THREE.Mesh[] = [];
@@ -138,6 +142,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
   const raised: RaisedPlacement[] = [];
   const extraGlow: THREE.MeshStandardMaterial[] = [];
   const actions: FeatureAction[] = [];
+  const fourFalls: FourFallInstance[] = [];
 
   // Shared materials.
   const mat = {
@@ -648,6 +653,30 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         light(0.5, 0.05, 0.5, '#ffc27a', 1.2, 2);
         break;
       }
+      case 'fourFall': {
+        // The four-fall rock waterfall (builder/fourfall.ts): its own rock, soil, water and falls, in one module.
+        const ff = buildFourFall(f, spec, quality, (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; });
+        o.add(ff.group);
+        surfaces.push(...ff.surfaces);
+        fourFalls.push(ff.inst);
+        const wf = ff.inst.wf;
+        const own = ff.lights.map((l) => {
+          light(l.x, l.y, l.z, l.color, l.intensity, l.distance);
+          return lights[lights.length - 1];
+        });
+        // The pump: the falls and their spray stop, the pools go still (the pools keep their water).
+        act({ key: 'water', label: 'Water', words: ['On', 'Off'], anchors: ff.falls.map((p) => anchorAt(o, p.x, p.y, p.z)), on: true, planOn: true, set(on) {
+          wf.setFlowing(on);
+        } });
+        const lit = featureOption(spec, f.options, 'fallLights');
+        const setLights = (on: boolean) => {
+          ff.inst.lightsOn = on;
+          for (const l of own) l.off = !on;
+        };
+        setLights(lit);
+        act({ key: 'light', label: 'Fall lights', words: ['On', 'Off'], option: 'fallLights', anchors: ff.falls.map((p) => anchorAt(o, p.x, p.y - 0.4, p.z + 0.3)), on: lit, planOn: lit, lights: true, set: setLights });
+        break;
+      }
       case 'pillarFountain': {
         pillarFountain(sink, f.id, featureOption(spec, f.options, 'bowls'));
         break;
@@ -822,11 +851,14 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     pebbleBeds,
     plants: raised,
     actions,
+    fourFalls,
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of owned) m.dispose();
       fixtureMats.dispose();
       for (const m of fallMats) m.dispose();
+      // Each waterfall's own meshes and materials; the rock and cobble shapes they share stay for the next yard.
+      for (const ff of fourFalls) ff.wf.dispose();
     },
   };
 }

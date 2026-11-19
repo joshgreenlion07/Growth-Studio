@@ -329,7 +329,11 @@ export function cleanPlan(input: unknown): CleanResult {
       for (const { key } of offered) if (typeof (it.options as Record<string, unknown>)[key] === 'boolean') o[key] = (it.options as Record<string, boolean>)[key];
       if (Object.keys(o).length) f.options = o;
     }
-    if (Array.isArray(it.size) && it.size.length === 3 && it.size.every((v: unknown) => typeof v === 'number' && Number.isFinite(v))) f.size = [num(it.size[0], 1, 0.1, 6), num(it.size[1], 1, 0.02, 6), num(it.size[2], 1, 0.05, 4)];
+    if (Array.isArray(it.size) && it.size.length === 3 && it.size.every((v: unknown) => typeof v === 'number' && Number.isFinite(v))) {
+      // The four-fall waterfall's outline (rockwork plus soil) runs to about 8.6 m deep at its longest levels.
+      const big = featureById.get(id)?.kind === 'fourFall' ? 10 : 6;
+      f.size = [num(it.size[0], 1, 0.1, big), num(it.size[1], 1, 0.02, big), num(it.size[2], 1, 0.05, 4)];
+    }
     if (it.planted === false) f.planted = false;
     if (it.cover === 'open' || it.cover === 'closed' || it.cover === 'off') f.cover = it.cover;
     if (typeof it.steps === 'boolean') f.steps = it.steps;

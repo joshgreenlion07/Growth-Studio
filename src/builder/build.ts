@@ -10,6 +10,7 @@ import type { Quality } from '../engine/post';
 import { buildConstruction, buildEquipment, type BuildStage, type ConstructionBuild } from './construction';
 import { buildContext } from './context';
 import { buildFeatures, type FeatureBuild, type NightLight } from './features';
+import { plantsOnFourFalls } from './fourfall';
 import type { LandLight } from '../engine/landlights';
 import { fixtureSite } from './landscapelights';
 import { groundModel, groundSteps, WATER_LEVEL, type GroundModel } from './ground';
@@ -351,7 +352,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     if (z && z.kind === 'hardscape') return isBoardDeck(z) ? 0 : zoneTop(z, plan.zones.indexOf(z));
     return onFloor(p) ? COVER_FLOOR_TOP : 0;
   };
-  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn));
+  const features = buildFeatures(plan.features, standOn, coverCeiling(plan.structures), pavingTop, fixtureSite(plan, standOn), quality);
   const models = buildModels(plan.models ?? [], standOn, assets);
   yield 'water, features, models';
 
@@ -375,7 +376,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       const spec = featureById.get(f.catalogId);
       if (!spec || spec.kind === 'pergolaWood' || spec.kind === 'pergolaLouvered' || spec.kind === 'pathLight' || spec.kind === 'spotLight' || spec.kind === 'puttingCup' || spec.kind === 'umbrella' || (CEILING_KINDS as readonly string[]).includes(spec.kind)) continue;
       // The long water feature and its bowls clear only their own footprint (a circle would bald the lawn around it).
-      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl') {
+      if (spec.kind === 'pillarFountain' || spec.kind === 'patinaBowl' || spec.kind === 'fourFall') {
         if (inFootprint(p, f.position, f.rotationDeg, spec.footprint, 0.05)) return true;
         continue;
       }
@@ -392,7 +393,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   yield 'soil fills';
 
   // Plants that stand on features (bowl planters on a water feature's pillars) come with the features.
-  const placements = [...expandPlants(plan, gm), ...ctx.trees, ...features.plants];
+  // Plants on a four-fall waterfall's mound stand on its soil, out of its rock and water (builder/fourfall.ts).
+  const fallBases = new Map(features.fourFalls.map((ff) => {
+    const f = plan.features.find((x) => x.id === ff.itemId)!;
+    return [ff.itemId, { inst: ff, originY: ff.wf.group.position.y, y0: standOn(f.position) }] as const;
+  }));
+  const placements = plantsOnFourFalls([...expandPlants(plan, gm), ...ctx.trees, ...features.plants], plan.features, fallBases);
   yield 'placements';
   // Each species' model (and its lower-detail copies) is made once per session and kept: make the new ones a species
   // per step, so the plant layer below only places them.

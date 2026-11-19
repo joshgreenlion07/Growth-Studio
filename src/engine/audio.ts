@@ -337,7 +337,8 @@ export class SceneAudio {
       let level = 1;
       if (a.key === 'water') {
         const f = plan.features.find((x) => x.id === a.itemId);
-        kind = f && /water-wall/.test(f.catalogId) ? 'waterfall' : 'trickle';
+        // Water walls and the four-fall rock waterfall roar; fountains and bowls trickle.
+        kind = f && /water-wall|rock-waterfall/.test(f.catalogId) ? 'waterfall' : 'trickle';
         level = kind === 'waterfall' ? 0.9 : 0.8;
       } else if (a.key === 'fire' && a.label === 'Fire') kind = 'fire';
       else if (a.key === 'jets') kind = 'spa';
