@@ -502,7 +502,7 @@ export const SAMPLES = [
   { id: 'deck', name: 'Composite deck: chevron, picture frame, spa set in', make: sampleCompositeDeck },
   { id: 'pillar-fountain', name: 'Three-pillar water feature with bowl planters', make: samplePillarFountain },
   { id: 'cedar-water-wall', name: 'Cedar slat water wall, Silver Travertine', make: sampleCedarWaterWall },
-  { id: 'urn-fountains', name: 'Urn fountains: glazed urn and stone jar', make: sampleUrnFountains },
+  { id: 'urn-fountains', name: 'Urn fountains: Blue Thumb aqua-teal and Tuscany vases', make: sampleUrnFountains },
   { id: 'four-fall', name: 'Four-fall rock waterfall', make: sampleFourFall },
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },

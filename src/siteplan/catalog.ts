@@ -1081,8 +1081,13 @@ export const FEATURES: FeatureSpec[] = [
     about: 'A pondless bubbling vase: Blue Thumb\'s Closed Top Fountain Kit FNT60036, a glossy aqua-teal glazed ceramic vase with darker blue-green drips, water welling up through its closed top and running down every side into a hidden basin under Yosemite Tan river pebble, with two boulders.',
     facts: ['Vase 22 in wide x 31 in tall, glazed ceramic, one of a kind (Blue Thumb FNT60036)', 'Kit: 36 in Achelous AquaBox basin (39.5 in across, 16 in deep), 530 GPH pump, plumbing and flow valve, auto-fill valve', 'Bed: California Landscape Supply 1 1/2 in Yosemite Tan, about 5 1/2 x 5 ft', 'A Canyon Tech boulder in front and a moss rock behind (moss off)'],
   }),
-  // The jar from the owner's second board, drawn as on the board; no maker sells it as drawn (see builder/urnfountain.ts).
-  F({ id: 'urn-fountain-jar', name: 'Urn fountain, stone jar (design board)', group: 'Water', kind: 'urnFountain', urn: 'jar', footprint: [88 * 0.0254, 68 * 0.0254] }),
+  // The second board's jar: no maker sells it as drawn, so the owner picked Blue Thumb's Tuscany Vase, the nearest shape.
+  F({
+    id: 'urn-fountain-jar', name: 'Urn fountain, Blue Thumb Tuscany vase', group: 'Water', kind: 'urnFountain', urn: 'jar', footprint: [80 * 0.0254, 64 * 0.0254],
+    maker: 'Blue Thumb', page: 'https://shopbluethumb.com/fountain-vase-kit-fnt40018/',
+    about: 'A pondless brimming vase: Blue Thumb\'s Tuscany Vase Fountain Kit FNT40018, a tall hand-glazed ceramic vase in warm sandy-yellow and cream, weathered darker toward its foot, under a terracotta rolled rim. A bubbling plume (LED lit at night) wells in its mouth and the water brims over the rim down every side into a hidden basin under black Mexican beach pebble, ringed by three tan boulders.',
+    facts: ['Vase 22 in wide x 39 in tall, hand-glazed ceramic, one of a kind (Blue Thumb FNT40018)', 'Kit: 48 in Achelous basin, 1,110 GPH mag-drive pump, plumbing and flow valve, LED on the standpipe, water-level support', 'Bed: black Mexican beach pebble 1-2 in, about 6 1/2 x 5 1/2 ft', 'Three moss rocks round the basin (moss off)'],
+  }),
   /*
    * Veneer columns: a Basalite 225 Lightweight 16 x 8 x 16 column block core (16 in square, 8 in courses; on Green Lion's
    * supplier bills) clad in a wall veneer, under a Basalite Column Cap (CA: 24 x 24 x 2 in, chiseled edges, flat top,

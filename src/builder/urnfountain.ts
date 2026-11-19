@@ -5,7 +5,7 @@ import { fbm, smooth, vnoise, voronoi } from '../engine/noise';
 import { mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from '../engine/textures';
 import { GLOBAL } from '../engine/foliage';
 import { pbrMaterial, plainMaterial } from './materials';
-import { agedCopper, clearFallMaterial, splashMaterial, streamGeometry, type FountainSink } from './pillarfountain';
+import { agedCopper, clearFallMaterial, ledMaterial, linkGlow, splashMaterial, type FountainSink } from './pillarfountain';
 import { buildRock, type RockLook, type RockShape } from './stonegeo';
 import { boulderMaterial } from './waterrock';
 
@@ -21,13 +21,15 @@ import { boulderMaterial } from './waterrock';
  *              gray and blue-gray), with a dark Canyon Tech boulder in front and a tan moss rock behind. Blue Thumb's
  *              vases are one of a kind: the drawn one is the photographed FNT60036. Top and foot sizes are read from
  *              Blue Thumb's photo (not published).
- *   'jar'      URN.jar: as drawn on the owner's second board, a large rustic jar in a sand-colored, hand-chiseled stone
- *              finish, a copper spray nozzle in its mouth throwing a small crown of water that falls back and spills over
- *              the rolled lip down its front, on an oval basin of black Mexican beach pebble ringed by three moss rocks
- *              (moss off: clean tan stone). No maker sells this jar as drawn (searched 2026-11-18: Blue Thumb, Aquascape,
- *              Teton / Castle Aquatics, EasyPro, Campania, Atlantic-Oase); the closest are Blue Thumb's Tuscany Vase
- *              FNT40018 (the shape, 22 x 39 in, a smooth sandy glaze) and Stoned Urn FNT40529 (real split-face stone, a
- *              straight barrel). Its size is read from the board.
+ *   'jar'      Blue Thumb Tuscany Vase Fountain Kit FNT40018 (shopbluethumb.com), the owner's pick for the second board
+ *              (no maker sells the board's chiseled jar with a spray): a 22 x 39 in hand-glazed ceramic vase, tall and
+ *              softly rounded, widest high on the shoulder and tapering to its foot, in warm sandy-yellow and creamy
+ *              tones weathered darker toward the foot with brown marks and drips, under a terracotta rolled rim round
+ *              its open mouth. The kit's standpipe lifts a bubbling plume in the mouth (its LED lights the water at
+ *              night) and the vase brims over its rim down every side, into the kit's 48 in Achelous basin hidden under
+ *              black Mexican beach pebble, ringed by three moss rocks as on the board (moss off: clean tan stone). The
+ *              vase is one of a kind; the drawn one is the photographed FNT40018. Its foot, rim and widest height are
+ *              read from Blue Thumb's photo (not published).
  *
  * The urns' sizes are the makers' (see URN). Local space: y up from grade, +z the front; the pebble bed's top is
  * `bedTop` in, the urn stands on the basin's grate an inch below it.
@@ -52,7 +54,7 @@ interface UrnSize {
 
 export const URN: Record<UrnStyle, UrnSize> = {
   glazed: { h: 31, max: 22, foot: 13.6, top: 12.8, belly: 0.7, bed: [34, 30], bedTop: 2 },
-  jar: { h: 40, max: 28, foot: 14, top: 15, belly: 0.56, bed: [44, 34], bedTop: 1.5 },
+  jar: { h: 39, max: 22, foot: 11.3, top: 15, belly: 0.72, bed: [40, 32], bedTop: 1.5 },
 };
 
 /* ------------------------------------------------------------------ */
@@ -94,21 +96,43 @@ function rimGlazeSet(): PBRSet {
 }
 
 /**
- * A cast stone jar's hand-chiseled finish: small overlapping scallops struck across the surface, sand to warm tan with
- * darker grit in the hollows and paler worn crests, soft cloudy color from the cast. Matte.
+ * FNT40018's glaze, from Blue Thumb's photo (tones taken through the wall calibration, so a vertical face renders at the
+ * photo's color in the default light): warm cream and sandy yellow, paler where it pooled thick, going ochre and darker
+ * over the lowest third, with sparse brown spots and thin brown drip lines running down. The tile is taller than the
+ * vase's whole surface, so `v` is the height up it (1.2 m a tile) and the weathering keys off it. Satin.
  */
-function chiseledSandSet(): PBRSet {
-  return textureSet('urn-jar-sand', () =>
-    paint(1024, 0.5, 7, (u, v) => {
-      const cell = voronoi(u, v, 17, 331);
-      const cloud = fbm(u, v, 3, 4, 337), grit = vnoise(u * 420, v * 420, 420, 339), speck = vnoise(u * 230, v * 230, 230, 341);
-      // Each strike leaves a shallow dish: deepest at its middle, a crisp ridge where it meets the next.
-      const dish = smooth(0, 0.55, cell.f1);
-      let c: RGB = mixRGB([0.46, 0.37, 0.25], [0.54, 0.44, 0.3], smooth(0.25, 0.8, cloud));
-      c = mulRGB(c, 0.95 + dish * 0.08 + (cell.id - 0.5) * 0.05);
-      c = mulRGB(c, 0.96 + grit * 0.06);
-      if (speck > 0.93) c = mulRGB(c, 0.85);
-      return { h: dish * 1.0 + grit * 0.06, c, r: 0.86 };
+function tuscanyGlazeSet(): PBRSet {
+  return textureSet('urn-glaze-fnt40018', () =>
+    paint(2048, 1.2, 1.2, (u, v) => {
+      // The painted tile's v runs down from its top row; the lathe's runs up from the foot.
+      const up = (1 - v) * 1.2;
+      const cloud = fbm(u, v, 5, 4, 351), pale = fbm(u + 2.3, v + 0.7, 9, 3, 353);
+      const low = 1 - smooth(0.1, 0.45, up + (fbm(u, v, 12, 3, 355) - 0.5) * 0.14);
+      // A little warmer than the calibrated tones: the sky fill grays a vertical face's yellow.
+      let c: RGB = mixRGB([0.667, 0.565, 0.34], [0.702, 0.595, 0.385], smooth(0.3, 0.7, cloud));
+      c = mixRGB(c, [0.75, 0.67, 0.49], smooth(0.6, 0.8, pale) * 0.6 * (1 - low));
+      c = mixRGB(c, mixRGB([0.55, 0.44, 0.2], [0.46, 0.35, 0.13], smooth(0.4, 0.7, cloud)), low);
+      // The foot's worn band and the brown marks: spots where the glaze skipped, drip lines below them.
+      const foot = 1 - smooth(0.0, 0.05, up + (vnoise(u * 60, v * 60, 60, 357) - 0.5) * 0.03);
+      const spot = voronoi(u, v, 22, 359);
+      const mark = spot.id > 0.975 ? (1 - smooth(0.04, 0.2, spot.f1 + (vnoise(u * 90, v * 90, 90, 365) - 0.5) * 0.12)) * (0.4 + low * 0.6) : 0;
+      const drip = smooth(0.94, 0.98, vnoise(u * 160, v * 4, 160, 361)) * (0.3 + low * 0.7);
+      c = mixRGB(c, [0.388, 0.286, 0.122], Math.max(foot * 0.8, mark * 0.85, drip * 0.7));
+      const fine = vnoise(u * 300, v * 300, 300, 363);
+      c = mulRGB(c, 0.97 + fine * 0.06);
+      return { h: 0.5 + (fine - 0.5) * 0.08 - mark * 0.1, c, r: 0.42 + low * 0.15 };
+    }),
+  );
+}
+
+/** The rolled rim: terracotta, unglazed, a little darker in the crease under the roll (Blue Thumb's photo). */
+function tuscanyRimSet(): PBRSet {
+  return textureSet('urn-rim-fnt40018', () =>
+    paint(512, 0.3, 1.4, (u, v) => {
+      const cloud = fbm(u, v, 5, 4, 371), grain = vnoise(u * 260, v * 260, 260, 373);
+      let c: RGB = mixRGB([0.561, 0.365, 0.251], [0.694, 0.427, 0.251], smooth(0.3, 0.75, cloud));
+      c = mixRGB(c, [0.576, 0.267, 0.094], smooth(0.62, 0.8, fbm(u + 1.1, v, 9, 3, 377)) * 0.5);
+      return { h: 0.5 + grain * 0.1, c: mulRGB(c, 0.95 + grain * 0.08), r: 0.82 };
     }),
   );
 }
@@ -159,22 +183,29 @@ function collarOutline(s: UrnSize): [number, number][] {
   return [[c + 0.15, neckY - 0.3], [c - 0.1, neckY + 0.6], [c + 0.25, s.h - 0.8], [c + 0.1, s.h - 0.15], [c - 0.5, s.h], [c - 1.2, s.h - 0.2], [c - 1.6, s.h - 0.9], [c - 2.0, s.h - 1.1], [0, s.h - 1.1]];
 }
 
-/** The jar's outline: a narrow foot, a full belly, a rounded shoulder into a short neck and a thick rolled lip. */
-function jarOutline(s: UrnSize): [number, number][] {
-  const R = s.max / 2, yb = s.h * s.belly;
-  const neckY = s.h - 4, neck = s.top / 2 - 0.6;
-  const pts: [number, number][] = [[0, 0.3], [s.foot / 2 - 0.4, 0], [s.foot / 2, 0.5]];
-  const below = yb / Math.sqrt(1 - (s.foot / 2 / R) ** 2);
-  const above = (neckY - yb) / Math.sqrt(1 - (neck / R) ** 2);
-  for (let i = 1; i <= 28; i++) {
-    const y = 0.5 + (i / 28) * (neckY - 0.5);
-    const k = (y - yb) / (y < yb ? below : above);
-    pts.push([Math.max(neck, R * Math.sqrt(Math.max(0, 1 - k * k))), y]);
+/**
+ * FNT40018's outline (inches, from the foot up): a narrow, softly rounded foot, a long taper to the widest point high on
+ * the body, a rounded shoulder in to a short neck under the rim.
+ */
+function tuscanyOutline(s: UrnSize): [number, number][] {
+  const R = s.max / 2, F = s.foot / 2, yb = s.h * s.belly;
+  const neckY = s.h - 2.1, neck = s.top / 2 - 0.65;
+  const pts: [number, number][] = [[0, 0.3], [F - 0.8, 0], [F - 0.1, 0.5]];
+  for (let i = 1; i <= 20; i++) {
+    const t = i / 20;
+    pts.push([F + (R - F) * Math.sin((t * Math.PI) / 2), 0.5 + t * (yb - 0.5)]);
   }
-  // The rolled lip: out and over, round, and in to the mouth; inside, the water stands an inch under the lip's top.
-  const lip = s.top / 2;
-  pts.push([neck + 0.1, neckY + 1], [lip, neckY + 2], [lip + 0.5, neckY + 2.9], [lip + 0.2, s.h - 0.3], [lip - 0.8, s.h], [lip - 1.8, s.h - 0.4], [lip - 2.2, s.h - 1.6]);
+  for (let i = 1; i <= 14; i++) {
+    const a = ((i / 14) * Math.PI) / 2;
+    pts.push([neck + (R - neck) * Math.cos(a), yb + (neckY - yb) * Math.sin(a)]);
+  }
   return pts;
+}
+
+/** The terracotta rolled rim over the neck, and the inside of the mouth down below the water (inches). */
+function tuscanyRim(s: UrnSize): [number, number][] {
+  const c = s.top / 2, neckY = s.h - 2.1;
+  return [[c - 0.6, neckY - 0.2], [c - 0.15, neckY + 0.3], [c, neckY + 1.0], [c - 0.15, s.h - 0.3], [c - 0.7, s.h], [c - 1.3, s.h - 0.25], [c - 1.5, s.h - 1.0], [c - 1.6, s.h - 3]];
 }
 
 /** The outline grown out along its normals by `off` inches (a film of water over the surface), from the outline's point `from` on. */
@@ -383,59 +414,45 @@ function glazedUrn(sink: FountainSink, seed: string) {
 function jarUrn(sink: FountainSink, seed: string) {
   const s = URN.jar;
   const base = s.bedTop - 1;
-  const outline = jarOutline(s);
-  const stone = pbrMaterial('urn-jar-sand', chiseledSandSet());
-  sink.add(stone, lathe(outline).rotateY(Math.PI).translate(0, base * IN, 0));
+  const outline = tuscanyOutline(s), rim = tuscanyRim(s);
+  sink.add(pbrMaterial('urn-glaze-fnt40018', tuscanyGlazeSet()), lathe(outline).rotateY(Math.PI).translate(0, base * IN, 0));
+  sink.add(pbrMaterial('urn-rim-fnt40018', tuscanyRimSet()), lathe(rim).rotateY(Math.PI).translate(0, base * IN, 0));
   const top = base + s.h;
-  // The water standing in the mouth, an inch under the lip's top, and the copper nozzle standing out of it.
-  const waterY = top - 0.9;
-  const pool = plainMaterial('urn-jar-pool', { color: '#1d2a2c', roughness: 0.06, metalness: 0.2 });
-  sink.add(pool, new THREE.CircleGeometry((s.top / 2 - 1.6) * IN, 36).rotateX(-Math.PI / 2).translate(0, waterY * IN, 0).toNonIndexed());
-  const copper = agedCopper();
-  sink.add(copper, new THREE.CylinderGeometry(0.45 * IN, 0.5 * IN, 2.2 * IN, 16).translate(0, (waterY + 1.0) * IN, 0).toNonIndexed());
-
+  // The vase brims: the water stands at the rim's inner edge, the standpipe's plume welling in the middle.
+  const waterY = top - 0.35;
+  sink.add(plainMaterial('urn-top-pool', { color: '#16302e', roughness: 0.04, metalness: 0.2 }), new THREE.CircleGeometry((s.top / 2 - 1.4) * IN, 36).rotateX(-Math.PI / 2).translate(0, waterY * IN, 0).toNonIndexed());
   const water = clearFallMaterial();
   sink.fall(water);
-  // The spray: a central column and a crown of streams thrown up about 10 in, falling back into the mouth.
-  const tip = new THREE.Vector3(0, (waterY + 2.15) * IN, 0);
-  const r = rng(`${seed}-spray`);
-  const jets: [THREE.Vector3, number, number][] = [[new THREE.Vector3(0.02, 1, 0.01), 2.25, 0.32]];
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + r() * 0.3, lean = 0.11 + r() * 0.06;
-    jets.push([new THREE.Vector3(Math.sin(a) * lean, 1, Math.cos(a) * lean), 1.95 + r() * 0.2, 0.17]);
-  }
-  for (const [dir, speed, rad] of jets) {
-    const m = new THREE.Mesh(streamGeometry(tip, dir, speed, waterY * IN + 0.002, rad * IN), water);
-    m.renderOrder = 3;
-    sink.object(m);
-  }
-  const splash = splashMaterial();
-  sink.fall(splash);
-  const churn = new THREE.Mesh(new THREE.PlaneGeometry((s.top - 2) * IN, (s.top - 2) * IN).rotateX(-Math.PI / 2), splash);
-  churn.position.set(0, (waterY + 0.05) * IN, 0);
-  churn.renderOrder = 3;
-  sink.object(churn);
-  // The overflow: over the lip and down the front, in a broad sheet that thins to the sides.
-  const lipAt = outline.findIndex(([, y]) => y >= s.h - 0.31);
-  const down = offsetOutline(outline.slice(0, lipAt + 1), 0.14).reverse().filter(([, y]) => y > 0.6).map(([r0, y]): [number, number] => [r0, y + base]);
-  const thin = filmMaterial(2.2);
+  const thin = filmMaterial();
   sink.fall(thin);
-  const sheet = new THREE.Mesh(filmGeometry(down, -0.55, 1.5, 36), thin);
-  sheet.renderOrder = 3;
-  sink.object(sheet);
-  foamRing(sink, s.foot / 2 + 1, s.max / 2 + 2, s.bedTop + 0.3);
+  const plume = new THREE.Mesh(domeGeometry(2.4 * IN, 1.2 * IN, (waterY + 0.02) * IN), water);
+  plume.renderOrder = 3;
+  sink.object(plume);
+  // The standpipe's LED, under the water at the top of the pipe: it lights the plume at night.
+  const led = ledMaterial();
+  sink.own(led);
+  sink.glow(led);
+  linkGlow(led, water);
+  sink.add(led, new THREE.CircleGeometry(0.9 * IN, 18).rotateX(-Math.PI / 2).translate(0, (waterY - 1.5) * IN, 0).toNonIndexed());
+  sink.light(0, (top + 4) * IN, 0, '#ffd9a0', 0.9, 1.6);
+  // The overflow: over the rim's top, down the roll, the shoulder and the body to the pebbles, all round.
+  const rimDown = offsetOutline(rim.slice(0, 5), 0.1).reverse();
+  const bodyDown = offsetOutline(outline, 0.1, 3).reverse().filter(([, y]) => y > 0.6);
+  const down = [...rimDown, ...bodyDown].map(([r0, y]): [number, number] => [r0, y + base]);
+  const film = new THREE.Mesh(filmGeometry(down), thin);
+  film.renderOrder = 3;
+  sink.object(film);
+  foamRing(sink, s.foot / 2 + 0.5, s.foot / 2 + 4, s.bedTop + 0.3);
 
-  // The basin: an oval of black Mexican beach pebble, wet round the jar.
+  // The bed over the 48 in Achelous basin: black Mexican beach pebble, wet round the vase.
   sink.add(plainMaterial('urn-basin-floor', { color: '#141311', roughness: 1 }), new THREE.CircleGeometry(s.bed[0] * IN, 40).scale(1, s.bed[1] / s.bed[0], 1).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 1.5) * IN, 0).toNonIndexed());
   sink.pebbles('mexican-beach-pebble-1-2', ovalIn(s.bed[0], s.bed[1], `${seed}-bed`), [circleIn(s.foot / 2 + 0.3)], s.bedTop, [0.72, 0.6, 0.5]);
 
-  // Round the jar's foot the basin runs full: water stands among the pebbles, their tops dry above it.
-  sink.add(plainMaterial('urn-jar-basin-water', { color: '#0e1719', roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.8, depthWrite: false }), new THREE.CircleGeometry((s.max / 2 + 9) * IN, 40).rotateX(-Math.PI / 2).translate(0, (s.bedTop - 0.3) * IN, 0).toNonIndexed());
-
-  // Three clean tan boulders round the basin: a big one front left, a small one in front of it, one back right.
-  boulder(sink, CLEAN_TAN, -27, 15, [28, 22, 17], 0.4, `${seed}-left`);
-  boulder(sink, CLEAN_TAN, -10, 27, [17, 14, 10], 1.7, `${seed}-front`);
-  boulder(sink, CLEAN_TAN, 30, -6, [26, 20, 16], 2.6, `${seed}-right`);
+  // Three clean tan boulders round the basin, as on the board: a big one front left, a small one in front of it, one
+  // back right.
+  boulder(sink, CLEAN_TAN, -25, 14, [26, 21, 16], 0.4, `${seed}-left`);
+  boulder(sink, CLEAN_TAN, -9, 25, [16, 13, 9], 1.7, `${seed}-front`);
+  boulder(sink, CLEAN_TAN, 27, -6, [24, 19, 15], 2.6, `${seed}-right`);
 }
 
 /** The glazed urn's pebble bed. */

@@ -1,15 +1,15 @@
 import type { SitePlan, Vec2 } from './types';
 
 /**
- * The two urn fountains from the owner's design boards, without the boards' plants: the glazed turquoise urn in a bark
- * bed against a cedar fence, and the chiseled stone jar in its black pebble basin beside a paver patio.
+ * The two urn fountains from the owner's design boards, without the boards' plants: Blue Thumb's glazed aqua-teal vase
+ * in a bark bed against a fence, and Blue Thumb's Tuscany vase in its black pebble basin beside a paver patio.
  */
 export function sampleUrnFountains(): SitePlan {
   const S = 'sample' as const;
   const rect = (x0: number, y0: number, x1: number, y1: number): Vec2[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
   return {
     schemaVersion: 1,
-    site: { name: 'Urn fountains: glazed urn and stone jar', boundary: rect(0, 0, 12, 9), latitude: 38.58, longitude: -121.49, northAngleDeg: 90 },
+    site: { name: 'Urn fountains: Blue Thumb aqua-teal and Tuscany vases', boundary: rect(0, 0, 12, 9), latitude: 38.58, longitude: -121.49, northAngleDeg: 90 },
     structures: [],
     zones: [
       { id: 'lawn', source: S, kind: 'turf', catalogId: 'artificial-turf', polygon: rect(0, 0, 12, 9) },
