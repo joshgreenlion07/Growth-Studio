@@ -6,8 +6,17 @@
  * Also the names of things the material pointer can land on that are not catalog materials: plants, water features,
  * structures, features and uploaded models. The pointer reports those as `<kind>:<id>` (see `pointKind`).
  */
-import { featureById, materialById, outOfAreaNote, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
+import { featureById, materialById, MOW_CURB_SHAPES, outOfAreaNote, plantById, type ConcreteFinish, type MaterialSpec } from './catalog';
 import type { ExistingStructure, WaterKind } from './types';
+
+/** Inches as a builder writes them, to the sixteenth: 4.5 → "4 1/2 in", 0.1875 → "3/16 in". */
+function fmtIn(x: number): string {
+  const q = Math.round(x * 16), w = Math.floor(q / 16);
+  let n = q % 16, d = 16;
+  while (n && n % 2 === 0) { n /= 2; d /= 2; }
+  const f = n ? `${n}/${d}` : '';
+  return `${w && f ? `${w} ${f}` : w ? w : f || 0} in`;
+}
 
 export interface MaterialInfo {
   /** Group the panel shows above the name: "Mulch and rock", "Concrete", "Synthetic turf". */
@@ -236,8 +245,30 @@ function baseInfo(m: MaterialSpec): MaterialInfo {
     case 'fence':
       return { group: 'Fences', about: FENCE_ABOUT[m.fence ?? 'boardOnBoard'], spec: m.fence === 'steelPicket' || m.fence === 'metalPicket' || m.fence === 'chainlinkSlat' ? ['Posts set in concrete', 'Panels or fabric between posts'] : ['Posts set in concrete about every 6 to 8 ft', 'Rails and boards fastened with exterior screws'] };
     case 'curb':
+      if (m.mowCurb) {
+        // Lil' Bubba's mold sizes (lilbubbashop.com); the curb as Green Lion pours it (catalog MOW_CURB_SHAPES).
+        const S = MOW_CURB_SHAPES[m.mowCurb];
+        const how = m.mowCurb === 'slant'
+          ? 'its top slopes from the tall bed side down to a low front on the lawn side, so the mower runs along it and the bed holds its soil'
+          : m.mowCurb === 'mower'
+            ? 'a raised back on the bed side and a flat lip a step lower on the lawn side, for the mower wheel to ride on'
+            : 'square, with rounded top corners';
+        return {
+          group: 'Curb',
+          about: `Poured concrete mow curb, ${S.name.toLowerCase()} shape${m.color ? `, ${m.color.toLowerCase()}` : ''}: one continuous curb slip-formed in place by a curb machine; ${how}.`,
+          spec: [`${S.mold} (${fmtIn(S.widthIn)} wide, ${fmtIn(S.heightIn)} high)`, `Set ${fmtIn(S.sinkIn)} into a trench on compacted soil, about ${fmtIn(S.heightIn - S.sinkIn)} showing at its tallest`, 'Integral color mixed through the concrete', `Control joints tooled every ${S.jointIn / 12} ft; follows curves down to about a 30 in radius`],
+        };
+      }
       return { group: 'Curb', about: m.maker ? `${m.maker} ${m.line}: a solid concrete curb unit that edges beds, lawn and paving.` : 'A concrete curb that edges beds, lawn and paving.', spec: ['Set on compacted base', 'Shows about 3 in above grade unless set otherwise'] };
     case 'steelEdging':
+      if (m.edging) {
+        const E = m.edging;
+        return {
+          group: 'Edging',
+          about: `${m.maker === 'Border Concepts' ? 'Border Concepts BORDER Line' : 'Black'} steel edging, ${fmtIn(E.thickIn)}: a thin, clean black line between lawn, beds and rock that keeps each in its place${E.thickIn > 0.15 ? '; the heavier strip, stiffer on long straight runs and against gravel' : '; it bends to tight curves by hand'}.`,
+          spec: [`${fmtIn(E.thickIn)} x ${fmtIn(E.heightIn)} steel, ${E.pieceFt} ft pieces, black powder coat`, `${E.stakes} steel stakes a piece${m.maker === 'Border Concepts' ? ' (15 in tapered, in pockets every 32 in)' : ''}`, `Set ${fmtIn(E.heightIn - E.revealIn)} deep, its top ${fmtIn(E.revealIn)} above grade`, m.maker === 'Border Concepts' ? 'Bought at SiteOne (BLBLE416)' : 'Bought at California Landscape Supply'],
+        };
+      }
       return { group: 'Edging', about: 'Steel edging: a thin, clean line between lawn, beds and rock that keeps each in its place.', spec: ['3/16 in steel strip', 'Staked about every 30 in, top flush with grade'] };
     case 'mulch': case 'dg': case 'riverRock': case 'blackPebble': case 'cobble':
       return { group: m.group, about: `${m.name}.`, spec: [] };

@@ -241,6 +241,43 @@ export type ConcreteFinish = 'broom' | 'smooth' | 'stamped' | 'exposed';
 export type StampPattern = 'ashlar' | 'cobble' | 'plank';
 
 /**
+ * Poured concrete mow curb: a continuous curb slip-formed in place by a curb machine (Lil' Bubba, The Concrete Edge
+ * Company), in Green Lion's integral concrete colors. The three most common landscape shapes, each a Lil' Bubba mold
+ * (lilbubbashop.com, Molds & Trowels):
+ *
+ *   slant   Slant Edge Mold, 6 in wide x 4 1/2 in high: the top slopes from the tall back (bed side) down to a low front
+ *           (lawn side), so a mower runs along it and the bed's soil is held.
+ *   mower   Super Edge Mold, 6 in wide x 4 in high: a raised back on the bed side and a flat lip on the lawn side, a step
+ *           lower, that the mower's wheel rides on.
+ *   block   Block Edge Mold, 5 1/2 in wide x 4 in high: square, its top corners rounded.
+ *
+ * The profile is [across from the lawn-side face, up from the base] in inches, its corners to round with their radii
+ * (read from the molds' and trowels' photos; the makers give only the overall size). The curb sits in a shallow trench,
+ * 1 1/2 in below grade (`sinkIn`), so the slant's front and the mower lip stand about 1/2 in above the lawn. Control
+ * joints are tooled across it every 3 ft (`jointIn`), the usual spacing for landscape curbing.
+ */
+export type MowCurbShape = 'slant' | 'mower' | 'block';
+export interface MowCurbProfile { name: string; mold: string; widthIn: number; heightIn: number; pts: [number, number, number][]; sinkIn: number; jointIn: number }
+export const MOW_CURB_SHAPES: Record<MowCurbShape, MowCurbProfile> = {
+  slant: { name: 'Slant', mold: "Lil' Bubba Slant Edge Mold, 6 x 4 1/2 in", widthIn: 6, heightIn: 4.5, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 2, 0.6], [6, 4.5, 0.75], [6, 0, 0]] },
+  mower: { name: 'Mower', mold: "Lil' Bubba Super Edge Mold, 6 x 4 in", widthIn: 6, heightIn: 4, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 2, 0.4], [2.6, 2, 0.5], [3.5, 4, 0.5], [6, 4, 0.75], [6, 0, 0]] },
+  block: { name: 'Block', mold: "Lil' Bubba Block Edge Mold, 5 1/2 x 4 in", widthIn: 5.5, heightIn: 4, sinkIn: 1.5, jointIn: 36, pts: [[0, 0, 0], [0, 4, 0.75], [5.5, 4, 0.75], [5.5, 0, 0]] },
+};
+function mowCurbLooks(): MaterialSpec[] {
+  const out: MaterialSpec[] = [];
+  for (const shape of ['slant', 'mower', 'block'] as MowCurbShape[]) {
+    const S = MOW_CURB_SHAPES[shape];
+    for (const c of CONCRETE_COLORS) {
+      out.push(M({
+        id: `mow-curb-${shape}-${c.id}`, name: `Mow curb, ${S.name.toLowerCase()}, ${c.name.toLowerCase()}`, use: 'edging', group: 'Edging', recipe: 'curb',
+        palette: c.palette.slice(), mowCurb: shape, maker: 'Green Lion', line: `Mow curb, ${S.name.toLowerCase()}`, shelf: 'Curb', color: c.name,
+      }));
+    }
+  }
+  return out;
+}
+
+/**
  * Loose stone sold by size (1/2-1 in, 1-2 in, ...), drawn as individual 3D stones over a matching ground texture. Sizes
  * are a stone's long side in inches. `wide` and `thick` are the other two sides as shares of the long side (ranges): beach
  * pebbles are flattened ovals. `colors` are sRGB as photographed, with how often each shows (`share`, summing to 1).
@@ -340,6 +377,11 @@ export interface MaterialSpec {
   /** Antiquing release (sRGB): the darker powder tossed on before stamping, which stays in the joints and low spots. */
   antique?: string;
   fence?: FenceStyle;
+  /** A poured concrete mow curb (recipe 'curb'): the shape of the curb machine's mold (MOW_CURB_SHAPES). */
+  mowCurb?: MowCurbShape;
+  /** Steel edging as sold (recipe 'steelEdging'): the strip's thickness and height, how much of it stands above grade
+   * (inches), the length of one piece (feet) and the stakes that come with it. Left out: the older generic look. */
+  edging?: { thickIn: number; heightIn: number; revealIn: number; pieceFt: number; stakes: number };
   /** Default height when this fence is drawn, meters (the plan's line keeps its own height afterwards). */
   fenceHeight?: number;
   wall?: { face: WallFace; cap: string; unit?: WallUnit };
@@ -352,7 +394,7 @@ export interface MaterialSpec {
   /** Catalogue tags for real product lines: who makes it, the line, and the shelf it sits on. */
   maker?: string;
   line?: string;
-  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
+  shelf?: 'Concrete' | 'Pavers' | 'Retaining walls' | 'Garden walls' | 'Wall veneer' | 'Curb' | 'Metal edging' | 'Paver edge' | 'Synthetic turf' | 'Rock' | 'Decking';
   /** A maker's composite deck board (siteplan/decking.ts): a deck in it is built board by board. */
   board?: DeckBoardSpec;
   /** Loose stone drawn stone by stone (beach pebble, river rock): its size range, shape and colors. */
@@ -501,6 +543,8 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'navel-orange', name: 'Navel orange, tree', botanical: 'Citrus sinensis \'Washington\'', group: 'Trees', form: 'standardTree', installHeight: 1.4, installSpread: 1.1, matureHeight: 3.0, matureSpread: 3.0, yearsToMature: 7, foliage: '#2b5524', foliage2: '#6d9838', flower: '#ee7f12', flower2: '#ffffff', evergreen: true, spacing: 3, container: '15 gal' }),
   P({ id: 'eureka-lemon', name: 'Eureka lemon, tree', botanical: 'Citrus limon \'Eureka\'', group: 'Trees', form: 'standardTree', installHeight: 1.3, installSpread: 1.2, matureHeight: 3.3, matureSpread: 3.3, yearsToMature: 7, foliage: '#3a6a2c', foliage2: '#86ad4a', flower: '#f0d21c', flower2: '#ffffff', evergreen: true, spacing: 3.5, container: '15 gal' }),
   P({ id: 'gardenia-standard', name: 'Gardenia, tree standard', botanical: 'Gardenia jasminoides \'Veitchii\'', group: 'Trees', form: 'standardTree', installHeight: 1.45, installSpread: 0.95, matureHeight: 1.9, matureSpread: 1.25, yearsToMature: 6, foliage: '#1f4520', foliage2: '#a8c03c', flower: '#fbf8ee', flower2: '#efe6c4', evergreen: true, spacing: 1.2, container: '15 gal' }),
+  P({ id: 'dwarf-mandarin', name: 'Mandarin orange, dwarf', botanical: 'Citrus reticulata', group: 'Trees', form: 'standardTree', installHeight: 1.05, installSpread: 0.8, matureHeight: 2.4, matureSpread: 2.4, yearsToMature: 8, foliage: '#1d401c', foliage2: '#5f9034', flower: '#f0660c', flower2: '#ffffff', evergreen: true, spacing: 2.5, container: '15 gal' }),
+  P({ id: 'pomegranate', name: 'Pomegranate', botanical: 'Punica granatum', group: 'Trees', form: 'multiTrunk', installHeight: 1.5, installSpread: 0.9, matureHeight: 4.5, matureSpread: 4.0, yearsToMature: 10, foliage: '#34621f', foliage2: '#7ea232', flower: '#f04a1c', flower2: '#b8141c', evergreen: false, spacing: 4, container: '15 gal' }),
   // Shrubs
   P({ id: 'boxwood', name: 'Boxwood', botanical: 'Buxus microphylla var. japonica \'Winter Gem\'', group: 'Shrubs', form: 'shrub', installHeight: 0.4, installSpread: 0.4, matureHeight: 1.2, matureSpread: 1.2, yearsToMature: 6, foliage: '#3f7029', foliage2: '#6f9a35', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'westringia', name: 'Coast rosemary (westringia)', botanical: 'Westringia fruticosa', group: 'Shrubs', form: 'shrub', installHeight: 0.5, installSpread: 0.5, matureHeight: 1.5, matureSpread: 1.8, yearsToMature: 4, foliage: '#6f8468', foliage2: '#a3b09a', flower: '#f4f2ee', evergreen: true, spacing: 1.5, container: '5 gal' }),
@@ -521,6 +565,10 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'cherry-laurel-compacta', name: 'Carolina cherry laurel \'Compacta\'', botanical: 'Prunus caroliniana \'Compacta\'', group: 'Shrubs', form: 'shrub', installHeight: 1.8, installSpread: 0.9, matureHeight: 3.0, matureSpread: 1.8, yearsToMature: 6, foliage: '#22401e', foliage2: '#4f7a34', flower: '#f1eedc', flower2: '#e2e0c4', evergreen: true, spacing: 1.8, container: '15 gal' }),
   P({ id: 'hopseed-bush-purpurea', name: 'Purple hopseed bush', botanical: 'Dodonaea viscosa \'Purpurea\'', group: 'Shrubs', form: 'shrub', installHeight: 1.5, installSpread: 0.75, matureHeight: 3.6, matureSpread: 1.8, yearsToMature: 5, foliage: '#4e4a30', foliage2: '#7a3e3a', flower: '#a8603a', flower2: '#c9a066', evergreen: true, spacing: 1.8, container: '15 gal' }),
   P({ id: 'glossy-abelia-kaleidoscope', name: 'Glossy abelia \'Kaleidoscope\'', botanical: 'Abelia x grandiflora \'Kaleidoscope\'', group: 'Shrubs', form: 'floweringShrub', installHeight: 0.45, installSpread: 0.5, matureHeight: 0.9, matureSpread: 1.2, yearsToMature: 4, foliage: '#7c9a2e', foliage2: '#e0c23a', flower: '#f4f0ea', flower2: '#e9d4dc', evergreen: true, spacing: 1.0, container: '5 gal' }),
+  // Plants from a job's plant list (2026-11-19). Sizes and colors from nursery and extension references cited in each builder file.
+  P({ id: 'lantana-radiation', name: 'Lantana \'Radiation\'', botanical: 'Lantana camara \'Radiation\'', group: 'Shrubs', form: 'floweringShrub', installHeight: 0.3, installSpread: 0.35, matureHeight: 1.2, matureSpread: 1.5, yearsToMature: 3, foliage: '#2f5222', foliage2: '#4a7430', flower: '#e8501c', flower2: '#f7a823', evergreen: true, spacing: 1.2, container: '1 gal' }),
+  P({ id: 'coprosma-tequila-sunrise', name: 'Coprosma \'Tequila Sunrise\'', botanical: 'Coprosma repens \'Tequila Sunrise\'', group: 'Shrubs', form: 'shrub', installHeight: 0.5, installSpread: 0.4, matureHeight: 1.1, matureSpread: 1.1, yearsToMature: 4, foliage: '#c4532a', foliage2: '#d9a02a', evergreen: true, spacing: 1.0, container: '5 gal' }),
+  P({ id: 'star-jasmine-trellis', name: 'Star jasmine, on a trellis', botanical: 'Trachelospermum jasminoides', group: 'Shrubs', form: 'floweringShrub', installHeight: 1.3, installSpread: 0.75, matureHeight: 2.1, matureSpread: 2.4, yearsToMature: 5, foliage: '#1f4a1c', foliage2: '#4c7a2a', flower: '#fbfaf2', flower2: '#f0e2a0', evergreen: true, spacing: 2.4, container: '5 gal' }),
   // Grasses
   P({ id: 'blue-fescue', name: 'Blue fescue', botanical: 'Festuca glauca', group: 'Grasses', form: 'grass', installHeight: 0.15, installSpread: 0.15, matureHeight: 0.3, matureSpread: 0.35, yearsToMature: 2, foliage: '#7f9fb2', foliage2: '#98b4c2', flower: '#c9b27c', evergreen: true, spacing: 0.35, container: '1 gal' }),
   P({ id: 'ornamental-grass', name: 'Ornamental grass', botanical: 'Calamagrostis x acutiflora \'Karl Foerster\'', group: 'Grasses', form: 'grass', installHeight: 0.4, installSpread: 0.3, matureHeight: 1.5, matureSpread: 0.75, yearsToMature: 2, foliage: '#628e3a', foliage2: '#7fa648', flower: '#d2b676', evergreen: false, spacing: 0.7, container: '5 gal' }),
@@ -550,6 +598,8 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'foxtail-fern', name: 'Foxtail fern', botanical: 'Asparagus densiflorus \'Myersii\'', group: 'Perennials and color', form: 'fern', installHeight: 0.5, installSpread: 0.75, matureHeight: 0.75, matureSpread: 1.05, yearsToMature: 3, foliage: '#6f9a34', foliage2: '#a0b84e', evergreen: true, spacing: 0.9, container: '5 gal' }),
   // Plants from a finished job's photos (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'cyclamen-red', name: 'Cyclamen, red', botanical: 'Cyclamen persicum, red', group: 'Perennials and color', form: 'perennial', installHeight: 0.22, installSpread: 0.25, matureHeight: 0.25, matureSpread: 0.3, yearsToMature: 1, foliage: '#26401f', foliage2: '#a9b49a', flower: '#c4122e', flower2: '#8e0a22', evergreen: false, spacing: 0.25, container: '6" pot' }),
+  // Plants from a job's plant list (2026-11-19). Sizes and colors from nursery and extension references cited in each builder file.
+  P({ id: 'nepeta-walkers-low', name: 'Catmint \'Walker\'s Low\'', botanical: 'Nepeta x faassenii \'Walker\'s Low\'', group: 'Perennials and color', form: 'perennial', installHeight: 0.25, installSpread: 0.3, matureHeight: 0.7, matureSpread: 0.9, yearsToMature: 2, foliage: '#76866a', foliage2: '#9aa68e', flower: '#7c7ad0', flower2: '#5048a8', evergreen: false, spacing: 0.75, container: '1 gal' }),
   // Succulents
   P({ id: 'variegated-yucca', name: 'Variegated yucca', botanical: 'Yucca filamentosa \'Color Guard\'', group: 'Succulents', form: 'agave', installHeight: 0.4, installSpread: 0.5, matureHeight: 0.75, matureSpread: 0.9, yearsToMature: 4, foliage: '#e6d874', foliage2: '#2e5c2c', evergreen: true, spacing: 0.9, container: '5 gal' }),
   P({ id: 'blue-sedum', name: 'Blue sedum', botanical: 'Sedum reflexum \'Blue Spruce\'', group: 'Succulents', form: 'groundcover', installHeight: 0.08, installSpread: 0.15, matureHeight: 0.15, matureSpread: 0.6, yearsToMature: 2, foliage: '#7fa3a0', foliage2: '#a6c6c2', evergreen: true, spacing: 0.3, container: '1 gal' }),
@@ -570,6 +620,8 @@ export const PLANTS: PlantSpec[] = [
   P({ id: 'groundcover', name: 'Low groundcover', botanical: 'Myoporum parvifolium', group: 'Groundcover', form: 'groundcover', installHeight: 0.08, installSpread: 0.3, matureHeight: 0.15, matureSpread: 1.5, yearsToMature: 2, foliage: '#4a8a2b', foliage2: '#72b43a', flower: '#fbfbf3', flower2: '#e9ecd2', evergreen: true, spacing: 0.9, container: '1 gal' }),
   // Plants from a finished job's photos (2026-11-17). Sizes and colors from nursery and extension references cited in each builder file.
   P({ id: 'lantana-new-gold', name: 'Lantana \'New Gold\'', botanical: 'Lantana x hybrida \'New Gold\'', group: 'Groundcover', form: 'groundcover', installHeight: 0.2, installSpread: 0.3, matureHeight: 0.45, matureSpread: 1.2, yearsToMature: 2, foliage: '#3d6a2a', foliage2: '#5c8a3a', flower: '#f6c21a', flower2: '#ffd94a', evergreen: true, spacing: 0.9, container: '1 gal' }),
+  // Plants from a job's plant list (2026-11-19). Sizes and colors from nursery and extension references cited in each builder file.
+  P({ id: 'verbena-tapien-blue', name: 'Verbena \'Tapien Blue\'', botanical: 'Verbena \'Tapien Blue Violet\'', group: 'Groundcover', form: 'groundcover', installHeight: 0.08, installSpread: 0.25, matureHeight: 0.15, matureSpread: 0.75, yearsToMature: 1, foliage: '#3d6a2a', foliage2: '#5a8a3a', flower: '#62309e', flower2: '#8052bc', evergreen: true, spacing: 0.5, container: '1 gal' }),
 ];
 
 /* ------------------------------------------------------------------ */
@@ -835,6 +887,15 @@ export const MATERIALS: MaterialSpec[] = [
   // Edging
   M({ id: 'curb-charcoal', name: 'Charcoal curb', use: 'edging', group: 'Edging', recipe: 'curb', palette: ['#55534f', '#4a4845'], matches: 'Belgard Melville curb style' }),
   M({ id: 'steel-edging', name: 'Steel edging', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#4a3a2e', '#3a2d24'] }),
+  // The black steel edging Green Lion buys (its supplier bills), both 16 ft pieces 4 in tall with 6 stakes, set 1/2 in
+  // proud of the ground. Thin: Border Concepts BORDER Line BLBLE416, 1/8 x 4 in x 16 ft (SiteOne; its stake pockets are
+  // stamped every 32 in for 15 in tapered steel stakes; California Landscape Supply sells a 1/8 in too). Thick:
+  // California Landscape Supply's 3/16 in black steel edging, 16 ft, 6 stakes included (the bill gives no maker or
+  // height; 4 in is the standard height). Black powder coat.
+  M({ id: 'steel-edging-black-1-8', name: 'Black steel edging, 1/8 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.125, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'Border Concepts', line: 'BORDER Line steel edging, 1/8 in', shelf: 'Metal edging', color: 'Black' }),
+  M({ id: 'steel-edging-black-3-16', name: 'Black steel edging, 3/16 x 4 in, 16 ft', use: 'edging', group: 'Edging', recipe: 'steelEdging', palette: ['#1e1f21', '#18191b'], edging: { thickIn: 0.1875, heightIn: 4, revealIn: 0.5, pieceFt: 16, stakes: 6 }, maker: 'California Landscape Supply', line: 'Black steel edging, 3/16 in', shelf: 'Metal edging', color: 'Black' }),
+  // Poured concrete mow curb: three curb machine shapes in the concrete colors (MOW_CURB_SHAPES).
+  ...mowCurbLooks(),
 ];
 
 /* ------------------------------------------------------------------ */

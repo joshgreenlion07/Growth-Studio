@@ -22,7 +22,7 @@ import { isBoardDeck } from '../siteplan/deckzone';
 import { lineCenter, lineThickness } from './linepath';
 import { materialById } from '../siteplan/catalog';
 import { buildModels, type ModelAssets } from './models';
-import { buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
+import { backToNearest, buildPlants, lodGeometry, speciesGeometry, type PlantLayer } from './plants';
 import { plantGround, planterPlants } from './decor/planters';
 import { coverCeiling } from './decor/patio';
 import { CEILING_KINDS } from '../siteplan/decor';
@@ -142,6 +142,16 @@ function lineBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
   return plan.lines.flatMap((l) => {
     if (l.kind === 'steps') return [];
     const c = lineCenter(l, plan.zones), half = lineThickness(l) / 2;
+    return c.slice(1).map((b, i) => ({ a: c[i], b, half }));
+  });
+}
+
+/** The curbs' bodies (edging lines built as a solid body: Melville curb, poured mow curb), as lineBodies gives them. */
+function curbBodies(plan: SitePlan): { a: Vec2; b: Vec2; half: number }[] {
+  return plan.lines.flatMap((l) => {
+    const half = l.kind === 'edging' ? lineThickness(l) / 2 : 0;
+    if (!half) return [];
+    const c = lineCenter(l, plan.zones);
     return c.slice(1).map((b, i) => ({ a: c[i], b, half }));
   });
 }
@@ -424,7 +434,10 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // there and the humus bed mask is zero (the same cut the ground shader makes, builder/fourfall.ts).
   const fallCuts = fourFallGroundCuts(plan.features, gm.fourFalls);
   const gmBeds: GroundModel = fallCuts.length ? { ...gm, zoneAt: (p) => (inGroundCut(fallCuts, p) ? null : gm.zoneAt(p)) } : gm;
-  const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds);
+  // Bed pieces stay off the curbs: a piece whose center is within its curb's body by more than 60% of its own size.
+  const curbs = bodyGrid(curbBodies(plan));
+  const onCurb = curbs.list.length ? (x: number, z: number, r: number) => curbs.grid.someWithin(x, z, curbs.maxHalf + r, (k, d) => d < curbs.list[k].half + r * 0.4) : undefined;
+  const pebbles = buildPebbles(plan, gmBeds, quality, features.pebbleBeds, onCurb);
   yield 'pebbles';
   const humus = buildHumus(plan, gmBeds, ground.surface, quality);
   yield 'soil fills';
@@ -471,7 +484,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   // Shadow map texel size, as Studio.fitShadow frames the sun's view and applyQuality sizes the map.
   const sb = bounds(plan.site.boundary);
   const shadowTexel = (Math.hypot(sb.maxX - sb.minX, sb.maxY - sb.minY) + 20) / (quality === 'max' ? 4096 : quality === 'balanced' ? 2048 : 1024);
-  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel });
+  // Vines trained on a trellis stand with their back to the nearest fence, wall or building wall.
+  const backing = backToNearest([
+    ...plan.lines.filter((l) => l.kind === 'fence' || l.kind === 'wall').flatMap((l) => l.points.slice(1).map((q, i): [Vec2, Vec2] => [l.points[i], q])),
+    ...plan.structures.filter((s) => s.kind !== 'cover').flatMap((s) => s.polygon.map((q, i): [Vec2, Vec2] => [q, s.polygon[(i + 1) % s.polygon.length]])),
+  ]);
+  const plants = buildPlants(placements, plantGround(plan.features, gm.height, (p) => standOn(p) - gm.height(p) + pavingTop(p)), quality !== 'draft', { lod: true, reflects, shadowTexel, backing });
   yield 'plants';
 
   root.add(ctx.object, ground.object, construction.object, hard.object, structs.object, water.object, features.object, models.object, plants.object);
@@ -514,7 +532,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
   let standing: PlantLayer | null = null;
   const ensureStanding = () => {
     if (standing) return;
-    standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel });
+    standing = buildPlants([...plan.plants.filter((p) => p.existing), ...ctx.trees], gm.height, quality !== 'draft', { reflects, shadowTexel, backing });
     standing.object.name = 'plants-standing';
     standing.setYears(years);
     standing.object.visible = stage !== 'finished';

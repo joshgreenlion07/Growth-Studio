@@ -265,8 +265,12 @@ export interface PebbleBuild {
   dispose(): void;
 }
 
-/** Stones over every bed zone whose material has spec.pebble, where that zone is the top one, and over features' `beds`. */
-export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, beds: PebbleBed[] = []): PebbleBuild {
+/**
+ * Stones over every bed zone whose material has spec.pebble, where that zone is the top one, and over features' `beds`.
+ * `onCurb(x, z, r)`, when given, is true where a piece of radius r centered at (x, z) would lie on a curb's body: those
+ * pieces are left out (a curb is set on the bed side of a lawn edge, and its top stands above the chips).
+ */
+export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, beds: PebbleBed[] = [], onCurb?: (x: number, z: number, r: number) => boolean): PebbleBuild {
   // Draft quality (the slowest devices) keeps the ground's pebble texture alone.
   const areas: { area: BedArea; catalogId: string }[] = quality === 'draft' ? [] : [
     ...plan.zones.filter((z) => materialById.get(z.catalogId)?.pebble).map((z) => ({
@@ -292,7 +296,8 @@ export function buildPebbles(plan: SitePlan, gm: GroundModel, quality: Quality, 
   const reach = quality === 'max' ? 1.25 : quality === 'balanced' ? 1 : 0.6;
   for (const { area, catalogId } of areas) {
     const spec = materialById.get(catalogId)!;
-    const stones = clearOfSteppingStones(placeStones(area, spec), plan.features, gm.height);
+    const placed = clearOfSteppingStones(placeStones(area, spec), plan.features, gm.height);
+    const stones = onCurb ? placed.filter((st) => !onCurb(st.x, st.z, Math.max(st.len, st.wid) * 0.5)) : placed;
     const P = spec.pebble!;
     const form: Form = P.form ?? 'pebble';
     const mat = matOf(form);

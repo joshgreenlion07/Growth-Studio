@@ -79,6 +79,13 @@ import { build as redYucca } from './succulents/red-yucca';
 import { build as echeveria } from './succulents/echeveria';
 import { build as primroseRed } from './perennials/primrose-red';
 import { build as gardeniaStandard } from './trees/gardenia-standard';
+import { build as lantanaRadiation } from './shrubs/lantana-radiation';
+import { build as nepetaWalkersLow } from './perennials/nepeta-walkers-low';
+import { build as verbenaTapienBlue } from './groundcover/verbena-tapien-blue';
+import { build as dwarfMandarin } from './trees/dwarf-mandarin';
+import { build as pomegranate } from './trees/pomegranate';
+import { build as coprosmaTequilaSunrise } from './shrubs/coprosma-tequila-sunrise';
+import { build as starJasmineTrellis } from './shrubs/star-jasmine-trellis';
 /**
  * Catalog plant id -> its builder. Each plant has its own file under
  * species/<group>/<catalog-id>.ts. A plant with no entry here falls back to
@@ -164,4 +171,11 @@ export const SPECIES: Record<string, SpeciesBuilder> = {
   'echeveria': echeveria,
   'primrose-red': primroseRed,
   'gardenia-standard': gardeniaStandard,
+  'lantana-radiation': lantanaRadiation,
+  'nepeta-walkers-low': nepetaWalkersLow,
+  'verbena-tapien-blue': verbenaTapienBlue,
+  'dwarf-mandarin': dwarfMandarin,
+  'pomegranate': pomegranate,
+  'coprosma-tequila-sunrise': coprosmaTequilaSunrise,
+  'star-jasmine-trellis': starJasmineTrellis,
 };

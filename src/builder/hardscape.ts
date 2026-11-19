@@ -9,6 +9,7 @@ import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
+import { mowCurbOutline, mowCurbSink, profileGeometry } from './mowcurb';
 import type { PoolLayout } from './pools';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
 import { metalPicketFence } from './decor/fence-metal-picket';
@@ -880,6 +881,11 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       // the cap across instead of a joint running down its middle.
       if (spec?.veneer?.cap && !l.cap) startAcrossAtEdge(cap);
       put('cap', isStuccoFace(face) ? catalogMaterial(l.catalogId) : capMaterial(l.catalogId, l.cap), cap);
+    } else if (spec?.mowCurb) {
+      // A poured mow curb: its mold's section along the path, its base in a shallow trench (or as deep as leaves the
+      // plan's `reveal` of its top above grade), the low side toward the lawn.
+      const sink = mowCurbSink(spec.mowCurb, l.reveal);
+      put('curb', catalogMaterial(l.catalogId), profileGeometry(path, mowCurbOutline(spec.mowCurb), path.pts.map((p) => height(p) - sink)));
     } else {
       // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
       const rev = Math.max(0.004, Math.min(CURB_TALL, l.reveal ?? CURB_REVEAL));
@@ -909,7 +915,13 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       if (l.kind === 'fence' && spec?.fence === 'grayBoardLattice') grayBoardLattice(l, a, b, y0, put, (yard ??= yardSide(l, zones)), i > 0);
       else if (l.kind === 'fence' && spec?.fence === 'metalPicket') metalPicketFence(l, a, b, height, spec.palette[0], put, i === 0 && !closed, i > 0 || closed, i < l.points.length - 2 || closed);
       else if (l.kind === 'fence') fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
-      else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
+      else if (spec?.edging) {
+        // Steel edging as sold: the strip at its own thickness and height, its top 1/2 in proud of the ground, black
+        // powder coat (a paint: dark, a little glossy, barely metallic).
+        const E = spec.edging, IN = 0.0254, t = E.thickIn * IN;
+        const mat = plainMaterial(`steel-edging-${spec.id}`, { color: spec.palette[0], roughness: 0.42, metalness: 0.15 });
+        put('edge', mat, segmentBox(a, b, t, Math.min(height(a), height(b)) - (E.heightIn - E.revealIn) * IN, Math.max(height(a), height(b)) + E.revealIn * IN, t), false);
+      } else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }
   }
   for (const [key, b] of buckets) {
