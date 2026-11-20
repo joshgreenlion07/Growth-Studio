@@ -272,6 +272,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Stepping (the Views quick tool) waits while a plan is on its way or being built: the camera is not on that yard.
+  studio.stepBusy = () => EMBED && (!!embedPending || embedShowing);
   // Painted maps are uploaded through the view's renderer a slice per frame (see texture-jobs.ts).
   setTextureRenderer(studio.renderer);
   // Painted textures arrive from the worker after the build; redraw when they do.
@@ -430,26 +432,53 @@ function renderViews() {
   const box = $('#views');
   box.replaceChildren();
   const views = studio?.views ?? [];
+  // The team's places (see the `places` message), never in client mode.
+  const places = EMBED_CLIENT ? [] : (studio?.places ?? []);
   if (!views.length) return;
   const cap = h('span', { class: 'sc-cap', title: 'Camera views' });
   cap.innerHTML = VIEW_ICON;
   const pick = h('select', { id: 'view-select', 'aria-label': 'Camera view' }, h('option', { value: '', text: 'Views' }));
+  const press = (id: string) => box.querySelectorAll('.view-btn').forEach((x) => x.setAttribute('aria-pressed', String((x as HTMLElement).dataset.view === id)));
   const go = (id: string) => {
     studio?.goTo(id);
-    box.querySelectorAll('.view-btn').forEach((x) => x.setAttribute('aria-pressed', String((x as HTMLElement).dataset.view === id)));
+    press(id);
+  };
+  // A place glides there in Walk (Studio.goToPlace); `place:<index>` in the menus.
+  const goPlace = (i: number) => {
+    // Not while a plan is on its way or being built (or the Library's sample shows): the camera is not on this yard.
+    if (embedBusy()) return toast('Still building the 3D view. Try again in a moment.', 'warn');
+    press('');
+    if (studio && !studio.goToPlace(i)) toast(`${places[i]?.label ?? 'That place'} is outside the yard now.`, 'warn');
+  };
+  const pickGo = (sel: HTMLSelectElement) => {
+    const v = sel.value;
+    if (v.startsWith('place:')) goPlace(Number(v.slice(6)));
+    else if (v) go(v);
+    sel.value = '';
+    sel.blur();
   };
   box.append(cap);
+  if (places.length) {
+    // Wide: a Places menu before the view buttons. Narrow: a Places group at the top of the one Views menu.
+    const pp = h('select', { id: 'place-select', 'aria-label': 'Places' }, h('option', { value: '', text: 'Places' }));
+    const grp = h('optgroup', { label: 'Places' });
+    places.forEach((p, i) => {
+      pp.append(h('option', { value: `place:${i}`, text: p.label }));
+      grp.append(h('option', { value: `place:${i}`, text: p.label }));
+    });
+    pp.addEventListener('change', () => pickGo(pp));
+    box.append(pp);
+    pick.append(grp);
+  }
+  const vg = places.length ? h('optgroup', { label: 'Views' }) : pick;
   for (const v of views) {
     const b = h('button', { type: 'button', class: 'sc-btn view-btn', 'data-view': v.id, 'aria-pressed': 'false', text: v.label });
     b.addEventListener('click', () => go(v.id));
     box.append(b);
-    pick.append(h('option', { value: v.id, text: v.label }));
+    vg.append(h('option', { value: v.id, text: v.label }));
   }
-  pick.addEventListener('change', () => {
-    if (pick.value) go(pick.value);
-    pick.value = '';
-    pick.blur();
-  });
+  if (vg !== pick) pick.append(vg);
+  pick.addEventListener('change', () => pickGo(pick));
   box.append(pick);
 }
 
@@ -1181,6 +1210,8 @@ function initFullscreen() {
 
   let on = false, raf = 0, last = -1;
   let pose: ReturnType<Studio['savePose']> | null = null;
+  /** The movement mode from before full screen, put back on leaving it (walking stays walking). */
+  let poseMode: Studio['mode'] = 'orbit';
   document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.addEventListener('click', () => studio?.setMeasureMode(b.dataset.mode as MeasureMode)));
   document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'orbit' | 'walk' | 'fly')));
   const tick = () => {
@@ -1204,14 +1235,15 @@ function initFullscreen() {
     if (studio && libraryOpen()) {
       // Left with the Library open (Esc in the browser's own full screen): the Library keeps its sample on screen,
       // and closing it goes back to the view from before full screen, in orbit.
-      if (!on && pose && libraryReturn) libraryReturn = { ...libraryReturn, pose, mode: 'orbit' };
+      if (!on && pose && libraryReturn) libraryReturn = { ...libraryReturn, pose, mode: poseMode };
       pose = null;
     } else if (studio) {
       if (on) {
         pose = studio.savePose();
+        poseMode = studio.mode;
         studio.setNavMode('walk');
       } else {
-        studio.setNavMode('orbit');
+        studio.setNavMode(pose ? poseMode : 'orbit');
         if (pose) studio.restorePose(pose);
         pose = null;
       }
@@ -1287,7 +1319,8 @@ const EMBED_DEBOUNCE_MS = 150;
 /** Largest uploaded model or picture the embed will read. */
 const EMBED_ASSET_MAX_BYTES = 60 * 1024 * 1024;
 
-let embedPending: { plan: unknown; name: string; refit: boolean; frame: string } | null = null;
+/** `start`: the start spot sent with the plan (the first build of a blueprint just opened; null: none), else undefined. */
+let embedPending: { plan: unknown; name: string; refit: boolean; frame: string; start?: StartPose | null } | null = null;
 /** The parent's coordinate frame of the last plan built (it changes only with a new plan image or scale). */
 let embedLastFrame = '';
 let embedTimer = 0;
@@ -1302,6 +1335,9 @@ let embedGoPose: { pose: StartPose; origin: string } | null = null;
 const embedBusy = () => !!embedPending || embedShowing || libraryOpen();
 function goPoseNow(p: StartPose | null, origin: string) {
   const ok = !!(p && studio && embedBuilt && !embedBusy() && studio.goToPose(p));
+  // At the client start (Area Planner's start for a blueprint opened again): stepping goes on from it.
+  const p0 = studio?.places[0]?.pose;
+  if (ok && p && p0 && p0.x === p.x && p0.z === p.z && p0.yaw === p.yaw) studio!.markPlace(0);
   window.parent.postMessage({ source: 'growth-studio', type: 'go-pose', ok }, origin);
 }
 /** Uploaded files already asked for since the last plan, so a rebuild does not ask twice. */
@@ -1417,6 +1453,23 @@ function onEmbedMessage(e: MessageEvent) {
     if (studio) studio.clientStart = startPose((d as { pose?: unknown }).pose);
     return;
   }
+  if (d.type === 'places') {
+    // The team's places (Area Planner's client start and waypoints, all of them): { start, list: [{ name, pose }] }.
+    // Listed first in the Views menu and the Views quick tool; Walk starts at `start`. Client mode has its own Places.
+    if (EMBED_CLIENT || !studio) return;
+    const q = d as { start?: unknown; list?: unknown };
+    const start = startPose(q.start);
+    const list = (Array.isArray(q.list) ? q.list.slice(0, 24) : []).map((w) => {
+      const o = w as { name?: unknown; pose?: unknown } | null;
+      const label = typeof o?.name === 'string' ? o.name.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      const pose = startPose(o?.pose);
+      return pose ? { label: label || 'Place', pose } : null;
+    }).filter((x): x is { label: string; pose: StartPose } => !!x);
+    studio.clientStart = start;
+    studio.places = [...(start ? [{ label: 'Client start', pose: start }] : []), ...list];
+    renderViews();
+    return;
+  }
   if (d.type === 'travel') {
     // Client mode's Places: glide to a saved spot (see Studio.travelTo); the light stays as the client picked it.
     const p = startPose((d as { pose?: unknown }).pose);
@@ -1463,7 +1516,9 @@ function onEmbedMessage(e: MessageEvent) {
   if (d.type !== 'siteplan') return;
   embedOrigin = e.origin;
   // Keep only the newest plan. A refit asked for by any message in the burst still happens.
-  embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit, frame: typeof d.frame === 'string' ? d.frame : '' };
+  // A start spot sent with any plan of the burst is kept too (the newest one that names one, null included).
+  const start = 'start' in d && !EMBED_CLIENT ? startPose((d as { start?: unknown }).start) : embedPending?.start;
+  embedPending = { plan: d.plan, name: typeof d.name === 'string' ? d.name : '', refit: d.refit === true || !!embedPending?.refit, frame: typeof d.frame === 'string' ? d.frame : '', start };
   clearTimeout(embedTimer);
   if (studio) $('#updating').hidden = false;
   embedTimer = window.setTimeout(applyEmbedPlan, EMBED_DEBOUNCE_MS);
@@ -1496,7 +1551,8 @@ function applyEmbedPlan() {
       embedReply(true, res.warnings.length ? { warnings: res.warnings } : {});
       return;
     }
-    const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
+    // With a start spot (a blueprint just opened) the camera starts there, in Walk (Studio.placeCamera).
+    const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame), next.start);
     embedShowing = true;
     const done = () => {
       embedShowing = false;

@@ -146,7 +146,8 @@ const TOOLS: QuickTool[] = [
     up: 'Next view',
     down: 'Previous view',
     status: () => 'Saved camera views',
-    act: (dir, s) => s.stepView(dir) || 'No saved views',
+    // While the yard is being built a step is skipped without a word (the chip keeps its status).
+    act: (dir, s) => s.stepView(dir) || (s.stepBusy() ? 'Saved camera views' : 'No saved views'),
   },
 ];
 

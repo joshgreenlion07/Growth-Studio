@@ -264,7 +264,7 @@ html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #nav-hint, html.
 .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--sc-h); min-width: var(--sc-h); padding: 0 12px; border: 0; border-radius: calc(var(--sc-r) - 4px); background: transparent; color: var(--sc-ink); font: 400 13.5px/1 var(--font-brand); letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.16s, color 0.16s, transform 0.12s var(--sc-ease); }
 .sc-btn:hover { background: rgba(245, 242, 234, 0.13); }
 .sc-btn:active { transform: scale(0.94); }
-.sc-btn:focus-visible, #stage-pick select:focus-visible, #view-select:focus-visible { outline: 2px solid var(--gl-lime); outline-offset: 1px; }
+.sc-btn:focus-visible, #stage-pick select:focus-visible, #view-select:focus-visible, #place-select:focus-visible { outline: 2px solid var(--gl-lime); outline-offset: 1px; }
 .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ic .ic-off { display: none; }
 /* A switch that is on: a lime icon on a faint lime wash; off, the label steps back. */
@@ -281,9 +281,9 @@ html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #nav-hint, html.
 #measure-modes { display: flex; align-items: center; gap: 2px; }
 #stage-pick { gap: 7px; padding-left: 11px; cursor: pointer; }
 #stage-pick > .ic { color: var(--sc-ink-2); }
-#stage-pick select, #view-select { -webkit-appearance: none; appearance: none; height: var(--sc-h); border: 0; border-radius: calc(var(--sc-r) - 4px); padding: 0 30px 0 12px; background: rgba(245, 242, 234, 0.09) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23F5F2EA' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center / 12px; color: var(--sc-ink); font: 400 13.5px/1 var(--font-brand); cursor: pointer; transition: background-color 0.16s; }
-#stage-pick select:hover, #view-select:hover { background-color: rgba(245, 242, 234, 0.16); }
-#stage-pick select option, #view-select option { color: var(--gl-charcoal); background: var(--gl-warm); }
+#stage-pick select, #view-select, #place-select { -webkit-appearance: none; appearance: none; height: var(--sc-h); border: 0; border-radius: calc(var(--sc-r) - 4px); padding: 0 30px 0 12px; background: rgba(245, 242, 234, 0.09) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23F5F2EA' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center / 12px; color: var(--sc-ink); font: 400 13.5px/1 var(--font-brand); cursor: pointer; transition: background-color 0.16s; }
+#stage-pick select:hover, #view-select:hover, #place-select:hover { background-color: rgba(245, 242, 234, 0.16); }
+#stage-pick select option, #view-select option, #place-select option, #view-select optgroup { color: var(--gl-charcoal); background: var(--gl-warm); }
 
 /* Where the groups sit: camera views top left, everything else top right. */
 #views { position: absolute; z-index: 3; top: 12px; left: 12px; max-width: calc(42% - 18px); flex-wrap: wrap; }
@@ -304,7 +304,7 @@ html.embed.viewer .scene-tools > .sc-group:first-child { display: none; }
   #measure-modes .sc-cap { padding: 0 4px 0 8px; }
 }
 @container scene (max-width: 1300px) {
-  #views > .sc-btn { display: none; }
+  #views > .sc-btn, #place-select { display: none; }
   #view-select { display: block; }
 }
 @container scene (max-width: 900px) {
@@ -341,7 +341,7 @@ section.scene-pane.fs #height-meter { display: block; }
 /* A TV across the room: everything a size up. */
 @media (min-width: 1800px) and (min-height: 900px) {
   :root { --sc-h: 46px; --sc-r: 15px; }
-  .sc-btn, #stage-pick select, #view-select { font-size: 16px; }
+  .sc-btn, #stage-pick select, #view-select, #place-select { font-size: 16px; }
   .ic { width: 21px; height: 21px; }
   .sc-cap, .sc-cap-txt { font-size: 12px; }
   #nav-hint { font-size: 14px; }

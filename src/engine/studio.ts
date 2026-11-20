@@ -770,8 +770,17 @@ export class Studio {
    * promise resolves once the new yard is on screen, after its shaders are warmed (or at once for a paving-only
    * restyle), and rejects when the plan cannot be built.
    */
-  setPlan(plan: SitePlan, keepCamera = false): Promise<void> {
-    this.applyPlan(plan, keepCamera, true);
+  setPlan(plan: SitePlan, keepCamera = false, start?: StartPose | null): Promise<void> {
+    // A start spot for this plan (the first build of a blueprint just opened); null: none (today's start). Left out,
+    // whatever was asked for before still waits for the next yard shown.
+    if (start !== undefined) this.startNext = start;
+    try {
+      this.applyPlan(plan, keepCamera, true);
+    } catch (e) {
+      // a plan that cannot even start building takes its start spot with it (as buildFailed does)
+      this.startNext = undefined;
+      throw e;
+    }
     return this.built();
   }
 
@@ -839,6 +848,8 @@ export class Studio {
     }
     this.inflight = null;
     this.restyleAfter = null;
+    // its start spot goes with it: a later rebuild of the same blueprint must not move the camera
+    this.startNext = undefined;
     this.shownToken = token;
     const waiting = this.whenBuilt;
     this.whenBuilt = [];
@@ -857,9 +868,30 @@ export class Studio {
     if (this.measure.visible) this.measure.rebuild(plan, this.build, this.state.years);
     this.regroundMarks();
     this.updateSky(false);
-    if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+    this.placeCamera(keepCamera);
     this.invalidate();
   }
+
+  /**
+   * Where the camera goes when a yard is shown: at the start spot asked for with the plan (Walk, eye height, facing
+   * its way) when there is one on the lot, else the first view unless the camera is kept. Used once per start spot.
+   */
+  private placeCamera(keepCamera: boolean) {
+    const s = this.startNext;
+    this.startNext = undefined;
+    if (s && this.goToPose(s)) {
+      this.placeIndex = this.places.length ? 0 : -1;
+      return;
+    }
+    if (!keepCamera && this.views.length) {
+      this.jumpTo(this.views[0]);
+      // a new yard: stepping starts again from its first view
+      this.placeIndex = -1;
+      this.viewIndex = 0;
+    }
+  }
+  /** A start spot waiting for the next yard shown (see setPlan). */
+  private startNext: StartPose | null | undefined = undefined;
 
   private warmAndSwap(next: SceneBuild, token: number, plan: SitePlan, copy: SitePlan, keepCamera: boolean) {
     // Every shadow caster joins the shadow pass (plants bring their own lower-detail casters).
@@ -959,7 +991,7 @@ export class Studio {
     this.regroundMarks();
     this.updateSky(true);
     this.assignNightLights();
-    if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+    this.placeCamera(keepCamera);
     this.invalidate();
     for (const id of next.missingAssets) this.onNeedAsset(id);
     // Whoever waits for this yard is told by warmAndSwap, after any paving picks made meanwhile are applied.
@@ -1492,6 +1524,7 @@ export class Studio {
     if (this.navMode === 'orbit') {
       if (!this.views.length) return;
       this.viewIndex = 0;
+      this.placeIndex = -1;
       this.goTo(this.views[0].id);
     } else {
       this.placeWalker();
@@ -1505,6 +1538,16 @@ export class Studio {
    * `yaw` (0 looks along +z, turning toward +x) and `pitch` (radians, up is positive). Set by the app.
    */
   clientStart: StartPose | null = null;
+
+  /**
+   * The team's places (Area Planner's client start and waypoints, every one, the start first), in the Views menu and
+   * the Views quick tool before the generated views. Set by the app; never used in client mode (its parent has its own).
+   */
+  places: { label: string; pose: StartPose }[] = [];
+  /** The place last gone to by stepping (-1: a generated view, see viewIndex). */
+  private placeIndex = -1;
+  /** True while the app has a plan on its way (stepping is skipped then). Set by the app. */
+  stepBusy: () => boolean = () => false;
 
   /** Inside the lot and clear of every house, garage and shed (with a little room). */
   walkable(x: number, z: number): boolean {
@@ -1602,8 +1645,9 @@ export class Studio {
     this.camera.position.copy(eye);
     this.controls.target.copy(eye).addScaledVector(look, 3);
     this.controls.target.y -= 0.35; // a slight downward glance
-    // Client mode: the spot the owner chose, when it is still on the lot (else the automatic start above).
-    const cs = this.clientMode ? this.clientStart : null;
+    // The spot the owner chose (client mode's start, or the team's client start from the places), when it is still on
+    // the lot (else the automatic start above).
+    const cs = this.clientStart;
     if (cs && this.plan && pointInPolygon([cs.x, cs.z], this.plan.site.boundary)) {
       const p = this.posePoints(cs);
       this.camera.position.copy(p.eye);
@@ -2019,17 +2063,54 @@ export class Studio {
 
   /** The next (1) or previous (-1) saved view. The name of the view it goes to, or '' when there are none. */
   stepView(d: 1 | -1): string {
-    if (!this.views.length) return '';
-    this.viewIndex = (this.viewIndex + d + this.views.length) % this.views.length;
-    this.goTo(this.views[this.viewIndex].id);
+    if (this.stepBusy()) return '';
+    // The team's places first, then the generated views, round and round (a place off the lot now is passed over).
+    const np = this.clientMode ? 0 : this.places.length, n = np + this.views.length;
+    if (!n) return '';
+    let at = this.placeIndex >= 0 && this.placeIndex < np ? this.placeIndex : np + this.viewIndex;
+    for (let i = 0; i < n; i++) {
+      at = (at + d + n) % n;
+      if (at < np) {
+        if (!this.travelToPlace(this.places[at].pose)) continue;
+        this.placeIndex = at;
+        this.nav.pulse();
+        return this.places[at].label;
+      }
+      this.viewIndex = at - np;
+      this.goTo(this.views[this.viewIndex].id);
+      this.nav.pulse();
+      return this.views[this.viewIndex].label;
+    }
+    return '';
+  }
+
+  /** The camera was put at place `i` some other way (a go-pose): stepping goes on from it. */
+  markPlace(i: number) {
+    if (i >= 0 && i < this.places.length) this.placeIndex = i;
+  }
+
+  /** Go to one of the team's places (the Views menu). False when it is off the lot. */
+  goToPlace(i: number): boolean {
+    const p = this.places[i];
+    if (!p || !this.travelToPlace(p.pose)) return false;
+    this.placeIndex = i;
     this.nav.pulse();
-    return this.views[this.viewIndex].label;
+    return true;
+  }
+
+  /**
+   * A place: walking already, a glide there (travelTo: the heading turns the short way round); from the orbit or fly
+   * camera, straight into Walk there (Walk would first put the walker at the start, and glide on from that).
+   */
+  private travelToPlace(p: StartPose): boolean {
+    return this.navMode === 'walk' ? this.travelTo(p) : this.goToPose(p);
   }
 
   goTo(id: string) {
     if (this.navMode !== 'orbit') this.setNavMode('orbit');
     const v = this.views.find((x) => x.id === id);
     if (!v) return;
+    this.placeIndex = -1;
     this.viewIndex = this.views.indexOf(v);
     this.manualFocus = null;
     this.tween = { from: { e: this.camera.position.clone(), t: this.controls.target.clone(), f: this.camera.fov }, to: v, t0: -1, dur: 1400 };
