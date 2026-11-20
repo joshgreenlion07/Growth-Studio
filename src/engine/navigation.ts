@@ -174,6 +174,13 @@ export class Navigation {
    * joystick) turn instead of stepping sideways; no run, no lens zoom (wheel, pinch, triggers), no shortcut keys.
    */
   client = false;
+  /**
+   * Client mode's look inverts (the client's Menu): drag-look and a controller's right stick turn the other way left
+   * and right (`invertX`) or up and down (`invertY`). The joystick's turn and the arrow keys are not inverted: pushing
+   * right still turns right.
+   */
+  invertX = false;
+  invertY = false;
   /** The on-screen joystick (-1..1, down is backward like a controller stick) and rise button (-1, 0, 1), and its eased result. */
   private vstick = { x: 0, y: 0 };
   private vstickOut = { x: 0, y: 0 };
@@ -547,6 +554,9 @@ export class Navigation {
         lift += this.vrise;
       }
       if (this.client) {
+        // The look inverts apply to the controller's right stick (drag-look below); not to the turn that follows.
+        if (this.invertX) lx = -lx;
+        if (this.invertY) ly = -ly;
         // Left and right turn, eased like a stick (about 43 degrees a second at full push); nothing steps sideways.
         lx += Math.max(-1, Math.min(1, mx)) * 0.75;
         mx = 0;
@@ -560,8 +570,8 @@ export class Navigation {
         mz /= m;
       }
       // Drag right to look right, drag up to look up. Direct, not eased: it follows the hand.
-      mouseYaw = this.look.x * (this.client ? 0.003 : 0.0035);
-      mousePitch = this.look.y * (this.client ? 0.003 : 0.0035);
+      mouseYaw = this.look.x * (this.client ? 0.003 : 0.0035) * (this.client && this.invertX ? -1 : 1);
+      mousePitch = this.look.y * (this.client ? 0.003 : 0.0035) * (this.client && this.invertY ? -1 : 1);
     }
     this.look.x = this.look.y = 0;
     if (mode === 'walk') lift = 0;

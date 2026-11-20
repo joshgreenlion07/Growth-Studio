@@ -305,6 +305,20 @@ function bootStudio() {
     studio.audio.setMuted(true);
     // A controller's A or View uses what the view is on; the quick tools are never touched.
     studio.onUse = () => { studio?.useAction(0); };
+    // The use tag: a small pill just above a usable thing the walker is near and looking at; tapping it uses it.
+    studio.tagVerb = touchOn ? 'Tap' : 'Click';
+    const tag = document.createElement('button');
+    tag.type = 'button';
+    tag.className = 'use-tag';
+    tag.setAttribute('aria-live', 'polite');
+    tag.addEventListener('click', (ev) => { ev.stopPropagation(); studio?.useTagged(); });
+    host.append(tag);
+    studio.onUseTag = (t) => {
+      if (!t) { tag.classList.remove('on'); return; }
+      if (tag.textContent !== t.text) tag.textContent = t.text;
+      tag.style.transform = `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) translate(-50%, -100%)`;
+      tag.classList.add('on');
+    };
     const q = CLIENT_QUALITY[new URLSearchParams(location.search).get('quality') ?? ''];
     if (q) studio.setQuality(q);
   }
@@ -1332,6 +1346,11 @@ function onEmbedMessage(e: MessageEvent) {
     return;
   }
   if (d.type === 'time') { if (EMBED_CLIENT) clientTime(String((d as { time?: unknown }).time)); return; }
+  if (d.type === 'invert') {
+    // Client mode's look inverts: { x, y } booleans (drag-look and the right stick).
+    if (EMBED_CLIENT && studio) { const q = d as { x?: unknown; y?: unknown }; studio.nav.invertX = q.x === true; studio.nav.invertY = q.y === true; }
+    return;
+  }
   if (d.type === 'pointer') { studio?.setPointer(!!(d as { on?: unknown }).on); return; }
   if (d.type === 'point-lock') { studio?.setPointLock(!!(d as { locked?: unknown }).locked); return; }
   if (d.type === 'cover') {

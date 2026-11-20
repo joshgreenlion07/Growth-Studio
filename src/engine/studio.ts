@@ -214,10 +214,19 @@ export class Studio {
   /**
    * Client mode (Area Planner's client page): walk only (setNavMode refuses the others), double tap or double click
    * the ground to walk there with a mouse too, a slower double tap, the Hand always on (a tap uses a door, fire,
-   * water or light), and a soft ring now and then under each usable thing nearby. Set by the app.
+   * water or light), and a small tag over a usable thing the walker is near and looking at (clientTag). Set by the app.
    */
   clientMode = false;
-  private beaconAt = 0;
+  /**
+   * Client mode's use tag: the usable thing the walker is near (5 m) and looking at (within 22 degrees of the view's
+   * center, not behind something), with the words a tap would do and where to draw them (container pixels, just above
+   * it), or null. Called every frame while one shows. `tagVerb` is Tap or Click.
+   */
+  onUseTag: (t: { text: string; x: number; y: number } | null) => void = () => {};
+  tagVerb = 'Tap';
+  private tagAction: FeatureAction | null = null;
+  private tagAt = 0;
+  private tagShown = false;
   /**
    * Client mode's lens: CLIENT_WIDE_H_DEG (78 degrees) side to side where a 100 degree tall view allows it (about 58 to
    * 70 degrees on an upright phone, which gets a tall, natural view instead of a narrow slice); landscape and computers
@@ -250,8 +259,6 @@ export class Studio {
     this.camera.updateProjectionMatrix();
   }
 
-  /** Client mode: when the camera last moved (the rings pulse only for a while after, so a still view stops drawing). */
-  private clientActiveAt = 0;
   /** Double tap timing: a little more time and room in client mode. */
   private dblMs() { return this.clientMode ? 450 : DOUBLE_TAP_MS; }
   private dblPx() { return this.clientMode ? 40 : DOUBLE_TAP_PX; }
@@ -1321,24 +1328,76 @@ export class Studio {
     this.onNavModeChanged(m);
   }
 
-  /**
-   * Client mode: every 2.6 s a soft ring on the ground under each usable thing within 14 m (see clientMode), for 6 s
-   * after the camera last moved; then nothing, so a still view lets drawing pause (phones keep cool).
-   */
-  private clientBeacons(now: number) {
-    if (!this.clientMode) return;
-    if (this.camMoved || this.tween || !this.clientActiveAt) this.clientActiveAt = now;
-    if (this.navMode !== 'walk' || !this.build || now - this.clientActiveAt > 6000 || now - this.beaconAt < 2600) return;
-    this.beaconAt = now;
-    const seen = new Set<string>(), w = new THREE.Vector3();
+  /** What a tap on the tagged thing would do, in plain words. */
+  private tagText(a: FeatureAction): string {
+    const v = this.tagVerb, on = a.on, k = a.key;
+    if (k === 'water') return `${v} to turn the water ${on ? 'off' : 'on'}`;
+    if (k === 'fire') return on ? `${v} to turn the fire off` : `${v} to light the fire`;
+    if (k === 'lid') return `${v} to ${on ? 'close' : 'open'} the ${/grill/i.test(a.label) ? 'grill' : 'lid'}`;
+    if (k === 'door' || k === 'doors') return `${v} to ${on ? 'close' : 'open'} the ${k}`;
+    if (k === 'light' || k === 'lights' || k === 'stringLights') return `${v} to turn the lights ${on ? 'off' : 'on'}`;
+    if (k === 'cover') return `${v} to ${on ? 'close' : 'open'} the cover`;
+    if (k === 'jets') return `${v} to turn the jets ${on ? 'off' : 'on'}`;
+    if (k === 'louvers') return `${v} to ${on ? 'close' : 'open'} the louvers`;
+    return `${v} to use`;
+  }
+
+  /** The usable thing nearest the view's center within 5 m and 22 degrees, and in plain sight; or null. */
+  private tagPick(): FeatureAction | null {
+    if (!this.build) return null;
+    const cam = this.camera.position, fwd = this.controls.target.clone().sub(cam).normalize();
+    const w = new THREE.Vector3(), dir = new THREE.Vector3();
+    const shown = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+    const itemOf = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (typeof o.userData?.itemId === 'string') return o.userData.itemId as string; return null; };
+    let best: FeatureAction | null = null, bestA = THREE.MathUtils.degToRad(22);
     for (const a of this.build.features.actions) {
       const an = a.anchors[0];
-      if (!an || seen.has(a.itemId)) continue;
+      if (!an) continue;
       an.getWorldPosition(w);
-      if (Math.hypot(w.x - this.camera.position.x, w.z - this.camera.position.z) > 14) continue;
-      seen.add(a.itemId);
-      this.tapMarks.show(new THREE.Vector3(w.x, this.groundAt(w.x, w.z), w.z), 'beacon', now);
+      dir.subVectors(w, cam);
+      const d = dir.length();
+      if (d > 5 || d < 0.05) continue;
+      dir.divideScalar(d);
+      const ang = Math.acos(THREE.MathUtils.clamp(dir.dot(fwd), -1, 1));
+      if (ang >= bestA) continue;
+      // Not behind a wall, fence or another thing: the first surface on the way is its own (or nothing).
+      this.raycaster.set(cam, dir);
+      this.raycaster.far = d;
+      const hit = this.raycaster.intersectObjects(this.build.surfaces, true).find((h) => shown(h.object));
+      this.raycaster.far = Infinity;
+      if (hit && hit.distance < d - 0.4 && itemOf(hit.object) !== a.itemId) continue;
+      best = a;
+      bestA = ang;
     }
+    return best;
+  }
+
+  /** Client mode: the use tag, picked about 8 times a second and placed every frame (hidden while gliding). */
+  private clientTag(now: number) {
+    if (!this.clientMode) return;
+    const off = () => { if (this.tagShown) { this.tagShown = false; this.onUseTag(null); } };
+    if (this.navMode !== 'walk' || !this.build || this.tween) { this.tagAction = null; return off(); }
+    if (now - this.tagAt > 120) { this.tagAt = now; this.tagAction = this.tagPick(); }
+    const a = this.tagAction, an = a?.anchors[0];
+    if (!a || !an) return off();
+    const p = an.getWorldPosition(new THREE.Vector3());
+    p.y += 0.35;
+    p.project(this.camera);
+    if (p.z > 1 || p.z < -1) return off();
+    this.tagShown = true;
+    this.onUseTag({ text: this.tagText(a), x: ((p.x + 1) / 2) * this.container.clientWidth, y: ((1 - p.y) / 2) * this.container.clientHeight });
+  }
+
+  /** The tag itself was tapped: use the thing it names. */
+  useTagged(): boolean {
+    const a = this.tagAction;
+    if (!a || !this.clientMode) return false;
+    this.setAction(a, !a.on, false);
+    this.noteAction(a.itemId, a.key, a.on);
+    this.onAction(a);
+    this.tagAt = 0;
+    this.invalidate();
+    return true;
   }
 
   /** Menu, Home or the touch Home button: the first saved view, or back to the start point in first person. */
@@ -2074,7 +2133,7 @@ export class Studio {
     this.audio.update(this.camera, this.sky.uniforms.uNight.value, this.mode === 'orbit' ? this.controls.target : null);
     // A thrown clod in the air, or a pile settling: keep drawing.
     if (this.marks.update(dt, this.camera)) this.dirty = true;
-    this.clientBeacons(now);
+    this.clientTag(now);
     if (this.tapMarks.update(now)) this.dirty = true;
     // Something switched on by hand that moves by itself (a spa's bubbles and steam).
     if (this.build && this.state.motion) for (const a of this.build.features.actions) if (a.on && a.frame) a.frame(dt);
