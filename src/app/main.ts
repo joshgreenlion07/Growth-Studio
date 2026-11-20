@@ -1375,6 +1375,13 @@ function onEmbedMessage(e: MessageEvent) {
     if (studio) studio.clientStart = startPose((d as { pose?: unknown }).pose);
     return;
   }
+  if (d.type === 'travel') {
+    // Client mode's Places: glide to a saved spot (see Studio.travelTo); the light stays as the client picked it.
+    const p = startPose((d as { pose?: unknown }).pose);
+    const ok = !!(EMBED_CLIENT && p && studio && embedBuilt && !embedBusy() && studio.travelTo(p));
+    window.parent.postMessage({ source: 'growth-studio', type: 'travel', ok }, e.origin);
+    return;
+  }
   if (d.type === 'go-pose') {
     // Stand at a start spot in Walk (Area Planner's "Change in 3D").
     // One that arrives while a plan is pending or building waits for that yard to be shown (applyEmbedPlan).

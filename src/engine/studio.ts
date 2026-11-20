@@ -1456,10 +1456,10 @@ export class Studio {
   }
 
   /** The camera as it stands now, for the app to keep as a start spot: world meters, heading and pitch, and the mode. */
-  pose(): StartPose & { y: number; mode: NavMode; inYard: boolean } {
+  pose(): StartPose & { y: number; mode: NavMode; inYard: boolean; mood: Mood | 'custom' } {
     const c = this.camera.position, t = this.controls.target;
     const dx = t.x - c.x, dy = t.y - c.y, dz = t.z - c.z;
-    return { x: c.x, y: c.y, z: c.z, yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)), mode: this.navMode, inYard: this.walkable(c.x, c.z) };
+    return { x: c.x, y: c.y, z: c.z, yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)), mode: this.navMode, inYard: this.walkable(c.x, c.z), mood: this.state.mood };
   }
 
   /** Eye and look target for a start spot, at walk height, the pitch kept gentle (at most 20 degrees up or down). */
@@ -1490,6 +1490,22 @@ export class Studio {
     this.controls.target.copy(target);
     this.camera.lookAt(target);
     this.invalidate();
+    return true;
+  }
+
+  /**
+   * Client mode's Places: walk to a saved spot in Walk, facing its way. A glide (1 to 2.5 s, eased) when it is within
+   * 25 m, else a jump; the light is not changed. False when it is off the lot.
+   */
+  travelTo(p: StartPose): boolean {
+    if (!this.plan || !Number.isFinite(p.x + p.z + p.yaw) || !pointInPolygon([p.x, p.z], this.plan.site.boundary)) return false;
+    if (this.navMode !== 'walk') this.setNavMode('walk');
+    const { eye, target } = this.posePoints(p);
+    const d = this.camera.position.distanceTo(eye);
+    if (d > 25) return this.goToPose(p);
+    this.manualFocus = null;
+    this.cancelPendingTap();
+    this.tweenToPose({ eye, target, fov: this.camera.fov }, THREE.MathUtils.clamp(900 + d * 80, 1000, 2500));
     return true;
   }
 
