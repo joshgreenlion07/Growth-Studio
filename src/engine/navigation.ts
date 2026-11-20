@@ -557,8 +557,8 @@ export class Navigation {
         // The look inverts apply to the controller's right stick (drag-look below); not to the turn that follows.
         if (this.invertX) lx = -lx;
         if (this.invertY) ly = -ly;
-        // Left and right turn, eased like a stick (about 43 degrees a second at full push); nothing steps sideways.
-        lx += Math.max(-1, Math.min(1, mx)) * 0.75;
+        // Left and right turn, eased like a stick (about 62 degrees a second at full push); nothing steps sideways.
+        lx += Math.max(-1, Math.min(1, mx)) * 1.09;
         mx = 0;
         fast = false;
         zoom = 0;
@@ -611,8 +611,8 @@ export class Navigation {
     const want = this.want.set(0, 0, 0);
     const ground = this.host.groundAt(cam.position.x, cam.position.z);
     if (mode === 'walk') {
-      // Client mode: a calm stroll (1.1 m/s), never the run.
-      const speed = this.client ? 1.1 : 1.6 * (fast ? 3 : 1);
+      // Client mode: an easy walk (1.6 m/s, 45% above the first 1.1), never the run.
+      const speed = this.client ? 1.6 : 1.6 * (fast ? 3 : 1);
       want.addScaledVector(this.fwd, -mz * speed).addScaledVector(this.right, mx * speed);
       // Triggers zoom the lens while walking.
       if (Math.abs(zoom) > 0.02) {
