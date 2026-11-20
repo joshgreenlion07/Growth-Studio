@@ -4,7 +4,7 @@ import type { SitePlan, Vec2 } from './types';
 /**
  * Infratech heaters and Blackstone griddles to their makers' sizes (siteplan/infratech.ts, siteplan/blackstone.ts): a
  * 9 ft patio roof with four W / WD heaters in four lengths and finishes (all but the white one switched on), the
- * ledgerstone island with its Blackstone 28 in griddle in the insulating jacket, and the 28 and 36 in Blackstone
+ * ledgerstone island with its Blackstone 28 in 6128 griddle, and the 28 and 36 in Blackstone
  * cooking stations on their carts beside the roof. Hand tool: each heater's switch, the griddle hoods.
  */
 export function sampleHeatersGriddles(): SitePlan {

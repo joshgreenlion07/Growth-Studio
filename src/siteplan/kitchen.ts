@@ -274,7 +274,7 @@ const DOUBLES: [number, number, number, number][] = [[30, 20, 28.5, 18.5], [32, 
 for (const [w, h, cw, ch] of DOUBLES) part({
   id: `kitchen-double-door-${w}`, family: 'double-door', familyName: 'Access doors, double', type: 'doubleDoor', mount: 'front', label: `${w} in`, name: `Access doors, double, ${w} x ${h} in`,
   overall: [w, 2, h], cutout: [cw, 21, ch], bayIn: w, leaves: 2,
-  about: `A flush-mount pair of ${w} x ${h} in brushed stainless doors meeting at the center, a vertical bar handle on each beside the seam${w === 39 ? '; the size that goes under a 40 to 42 in grill or a Blackstone 28 in griddle (38 1/2 in wide)' : ''}.`,
+  about: `A flush-mount pair of ${w} x ${h} in brushed stainless doors meeting at the center, a vertical bar handle on each beside the seam${w === 39 ? '; the size that goes under a 40 to 42 in grill or a Blackstone 28 in griddle in its jacket (6029, 38 1/2 in wide)' : w === 33 ? '; the size that goes under a Blackstone 28 in 6128 / 6301 griddle (33 in wide)' : ''}.`,
   facts: ['Hand tool: open the doors'],
 });
 const DRAWERS: [number, number, number, number, number][] = [[2, 16, 18, 14.5, 16.5], [3, 16, 22, 14.5, 20.5], [2, 17, 18, 15.5, 16.5], [2, 30, 13.5, 28.5, 12], [2, 32, 13.5, 30.5, 12], [3, 17, 22, 15.5, 20.5], [3, 30, 22, 28.5, 20.5], [3, 32, 22, 30.5, 20.5]];
@@ -509,10 +509,13 @@ export function checkIsland(isl: KitchenIsland): string[] {
 const F = (s: Omit<FeatureSpec, 'placeholder'>): FeatureSpec => ({ ...s, placeholder: true });
 
 /**
- * A straight island of 10 ft 6 in from a customer design: left to right, 17 1/2 in of counter, a 32 x 28 in three-drawer
- * unit, a Blackstone 28 in built-in griddle (38 1/2 in wide, 38 3/4 x 27 1/2 x 8 in cutout) over 39 x 24 in double doors,
- * a 20 x 28 in vented propane cabinet, 17 1/2 in of counter (the taller fronts follow the design's proportions). The design drew the griddle in a 28 in bay with 23 in counters; the
- * real griddle needs 39 in, so the island stays 126 in and the end counters were shortened (the owner's decision).
+ * A straight island of 10 ft 6 in from a customer design: left to right, 20 in of counter, a 32 x 28 in three-drawer unit,
+ * a Blackstone 28 in built-in griddle (6128 propane / 6301 natural gas: 33 in wide, cavity 33.32 x 25.02 x 7.59 in) over
+ * 33 x 22 in double doors, a 20 x 28 in vented propane cabinet, 20 in of counter (the taller fronts follow the design's
+ * proportions). The design drew the griddle in a 28 in bay with 23 in counters; no Blackstone built-in is that narrow,
+ * so the owner chose the closest model that fits (2026-11-20): the 6128 / 6301, the slimmest, in a 34 in bay, the
+ * island staying 126 in. It needs a non-combustible island (block, or steel studs and cement board); in a wood-framed
+ * one it goes in Blackstone's 6228 insulating jacket, whose 35.4 in cavity takes a 36 in bay.
  * Light gray granite, 1 1/2 in over the front and ends and 3/4 in at the back, MSI Silver Travertine ledger on all four sides, an LED strip under the
  * front overhang, propane.
  */
@@ -521,11 +524,11 @@ export const LEDGERSTONE_GRIDDLE_ISLAND: KitchenIsland = {
   runs: [{
     lengthIn: 126,
     bays: [
-      { widthIn: 17.5 },
+      { widthIn: 20 },
       { widthIn: 32, front: ['kitchen-drawers-3-32-tall'] },
-      { widthIn: 39, top: 'kitchen-griddle-blackstone-28', front: ['kitchen-double-door-39-tall'] },
+      { widthIn: 34, top: 'kitchen-griddle-blackstone-28-6128', front: ['kitchen-double-door-33'] },
       { widthIn: 20, front: ['kitchen-propane-cabinet-20-tall'] },
-      { widthIn: 17.5 },
+      { widthIn: 20 },
     ],
   }],
   depthIn: 30,
@@ -548,9 +551,10 @@ export const KITCHEN_ISLAND_FEATURES: FeatureSpec[] = [
     about: 'A straight 10 ft 6 in outdoor kitchen island: a Blackstone 28 in built-in griddle over double access doors, a three-drawer unit on its left and a vented propane cabinet on its right, light gray granite on a base clad in MSI Silver Travertine ledger stone on all four sides, with an LED strip under the counter\'s front edge.',
     facts: [
       '126 in long x 30 in deep base, counter 36 in high: 129 x 32 1/4 in of granite (1 1/2 in over the front and ends, 3/4 in at the back); the footprint is the counter',
-      'Bays left to right: counter 17 1/2 in, three-drawer unit 32 in, griddle 39 in, propane cabinet 20 in, counter 17 1/2 in',
-      'Blackstone 28 in built-in griddle, 38 1/2 in wide (cutout 38 3/4 x 27 1/2 x 8 in), over 39 x 24 in double doors; propane',
-      'Three-drawer unit 32 x 28 in; propane cabinet 20 x 28 in, vented, 20 lb tank on a pull-out tray (the taller sizes, to the design\'s proportions: drawer and cabinet tops 1 1/2 in under the counter, the doors just under the griddle\'s front)',
+      'Bays left to right: counter 20 in, three-drawer unit 32 in, griddle 34 in, propane cabinet 20 in, counter 20 in',
+      'Blackstone 28 in built-in griddle 6128 (propane; 6301 for natural gas), 33 x 29 1/4 x 13 in, cavity 33.32 x 25.02 x 7.59 in, over 33 x 22 in double doors',
+      'Needs a non-combustible island (block, or steel studs and cement board); in a wood-framed island use Blackstone\'s 6228 insulating jacket (cavity 35.4 x 26.09 x 9.16 in, a 36 in bay)',
+      'Three-drawer unit 32 x 28 in; propane cabinet 20 x 28 in, vented, 20 lb tank on a pull-out tray (the taller sizes, to the design\'s proportions: drawer and cabinet tops 1 1/2 in under the counter, the doors just under the griddle)',
       'Light gray granite, 3 cm, eased edge; MSI Silver Travertine Panel 6x24 (LPNLTSIL624) on all sides',
       'LED strip under the front overhang, 3000 K',
       'Option: a 42 in raised bar ledge on a 6 in wall behind the base, 12 in overhang, four bar stools; it reaches about 2 ft behind the footprint',
