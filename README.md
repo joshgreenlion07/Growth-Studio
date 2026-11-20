@@ -712,7 +712,8 @@ Messages use `window.postMessage`:
   Vercel team (`https://area-planner-joshua-jackson.vercel.app`,
   `https://area-planner-git-<branch>-joshua-jackson.vercel.app`,
   `https://area-planner-<hash>-joshua-jackson.vercel.app`), and
-  `https://greenlionlandscape.com` (and `www.`). Anything else is ignored silently.
+  `https://greenlionlandscape.com` (and `www.`), and `https://design.greenlionlandscape.com` (Area Planner's client links
+  on Green Lion's own address). Anything else is ignored silently.
 - The build uses relative asset paths, so the studio also works under a
   sub-path, such as Area Planner's `/studio/` rewrite to this deployment
   (same origin as the planner, which Safari does not throttle).
