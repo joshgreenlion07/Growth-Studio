@@ -178,8 +178,8 @@ export const MOSS_ROCK_GRAY: MossRockLook = {
  * CANYON_CUT, on the wedge and ridge forms.
  */
 export const MOSS_ROCK_CANYON: MossRockLook = {
-  rind: ['#58585b', '#605b55', '#4d4e50', '#676054', '#54514c'],
-  breakFace: ['#696054', '#5e554b', '#716557', '#544d44', '#655a4d'],
+  rind: ['#595757', '#5c5954', '#545352', '#605b54', '#575450'],
+  breakFace: ['#665d51', '#61584d', '#6a5f52', '#5c544a', '#645a4e'],
   iron: ['#86522c', '#4e301b'],
   ironAmount: 0.55,
   pore: '#1b1b19',
@@ -200,8 +200,8 @@ export const CANYON_CUT: MossRockCut = { extra: 4, crisp: 0.55, blocky: 0.7 };
  * the stones round a pond, a stream and a bubbler, and the tan boulders of the urn fountains).
  */
 export const MOSS_ROCK_GRANITE: MossRockLook = {
-  rind: ['#554f46', '#4a453d', '#5d564c', '#423e38', '#534c43'],
-  breakFace: ['#5f574c', '#544c43', '#685e53', '#4c463e', '#5d5349'],
+  rind: ['#524c44', '#4d4840', '#565046', '#4a453e', '#514b42'],
+  breakFace: ['#5c544a', '#584f46', '#61574d', '#544d44', '#5c5249'],
   iron: ['#8e623a', '#523822'],
   ironAmount: 0.45,
   pore: '#1c1a17',
@@ -566,9 +566,18 @@ export const MOSS_ROCK_SPACING: Record<Quality, number> = { max: 0.0032, balance
  * The cap on a big boulder's segments for the stones drawn in this build after it was approved on the moss rock shapes
  * (Canyon Tech, the moss rock sold by weight, the urn fountains' boulders): a yard sets many of them, and a 5 ft boulder
  * at the moss rock's own cap (160 at Max) is some 150k points. At 104 it is about 65k (a point every 7 mm or so on a
- * 5 ft rock; pores and lichen are the shader's at any mesh); a rock up to about 2 ft is not changed by it.
+ * 5 ft rock; pores and lichen are the shader's at any mesh). The cap binds from a mean half size (of the length, depth
+ * and whole height) of about 0.21 m at Max and 0.22 m at Balanced: a rock whose sides average about 17 in, so a 22 in
+ * medium boulder is capped a little (about 104 segments for its 114) and a head-size or double-head stone not at all.
  */
 export const BOULDER_MAX_SEGMENTS: Record<Quality, number> = { max: 104, balanced: 84, light: 72, draft: 56 };
+
+/**
+ * The cap for a shared shape drawn as many instances (the stones of a water feature, the plain boulders, a rock
+ * border's stones): a stream bank sets some six stones a meter, so each is kept light (about 9,600 points at Max, 19k
+ * triangles); the material's pores, pits and lichen carry the close-up detail.
+ */
+export const FIELD_MAX_SEGMENTS: Record<Quality, number> = { max: 40, balanced: 32, light: 24, draft: 16 };
 
 const kept = new Map<string, THREE.BufferGeometry>();
 let keptPoints = 0;
@@ -766,6 +775,11 @@ const glslColor = (hex: string) => {
 
 /** One material per lichen palette (the stone's own colors are in the vertices). */
 const materials = new Map<string, THREE.MeshStandardMaterial>();
+
+/** A moss rock material: its rocks are kept indexed when merged (a rock's points are each shared by six triangles). */
+export function isMossRockMaterial(m: THREE.Material): boolean {
+  return [...materials.values()].includes(m as THREE.MeshStandardMaterial);
+}
 
 /**
  * The moss rock's material. The stone's colors and shading come in the vertices; the shader draws the sand grain, the

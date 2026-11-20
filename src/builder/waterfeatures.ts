@@ -8,7 +8,7 @@ import { poolTile } from '../engine/textures';
 import { WATER_LEVEL, type GroundModel } from './ground';
 import { catalogMaterial, pbrMaterial, segmentBox } from './materials';
 import type { Quality } from '../engine/post';
-import { rockField, type RockSpot } from './rocks';
+import { disposeRockField, rockField, type RockSpot } from './rocks';
 import { boxMapWorld, insetPolygon, outsetPolygon, slab } from './hardscape';
 import type { PoolLayout } from './pools';
 
@@ -336,7 +336,8 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
       rocks.push({ x: c[0], y: rim - 0.18, z: c[1], size: 0.45, rot: 1.1, seed: `${w.id}-bubbler` });
     }
   }
-  group.add(rockField(rocks, 'water-rocks', quality));
+  const field = rockField(rocks, 'water-rocks', quality);
+  group.add(field);
 
   // The scene is reflected about one height only. It is set to the level that carries the most
   // water; water more than 5 cm off it (a raised spa beside a pool at grade) reflects the sky instead.
@@ -357,6 +358,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
       for (const g of geos) g.dispose();
       for (const m of materials) m.dispose();
       for (const m of fallMats) m.dispose();
+      disposeRockField(field);
     },
   };
 }

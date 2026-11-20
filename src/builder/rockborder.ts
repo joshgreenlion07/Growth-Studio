@@ -4,7 +4,7 @@ import { BORDER_BURIED, BORDER_STONE_RATIO, mossSizeIn, type RockBorderSpec } fr
 import type { LineItem, Vec2 } from '../siteplan/types';
 import type { Quality } from '../engine/post';
 import { DOUBLE_HEAD_FORM, borderLook } from './groundrock-looks';
-import { MOSS_ROCK_SPACING, buildMossRock, type MossRockLook } from './mossrock';
+import { FIELD_MAX_SEGMENTS, MOSS_ROCK_SPACING, buildMossRock, type MossRockLook } from './mossrock';
 import { footSink } from './stonegeo';
 
 /*
@@ -52,7 +52,7 @@ function runOf(points: Vec2[]): Run {
 }
 
 /** Stone shapes per look: a border's stones are these, each turned, sized and set its own way. */
-export const BORDER_SHAPES = 8;
+export const BORDER_SHAPES = 12;
 const shapes = new Map<string, THREE.BufferGeometry>();
 /** The size a border stone shape is built at: the middle stone (about 47 lb), [length, depth, height that shows], m. */
 const REF_SIZE = mossSizeIn(47, BORDER_STONE_RATIO, BORDER_BURIED).map((v) => v * IN) as [number, number, number];
@@ -62,7 +62,7 @@ function borderShape(li: number, look: MossRockLook, v: number, quality: Quality
   const key = `${li}:${v}:${quality}`;
   let g = shapes.get(key);
   if (!g) {
-    g = buildMossRock({ size: REF_SIZE, buried: BORDER_BURIED, seed: `border-stone:${li}:${v}`, moss: true, form: DOUBLE_HEAD_FORM, look, spacing: MOSS_ROCK_SPACING[quality] * BORDER_COARSER });
+    g = buildMossRock({ size: REF_SIZE, buried: BORDER_BURIED, seed: `border-stone:${li}:${v}`, moss: true, form: DOUBLE_HEAD_FORM, look, spacing: MOSS_ROCK_SPACING[quality] * BORDER_COARSER, maxSegments: FIELD_MAX_SEGMENTS[quality] });
     g.computeBoundingSphere();
     shapes.set(key, g);
   }

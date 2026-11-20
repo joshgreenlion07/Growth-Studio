@@ -236,7 +236,7 @@ Messages use `window.postMessage`:
 - A rock border is an edging line whose look has `rockBorder` (shelf `Rock border`, use `edging`, sent in the looks
   list): `moss-rock-border-double-head` lays double-head moss rock along the line as drawn, one stone at a time (15-80
   lb, 1-7 in apart, wandering 3 in off the line, now and then a small stone tucked beside a big one), each placed, sized
-  and turned from the line's id (`builder/rockborder.ts`), its shape one of eight moss rock shapes per stone look, drawn
+  and turned from the line's id (`builder/rockborder.ts`), its shape one of twelve moss rock shapes per stone look, drawn
   as instances. A closed line rings a bed (a dry creek's both banks). Its look
   carries `rockBorder: { lb, stonesPerFt, lbPerFt }` for the parent's takeoff (`rockBorderPerFoot`: about 0.8 stones
   and 36 lb a linear foot) and `sizeText`. The material pointer reports part `stone`.

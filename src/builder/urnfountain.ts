@@ -326,8 +326,8 @@ function foamRing(sink: FountainSink, r0: number, r1: number, y: number) {
  */
 /** Clean tan-brown stone, as the vase boards' boulders. */
 const CLEAN_TAN: MossRockLook = {
-  rind: ['#6c5c43', '#5a4b31', '#7a694a', '#4e4130', '#64533a'],
-  breakFace: ['#746348', '#635237', '#816f50', '#564633', '#6c5a3e'],
+  rind: ['#67583f', '#5f5037', '#6e5d42', '#5a4b36', '#64543b'],
+  breakFace: ['#6f5e44', '#68573c', '#756447', '#62513a', '#6c5a3f'],
   iron: ['#a8531f', '#5e3418'],
   ironAmount: 0.2,
   pore: '#241e17',
@@ -337,8 +337,8 @@ const CLEAN_TAN: MossRockLook = {
 };
 /** Dark charcoal stone with a little rust, the glazed urn's front boulder. */
 const CANYON_DARK: MossRockLook = {
-  rind: ['#3d3c3a', '#353432', '#45423d', '#302f2d', '#403d38'],
-  breakFace: ['#44423e', '#3b3a37', '#4c4842', '#363431', '#46423d'],
+  rind: ['#3c3a38', '#383734', '#403d39', '#363532', '#3d3b37'],
+  breakFace: ['#43403c', '#3f3d39', '#46433e', '#3c3a36', '#43403c'],
   iron: ['#8a5430', '#4a2e1a'],
   ironAmount: 0.4,
   pore: '#141413',
@@ -348,8 +348,8 @@ const CANYON_DARK: MossRockLook = {
 };
 /** Tan granite, as the bubbler board's boulders: gray-tan with warmer patches. */
 const GRANITE_TAN: MossRockLook = {
-  rind: ['#635c51', '#564f45', '#6c655a', '#4c463e', '#5e554a'],
-  breakFace: ['#6a6255', '#5d5449', '#746c5e', '#534c42', '#655b4f'],
+  rind: ['#5f584e', '#5a5348', '#645c52', '#554e45', '#5d554b'],
+  breakFace: ['#675e52', '#61584d', '#6b6356', '#5c5449', '#645b4f'],
   iron: ['#9a6a3f', '#563b24'],
   ironAmount: 0.3,
   pore: '#211e1a',

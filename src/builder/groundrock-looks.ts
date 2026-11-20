@@ -6,13 +6,15 @@ import type { MossRockForm, MossRockLook } from './mossrock';
  * weathered smooth, speckled, with beige patches and small dark crust lichen; the border stones are that tan-gray, a
  * paler buff-tan, and (about a quarter) dark gray-green crusted with pale lichen and a little moss. Colors are the
  * stone's own (before the rock's shading), set so the rocks render at the tones measured from the video's sunlit faces.
- * Each look's rind is the weathered skin, its breaks the same stone a little warmer and lighter where it split.
+ * Each look's rind is the weathered skin, its breaks the same stone a little warmer and lighter where it split. The
+ * colors of a look stay close together: a wide range shows as dark round blotches a hand across, and two of them side
+ * by side on a big face read as eyes.
  */
 
 /** Light tan-gray moss rock (border stones): dark crust lichen in small patches, a few beige ones. */
 export const MOSS_TAN_GRAY: MossRockLook = {
-  rind: ['#5d5349', '#4f473d', '#695e50', '#443e36', '#736554'],
-  breakFace: ['#675a4a', '#5a4e3f', '#706250', '#504538', '#786852'],
+  rind: ['#5c5348', '#564d42', '#62584b', '#51493f', '#665b4d'],
+  breakFace: ['#665948', '#605343', '#6a5c4b', '#5c4f40', '#6e5f4c'],
   iron: ['#94744f', '#5a4632'],
   ironAmount: 0.3,
   pore: '#221e1b',
@@ -28,8 +30,8 @@ export const MOSS_TAN_GRAY: MossRockLook = {
 
 /** The garden and showpiece boulders: the same stone in bigger pieces, more weathered, with more dark crust lichen. */
 export const MOSS_BOULDER: MossRockLook = {
-  rind: ['#534c44', '#453e37', '#5f564b', '#3c3730', '#695d4f'],
-  breakFace: ['#5e5347', '#50463b', '#685b4d', '#463d33', '#706150'],
+  rind: ['#534b42', '#4c453c', '#585046', '#484239', '#5d5347'],
+  breakFace: ['#5d5245', '#574c40', '#615548', '#52483c', '#655849'],
   iron: ['#94744f', '#5a4632'],
   ironAmount: 0.25,
   pore: '#1f1b18',
@@ -45,8 +47,8 @@ export const MOSS_BOULDER: MossRockLook = {
 
 /** Buff-tan moss rock, the palest of the border stones. */
 export const MOSS_BUFF: MossRockLook = {
-  rind: ['#7d6d57', '#6c5e4b', '#887761', '#5f513f', '#917f67'],
-  breakFace: ['#85735a', '#75634d', '#907d63', '#685742', '#978469'],
+  rind: ['#7b6b56', '#746550', '#80705a', '#6e5f4b', '#84735d'],
+  breakFace: ['#837159', '#7c6a53', '#88765d', '#76654e', '#8b795f'],
   iron: ['#94744f', '#5a4632'],
   ironAmount: 0.25,
   pore: '#2d261f',
@@ -62,8 +64,8 @@ export const MOSS_BUFF: MossRockLook = {
 
 /** Dark gray-green moss rock crusted with pale lichen (some of the border stones), a little more moss. */
 export const MOSS_DARK_LICHEN: MossRockLook = {
-  rind: ['#423f3a', '#393731', '#4a4640', '#32302c'],
-  breakFace: ['#4a463f', '#413e38', '#534e46', '#3a3732'],
+  rind: ['#403d38', '#3c3934', '#43403a', '#383631'],
+  breakFace: ['#48443d', '#44403a', '#4c4840', '#413d37'],
   iron: ['#8a6a4a', '#4a3828'],
   ironAmount: 0.15,
   pore: '#171614',

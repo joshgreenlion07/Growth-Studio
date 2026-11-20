@@ -7,7 +7,7 @@ import type { FeaturePlacement, Vec2 } from '../siteplan/types';
 import { cortenSet, flagFaceSet, padSet, porcelainPanelSet, slabSet } from '../engine/surfaces';
 import { fallMaterial } from '../engine/water';
 import { boxUV, catalogMaterial, pbrMaterial, plainMaterial } from './materials';
-import { rockField, type RockSpot } from './rocks';
+import { disposeRockField, rockField, type RockSpot } from './rocks';
 import type { LandLight } from '../engine/landlights';
 import { FixtureMaterials, buildFixture, type FixtureSite } from './landscapelights';
 import { buildSaunaLifeCL5G } from './saunalife-cl5g';
@@ -16,6 +16,7 @@ import { buildDecor } from './decor';
 import { buildYard } from './yard';
 import { veneerColumn } from './veneercolumn';
 import { buildWaterRock } from './waterrock';
+import { isMossRockMaterial } from './mossrock';
 import { buildFlagstone, flagLookOf } from './flagstone';
 import type { PebbleBed } from './pebbles';
 import type { RaisedPlacement } from './plants';
@@ -230,9 +231,11 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     const o = new THREE.Group();
     const ob = new THREE.Group();
     const parts: Parts = new Map();
+    // A moss rock stays indexed (its bucket is only moss rock, so the merge is all indexed): unindexed, a rock's points
+    // would be some six times as many.
     const add = (m: THREE.Material, g: THREE.BufferGeometry) => {
       const list = parts.get(m) ?? [];
-      list.push(g.index ? g.toNonIndexed() : g);
+      list.push(g.index && !isMossRockMaterial(m) ? g.toNonIndexed() : g);
       parts.set(m, list);
     };
     const y0 = height(f.position);
@@ -278,7 +281,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       // Geometry is given in the feature's local space and moved into the hinge's.
       const hadd = (m: THREE.Material, geo: THREE.BufferGeometry) => {
         const list = hp.get(m) ?? [];
-        list.push((geo.index ? geo.toNonIndexed() : geo).translate(-px, -py, -pz));
+        list.push((geo.index && !isMossRockMaterial(m) ? geo.toNonIndexed() : geo).translate(-px, -py, -pz));
         hp.set(m, list);
       };
       const raw = (m: THREE.Material, geo: THREE.BufferGeometry) => {
@@ -1005,7 +1008,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     o.name = `feature-${f.id}`;
     group.add(o);
   }
-  group.add(rockField(rocks, 'boulders', quality));
+  const field = rockField(rocks, 'boulders', quality);
+  group.add(field);
 
   return {
     object: group,
@@ -1028,6 +1032,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       for (const m of fallMats) m.dispose();
       // Each waterfall's own meshes and materials; the rock and cobble shapes they share stay for the next yard.
       for (const ff of fourFalls) ff.wf.dispose();
+      // The boulders' instance buffers (their shapes are shared and kept).
+      disposeRockField(field);
     },
   };
 }

@@ -661,6 +661,10 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
     dispose() {
       for (const g of geos) g.dispose();
       glowMat.dispose();
+      // Rock borders' instance buffers (their stone shapes are shared and kept).
+      group.traverse((o) => {
+        if ((o as THREE.InstancedMesh).isInstancedMesh && o.userData.part === 'stone') (o as THREE.InstancedMesh).dispose();
+      });
     },
   };
 }
