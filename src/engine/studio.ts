@@ -222,7 +222,7 @@ export class Studio {
    */
   clientMode = false;
   /**
-   * Client mode's use tag: the usable thing the walker is near (5 m) and looking at (within 22 degrees of the view's
+   * Client mode's use tag: the appliance or water feature (no lights) the walker is within 3 ft of and facing (within 30 degrees side to side of the view
    * center, not behind something), with the words a tap would do and where to draw them (container pixels, just above
    * it), or null. Called every frame while one shows. `tagVerb` is Tap or Click.
    */
@@ -1359,30 +1359,57 @@ export class Studio {
     return `${v} to use`;
   }
 
-  /** The usable thing nearest the view's center within 5 m and 22 degrees, and in plain sight; or null. */
+  /** Client mode tags: appliances and water only (no lights), within 3 ft of the thing and facing it. */
+  private static readonly TAG_NEAR = 0.9144;
+  private static readonly TAG_YAW = THREE.MathUtils.degToRad(30);
+  private static readonly TAG_SKIP = new Set(['light', 'lights', 'stringLights']);
+  /** Each action's item footprint (world box), worked out once per build. */
+  private tagBoxes = new WeakMap<FeatureAction, THREE.Box3 | null>();
+  private tagBox(a: FeatureAction): THREE.Box3 | null {
+    if (this.tagBoxes.has(a)) return this.tagBoxes.get(a) ?? null;
+    let root: THREE.Object3D | null = a.anchors[0] ?? null;
+    while (root && root.userData?.itemId !== a.itemId) root = root.parent;
+    const box = root ? new THREE.Box3().setFromObject(root) : null;
+    this.tagBoxes.set(a, box && !box.isEmpty() ? box : null);
+    return this.tagBoxes.get(a) ?? null;
+  }
+
+  /** The usable thing the walker faces most directly, within 3 ft of it and in plain sight; or null. */
   private tagPick(): { action: FeatureAction; anchor: THREE.Object3D } | null {
     if (!this.build) return null;
-    const cam = this.camera.position, fwd = this.controls.target.clone().sub(cam).normalize();
+    const cam = this.camera.position, look = this.controls.target.clone().sub(cam);
+    const yaw0 = Math.atan2(look.x, look.z);
     const w = new THREE.Vector3(), dir = new THREE.Vector3();
     const shown = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
     const itemOf = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (typeof o.userData?.itemId === 'string') return o.userData.itemId as string; return null; };
-    let best: { action: FeatureAction; anchor: THREE.Object3D } | null = null, bestA = THREE.MathUtils.degToRad(22);
-    for (const a of this.build.features.actions) for (const an of a.anchors) {
-      an.getWorldPosition(w);
-      dir.subVectors(w, cam);
-      const d = dir.length();
-      if (d > 5 || d < 0.05) continue;
-      dir.divideScalar(d);
-      const ang = Math.acos(THREE.MathUtils.clamp(dir.dot(fwd), -1, 1));
-      if (ang >= bestA) continue;
-      // Not behind a wall, fence or another thing: the first surface on the way is its own (or nothing).
-      this.raycaster.set(cam, dir);
-      this.raycaster.far = d;
-      const hit = this.raycaster.intersectObjects(this.build.surfaces, true).find((h) => shown(h.object));
-      this.raycaster.far = Infinity;
-      if (hit && hit.distance < d - 0.4 && itemOf(hit.object) !== a.itemId) continue;
-      best = { action: a, anchor: an };
-      bestA = ang;
+    let best: { action: FeatureAction; anchor: THREE.Object3D } | null = null, bestA = Studio.TAG_YAW;
+    for (const a of this.build.features.actions) {
+      if (Studio.TAG_SKIP.has(a.key)) continue;
+      // Near: within 3 ft of the thing's footprint (side to side), or of the point itself when it has no footprint.
+      const box = this.tagBox(a);
+      for (const an of a.anchors) {
+        an.getWorldPosition(w);
+        const near = box
+          ? Math.hypot(Math.max(box.min.x - cam.x, 0, cam.x - box.max.x), Math.max(box.min.z - cam.z, 0, cam.z - box.max.z))
+          : Math.hypot(w.x - cam.x, w.z - cam.z);
+        if (near > Studio.TAG_NEAR) continue;
+        dir.subVectors(w, cam);
+        const d = dir.length();
+        if (d < 0.05) continue;
+        dir.divideScalar(d);
+        // Facing it: the turn to it, side to side only (a fire pit or grill sits well below the eyes up close).
+        let ang = Math.abs(Math.atan2(w.x - cam.x, w.z - cam.z) - yaw0);
+        if (ang > Math.PI) ang = 2 * Math.PI - ang;
+        if (ang >= bestA) continue;
+        // Not behind a wall, fence or another thing: the first surface on the way is its own (or nothing).
+        this.raycaster.set(cam, dir);
+        this.raycaster.far = d;
+        const hit = this.raycaster.intersectObjects(this.build.surfaces, true).find((h) => shown(h.object));
+        this.raycaster.far = Infinity;
+        if (hit && hit.distance < d - 0.4 && itemOf(hit.object) !== a.itemId) continue;
+        best = { action: a, anchor: an };
+        bestA = ang;
+      }
     }
     return best;
   }
