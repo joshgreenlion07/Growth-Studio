@@ -117,7 +117,8 @@ export interface LineItem extends ItemBase {
   clad?: Clad;
   /**
    * Curbs: how much of the curb shows above the highest finished surface beside it (paving, loose stone; else grade),
-   * meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. A poured mow curb's is measured the same way.
+   * meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. A poured mow curb's is measured from hard paving beside it only
+   * (else grade).
    */
   reveal?: number;
   /**
