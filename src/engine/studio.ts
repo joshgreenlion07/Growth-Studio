@@ -225,8 +225,16 @@ export class Studio {
   onUseTag: (t: { text: string; x: number; y: number } | null) => void = () => {};
   tagVerb = 'Tap';
   private tagAction: FeatureAction | null = null;
+  /** The anchor of tagAction the tag sits on (the one nearest the view's center: a waterfall's fall, a kitchen door). */
+  private tagAnchor: THREE.Object3D | null = null;
   private tagAt = 0;
   private tagShown = false;
+  /** Re-pick only after the camera moved, a use or a rebuild (no raycasts while the view is still). */
+  private tagDirty = true;
+  /** When the tag was last used: a second tap within the double-tap time is the same tap (never undone). */
+  private tagUsedAt = -1e9;
+  /** The last text and position sent to onUseTag (sent again only when they change). */
+  private tagSent = '';
   /**
    * Client mode's lens: CLIENT_WIDE_H_DEG (78 degrees) side to side where a 100 degree tall view allows it (about 58 to
    * 70 degrees on an upright phone, which gets a tall, natural view instead of a narrow slice); landscape and computers
@@ -930,6 +938,10 @@ export class Studio {
       this.yardTop = 20;
     }
     this.build = next;
+    // the use tag belonged to the old yard's things
+    this.tagAction = this.tagAnchor = null;
+    this.tagAt = 0;
+    this.tagDirty = true;
     this.reapplyHand(next);
     this.builtPlan = copy;
     this.focusSurfaces = next.surfaces.filter((o) => !o.userData?.plantId);
@@ -1332,6 +1344,7 @@ export class Studio {
   private tagText(a: FeatureAction): string {
     const v = this.tagVerb, on = a.on, k = a.key;
     if (k === 'water') return `${v} to turn the water ${on ? 'off' : 'on'}`;
+    if (k === 'fire' && /grill|burner/i.test(a.label)) return `${v} to turn the burners ${on ? 'off' : 'on'}`;
     if (k === 'fire') return on ? `${v} to turn the fire off` : `${v} to light the fire`;
     if (k === 'lid') return `${v} to ${on ? 'close' : 'open'} the ${/grill/i.test(a.label) ? 'grill' : 'lid'}`;
     if (k === 'door' || k === 'doors') return `${v} to ${on ? 'close' : 'open'} the ${k}`;
@@ -1343,16 +1356,14 @@ export class Studio {
   }
 
   /** The usable thing nearest the view's center within 5 m and 22 degrees, and in plain sight; or null. */
-  private tagPick(): FeatureAction | null {
+  private tagPick(): { action: FeatureAction; anchor: THREE.Object3D } | null {
     if (!this.build) return null;
     const cam = this.camera.position, fwd = this.controls.target.clone().sub(cam).normalize();
     const w = new THREE.Vector3(), dir = new THREE.Vector3();
     const shown = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
     const itemOf = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (typeof o.userData?.itemId === 'string') return o.userData.itemId as string; return null; };
-    let best: FeatureAction | null = null, bestA = THREE.MathUtils.degToRad(22);
-    for (const a of this.build.features.actions) {
-      const an = a.anchors[0];
-      if (!an) continue;
+    let best: { action: FeatureAction; anchor: THREE.Object3D } | null = null, bestA = THREE.MathUtils.degToRad(22);
+    for (const a of this.build.features.actions) for (const an of a.anchors) {
       an.getWorldPosition(w);
       dir.subVectors(w, cam);
       const d = dir.length();
@@ -1366,7 +1377,7 @@ export class Studio {
       const hit = this.raycaster.intersectObjects(this.build.surfaces, true).find((h) => shown(h.object));
       this.raycaster.far = Infinity;
       if (hit && hit.distance < d - 0.4 && itemOf(hit.object) !== a.itemId) continue;
-      best = a;
+      best = { action: a, anchor: an };
       bestA = ang;
     }
     return best;
@@ -1375,27 +1386,41 @@ export class Studio {
   /** Client mode: the use tag, picked about 8 times a second and placed every frame (hidden while gliding). */
   private clientTag(now: number) {
     if (!this.clientMode) return;
-    const off = () => { if (this.tagShown) { this.tagShown = false; this.onUseTag(null); } };
-    if (this.navMode !== 'walk' || !this.build || this.tween) { this.tagAction = null; return off(); }
-    if (now - this.tagAt > 120) { this.tagAt = now; this.tagAction = this.tagPick(); }
-    const a = this.tagAction, an = a?.anchors[0];
+    const off = () => { if (this.tagShown) { this.tagShown = false; this.tagSent = ''; this.onUseTag(null); } };
+    if (this.navMode !== 'walk' || !this.build || this.tween) { this.tagAction = this.tagAnchor = null; this.tagDirty = true; return off(); }
+    if (this.camMoved) this.tagDirty = true;
+    if (this.tagDirty && now - this.tagAt > 120) {
+      this.tagAt = now;
+      this.tagDirty = false;
+      const pick = this.tagPick();
+      this.tagAction = pick?.action ?? null;
+      this.tagAnchor = pick?.anchor ?? null;
+    }
+    const a = this.tagAction, an = this.tagAnchor;
     if (!a || !an) return off();
     const p = an.getWorldPosition(new THREE.Vector3());
     p.y += 0.35;
     p.project(this.camera);
     if (p.z > 1 || p.z < -1) return off();
     this.tagShown = true;
-    this.onUseTag({ text: this.tagText(a), x: ((p.x + 1) / 2) * this.container.clientWidth, y: ((1 - p.y) / 2) * this.container.clientHeight });
+    const t = { text: this.tagText(a), x: Math.round(((p.x + 1) / 2) * this.container.clientWidth), y: Math.round(((1 - p.y) / 2) * this.container.clientHeight) };
+    const key = `${t.text}|${t.x}|${t.y}`;
+    if (key !== this.tagSent) { this.tagSent = key; this.onUseTag(t); }
   }
 
   /** The tag itself was tapped: use the thing it names. */
   useTagged(): boolean {
-    const a = this.tagAction;
-    if (!a || !this.clientMode) return false;
+    const a = this.tagAction, now = performance.now();
+    // only an action of the yard on screen; a second tap of a double tap (or a canvas tap waiting) never undoes it
+    if (!a || !this.clientMode || !this.build || !this.build.features.actions.includes(a)) return false;
+    this.cancelPendingTap();
+    if (now - this.tagUsedAt < this.dblMs()) return false;
+    this.tagUsedAt = now;
     this.setAction(a, !a.on, false);
     this.noteAction(a.itemId, a.key, a.on);
     this.onAction(a);
     this.tagAt = 0;
+    this.tagDirty = true;
     this.invalidate();
     return true;
   }
