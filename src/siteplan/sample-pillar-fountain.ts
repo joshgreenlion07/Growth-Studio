@@ -27,8 +27,8 @@ export function samplePillarFountain(): SitePlan {
     ],
     lines: [
       { id: 'fence', source: S, kind: 'fence', catalogId: 'fence-gray-lattice', points: [[0, fenceY], [12, fenceY]], height: 2.0 },
-      { id: 'curb-l', source: S, kind: 'edging', catalogId: 'melville-curb-anthracite', points: [[0.3, bedFront], [fx - half, bedFront]], height: 0.15, reveal: 5.5 * IN },
-      { id: 'curb-r', source: S, kind: 'edging', catalogId: 'melville-curb-anthracite', points: [[fx + half, bedFront], [11.7, bedFront]], height: 0.15, reveal: 5.5 * IN },
+      { id: 'curb-l', source: S, kind: 'edging', catalogId: 'melville-curb-anthracite', points: [[0.3, bedFront], [fx - half, bedFront]], height: 0.15 },
+      { id: 'curb-r', source: S, kind: 'edging', catalogId: 'melville-curb-anthracite', points: [[fx + half, bedFront], [11.7, bedFront]], height: 0.15 },
     ],
     water: [],
     plants: [

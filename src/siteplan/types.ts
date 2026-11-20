@@ -115,7 +115,10 @@ export interface LineItem extends ItemBase {
   tread?: number;
   /** Steps: their risers clad and their nosing a coping, as a clad landing's (see Clad). Left out, plain. */
   clad?: Clad;
-  /** Curbs: how much of the curb shows above grade, meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. */
+  /**
+   * Curbs: how much of the curb shows above the highest finished surface beside it (paving, loose stone; else grade),
+   * meters (Melville Curb is 6 1/2 in tall). Left out, 3 in. A poured mow curb's is measured the same way.
+   */
   reveal?: number;
   /**
    * Paver edging (an edging line whose catalogId is a paver border look, use 'border'): one row of 6 x 9 pavers along

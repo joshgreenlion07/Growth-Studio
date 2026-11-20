@@ -8,7 +8,7 @@ import { hasPaverDetail, latticeAlpha, materialTextures, photoAlbedo, slabSet, s
 import { paint, textureSet } from '../engine/textures';
 import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
-import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath } from './linepath';
+import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath, type LinePath } from './linepath';
 import { mowCurbOutline, mowCurbSink, profileGeometry } from './mowcurb';
 import { rockBorderGeometry } from './rockborder';
 import { boulderMaterial } from './waterrock';
@@ -934,12 +934,23 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     } else if (spec?.mowCurb) {
       // A poured mow curb: its mold's section along the path, its base in a shallow trench (or as deep as leaves the
       // plan's `reveal` of its top above grade), the low side toward the lawn.
+      // Its sink is measured from the highest finished surface beside it (curbLevels), so beside paving it stands as
+      // proud of the pavers as it would of a lawn; a skirt of the same concrete fills down to grade where it is lifted.
       const sink = mowCurbSink(spec.mowCurb, l.reveal);
-      put('curb', catalogMaterial(l.catalogId), profileGeometry(path, mowCurbOutline(spec.mowCurb), path.pts.map((p) => height(p) - sink)));
+      const level = curbLevels(path, half, zones, height);
+      const base = path.pts.map((p, k) => level[k] - sink);
+      put('curb', catalogMaterial(l.catalogId), profileGeometry(path, mowCurbOutline(spec.mowCurb), base));
+      if (base.some((b, k) => b > height(path.pts[k]) - 0.02)) {
+        const foot = path.pts.map((p, k) => Math.min(base[k], height(p) - 0.03));
+        put('curb', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, foot, base));
+      }
     } else {
-      // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above grade (3 in unless the plan says).
+      // A Melville Curb unit is 6 1/2 in tall; `reveal` is how much of it stands above the highest finished surface beside
+      // it (paving, loose stone, else grade; see curbLevels), 3 in unless the plan says. Where that surface is paving the
+      // unit is set higher, and its bottom still reaches below grade, so it never floats.
       const rev = Math.max(0.004, Math.min(CURB_TALL, l.reveal ?? CURB_REVEAL));
-      const top = path.pts.map((p) => height(p) + rev);
+      const level = curbLevels(path, half, zones, height);
+      const top = level.map((y) => y + rev);
       const bot = path.pts.map((p, k) => Math.min(top[k] - CURB_TALL, height(p) - 0.01));
       put('curb', catalogMaterial(l.catalogId), bandGeometry(path, (d) => d - half, (d) => d + half, bot, top, true));
     }
@@ -966,11 +977,15 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
       else if (l.kind === 'fence' && spec?.fence === 'metalPicket') metalPicketFence(l, a, b, height, spec.palette[0], put, i === 0 && !closed, i > 0 || closed, i < l.points.length - 2 || closed);
       else if (l.kind === 'fence') fenceSegment(spec?.fence ?? 'boardOnBoard', l, a, b, y0, put);
       else if (spec?.edging) {
-        // Steel edging as sold: the strip at its own thickness and height, its top 1/2 in proud of the ground, black
-        // powder coat (a paint: dark, a little glossy, barely metallic).
+        // Steel edging as sold: the strip at its own thickness and height, its top 1/2 in proud of the highest finished
+        // surface beside it (paving, loose stone, else the ground), black powder coat (a paint: dark, a little glossy,
+        // barely metallic). Lifted beside paving, it still reaches below grade.
         const E = spec.edging, IN = 0.0254, t = E.thickIn * IN;
         const mat = plainMaterial(`steel-edging-${spec.id}`, { color: spec.palette[0], roughness: 0.42, metalness: 0.15 });
-        put('edge', mat, segmentBox(a, b, t, Math.min(height(a), height(b)) - (E.heightIn - E.revealIn) * IN, Math.max(height(a), height(b)) + E.revealIn * IN, t), false);
+        const ground = Math.max(height(a), height(b));
+        const top = Math.max(ground, segmentLevel(a, b, t / 2, zones, height)) + E.revealIn * IN;
+        const bot = Math.min(Math.min(height(a), height(b)) - (E.heightIn - E.revealIn) * IN, top - E.heightIn * IN);
+        put('edge', mat, segmentBox(a, b, t, bot, top, t), false);
       } else put('edge', plainMaterial('steel-edging', { color: '#3e2e24', roughness: 0.55, metalness: 0.6 }), segmentBox(a, b, 0.008, y0 + 0.02, Math.max(height(a), height(b)) + 0.03, 0.004), false);
     }
   }
@@ -989,6 +1004,100 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
     g.add(m);
   }
   return g;
+}
+
+/** How far past a curb's face its neighbors are read (beyond the joint), and how far along the line each point looks. */
+const EDGE_GAP = 0.06, EDGE_STEP = 0.15, EDGE_WINDOW = 0.6;
+/**
+ * A surface counts for an edge's reveal only while it is at most this far above grade: a raised landing, a deck on
+ * posts or a raised planter's fill is something the edge runs beside, not a surface it edges.
+ */
+const EDGE_SURFACE_MAX = 0.2;
+
+/**
+ * How far loose stone stands above the ground it is spread on, for the edge beside it: a typical stone of the bed's size,
+ * set in a fifth to a half of its thickness (builder/pebbles.ts), crowns about 0.8 of its thickness up. Bark and wood
+ * chips lie flat as mulch does and count as the ground. 0 for anything that is not loose stone.
+ */
+function fillCrown(catalogId: string): number {
+  const P = materialById.get(catalogId)?.pebble;
+  if (!P || P.form === 'chip' || P.form === 'nugget') return 0;
+  const bands = P.mix?.length ? P.mix : [{ minIn: P.minIn, maxIn: P.maxIn, share: 1 }];
+  const len = bands.reduce((a, b) => a + ((b.minIn + b.maxIn) / 2) * b.share, 0) / bands.reduce((a, b) => a + b.share, 0);
+  return len * 0.0254 * ((P.thick[0] + P.thick[1]) / 2) * 0.8;
+}
+
+/**
+ * The finished surface at a point beside an edge, in world height: ground-level paving's top (pavers, slabs, concrete,
+ * a low deck: drawn its thickness above grade, see zoneTop), else loose stone's crown over the ground; -Infinity where
+ * the surface is the ground itself (lawn, soil, mulch, bark), so an edge between those stays as it was.
+ */
+function finishedTop(zones: Zone[], height: (p: Vec2) => number, q: Vec2, ground: number): number {
+  let pave = -Infinity, top: Zone | null = null;
+  zones.forEach((z, i) => {
+    if (!pointInPolygon(q, z.polygon)) return;
+    if (z.kind !== 'hardscape') {
+      top = z;
+      return;
+    }
+    if (z.elevation ?? 0) return;
+    const t = zoneTop(z, i);
+    if (t <= ground + EDGE_SURFACE_MAX) pave = Math.max(pave, t);
+  });
+  if (pave > -Infinity) return pave;
+  const bed = top as Zone | null;
+  if (bed?.kind === 'bed' && !bed.raised) {
+    const c = fillCrown(bed.catalogId);
+    if (c) return height(q) + c;
+  }
+  return -Infinity;
+}
+
+/**
+ * The level a curb's reveal is measured from at each point of its path: the highest finished surface on either side of
+ * its body (read just past each face, every few inches along the line, and over a short stretch either way so a unit
+ * beside a patio keeps the patio's level to its end), and never below grade at the point. A curb between pavers and a
+ * rock bed stands its reveal above the pavers; one between lawn and soil is at grade, as before.
+ */
+function curbLevels(path: LinePath, half: number, zones: Zone[], height: (p: Vec2) => number): number[] {
+  const pts = path.pts, n = pts.length;
+  const S = [0];
+  for (let i = 1; i < n; i++) S.push(S[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const samples: { s: number; y: number }[] = [];
+  const out = half + EDGE_GAP;
+  for (let k = 0; k + 1 < n; k++) {
+    const a = pts[k], b = pts[k + 1], len = S[k + 1] - S[k];
+    if (len < 1e-6) continue;
+    const nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+    const m = Math.max(1, Math.ceil(len / EDGE_STEP));
+    for (let j = 0; j <= m; j++) {
+      const t = j / m, d = path.dOut[k] + (path.dIn[k + 1] - path.dOut[k]) * t;
+      const p: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const g = height(p);
+      let y = -Infinity;
+      for (const e of [d - out, d + out]) y = Math.max(y, finishedTop(zones, height, [p[0] + nx * e, p[1] + ny * e], g));
+      if (y > -Infinity) samples.push({ s: S[k] + len * t, y });
+    }
+  }
+  return pts.map((p, i) => {
+    let y = height(p);
+    for (const q of samples) if (Math.abs(q.s - S[i]) <= EDGE_WINDOW) y = Math.max(y, q.y);
+    return y;
+  });
+}
+
+/** The highest finished surface beside a thin edge's segment (see finishedTop), read just past each face along it; -Infinity for none. */
+function segmentLevel(a: Vec2, b: Vec2, half: number, zones: Zone[], height: (p: Vec2) => number): number {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len < 1e-6) return -Infinity;
+  const nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len, out = half + EDGE_GAP;
+  const m = Math.max(1, Math.ceil(len / EDGE_STEP));
+  let y = -Infinity;
+  for (let j = 0; j <= m; j++) {
+    const t = j / m, p: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], g = height(p);
+    for (const e of [-out, out]) y = Math.max(y, finishedTop(zones, height, [p[0] + nx * e, p[1] + ny * e], g));
+  }
+  return y;
 }
 
 /** Shifts a band's top UVs across so they start at 0 on one edge at every point along it (see bandGeometry). */
