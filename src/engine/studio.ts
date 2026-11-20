@@ -181,7 +181,11 @@ export class Studio {
   private focusInv = 0.1;
   private manualFocus: THREE.Vector3 | null = null;
   private raycaster = new THREE.Raycaster();
-  private tween: { from: { e: THREE.Vector3; t: THREE.Vector3; f: number }; to: CameraView; t0: number; dur: number } | null = null;
+  /**
+   * A camera glide. With `arc` (Places travel) the heading turns the short way round and the pitch moves on its own,
+   * the target kept 3 m ahead each frame, so opposite headings never cancel into a look straight down mid-glide.
+   */
+  private tween: { from: { e: THREE.Vector3; t: THREE.Vector3; f: number }; to: CameraView; t0: number; dur: number; arc?: { y0: number; dy: number; p0: number; p1: number } } | null = null;
   private resizeObs: ResizeObserver;
   private disposed = false;
   views: CameraView[] = [];
@@ -1456,10 +1460,10 @@ export class Studio {
   }
 
   /** The camera as it stands now, for the app to keep as a start spot: world meters, heading and pitch, and the mode. */
-  pose(): StartPose & { y: number; mode: NavMode; inYard: boolean } {
+  pose(): StartPose & { y: number; mode: NavMode; inYard: boolean; mood: Mood | 'custom'; hour: number } {
     const c = this.camera.position, t = this.controls.target;
     const dx = t.x - c.x, dy = t.y - c.y, dz = t.z - c.z;
-    return { x: c.x, y: c.y, z: c.z, yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)), mode: this.navMode, inYard: this.walkable(c.x, c.z) };
+    return { x: c.x, y: c.y, z: c.z, yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)), mode: this.navMode, inYard: this.walkable(c.x, c.z), mood: this.state.mood, hour: this.currentHour() };
   }
 
   /** Eye and look target for a start spot, at walk height, the pitch kept gentle (at most 20 degrees up or down). */
@@ -1490,6 +1494,27 @@ export class Studio {
     this.controls.target.copy(target);
     this.camera.lookAt(target);
     this.invalidate();
+    return true;
+  }
+
+  /**
+   * Client mode's Places: walk to a saved spot in Walk, facing its way. A glide (1 to 2.5 s, eased) when it is within
+   * 25 m, else a jump; the light is not changed. False when it is off the lot.
+   */
+  travelTo(p: StartPose): boolean {
+    if (!this.plan || !Number.isFinite(p.x + p.z + p.yaw) || !pointInPolygon([p.x, p.z], this.plan.site.boundary)) return false;
+    if (this.navMode !== 'walk') this.setNavMode('walk');
+    const { eye, target } = this.posePoints(p);
+    const d = this.camera.position.distanceTo(eye);
+    if (d > 25) return this.goToPose(p);
+    this.manualFocus = null;
+    this.cancelPendingTap();
+    this.tweenToPose({ eye, target, fov: this.camera.fov }, THREE.MathUtils.clamp(900 + d * 80, 1000, 2500));
+    // the heading turns the short way round, the pitch on its own (see `tween.arc`)
+    const now = this.pose(), to = Math.atan2(target.x - eye.x, target.z - eye.z), toP = Math.atan2(target.y - eye.y, Math.hypot(target.x - eye.x, target.z - eye.z));
+    let dy = to - now.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    if (this.tween) this.tween.arc = { y0: now.yaw, dy, p0: THREE.MathUtils.clamp(now.pitch ?? 0, -0.6, 0.6), p1: toP };
     return true;
   }
 
@@ -2200,7 +2225,11 @@ export class Studio {
       const k = Math.min(1, (now - this.tween.t0) / this.tween.dur);
       const e = ease(k);
       this.camera.position.lerpVectors(this.tween.from.e, this.tween.to.eye, e);
-      this.controls.target.lerpVectors(this.tween.from.t, this.tween.to.target, e);
+      const arc = this.tween.arc;
+      if (arc) {
+        const yaw = arc.y0 + arc.dy * e, pitch = arc.p0 + (arc.p1 - arc.p0) * e, cp = Math.cos(pitch);
+        this.controls.target.set(this.camera.position.x + Math.sin(yaw) * cp * 3, this.camera.position.y + Math.sin(pitch) * 3, this.camera.position.z + Math.cos(yaw) * cp * 3);
+      } else this.controls.target.lerpVectors(this.tween.from.t, this.tween.to.target, e);
       this.camera.fov = this.tween.from.f + (this.tween.to.fov - this.tween.from.f) * e;
       this.camera.updateProjectionMatrix();
       if (k >= 1) this.tween = null;
@@ -2565,7 +2594,7 @@ export class Studio {
    * view; an unknown id is the Overview) under one light mood, at a fixed shape, as a JPEG. Drawn off screen like the
    * cover; the light is put back right after, so the live view shows the mood it had. Calls wait for each other.
    */
-  shot(opts: { view?: string; mood?: Mood; width?: number; aspect?: number; quality?: number; pose?: StartPose }): Promise<Blob> {
+  shot(opts: { view?: string; mood?: Mood; hour?: number; width?: number; aspect?: number; quality?: number; pose?: StartPose }): Promise<Blob> {
     return this.queued(async () => {
       await this.built();
       // A start spot (`pose`) is drawn from where a client would stand there, else a generated view.
@@ -2575,9 +2604,12 @@ export class Studio {
       // At most 2400 px either way.
       const width = Math.min(2400, Math.round(2400 * aspect), Math.max(320, Math.round(Number.isFinite(opts.width) ? opts.width! : 1600)));
       const prev = { mood: this.state.mood, hour: this.state.hour };
-      const change = !!opts.mood && opts.mood !== prev.mood;
+      // `hour` (a waypoint saved at a custom time of day) wins over `mood`
+      const hour = typeof opts.hour === 'number' && Number.isFinite(opts.hour) && opts.hour >= 0 && opts.hour <= 24 ? opts.hour : null;
+      const change = hour != null || (!!opts.mood && opts.mood !== prev.mood);
       this.holdLive = change;
-      if (change) this.setMood(opts.mood!);
+      if (hour != null) this.setHour(hour);
+      else if (change) this.setMood(opts.mood!);
       try {
         return await this.stillNow(width, 'image/jpeg', opts.quality ?? 0.86, v ? { eye: v.eye, target: v.target, fov: v.fov } : undefined, aspect);
       } finally {
