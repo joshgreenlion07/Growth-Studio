@@ -12,7 +12,7 @@ const GROUND = '#b9b4a9';
 
 /** A height guess per group, used when the built object has no size. */
 const HEIGHT_GUESS: Record<FeatureGroup, number> = {
-  Shade: 3, Kitchens: 1.1, Fire: 0.8, Water: 2, 'Spa and sauna': 2, Accents: 1, Lighting: 1, Furniture: 1,
+  Shade: 3, Kitchens: 1.1, Fire: 0.8, Water: 2, 'Rock library': 0.6, 'Spa and sauna': 2, Accents: 1, Lighting: 1, Furniture: 1,
 };
 
 interface Rig {

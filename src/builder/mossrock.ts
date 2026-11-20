@@ -152,6 +152,8 @@ export const MOSS_ROCK_GRAY: MossRockLook = {
   soil: '#3f3126',
 };
 
+export type MossRockForm = 'rounded' | 'tall' | 'flat' | 'ridge' | 'wedge';
+
 export interface MossRockSpec {
   /** Length (x), depth (z) and the height above the ground (y), meters. */
   size: [number, number, number];
@@ -161,8 +163,11 @@ export interface MossRockSpec {
   /** Moss and lichen on (false: clean stone). */
   moss: boolean;
   look?: MossRockLook;
-  /** Rounded (the default), tall (stands on end, steeper sides) or flat (a flat top a stream can pour over). */
-  form?: 'rounded' | 'tall' | 'flat';
+  /**
+   * Rounded (the default), tall (stands on end, steeper sides), flat (a flat top a stream can pour over), ridge (two
+   * steep breaks meet in a ridge along the top) or wedge (one big sloped break across the top).
+   */
+  form?: MossRockForm;
   /** Meters between the mesh's points on a medium rock (default 3.2 mm). Pores and lichen are the shader's, at any spacing. */
   spacing?: number;
 }
@@ -292,12 +297,19 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
   // The breaks: planes the stone split along, mostly on the sides, two across the top. Most are fairly crisp, a few worn.
   const planes: { nx: number; ny: number; nz: number; h: number; k: number }[] = [];
   const breaks = 8 + Math.floor(r() * 4);
+  let a0 = 0;
   for (let k = 0; k < breaks; k++) {
-    const a = (k / breaks) * Math.PI * 2 + (r() - 0.5) * 0.9;
+    let a = (k / breaks) * Math.PI * 2 + (r() - 0.5) * 0.9;
+    if (k === 0) a0 = a;
+    // A ridge's second top break faces the first across the rock.
+    if (k === 1 && form === 'ridge') a = a0 + Math.PI;
     // A flat-top rock's top break lies nearly level; a tall one's side breaks stand nearly upright.
-    const el = k === 0 ? (form === 'flat' ? Math.PI / 2 - r() * 0.08 : 0.9 + r() * 0.5) : k === 1 ? 0.45 + r() * 0.4 : form === 'tall' ? (r() - 0.45) * 0.55 : (r() - 0.3) * 1.0;
+    const el =
+      k === 0 ? (form === 'flat' ? Math.PI / 2 - r() * 0.08 : form === 'ridge' ? 0.5 + r() * 0.15 : form === 'wedge' ? 0.55 + r() * 0.2 : 0.9 + r() * 0.5)
+      : k === 1 ? (form === 'ridge' ? 0.5 + r() * 0.15 : 0.45 + r() * 0.4)
+      : form === 'tall' ? (r() - 0.45) * 0.55 : (r() - 0.3) * 1.0;
     const v = new THREE.Vector3(Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)).normalize();
-    const h = k === 0 && form === 'flat' ? 0.66 + r() * 0.06 : 0.7 + r() * 0.2;
+    const h = k === 0 && form === 'flat' ? 0.66 + r() * 0.06 : (form === 'ridge' && k <= 1) || (form === 'wedge' && k === 0) ? 0.6 + r() * 0.06 : 0.7 + r() * 0.2;
     planes.push({ nx: v.x, ny: v.y, nz: v.z, h, k: k === 0 && form === 'flat' ? 0.008 : r() < 0.2 ? 0.03 + r() * 0.03 : 0.005 + r() * 0.012 });
   }
   const sq = (form === 'tall' ? 2.9 : 2.6) + r() * 0.4;

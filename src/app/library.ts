@@ -3,6 +3,7 @@
 // decides what Area Planner offers (see siteplan/approval.ts); approvals are saved by Area Planner, so they can be
 // changed only when the studio runs inside it. Generic paver, wall and curb looks are listed apart as testers, to be
 // removed as real product lines replace them.
+import { roundLb } from '../siteplan/waterrocks';
 import * as THREE from 'three';
 import type { Studio } from '../engine/studio';
 import { FEATURES, MATERIALS, PLANTS, approvalKeyOf, featureById, isApproved, isOutOfArea, isTester, layingName, layingsFor, materialById, outOfAreaNote, type FeatureSpec, type LayingPattern, type MaterialSpec, type PlantSpec } from '../siteplan/catalog';
@@ -80,7 +81,7 @@ function catOf(m: MaterialSpec): string | null {
   return null;
 }
 
-const FEATURE_CAT: Record<string, string> = { Shade: 'shade', Kitchens: 'kitchens', Fire: 'fire', Water: 'water', 'Spa and sauna': 'water', Accents: 'accents', Lighting: 'accents', Furniture: 'accents' };
+const FEATURE_CAT: Record<string, string> = { Shade: 'shade', Kitchens: 'kitchens', Fire: 'fire', Water: 'water', 'Rock library': 'water', 'Spa and sauna': 'water', Accents: 'accents', Lighting: 'accents', Furniture: 'accents' };
 const STRUCTURES: { id: 'cover' | 'calroom'; name: string; sub: string }[] = [
   { id: 'cover', name: 'Attached roof', sub: 'Roofed patio on posts' },
   { id: 'calroom', name: 'California room', sub: 'Roofed room, solid walls on its closed sides' },
@@ -187,6 +188,7 @@ function facts(p: Product, v: Variant): [string, string][] {
   }
   if (p.feature) {
     out.push(['Group', p.feature.group], ['Footprint', `${ft(p.feature.footprint[0])} × ${ft(p.feature.footprint[1])}`]);
+    if (p.feature.scale) out.push(['Weight', `about ${roundLb(p.feature.scale.lb).toLocaleString('en-US')} lb at its standard size; it scales with the size`]);
     return out;
   }
   const m = v.item.kind === 'material' ? materialById.get(v.item.id) : undefined;

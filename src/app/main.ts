@@ -1,4 +1,5 @@
 import { houseLookLists } from '../siteplan/houselooks';
+import { roundLb, scaledLb } from '../siteplan/waterrocks';
 import { FEATURES, MATERIALS, PLANTS, featureById, featureOption, isAntiqued, isApproved, isOffered, layingName, layingOf, layingsFor, materialById, materialsFor, plantById, sizeAt, swapClassOf, type FeatureGroup, type LayingPattern, type MaterialSpec, type MaterialUse } from '../siteplan/catalog';
 import { area, fmtFeet, polylineLength } from '../siteplan/geometry';
 import { SAMPLES } from '../siteplan/samples';
@@ -601,6 +602,34 @@ function lightColorField(f: SitePlan['features'][number], fx: Parameters<typeof 
   return field('Light color', h('span', { style: 'display:flex;gap:6px;align-items:center' }, sel, pick), 'RGBCW lamp: a white or any color.');
 }
 
+/**
+ * A scalable feature's size (a boulder): one slider from a quarter to three times its standard size, keeping its
+ * shape, with its size in inches and its weight, which goes with length x depth x height.
+ */
+function scaleField(f: SitePlan['features'][number], spec: NonNullable<ReturnType<typeof featureById.get>>) {
+  const std = (spec.sizes?.[spec.size ?? 0]?.size ?? [spec.footprint[0], spec.footprint[1], 0.4]) as [number, number, number];
+  const cur = (f.size ?? std) as [number, number, number];
+  const pct = Math.round((cur[0] / std[0]) * 100);
+  const read = h('span', { class: 'field-hint' });
+  const show = (k: number) => {
+    const z = std.map((v) => v * k) as [number, number, number];
+    read.textContent = `${Math.round(k * 100)}%: ${z.map((v) => Math.round(v / 0.0254)).join(' x ')} in, about ${roundLb(scaledLb(spec.scale!.lb, std, z)).toLocaleString('en-US')} lb`;
+  };
+  const inp = h('input', { id: 'f-scale', type: 'range', min: 25, max: 300, step: 5, value: Math.min(300, Math.max(25, pct)) });
+  inp.addEventListener('input', () => show(+inp.value / 100));
+  inp.addEventListener('change', () => {
+    snapshot();
+    const k = +inp.value / 100;
+    if (Math.abs(k - 1) < 1e-3) delete f.size;
+    else f.size = std.map((v) => v * k) as [number, number, number];
+    changed();
+  });
+  // A size set elsewhere (Area Planner's size list) may not keep the shape: show its own measure and weight.
+  if (f.size && Math.abs(cur[1] / std[1] - cur[0] / std[0]) > 0.01) read.textContent = `${cur.map((v) => Math.round(v / 0.0254)).join(' x ')} in, about ${roundLb(scaledLb(spec.scale!.lb, std, cur)).toLocaleString('en-US')} lb`;
+  else show(pct / 100);
+  return h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Size' }), inp, read);
+}
+
 function field(label: string, control: HTMLElement, hint?: string) {
   return h('label', { class: 'field' }, h('span', { class: 'field-label', text: label }), control, hint ? h('span', { class: 'field-hint', text: hint }) : null);
 }
@@ -791,6 +820,7 @@ function renderInspector() {
       field('Feature', selectEl('f-sp', featureOptions(), f.catalogId, (v) => { snapshot(); f.catalogId = v; changed('structure'); }, 'Feature')),
       field('Turn', rot, 'Or press R on the plan.'),
       ...(spec.options ?? []).map((op) => check(`f-op-${op.key}`, op.label, featureOption(spec, f.options, op.key), (v) => { snapshot(); f.options = { ...f.options, [op.key]: v }; changed(); })),
+      ...(spec.scale ? [scaleField(f, spec)] : []),
       ...(spec.plantable ? [check('f-planted', 'Planted', f.planted !== false, (v) => { snapshot(); if (v) delete f.planted; else f.planted = false; changed(); })] : []),
       ...(spec.fixture?.rgb ? [lightColorField(f, spec.fixture)] : []),
       ...(makerSpa(spec)
@@ -1557,7 +1587,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, swap: swapClassOf(f), footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}), ...(f.fixture?.rgb ? { rgb: true } : {}) })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, swap: swapClassOf(f), footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.scale ? { scale: f.scale } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}), ...(f.fixture?.rgb ? { rgb: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }

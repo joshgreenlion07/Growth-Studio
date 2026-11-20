@@ -1,4 +1,5 @@
 import type { SitePlan, Vec2 } from './types';
+import { LIBRARY_ROCKS } from './waterrocks';
 
 /**
  * Moss rock up close: the three moss rock boulder shapes (rounded in the middle, tall at the left, flat-top at the
@@ -73,5 +74,29 @@ export function sampleMossRockMix(): SitePlan {
         size: [Math.round(n * l) * IN, Math.round(n * d) * IN, Math.round(n * h) * IN] as [number, number, number],
       };
     }),
+  };
+}
+
+/**
+ * The rock library laid out: the 20 tan-brown (T01 to T20) or the 20 dark gray (G01 to G20) moss rocks at their
+ * standard sizes, in four rows of five from the fence (01 to 05 in the back row, left to right), on black mulch.
+ */
+export function sampleRockLibrary(shade: 'tan' | 'gray'): SitePlan {
+  const S = 'sample' as const;
+  const rect = (x0: number, y0: number, x1: number, y1: number): Vec2[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const rocks = LIBRARY_ROCKS.filter((r) => r.shade === shade);
+  const W = 11.5, D = 9.4;
+  return {
+    schemaVersion: 1,
+    site: { name: `Rock library, ${shade === 'tan' ? 'tan-brown' : 'dark gray'} moss rock: 20 rocks`, boundary: rect(0, 0, W, D), latitude: 37.64, longitude: -120.99, northAngleDeg: 90 },
+    structures: [],
+    zones: [
+      { id: 'bed', source: S, kind: 'bed', catalogId: 'black-mulch', polygon: rect(0.3, 0.85, W - 0.3, D - 1.0) },
+      { id: 'lawn', source: S, kind: 'turf', catalogId: 'lawn', polygon: rect(0.3, D - 1.0, W - 0.3, D - 0.2) },
+    ],
+    lines: [{ id: 'fence', source: S, kind: 'fence', catalogId: 'fence-gray-lattice', points: [[0, 0.8], [W, 0.8]], height: 1.8 }],
+    water: [],
+    plants: [],
+    features: rocks.map((r, k) => ({ id: `library-${r.code}`, source: S, catalogId: r.id, position: [1.45 + (k % 5) * 2.15, 2.0 + Math.floor(k / 5) * 1.75] as Vec2, rotationDeg: 0 })),
   };
 }
