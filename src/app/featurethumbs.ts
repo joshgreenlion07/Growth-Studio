@@ -8,6 +8,7 @@ const waiting = new Map<string, Set<(url: string) => void>>();
 const failed = new Set<string>();
 const queue: string[] = [];
 let running = false;
+let releaseT = 0;
 
 /** The picture if it is ready yet. */
 export const featureThumbUrl = (id: string): string | undefined => cache.get(id);
@@ -57,7 +58,9 @@ async function pump() {
       waiting.delete(id);
       await new Promise((res) => setTimeout(res, 30));
     }
-    r.releaseFeatureThumbRenderer();
+    // keep the WebGL rig a few seconds: the planner's picker asks again as cards scroll into view
+    clearTimeout(releaseT);
+    releaseT = window.setTimeout(() => { if (!running) r.releaseFeatureThumbRenderer(); }, 5000);
   } catch (err) {
     console.warn('Feature pictures unavailable', err);
     // Nothing more will be drawn this time; a later request tries again.

@@ -76,12 +76,32 @@ export function renderFeatureThumb(spec: FeatureSpec, size = SIZE): string {
     // Very thin or tiny things (lights, cups, trellis cables) still get a readable frame.
     const radius = Math.max(spec.fixture ? 0.07 : 0.35, 0.5 * Math.hypot(size.x, size.y, size.z));
     const look = new THREE.Vector3(center.x, Math.max(center.y, size.y * 0.42), center.z);
-    const dist = (radius / Math.sin(THREE.MathUtils.degToRad(15))) * 0.95;
-    camera.position.copy(look).addScaledVector(new THREE.Vector3(0.75, 0.6, 1.1).normalize(), dist);
-    camera.lookAt(look);
-    camera.near = Math.max(0.02, dist * 0.02);
-    camera.far = dist * 20 + 100;
-    camera.updateProjectionMatrix();
+    const dir = new THREE.Vector3(0.75, 0.6, 1.1).normalize();
+    let dist = (radius / Math.sin(THREE.MathUtils.degToRad(15))) * 0.95;
+    const place = () => {
+      camera.position.copy(look).addScaledVector(dir, dist);
+      camera.lookAt(look);
+      camera.near = Math.max(0.02, dist * 0.02);
+      camera.far = dist * 20 + 100;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+    };
+    place();
+    // A long, thin thing seen nearly side on (a wall heater) can reach past the sphere's frame: step back until every
+    // corner of its box is inside the picture with a small margin.
+    if (ok) {
+      const corner = new THREE.Vector3();
+      for (let i = 0; i < 6; i++) {
+        let reach = 0;
+        for (let k = 0; k < 8; k++) {
+          corner.set(k & 1 ? bb.max.x : bb.min.x, k & 2 ? bb.max.y : bb.min.y, k & 4 ? bb.max.z : bb.min.z).project(camera);
+          reach = Math.max(reach, Math.abs(corner.x), Math.abs(corner.y));
+        }
+        if (reach <= 0.9) break;
+        dist *= reach / 0.86;
+        place();
+      }
+    }
     scene.fog = new THREE.Fog(SKY, dist * 2.5, dist * 9);
 
     const s = radius * 1.6 + 0.5;
