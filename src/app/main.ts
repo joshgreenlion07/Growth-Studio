@@ -11,6 +11,8 @@ import { groundModel } from '../builder/ground';
 import { builtLine } from '../builder/linepath';
 import { plantPicker } from './plantpicker';
 import { wantThumb } from './plantthumbs';
+import { wantFeatureThumb } from './featurethumbs';
+import { featureShelf } from '../siteplan/featureshelves';
 import { lookOf, lookOfPoint, type Look } from './looks';
 import { pictureFor, pictureNow, swatchNow } from './swatches';
 import { pointKind } from '../siteplan/material-info';
@@ -1340,6 +1342,15 @@ function onEmbedMessage(e: MessageEvent) {
     for (const id of ids) wantThumb(id, (url) => window.parent.postMessage({ source: 'growth-studio', type: 'plant-thumb', id, url }, origin));
     return;
   }
+  if (d.type === 'feature-thumbs') {
+    // The parent wants small pictures of catalog features (for its feature picker), usually the cards it has on screen.
+    // Each is the Library card's picture, drawn with the app's own feature builder; asked-for ones go to the front of the
+    // queue, last asked first, and each is sent back as { type: 'feature-thumb', id, url } as soon as it is ready.
+    const origin = e.origin;
+    const ids = Array.isArray(d.ids) ? d.ids.slice(0, 200).filter((x): x is string => typeof x === 'string' && featureById.has(x)) : [];
+    for (const id of ids.reverse()) wantFeatureThumb(id, (url) => window.parent.postMessage({ source: 'growth-studio', type: 'feature-thumb', id, url }, origin), true);
+    return;
+  }
   if (d.type === 'swatch') {
     // A swatch for a look the parent shows without pointing at it (a color previewed in its panel): the same picture
     // the pointer sends, as { type: 'swatch', id, url } (url null when there is none).
@@ -1587,7 +1598,7 @@ function postCatalog(withMaterials: boolean) {
     type: 'catalog',
     approvals: getApprovals(),
     plants: PLANTS.filter((p) => isApproved(`plant:${p.id}`)).map((p) => p.id),
-    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, swap: swapClassOf(f), footprint: f.footprint, ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.scale ? { scale: f.scale } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}), ...(f.fixture?.rgb ? { rgb: true } : {}) })),
+    features: FEATURES.filter((f) => f.kind !== 'steppingStone' && isApproved(`feature:${f.id}`)).map((f) => ({ id: f.id, name: f.name, group: f.group, swap: swapClassOf(f), footprint: f.footprint, ...(featureShelf(f) ? { shelf: featureShelf(f) } : {}), ...(f.maker ? { maker: f.maker } : {}), ...(f.options ? { options: f.options } : {}), ...(f.sizes ? { sizes: f.sizes, size: f.size ?? 0 } : {}), ...(f.scale ? { scale: f.scale } : {}), ...(f.plantable ? { plantable: true } : {}), ...(makerSpa(f) ? { cover: true, steps: true } : {}), ...(f.fixture?.rgb ? { rgb: true } : {}) })),
     structures: { cover: isApproved('structure:cover'), calroom: isApproved('structure:calroom') },
   }, to);
 }

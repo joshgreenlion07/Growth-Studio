@@ -8,6 +8,7 @@ const waiting = new Map<string, Set<(url: string) => void>>();
 const failed = new Set<string>();
 const queue: string[] = [];
 let running = false;
+let releaseT = 0;
 
 /** The picture if it is ready yet. */
 export const featureThumbUrl = (id: string): string | undefined => cache.get(id);
@@ -15,15 +16,20 @@ export const featureThumbUrl = (id: string): string | undefined => cache.get(id)
 /** The material panel's larger picture of a feature (key `big:<id>` in the same queue and cache). */
 export const wantFeaturePicture = (id: string, done: (url: string) => void) => wantFeatureThumb(`big:${id}`, done);
 
-/** Call back with the picture as soon as it exists, and make sure it is queued. */
-export function wantFeatureThumb(id: string, done: (url: string) => void): void {
+/** Call back with the picture as soon as it exists, and make sure it is queued (`front`: next in line, for pictures
+ *  someone is looking at now, such as the planner's feature picker cards on screen). */
+export function wantFeatureThumb(id: string, done: (url: string) => void, front = false): void {
   const have = cache.get(id);
   if (have) return done(have);
   if (failed.has(id)) return;
   let set = waiting.get(id);
   if (!set) waiting.set(id, (set = new Set()));
   set.add(done);
-  if (!queue.includes(id)) queue.push(id);
+  const at = queue.indexOf(id);
+  if (front) {
+    if (at >= 0) queue.splice(at, 1);
+    queue.unshift(id);
+  } else if (at < 0) queue.push(id);
   void pump();
 }
 
@@ -52,7 +58,9 @@ async function pump() {
       waiting.delete(id);
       await new Promise((res) => setTimeout(res, 30));
     }
-    r.releaseFeatureThumbRenderer();
+    // keep the WebGL rig a few seconds: the planner's picker asks again as cards scroll into view
+    clearTimeout(releaseT);
+    releaseT = window.setTimeout(() => { if (!running) r.releaseFeatureThumbRenderer(); }, 5000);
   } catch (err) {
     console.warn('Feature pictures unavailable', err);
     // Nothing more will be drawn this time; a later request tries again.
