@@ -127,7 +127,7 @@ td .botanical { line-height: 1.3; }
 .num input { width: 7em; border: 1px solid var(--line); background: var(--paper); padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .unit { font-size: 12px; color: var(--ink-2); font-family: var(--font-mono); }
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
-#sound-group[hidden] { display: none; }
+#sound-group[hidden], #btn-sound[hidden] { display: none !important; }
 .muted { color: var(--ink-2); font-size: 13px; margin: 0; }
 .ai-note { margin: 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 13px; display: grid; gap: 6px; justify-items: start; }
 .ai-note p { margin: 0; }
@@ -503,8 +503,15 @@ html.client .dock, html.client #views, html.client .scene-tools, html.client #st
 html.client #updating, html.client #loading, html.client #library, html.client #library-book, html.client #nav-hint,
 html.client .quick-hud, html.client .quick-aim, html.client .tape-label, html.client #height-meter, html.client .measure-label,
 html.client .tc-bar, html.client .tc-rise, html.client .ss-float, html.client #toast, html.client .toast { display: none !important; }
-html.client .tc-stick { width: 148px; height: 148px; left: max(22px, env(safe-area-inset-left, 0px)); bottom: max(26px, env(safe-area-inset-bottom, 0px)); background: rgba(32, 35, 33, 0.42); border: 3px solid rgba(245, 242, 234, 0.85); box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); }
-html.client .tc-knob { width: 64px; height: 64px; margin: -32px 0 0 -32px; background: #AFE414; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+/* client joystick: compact, see-through while resting, solid while a finger is on it */
+html.client .tc-stick { width: 104px; height: 104px; left: max(18px, env(safe-area-inset-left, 0px)); bottom: max(22px, env(safe-area-inset-bottom, 0px)); background: rgba(32, 35, 33, 0.32); border: 2px solid rgba(245, 242, 234, 0.75); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25); opacity: 0.6; transition: opacity 0.18s ease; }
+html.client .tc-stick.on { opacity: 1; }
+/* client mode's use tag: a small pill just above the thing, following it, fading in and out */
+.use-tag { display: none; }
+html.client .use-tag { display: block; position: absolute; left: 0; top: 0; z-index: 6; margin-top: -6px; padding: 8px 14px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 999px; background: rgba(24, 26, 25, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: #fff; font: 700 15px/1.2 var(--font-brand); white-space: nowrap; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.22s ease; touch-action: manipulation; }
+html.client .use-tag.on { opacity: 1; pointer-events: auto; }
+html.client .use-tag::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(24, 26, 25, 0.62); }
+html.client .tc-knob { width: 46px; height: 46px; margin: -23px 0 0 -23px; background: #AFE414; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 .dock-end { margin-left: auto; }
 #embed-note { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; pointer-events: none; }
 #embed-note p { margin: 0; max-width: 34em; padding: 10px 16px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; text-align: center; }

@@ -14,8 +14,8 @@ import type { Studio } from '../engine/studio';
  * (engine/audio.ts) still hears the first touch. Looks are in page.html under `.tc-`.
  */
 
-/** Joystick travel from its center to the edge of its ring, px. */
-const STICK_RADIUS = 52;
+/** Joystick travel from its center, as a share of the ring's width (52 px on the 132 px ring; smaller rings travel less). */
+const STICK_TRAVEL = 0.4;
 
 export class TouchControls {
   private root: HTMLElement;
@@ -151,19 +151,22 @@ export class TouchControls {
 
   private moveStick(e: PointerEvent) {
     const r = this.stick.getBoundingClientRect();
-    let x = (e.clientX - (r.left + r.width / 2)) / STICK_RADIUS;
-    let y = (e.clientY - (r.top + r.height / 2)) / STICK_RADIUS;
+    const R = Math.max(30, r.width * STICK_TRAVEL);
+    this.stick.classList.add('on');
+    let x = (e.clientX - (r.left + r.width / 2)) / R;
+    let y = (e.clientY - (r.top + r.height / 2)) / R;
     const m = Math.hypot(x, y);
     if (m > 1) {
       x /= m;
       y /= m;
     }
-    this.knob.style.transform = `translate(${x * STICK_RADIUS}px, ${y * STICK_RADIUS}px)`;
+    this.knob.style.transform = `translate(${x * R}px, ${y * R}px)`;
     this.studio()?.nav.setVirtualStick(x, y);
   }
 
   private releaseStick() {
     this.stickId = -1;
+    this.stick.classList.remove('on');
     this.knob.style.transform = '';
     this.studio()?.nav.setVirtualStick(0, 0);
   }

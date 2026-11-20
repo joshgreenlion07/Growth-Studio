@@ -17,7 +17,7 @@ export class TapMarks {
   }
 
   /** A ring on the ground at `at` (its y is the ground): 'hint' for the first tap, 'target' for the destination. */
-  show(at: THREE.Vector3, kind: 'hint' | 'target' | 'beacon', now = performance.now(), dur = kind === 'hint' ? 350 : kind === 'beacon' ? 1800 : 1300) {
+  show(at: THREE.Vector3, kind: 'hint' | 'target', now = performance.now(), dur = kind === 'hint' ? 350 : 1300) {
     const mat = new THREE.MeshBasicMaterial({ color: kind === 'hint' ? 0xf5f2ea : 0xafe414, transparent: true, opacity: 0, depthWrite: false, fog: false, toneMapped: false, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(RING, mat);
     mesh.position.set(at.x, at.y + 0.03, at.z);
@@ -25,8 +25,6 @@ export class TapMarks {
     mesh.frustumCulled = false;
     this.group.add(mesh);
     if (kind === 'hint') this.rings.push({ mesh, mat, t0: now, dur, r0: 0.16, r1: 0.26, a: 0.5 });
-    // Client mode: a soft pulse under something that can be used (a fire, water, a light, a door).
-    else if (kind === 'beacon') this.rings.push({ mesh, mat, t0: now, dur, r0: 0.6, r1: 1.4, a: 0.45 });
     else this.rings.push({ mesh, mat, t0: now, dur, r0: 0.22, r1: 0.5, a: 0.9 });
     this.update(now);
   }
