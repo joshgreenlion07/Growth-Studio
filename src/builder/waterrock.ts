@@ -5,6 +5,7 @@ import type { FeaturePlacement } from '../siteplan/types';
 import { ROCK_GRAIN_MEAN, rockGrainSet } from '../engine/rock-surfaces';
 import { pbrMaterial } from './materials';
 import { MOSS_ROCK_GRAY, MOSS_ROCK_SPACING, mossRock, mossRockMaterial, type MossRockLook, type MossRockSpec } from './mossrock';
+import { libraryRockById } from '../siteplan/waterrocks';
 import type { Quality } from '../engine/post';
 import { buildRock, footSink, type GroundAt, type RockLook, type RockShape } from './stonegeo';
 import { BORDER_STONE, GARDEN_BOULDER, MOSS_BOULDER, SHOWPIECE, borderLook } from './groundrock-looks';
@@ -35,7 +36,7 @@ const CANYON_LOOK: RockLook = {
 /** Crisper: more cuts, sharper edges. */
 const CANYON: RockShape = { squareness: 3.6, cuts: 9, cutDepth: [0.64, 0.86], edge: 0.025, lump: 0.035, rough: 0.02, pocket: 0.05, lean: 4 };
 
-type Style = { shape: RockShape; look: RockLook | ((h: number) => RockLook); buried?: number } | { form: NonNullable<MossRockSpec['form']>; look?: MossRockLook; buried?: number };
+type Style = { shape: RockShape; look: RockLook | ((h: number) => RockLook); buried?: number } | { form: NonNullable<MossRockSpec['form']>; look?: MossRockLook; buried?: number; seed?: string };
 
 /** Each boulder's build: a moss rock form (builder/mossrock.ts), or a shape and look for builder/stonegeo.ts. */
 const STYLE: Record<string, Style> = {
@@ -71,14 +72,20 @@ export interface WaterRockContext {
 }
 
 /** A boulder (a moss rock shape or a Canyon Tech boulder), set into the ground at the feature's spot. */
+/** A library rock (siteplan/waterrocks.ts): one rock, its own seed, the same wherever it is placed. */
+function libraryStyle(id: string): Style | undefined {
+  const r = libraryRockById.get(id);
+  return r ? { form: r.form, look: r.shade === 'gray' ? MOSS_ROCK_GRAY : undefined, seed: `library:${r.code}` } : undefined;
+}
+
 export function buildWaterRock(c: WaterRockContext) {
-  const st = STYLE[c.spec.id];
+  const st = STYLE[c.spec.id] ?? libraryStyle(c.spec.id);
   if (!st) return;
   const size = featureSize(c.spec, c.f.size, 0.4);
   const buried = c.lift ? 0.04 : st.buried ?? 0.2, moss = featureOption(c.spec, c.f.options, 'moss');
   let geo: THREE.BufferGeometry, mat: THREE.Material;
   if ('form' in st) {
-    geo = mossRock({ size, buried, seed: c.f.id, moss, form: st.form, look: st.look, spacing: MOSS_ROCK_SPACING[c.quality ?? 'balanced'] });
+    geo = mossRock({ size, buried, seed: st.seed ?? c.f.id, moss, form: st.form, look: st.look, spacing: MOSS_ROCK_SPACING[c.quality ?? 'balanced'] });
     mat = mossRockMaterial(st.look);
   } else {
     const look = typeof st.look === 'function' ? st.look(rng(`look:${c.f.id}`)()) : st.look;

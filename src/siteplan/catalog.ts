@@ -20,7 +20,7 @@ import { approvalOverride } from './approval';
 import { truscapesFeatures, type FixtureSpec } from './truscapes';
 import { vistaFeatures } from './vista';
 import { DECOR_FEATURES, type DecorKind, type FeatureSize } from './decor';
-import { FLAGSTONE_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
+import { FLAGSTONE_FEATURES, ROCK_LIBRARY_FEATURES, WATER_ROCK_FEATURES, type WaterRockKind } from './waterrocks';
 import { GROUND_ROCK_FEATURES, GROUND_ROCK_MATERIALS, ROCK_BORDER_MATERIALS, type RockBorderSpec } from './groundrock';
 import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
 import { KITCHEN_ISLAND_FEATURES, KITCHEN_PART_FEATURES, type KitchenIsland } from './kitchen';
@@ -495,7 +495,7 @@ export type FeatureKind =
   | 'trellisCable'
   | 'trellisGrid';
 
-export type FeatureGroup = 'Fire' | 'Shade' | 'Kitchens' | 'Spa and sauna' | 'Water' | 'Accents' | 'Lighting' | 'Furniture';
+export type FeatureGroup = 'Fire' | 'Shade' | 'Kitchens' | 'Spa and sauna' | 'Water' | 'Rock library' | 'Accents' | 'Lighting' | 'Furniture';
 
 export interface FeatureSpec {
   id: string;
@@ -528,6 +528,11 @@ export interface FeatureSpec {
   model?: 'stratus' | 'ppz-743bc' | 'saunalife-cl5g' | 'mirador-111';
   /** On/off choices a placement can make (`FeaturePlacement.options`), with their defaults. */
   options?: FeatureOption[];
+  /**
+   * It can be scaled to any size, keeping its shape (a boulder): its weight in pounds at its standard size
+   * (`sizes[size]`, or the footprint); at another size the weight goes with length x depth x height (`scaledLb`).
+   */
+  scale?: { lb: number };
   /** A lighting fixture's maker spec (kind 'landscapeLight', siteplan/truscapes.ts). */
   fixture?: FixtureSpec;
   /** A stepping stone (kind 'steppingStone'): what it is and its size in inches, [across (local x), along (local z)]. A
@@ -1306,6 +1311,7 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'boulder', name: 'Boulder', group: 'Accents', kind: 'boulder', footprint: [1.0, 0.8] }),
   // Moss rock, Canyon Tech boulders and flagstone pieces for water features (siteplan/waterrocks.ts).
   ...WATER_ROCK_FEATURES,
+  ...ROCK_LIBRARY_FEATURES,
   ...FLAGSTONE_FEATURES,
   // Moss rock by weight: double-head border stones, garden and showpiece boulders (siteplan/groundrock.ts).
   ...GROUND_ROCK_FEATURES,

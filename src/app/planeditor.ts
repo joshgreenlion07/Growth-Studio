@@ -166,7 +166,8 @@ export class PlanEditor {
     for (let i = pl.features.length - 1; i >= 0; i--) {
       const f = pl.features[i];
       const spec = featureById.get(f.catalogId);
-      const r = spec ? Math.max(spec.footprint[0], spec.footprint[1]) / 2 : 0.5;
+      const fp = f.size ?? spec?.footprint;
+      const r = fp ? Math.max(fp[0], fp[1]) / 2 : 0.5;
       if (Math.hypot(p[0] - f.position[0], p[1] - f.position[1]) < Math.max(r * 0.8, tol * 1.5)) return { list: 'features', id: f.id };
     }
     for (let i = pl.plants.length - 1; i >= 0; i--) {
@@ -537,7 +538,8 @@ export class PlanEditor {
     }
     for (const f of this.plan.features) {
       const spec = featureById.get(f.catalogId);
-      const [fw, fd] = spec?.footprint ?? [0.6, 0.6];
+      // A feature set to its own size (a scaled boulder) draws at that size.
+      const [fw, fd] = f.size ?? spec?.footprint ?? [0.6, 0.6];
       const [cx, cy] = this.sx(f.position);
       g.save();
       g.translate(cx, cy);

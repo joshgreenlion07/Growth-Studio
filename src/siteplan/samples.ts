@@ -9,7 +9,7 @@ import { samplePillarFountain } from './sample-pillar-fountain';
 import { sampleCedarWaterWall } from './sample-cedar-water-wall';
 import { samplePillarWaterWall } from './sample-pillar-water-wall';
 import { sampleUrnFountains } from './sample-urn-fountains';
-import { sampleMossRock, sampleMossRockMix } from './sample-moss-rock';
+import { sampleMossRock, sampleMossRockMix, sampleRockLibrary } from './sample-moss-rock';
 import { sampleSideYard } from './sample-side-yard';
 import { sampleVista } from './sample-vista';
 import { sampleMowCurb } from './sample-mow-curb';
@@ -527,6 +527,8 @@ export const SAMPLES = [
   { id: 'moss-rock', name: 'Moss rock boulders up close: rounded, tall and flat-top', make: () => sampleMossRock('tan') },
   { id: 'moss-rock-gray', name: 'Dark gray moss rock boulders up close: rounded, tall and flat-top', make: () => sampleMossRock('gray') },
   { id: 'moss-rock-mix', name: 'Moss rock bed: ten boulders, every one its own', make: sampleMossRockMix },
+  { id: 'rock-library-tan', name: 'Rock library: 20 tan-brown moss rocks', make: () => sampleRockLibrary('tan') },
+  { id: 'rock-library-gray', name: 'Rock library: 20 dark gray moss rocks', make: () => sampleRockLibrary('gray') },
   { id: 'side-yard', name: 'Side yard with shed, raised bed and urn fountain', make: sampleSideYard },
   { id: 'beds-landing', name: 'Vego raised beds, deck planters and a clad entry landing', make: sampleBedsLanding },
   { id: 'mow-curb', name: 'Poured concrete mow curb: slant, mower and block', make: sampleMowCurb },
