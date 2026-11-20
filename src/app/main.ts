@@ -272,6 +272,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  // Stepping (the Views quick tool) waits while a plan is on its way or being built: the camera is not on that yard.
+  studio.stepBusy = () => EMBED && (!!embedPending || embedShowing);
   // Painted maps are uploaded through the view's renderer a slice per frame (see texture-jobs.ts).
   setTextureRenderer(studio.renderer);
   // Painted textures arrive from the worker after the build; redraw when they do.
@@ -443,6 +445,8 @@ function renderViews() {
   };
   // A place glides there in Walk (Studio.goToPlace); `place:<index>` in the menus.
   const goPlace = (i: number) => {
+    // Not while a plan is on its way or being built (or the Library's sample shows): the camera is not on this yard.
+    if (embedBusy()) return toast('Still building the 3D view. Try again in a moment.', 'warn');
     press('');
     if (studio && !studio.goToPlace(i)) toast(`${places[i]?.label ?? 'That place'} is outside the yard now.`, 'warn');
   };
@@ -1206,6 +1210,8 @@ function initFullscreen() {
 
   let on = false, raf = 0, last = -1;
   let pose: ReturnType<Studio['savePose']> | null = null;
+  /** The movement mode from before full screen, put back on leaving it (walking stays walking). */
+  let poseMode: Studio['mode'] = 'orbit';
   document.querySelectorAll<HTMLButtonElement>('#measure-modes button').forEach((b) => b.addEventListener('click', () => studio?.setMeasureMode(b.dataset.mode as MeasureMode)));
   document.querySelectorAll<HTMLButtonElement>('#nav-modes button').forEach((b) => b.addEventListener('click', () => studio?.setNavMode(b.dataset.mode as 'orbit' | 'walk' | 'fly')));
   const tick = () => {
@@ -1229,14 +1235,15 @@ function initFullscreen() {
     if (studio && libraryOpen()) {
       // Left with the Library open (Esc in the browser's own full screen): the Library keeps its sample on screen,
       // and closing it goes back to the view from before full screen, in orbit.
-      if (!on && pose && libraryReturn) libraryReturn = { ...libraryReturn, pose, mode: 'orbit' };
+      if (!on && pose && libraryReturn) libraryReturn = { ...libraryReturn, pose, mode: poseMode };
       pose = null;
     } else if (studio) {
       if (on) {
         pose = studio.savePose();
+        poseMode = studio.mode;
         studio.setNavMode('walk');
       } else {
-        studio.setNavMode('orbit');
+        studio.setNavMode(pose ? poseMode : 'orbit');
         if (pose) studio.restorePose(pose);
         pose = null;
       }
@@ -1328,6 +1335,9 @@ let embedGoPose: { pose: StartPose; origin: string } | null = null;
 const embedBusy = () => !!embedPending || embedShowing || libraryOpen();
 function goPoseNow(p: StartPose | null, origin: string) {
   const ok = !!(p && studio && embedBuilt && !embedBusy() && studio.goToPose(p));
+  // At the client start (Area Planner's start for a blueprint opened again): stepping goes on from it.
+  const p0 = studio?.places[0]?.pose;
+  if (ok && p && p0 && p0.x === p.x && p0.z === p.z && p0.yaw === p.yaw) studio!.markPlace(0);
   window.parent.postMessage({ source: 'growth-studio', type: 'go-pose', ok }, origin);
 }
 /** Uploaded files already asked for since the last plan, so a rebuild does not ask twice. */

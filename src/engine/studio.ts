@@ -774,7 +774,13 @@ export class Studio {
     // A start spot for this plan (the first build of a blueprint just opened); null: none (today's start). Left out,
     // whatever was asked for before still waits for the next yard shown.
     if (start !== undefined) this.startNext = start;
-    this.applyPlan(plan, keepCamera, true);
+    try {
+      this.applyPlan(plan, keepCamera, true);
+    } catch (e) {
+      // a plan that cannot even start building takes its start spot with it (as buildFailed does)
+      this.startNext = undefined;
+      throw e;
+    }
     return this.built();
   }
 
@@ -842,6 +848,8 @@ export class Studio {
     }
     this.inflight = null;
     this.restyleAfter = null;
+    // its start spot goes with it: a later rebuild of the same blueprint must not move the camera
+    this.startNext = undefined;
     this.shownToken = token;
     const waiting = this.whenBuilt;
     this.whenBuilt = [];
@@ -875,7 +883,12 @@ export class Studio {
       this.placeIndex = this.places.length ? 0 : -1;
       return;
     }
-    if (!keepCamera && this.views.length) this.jumpTo(this.views[0]);
+    if (!keepCamera && this.views.length) {
+      this.jumpTo(this.views[0]);
+      // a new yard: stepping starts again from its first view
+      this.placeIndex = -1;
+      this.viewIndex = 0;
+    }
   }
   /** A start spot waiting for the next yard shown (see setPlan). */
   private startNext: StartPose | null | undefined = undefined;
@@ -1533,6 +1546,8 @@ export class Studio {
   places: { label: string; pose: StartPose }[] = [];
   /** The place last gone to by stepping (-1: a generated view, see viewIndex). */
   private placeIndex = -1;
+  /** True while the app has a plan on its way (stepping is skipped then). Set by the app. */
+  stepBusy: () => boolean = () => false;
 
   /** Inside the lot and clear of every house, garage and shed (with a little room). */
   walkable(x: number, z: number): boolean {
@@ -2048,6 +2063,7 @@ export class Studio {
 
   /** The next (1) or previous (-1) saved view. The name of the view it goes to, or '' when there are none. */
   stepView(d: 1 | -1): string {
+    if (this.stepBusy()) return '';
     // The team's places first, then the generated views, round and round (a place off the lot now is passed over).
     const np = this.clientMode ? 0 : this.places.length, n = np + this.views.length;
     if (!n) return '';
@@ -2066,6 +2082,11 @@ export class Studio {
       return this.views[this.viewIndex].label;
     }
     return '';
+  }
+
+  /** The camera was put at place `i` some other way (a go-pose): stepping goes on from it. */
+  markPlace(i: number) {
+    if (i >= 0 && i < this.places.length) this.placeIndex = i;
   }
 
   /** Go to one of the team's places (the Views menu). False when it is off the lot. */
