@@ -1246,6 +1246,7 @@ const EMBED_ALLOWED_PARENT_ORIGINS: RegExp[] = [
   // The team suffix cannot be taken by another Vercel account, unlike a bare "area-planner" prefix.
   /^https:\/\/area-planner(-(git-[a-z0-9-]+|[a-z0-9]+))?-joshua-jackson\.vercel\.app$/,
   /^https:\/\/(www\.)?greenlionlandscape\.com$/, // Green Lion's own site
+  /^https:\/\/design\.greenlionlandscape\.com$/, // Area Planner's client links on Green Lion's own address (same deployment)
 ];
 
 const EMBED_EMPTY_NOTE = 'Draw areas in the Design tab to see them here';
