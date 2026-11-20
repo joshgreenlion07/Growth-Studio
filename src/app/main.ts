@@ -1399,7 +1399,7 @@ function onEmbedMessage(e: MessageEvent) {
     const fail = (message: string) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: false, message }, origin);
     if (!studio || !embedBuilt) return fail('The 3D view is not ready yet.');
     const mood = MOODS.some((m) => m.id === q.mood) ? (q.mood as Mood) : undefined;
-    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5, pose: sp ?? undefined }).then(
+    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5, pose: sp ?? undefined, hour: typeof (q as { hour?: unknown }).hour === 'number' ? (q as { hour: number }).hour : undefined }).then(
       // `posed`: the picture is from the start spot asked for (false: it was off the lot, so the view was used).
       (data) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: true, data, posed: !!sp && !!studio?.poseUsable(sp) }, origin),
       (err) => fail(err instanceof Error ? err.message : String(err)),
