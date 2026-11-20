@@ -1391,6 +1391,11 @@ export class Studio {
     return { eye, target };
   }
 
+  /** Whether a start spot is on the lot of the plan shown (else client mode and shots use the automatic start or view). */
+  poseUsable(p: StartPose): boolean {
+    return !!this.plan && Number.isFinite(p.x + p.z + p.yaw) && pointInPolygon([p.x, p.z], this.plan.site.boundary);
+  }
+
   /** Stand at a start spot in Walk (Area Planner's "Change in 3D"). False when it is off the lot. */
   goToPose(p: StartPose): boolean {
     if (!this.plan || !Number.isFinite(p.x + p.z + p.yaw) || !pointInPolygon([p.x, p.z], this.plan.site.boundary)) return false;
