@@ -752,7 +752,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'mossRock':
       case 'canyonBoulder': {
         // Moss rock and Canyon Tech boulders (builder/waterrock.ts): each its own shape, set partly buried.
-        buildWaterRock({ f, spec, add, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
+        buildWaterRock({ f, spec, add, quality, lift: lift?.(f.position), ground: (x, z) => { const w = local(x, 0, z); return height([w.x, w.z]) - y0; } });
         break;
       }
       case 'flagLip':
