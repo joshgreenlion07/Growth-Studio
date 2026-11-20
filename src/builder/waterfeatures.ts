@@ -7,6 +7,7 @@ import type { NightLight } from './features';
 import { poolTile } from '../engine/textures';
 import { WATER_LEVEL, type GroundModel } from './ground';
 import { catalogMaterial, pbrMaterial, segmentBox } from './materials';
+import type { Quality } from '../engine/post';
 import { rockField, type RockSpot } from './rocks';
 import { boxMapWorld, insetPolygon, outsetPolygon, slab } from './hardscape';
 import type { PoolLayout } from './pools';
@@ -128,7 +129,8 @@ function edgeRocks(poly: Vec2[], gm: GroundModel, seed: string, size: number, sp
   return out;
 }
 
-export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror | null, sky: SkyUniforms, pools: PoolLayout): WaterBuild {
+/** `quality`: how fine the boulders round the water are (builder/rocks.ts). */
+export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror | null, sky: SkyUniforms, pools: PoolLayout, quality: Quality = 'balanced'): WaterBuild {
   const group = new THREE.Group();
   group.name = 'water';
   const surfaces: THREE.Mesh[] = [];
@@ -227,7 +229,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
         geos.push(sheet);
         group.add(m);
         // Spill stone the water pours over.
-        rocks.push({ x: s2.p[0] - s2.dir[0] * 0.2, y: upper - 0.12, z: s2.p[1] - s2.dir[1] * 0.2, size: width * 0.95, rot: Math.atan2(perp[1], perp[0]), seed: `${w.id}-spill-${k}` });
+        rocks.push({ x: s2.p[0] - s2.dir[0] * 0.2, y: upper - 0.12, z: s2.p[1] - s2.dir[1] * 0.2, size: width * 0.95, rot: Math.atan2(perp[1], perp[0]), seed: `${w.id}-spill-${k}`, kind: 'flat' });
         for (const sd of [-1, 1]) {
           rocks.push({ x: s2.p[0] + perp[0] * (width / 2 + 0.25) * sd, y: lower, z: s2.p[1] + perp[1] * (width / 2 + 0.25) * sd, size: 0.7 + drop, rot: k + sd, seed: `${w.id}-cheek-${k}-${sd}` });
         }
@@ -248,7 +250,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
         for (let k = 0; k < 9; k++) {
           const r = rng(`${w.id}-basin-${k}`);
           const a = r() * Math.PI * 2, rr = r() * (half + 0.3);
-          rocks.push({ x: end[0] + Math.cos(a) * rr, y: -0.04, z: end[1] + Math.sin(a) * rr, size: 0.18 + r() * 0.2, rot: a, seed: `${w.id}-basin-${k}` });
+          rocks.push({ x: end[0] + Math.cos(a) * rr, y: -0.04, z: end[1] + Math.sin(a) * rr, size: 0.18 + r() * 0.2, rot: a, seed: `${w.id}-basin-${k}`, kind: 'cobble' });
         }
       }
     } else if (w.kind === 'pool' && w.polygon && pools.byId.has(w.id)) {
@@ -334,7 +336,7 @@ export function buildWater(plan: SitePlan, gm: GroundModel, mirror: PlanarMirror
       rocks.push({ x: c[0], y: rim - 0.18, z: c[1], size: 0.45, rot: 1.1, seed: `${w.id}-bubbler` });
     }
   }
-  group.add(rockField(rocks, 'water-rocks'));
+  group.add(rockField(rocks, 'water-rocks', quality));
 
   // The scene is reflected about one height only. It is set to the level that carries the most
   // water; water more than 5 cm off it (a raised spa beside a pool at grade) reflects the sky instead.

@@ -25,8 +25,13 @@ import type { Quality } from '../engine/post';
 
 /* ---- Cellular noise --------------------------------------------------------------- */
 
-function hash3(ix: number, iy: number, iz: number, seed: number): number {
-  let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(iz, 1274126177) + Math.imul(seed, 2147483647)) | 0;
+const HX = 374761393, HY = 668265263, HZ = 1274126177, HS = 2147483647;
+
+/**
+ * A cell's hash from the sum of its coordinates' and seed's products (imul by HX, HY, HZ and HS): each product is
+ * worked out once and reused across the cells that share it.
+ */
+function mix32(h: number): number {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
@@ -41,9 +46,11 @@ function noise3f(x: number, y: number, z: number, seed: number): number {
   fx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
   fy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
   fz = fz * fz * fz * (fz * (fz * 6 - 15) + 10);
-  const x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
-  const a = hash3(x0, y0, z0, seed), b = hash3(x1, y0, z0, seed), c = hash3(x0, y1, z0, seed), d = hash3(x1, y1, z0, seed);
-  const e = hash3(x0, y0, z1, seed), f = hash3(x1, y0, z1, seed), g = hash3(x0, y1, z1, seed), h = hash3(x1, y1, z1, seed);
+  // The eight corners' hashes, each axis' product worked out once.
+  const X0 = Math.imul(x0, HX), X1 = Math.imul(x0 + 1, HX), Y0 = Math.imul(y0, HY), Y1 = Math.imul(y0 + 1, HY);
+  const Z0 = Math.imul(z0, HZ) + Math.imul(seed, HS), Z1 = Math.imul(z0 + 1, HZ) + Math.imul(seed, HS);
+  const a = mix32((X0 + Y0 + Z0) | 0), b = mix32((X1 + Y0 + Z0) | 0), c = mix32((X0 + Y1 + Z0) | 0), d = mix32((X1 + Y1 + Z0) | 0);
+  const e = mix32((X0 + Y0 + Z1) | 0), f = mix32((X1 + Y0 + Z1) | 0), g = mix32((X0 + Y1 + Z1) | 0), h = mix32((X1 + Y1 + Z1) | 0);
   const ab = a + (b - a) * fx, cd = c + (d - c) * fx, ef = e + (f - e) * fx, gh = g + (h - g) * fx;
   const lo = ab + (cd - ab) * fy, hi = ef + (gh - ef) * fy;
   return lo + (hi - lo) * fz;
@@ -72,13 +79,15 @@ function worley3(x: number, y: number, z: number, seed: number, jitter = 0.9) {
     for (let j = -1; j <= 1; j++) {
       for (let i = -1; i <= 1; i++) {
         const cx = ix + i, cy = iy + j, cz = iz + k;
-        const dx = cx + 0.5 + (hash3(cx, cy, cz, seed) - 0.5) * jitter - x;
-        const dy = cy + 0.5 + (hash3(cx, cy, cz, seed + 1) - 0.5) * jitter - y;
-        const dz = cz + 0.5 + (hash3(cx, cy, cz, seed + 2) - 0.5) * jitter - z;
+        // The cell's hashes for seed to seed + 3, its coordinates' part worked out once.
+        const P = Math.imul(cx, HX) + Math.imul(cy, HY) + Math.imul(cz, HZ);
+        const dx = cx + 0.5 + (mix32((P + Math.imul(seed, HS)) | 0) - 0.5) * jitter - x;
+        const dy = cy + 0.5 + (mix32((P + Math.imul(seed + 1, HS)) | 0) - 0.5) * jitter - y;
+        const dz = cz + 0.5 + (mix32((P + Math.imul(seed + 2, HS)) | 0) - 0.5) * jitter - z;
         const d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < f1) {
           f1 = d2;
-          id = hash3(cx, cy, cz, seed + 3);
+          id = mix32((P + Math.imul(seed + 3, HS)) | 0);
         }
       }
     }
@@ -123,6 +132,17 @@ export interface MossRockLook {
   lichen: [string, string, string, string];
   moss: [string, string];
   soil: string;
+  /**
+   * How much of each lichen a stone of this kind carries, against the tan moss rock's (left out: as the tan rock):
+   * `paleCrust` shifts the pale crust's cover (about -0.2 nearly bare to +0.15 crusted), `darkCrust` and `orangeDots`
+   * scale the dark crust and the orange lichen, and `mossCover` shifts the moss cushions' cover. `porous` scales how
+   * many pockets the stone has (below 1 for a stone weathered smooth).
+   */
+  paleCrust?: number;
+  darkCrust?: number;
+  orangeDots?: number;
+  mossCover?: number;
+  porous?: number;
 }
 
 /** Tan moss rock: warm tan-brown stone, pale yellow-green lichen. */
@@ -152,6 +172,48 @@ export const MOSS_ROCK_GRAY: MossRockLook = {
   soil: '#3f3126',
 };
 
+/**
+ * Canyon Tech boulder (Resource Building Materials): weathered, angular stone in warm gray and tan, its breaks a warmer
+ * tan, with rust-orange lichen patches on the faces that look out, a little pale gray crust and little moss. Its shape is
+ * CANYON_CUT, on the wedge and ridge forms.
+ */
+export const MOSS_ROCK_CANYON: MossRockLook = {
+  rind: ['#58585b', '#605b55', '#4d4e50', '#676054', '#54514c'],
+  breakFace: ['#696054', '#5e554b', '#716557', '#544d44', '#655a4d'],
+  iron: ['#86522c', '#4e301b'],
+  ironAmount: 0.55,
+  pore: '#1b1b19',
+  lichen: ['#9c9d90', '#85887d', '#36332e', '#8e5530'],
+  moss: ['#6f7f3a', '#586b2f'],
+  soil: '#3f3126',
+  paleCrust: -0.2,
+  darkCrust: 0.5,
+  orangeDots: 1.2,
+  mossCover: -0.07,
+};
+
+/** Canyon Tech's breaks: more of them, crisper and blockier than moss rock's, so the boulder reads angular. */
+export const CANYON_CUT: MossRockCut = { extra: 4, crisp: 0.55, blocky: 0.7 };
+
+/**
+ * Weathered tan granite: warm tan-gray with darker lichen patches and a little rust (the plain Boulder of the catalog,
+ * the stones round a pond, a stream and a bubbler, and the tan boulders of the urn fountains).
+ */
+export const MOSS_ROCK_GRANITE: MossRockLook = {
+  rind: ['#554f46', '#4a453d', '#5d564c', '#423e38', '#534c43'],
+  breakFace: ['#5f574c', '#544c43', '#685e53', '#4c463e', '#5d5349'],
+  iron: ['#8e623a', '#523822'],
+  ironAmount: 0.45,
+  pore: '#1c1a17',
+  lichen: ['#8d8d80', '#76786b', '#302f2a', '#9a5a2e'],
+  moss: ['#5c6828', '#435423'],
+  soil: '#3f3126',
+  paleCrust: -0.28,
+  darkCrust: 1.8,
+  orangeDots: 0.5,
+  mossCover: -0.05,
+};
+
 export type MossRockForm = 'rounded' | 'tall' | 'flat' | 'ridge' | 'wedge';
 
 export interface MossRockSpec {
@@ -170,6 +232,20 @@ export interface MossRockSpec {
   form?: MossRockForm;
   /** Meters between the mesh's points on a medium rock (default 3.2 mm). Pores and lichen are the shader's, at any spacing. */
   spacing?: number;
+  /** A more angular stone than moss rock (a quarried or broken boulder); left out, moss rock's own breaks. */
+  cut?: MossRockCut;
+  /** At most this many cube-sphere segments a side, however big the rock (caps a big boulder's points). */
+  maxSegments?: number;
+}
+
+/** How a stone of another kind is broken: more breaks, crisper and blockier than moss rock's. */
+export interface MossRockCut {
+  /** Breaks added to moss rock's 8 to 11 (on the sides, steep). */
+  extra: number;
+  /** Scales how worn the breaks' edges are: below 1 crisper. */
+  crisp: number;
+  /** Added to the old block's squareness (moss rock's is about 2.6 to 3): higher is blockier. */
+  blocky: number;
 }
 
 const smin = (a: number, b: number, k: number) => {
@@ -182,8 +258,8 @@ const smin = (a: number, b: number, k: number) => {
  * Cube-sphere segments per edge, for about `spacing` meters between points on a rock of this mean half size. A big rock
  * is capped (its points spread wider), and the cap falls with the spacing, so a coarser setting also costs less.
  */
-function segmentsFor(meanHalf: number, spacing: number): number {
-  const cap = Math.round((160 * 0.0032) / spacing);
+function segmentsFor(meanHalf: number, spacing: number, most = Infinity): number {
+  const cap = Math.min(most, Math.round((160 * 0.0032) / spacing));
   return Math.round(Math.min(cap, Math.max(24, ((Math.PI / 2) * meanHalf) / spacing)));
 }
 
@@ -282,12 +358,13 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
   const { size } = spec;
   const r = rng(`mossrock:${spec.seed}`);
   const ch = character(spec.seed);
+  ch.porous *= look.porous ?? 1;
   const seed = Math.floor(r() * 1e6);
   const total = size[2] / (1 - spec.buried);
   const half = [size[0] / 2, total / 2, size[1] / 2];
   const meanHalf = (half[0] + half[1] + half[2]) / 3;
   const spacing = spec.spacing ?? 0.0032;
-  const n = segmentsFor(meanHalf, spacing);
+  const n = segmentsFor(meanHalf, spacing, spec.maxSegments);
   const form = spec.form ?? 'rounded';
   const sph = unitSphere(n);
   const count = sph.pos.length / 3;
@@ -296,7 +373,7 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
 
   // The breaks: planes the stone split along, mostly on the sides, two across the top. Most are fairly crisp, a few worn.
   const planes: { nx: number; ny: number; nz: number; h: number; k: number }[] = [];
-  const breaks = 8 + Math.floor(r() * 4);
+  const breaks = 8 + Math.floor(r() * 4) + (spec.cut?.extra ?? 0);
   let a0 = 0;
   for (let k = 0; k < breaks; k++) {
     let a = (k / breaks) * Math.PI * 2 + (r() - 0.5) * 0.9;
@@ -310,9 +387,9 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
       : form === 'tall' ? (r() - 0.45) * 0.55 : (r() - 0.3) * 1.0;
     const v = new THREE.Vector3(Math.cos(a) * Math.cos(el), Math.sin(el), Math.sin(a) * Math.cos(el)).normalize();
     const h = k === 0 && form === 'flat' ? 0.66 + r() * 0.06 : (form === 'ridge' && k <= 1) || (form === 'wedge' && k === 0) ? 0.6 + r() * 0.06 : 0.7 + r() * 0.2;
-    planes.push({ nx: v.x, ny: v.y, nz: v.z, h, k: k === 0 && form === 'flat' ? 0.008 : r() < 0.2 ? 0.03 + r() * 0.03 : 0.005 + r() * 0.012 });
+    planes.push({ nx: v.x, ny: v.y, nz: v.z, h, k: (k === 0 && form === 'flat' ? 0.008 : r() < 0.2 ? 0.03 + r() * 0.03 : 0.005 + r() * 0.012) * (spec.cut?.crisp ?? 1) });
   }
-  const sq = (form === 'tall' ? 2.9 : 2.6) + r() * 0.4;
+  const sq = (form === 'tall' ? 2.9 : 2.6) + r() * 0.4 + (spec.cut?.blocky ?? 0);
   /** The direction the split stepped along (its steps run across it). */
   const sd = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize().toArray();
   const ox = r() * 50, oy = r() * 50, oz = r() * 50;
@@ -426,7 +503,7 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
   relax(geo, 2);
 
   const cav = cavity(geo);
-  const moss = spec.moss ? mossCushions(geo, cav, size[2], seed, ch.moss) : null;
+  const moss = spec.moss ? mossCushions(geo, cav, size[2], seed, ch.moss + (look.mossCover ?? 0)) : null;
   paint(geo, look, { breakAt, poreAt, edgeAt, cav, moss, lichen: spec.moss }, seed, ch);
   return geo;
 }
@@ -485,17 +562,25 @@ function relax(geo: THREE.BufferGeometry, passes: number) {
 /** Mesh spacing by the yard's quality: the full detail at Max, coarser on phones (the shader's pores and lichen stay). */
 export const MOSS_ROCK_SPACING: Record<Quality, number> = { max: 0.0032, balanced: 0.0042, light: 0.006, draft: 0.009 };
 
+/**
+ * The cap on a big boulder's segments for the stones drawn in this build after it was approved on the moss rock shapes
+ * (Canyon Tech, the moss rock sold by weight, the urn fountains' boulders): a yard sets many of them, and a 5 ft boulder
+ * at the moss rock's own cap (160 at Max) is some 150k points. At 104 it is about 65k (a point every 7 mm or so on a
+ * 5 ft rock; pores and lichen are the shader's at any mesh); a rock up to about 2 ft is not changed by it.
+ */
+export const BOULDER_MAX_SEGMENTS: Record<Quality, number> = { max: 104, balanced: 84, light: 72, draft: 56 };
+
 const kept = new Map<string, THREE.BufferGeometry>();
 let keptPoints = 0;
-/** About 60 MB of finished rocks at most. */
-const KEEP_POINTS = 800_000;
+/** About 90 MB of finished rocks at most: a yard of some twenty boulders at Max, rebuilt for an edit elsewhere, finds them all. */
+const KEEP_POINTS = 1_200_000;
 
 /**
  * A moss rock, from a small cache: a yard rebuilt because something else in the plan changed does not work its rocks
  * out again. Returns a copy the caller owns (it may move and dispose it).
  */
 export function mossRock(spec: MossRockSpec): THREE.BufferGeometry {
-  const key = JSON.stringify([spec.seed, spec.size, spec.buried, spec.moss, spec.form ?? 'rounded', spec.spacing ?? 0.0032, spec.look ?? null]);
+  const key = JSON.stringify([spec.seed, spec.size, spec.buried, spec.moss, spec.form ?? 'rounded', spec.spacing ?? 0.0032, spec.look ?? null, spec.cut ?? null, spec.maxSegments ?? null]);
   let g = kept.get(key);
   if (g) {
     kept.delete(key);
@@ -662,9 +747,9 @@ function paint(geo: THREE.BufferGeometry, look: MossRockLook, f: Fields, seed: n
       const clear = (1 - Math.min(1, mo * 2)) * smooth(0.03, 0.09, y);
       const wq = fbm3f(x * 9, y * 9 + 3, z * 9, 2, seed + 6) - 0.5;
       const field = fbm3f(x * 4.5 + wq, y * 4.5 - wq, z * 4.5 + wq, 4, seed + 7) + 0.24 * Math.max(0, up) - 0.12 * b - 0.12 * Math.max(0, broad);
-      rk[i * 4] = smooth(0.4, 0.68, field + ch.lichen) * clear;
-      rk[i * 4 + 1] = Math.min(1, smooth(0.55, 0.72, fbm3f(x * 7 + 50, y * 7, z * 7, 3, seed + 16)) * (0.25 + 0.75 * Math.max(0, up)) * (1 - 0.7 * b) * clear * ch.dark);
-      rk[i * 4 + 2] = Math.min(1, smooth(0.56, 0.72, fbm3f(x * 6 + 90, y * 6, z * 6, 3, seed + 17)) * (0.35 + 0.4 * (1 - Math.abs(up))) * clear * ch.orange);
+      rk[i * 4] = smooth(0.4, 0.68, field + ch.lichen + (look.paleCrust ?? 0)) * clear;
+      rk[i * 4 + 1] = Math.min(1, smooth(0.55, 0.72, fbm3f(x * 7 + 50, y * 7, z * 7, 3, seed + 16)) * (0.25 + 0.75 * Math.max(0, up)) * (1 - 0.7 * b) * clear * ch.dark * (look.darkCrust ?? 1));
+      rk[i * 4 + 2] = Math.min(1, smooth(0.56, 0.72, fbm3f(x * 6 + 90, y * 6, z * 6, 3, seed + 17)) * (0.35 + 0.4 * (1 - Math.abs(up))) * clear * ch.orange * (look.orangeDots ?? 1));
     }
     rk[i * 4 + 3] = shade;
   }
@@ -696,7 +781,12 @@ export function mossRockMaterial(look: MossRockLook = MOSS_ROCK_TAN): THREE.Mesh
   m.onBeforeCompile = (s) => {
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 rkA;\nvarying vec4 vRkA;\nvarying vec3 vRk;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvRk = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvRkA = rkA;');
+      .replace(
+        '#include <worldpos_vertex>',
+        // Instanced (the stones of a water feature and the plain boulders share a few shapes): each stone's own place, so
+        // no two show the same pores and lichen.
+        '#include <worldpos_vertex>\nvec4 rkP = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\nrkP = instanceMatrix * rkP;\n#endif\nvRk = (modelMatrix * rkP).xyz;\nvRkA = rkA;',
+      );
     s.fragmentShader = s.fragmentShader
       .replace(
         '#include <common>',
@@ -805,7 +895,7 @@ diffuseColor.rgb = rkStone;`,
 }`,
       );
   };
-  m.customProgramCacheKey = () => `mossrock-9:${key}`;
+  m.customProgramCacheKey = () => `mossrock-10:${key}`;
   materials.set(key, m);
   return m;
 }

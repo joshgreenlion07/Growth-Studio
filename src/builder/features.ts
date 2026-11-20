@@ -293,6 +293,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     const r = rng(f.id);
     // What the water feature and bowl planter builders (pillarfountain.ts) hand back, in this feature's local space.
     const sink: FountainSink = {
+      quality,
       add,
       object(m) {
         o.add(m);
@@ -1004,7 +1005,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
     o.name = `feature-${f.id}`;
     group.add(o);
   }
-  group.add(rockField(rocks, 'boulders'));
+  group.add(rockField(rocks, 'boulders', quality));
 
   return {
     object: group,

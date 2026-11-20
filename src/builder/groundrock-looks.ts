@@ -1,71 +1,86 @@
-import type { RockLook, RockShape } from './stonegeo';
+import type { MossRockForm, MossRockLook } from './mossrock';
 
 /*
  * The moss rock of a customer job's finished front yard (2026 video, clear late-morning sun), for the boulders and border
- * stones of siteplan/groundrock.ts. The boulders are a light tan-gray, weathered smooth, speckled, with beige patches
- * and small dark crust lichen; the border stones are that tan-gray, a paler buff-tan, and (about a quarter) dark
- * gray-green crusted with pale lichen and a little moss. Colors are the stone's own (before the rock's shading), set so
- * the rocks render at the tones measured from the video's sunlit faces.
+ * stones of siteplan/groundrock.ts, drawn in fine detail by builder/mossrock.ts. The boulders are a light tan-gray,
+ * weathered smooth, speckled, with beige patches and small dark crust lichen; the border stones are that tan-gray, a
+ * paler buff-tan, and (about a quarter) dark gray-green crusted with pale lichen and a little moss. Colors are the
+ * stone's own (before the rock's shading), set so the rocks render at the tones measured from the video's sunlit faces.
+ * Each look's rind is the weathered skin, its breaks the same stone a little warmer and lighter where it split.
  */
 
-/** Light tan-gray moss rock (border stones). */
-export const MOSS_TAN_GRAY: RockLook = {
-  stone: ['#776b5d', '#655b4e', '#877967', '#574f45', '#94826c'],
-  streak: '#3a3530',
-  soil: '#4a3a2c',
-  lichen: '#3a3b35',
-  lichenAmount: 0.5,
-  rust: '#94744f',
-  rustAmount: 0.12,
+/** Light tan-gray moss rock (border stones): dark crust lichen in small patches, a few beige ones. */
+export const MOSS_TAN_GRAY: MossRockLook = {
+  rind: ['#5d5349', '#4f473d', '#695e50', '#443e36', '#736554'],
+  breakFace: ['#675a4a', '#5a4e3f', '#706250', '#504538', '#786852'],
+  iron: ['#94744f', '#5a4632'],
+  ironAmount: 0.3,
+  pore: '#221e1b',
+  lichen: ['#a39c88', '#8a8778', '#3a3b35', '#9a6a3a'],
   moss: ['#4d5230', '#3c4226'],
-  mossAmount: 0.06,
+  soil: '#4a3a2c',
+  paleCrust: -0.1,
+  darkCrust: 1.6,
+  orangeDots: 0.3,
+  mossCover: -0.04,
+  porous: 0.6,
 };
 
 /** The garden and showpiece boulders: the same stone in bigger pieces, more weathered, with more dark crust lichen. */
-export const MOSS_BOULDER: RockLook = {
-  stone: ['#6b6157', '#594f46', '#7a6e60', '#4d463e', '#877765'],
-  streak: '#35302b',
-  soil: '#4a3a2c',
-  lichen: '#34352f',
-  lichenAmount: 0.8,
-  rust: '#94744f',
-  rustAmount: 0.1,
+export const MOSS_BOULDER: MossRockLook = {
+  rind: ['#534c44', '#453e37', '#5f564b', '#3c3730', '#695d4f'],
+  breakFace: ['#5e5347', '#50463b', '#685b4d', '#463d33', '#706150'],
+  iron: ['#94744f', '#5a4632'],
+  ironAmount: 0.25,
+  pore: '#1f1b18',
+  lichen: ['#9c9584', '#858273', '#34352f', '#9a6a3a'],
   moss: ['#4d5230', '#3c4226'],
-  mossAmount: 0.06,
+  soil: '#4a3a2c',
+  paleCrust: -0.08,
+  darkCrust: 2.2,
+  orangeDots: 0.25,
+  mossCover: -0.04,
+  porous: 0.2,
 };
 
 /** Buff-tan moss rock, the palest of the border stones. */
-export const MOSS_BUFF: RockLook = {
-  stone: ['#a08c70', '#8b7860', '#ae997c', '#7a6851', '#baa384'],
-  streak: '#584c3f',
-  soil: '#4a3a2c',
-  lichen: '#4a4a42',
-  lichenAmount: 0.35,
-  rust: '#94744f',
-  rustAmount: 0.1,
+export const MOSS_BUFF: MossRockLook = {
+  rind: ['#7d6d57', '#6c5e4b', '#887761', '#5f513f', '#917f67'],
+  breakFace: ['#85735a', '#75634d', '#907d63', '#685742', '#978469'],
+  iron: ['#94744f', '#5a4632'],
+  ironAmount: 0.25,
+  pore: '#2d261f',
+  lichen: ['#b6af99', '#9d9a89', '#4a4a42', '#9a6a3a'],
   moss: ['#4d5230', '#3c4226'],
-  mossAmount: 0.06,
+  soil: '#4a3a2c',
+  paleCrust: -0.14,
+  darkCrust: 1.1,
+  orangeDots: 0.25,
+  mossCover: -0.04,
+  porous: 0.6,
 };
 
-/** Dark gray-green moss rock crusted with pale lichen (some of the border stones). */
-export const MOSS_DARK_LICHEN: RockLook = {
-  stone: ['#55514a', '#49463f', '#5f5a52', '#403d38'],
-  streak: '#2c2c2a',
-  soil: '#4a3a2c',
-  lichen: '#7c7f74',
-  lichenAmount: 0.55,
-  rust: '#8a6a4a',
-  rustAmount: 0.05,
+/** Dark gray-green moss rock crusted with pale lichen (some of the border stones), a little more moss. */
+export const MOSS_DARK_LICHEN: MossRockLook = {
+  rind: ['#423f3a', '#393731', '#4a4640', '#32302c'],
+  breakFace: ['#4a463f', '#413e38', '#534e46', '#3a3732'],
+  iron: ['#8a6a4a', '#4a3828'],
+  ironAmount: 0.15,
+  pore: '#171614',
+  lichen: ['#8e9282', '#7c7f74', '#2c2c2a', '#8a6a4a'],
   moss: ['#4d5230', '#3c4226'],
-  mossAmount: 0.15,
+  soil: '#4a3a2c',
+  paleCrust: 0.06,
+  darkCrust: 0.6,
+  orangeDots: 0.2,
+  mossCover: 0.03,
+  porous: 0.8,
 };
 
-/** A border stone: low, rounded, a few worn breaks. */
-export const BORDER_STONE: RockShape = { squareness: 3.0, cuts: 5, cutDepth: [0.76, 0.93], edge: 0.07, flatTop: [0.78, 0.06], lump: 0.05, rough: 0.025, pocket: 0.05, lean: 5 };
-/** A garden boulder: a weathered block worn smooth, its breaks soft. */
-export const GARDEN_BOULDER: RockShape = { squareness: 2.9, cuts: 7, cutDepth: [0.66, 0.9], edge: 0.05, lump: 0.05, rough: 0.03, pocket: 0.03, lean: 4 };
-/** A showpiece: a tall stone on end, broken along a few long planes. */
-export const SHOWPIECE: RockShape = { squareness: 3.0, cuts: 8, cutDepth: [0.6, 0.86], edge: 0.04, lump: 0.06, rough: 0.03, pocket: 0.03, lean: 8 };
+/** The moss rock shape each sold-by-weight piece takes: border stones and garden boulders rounded, a showpiece on end. */
+export const DOUBLE_HEAD_FORM: MossRockForm = 'rounded';
+export const GARDEN_BOULDER_FORM: MossRockForm = 'rounded';
+export const SHOWPIECE_FORM: MossRockForm = 'tall';
 
 /** A border stone's look: about a quarter dark and lichen-crusted, the rest tan-gray and buff. `h` is a number in [0, 1). */
-export const borderLook = (h: number): RockLook => (h < 0.28 ? MOSS_DARK_LICHEN : h < 0.64 ? MOSS_TAN_GRAY : MOSS_BUFF);
+export const borderLook = (h: number): MossRockLook => (h < 0.28 ? MOSS_DARK_LICHEN : h < 0.64 ? MOSS_TAN_GRAY : MOSS_BUFF);
