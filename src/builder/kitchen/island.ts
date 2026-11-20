@@ -4,6 +4,7 @@ import type { FeatureSpec } from '../../siteplan/catalog';
 import { DEFAULT_BAR_LEDGE, counterFinish, frontLineIn, islandBaseOffsetIn, kitchenPartById, partStub, standsOnFloor, veneerFinish, type KitchenIsland, type KitchenPart } from '../../siteplan/kitchen';
 import { IN, bx, counterMaterial, kitchenMats, veneerMaterial, type KitchenSink, type Mover } from './kit';
 import { buildPart, notched, ownsInside, stool, type PartCtx } from './parts';
+import { griddleStation } from './blackstone';
 
 /*
  * An outdoor kitchen island from its bays (siteplan/kitchen.ts). Local space: the base centered on the origin, its
@@ -239,6 +240,10 @@ export function buildIsland(sink: KitchenSink, isl: KitchenIsland, ch: IslandCho
 /** A kitchen feature: an island, or one part shown on its own (a stub of island round it, or a stool on its own). */
 export function buildKitchenFeature(sink: KitchenSink, spec: FeatureSpec, options: Record<string, boolean> | undefined, seed: string) {
   const opt = (key: string) => options?.[key] ?? spec.options?.find((o) => o.key === key)?.default ?? false;
+  if (spec.kind === 'griddleStation') {
+    griddleStation(sink, spec, options, seed);
+    return;
+  }
   if (spec.kind === 'kitchenIsland' && spec.island) {
     buildIsland(shifted(sink, islandBaseOffsetIn(spec.island)), spec.island, { underLight: opt('underLight'), barLedge: opt('barLedge'), seed, options });
     return;

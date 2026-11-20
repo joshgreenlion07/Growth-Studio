@@ -505,7 +505,8 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
         break;
       }
       case 'kitchenIsland':
-      case 'kitchenPart': {
+      case 'kitchenPart':
+      case 'griddleStation': {
         // An island assembled from the kitchen parts, or one part on its own (builder/kitchen/), inches to meters.
         const yaw = (-f.rotationDeg * Math.PI) / 180;
         buildKitchenFeature({
@@ -720,7 +721,7 @@ export function buildFeatures(features: FeaturePlacement[], height: (p: Vec2) =>
       case 'patioHeater':
       case 'ceilingFan': {
         // Decor and furniture from a finished job (builder/decor/), drawn to its photos.
-        buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position) });
+        buildDecor(kind, { f, spec, add, light, fire, glow: (m) => { owned.push(m); decorGlow.push(m); }, ceiling: ceiling?.(f.position), lift: lift?.(f.position), act, anchor: (x, y, z) => anchorAt(o, x, y, z), own: (m) => owned.push(m) });
         break;
       }
       case 'shedResin':

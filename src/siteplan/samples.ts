@@ -20,6 +20,7 @@ import { sampleStepping } from './sample-stepping';
 import { sampleFire } from './sample-fire';
 import { sampleWaterFire } from './sample-water-fire';
 import { sampleKitchenIsland } from './sample-kitchen-island';
+import { sampleHeatersGriddles } from './sample-heaters-griddles';
 import { sampleRanch } from './sample-ranch';
 import { sampleSoftPlants } from './sample-soft-plants';
 import { sampleDryCreek } from './sample-dry-creek';
@@ -538,6 +539,7 @@ export const SAMPLES = [
   { id: 'fire', name: 'Fire: fire pits, fire table, fire and water bowl, grill', make: sampleFire },
   { id: 'water-fire', name: 'Water and fire: basalt fountain, glazed birdbaths, Florence fire pit', make: sampleWaterFire },
   { id: 'kitchen-island', name: 'Outdoor kitchen: ledgerstone griddle island', make: sampleKitchenIsland },
+  { id: 'heaters-griddles', name: 'Infratech patio heaters and Blackstone griddles', make: sampleHeatersGriddles },
   { id: 'stepping', name: 'Stepping stones: slabs, poured pads, flagstone', make: sampleStepping },
   { id: 'ranch', name: 'Single-story ranch with hip roof', make: sampleRanch },
   { id: 'soft-plants', name: 'Front-yard soft plants: verbena, lantana, sedum, pittosporum, box honeysuckle', make: sampleSoftPlants },
