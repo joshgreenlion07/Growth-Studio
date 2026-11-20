@@ -82,6 +82,8 @@ Messages use `window.postMessage`:
 | Studio to parent, once that file is read | `{ source: 'growth-studio', type: 'asset', id, ok: true }` or `{ ..., ok: false, message }` |
 | Parent to studio, to get plant pictures | `{ source: 'area-planner', type: 'plant-thumbs', ids? }` (`ids` are catalog plant ids; leave it out for all) |
 | Studio to parent, one per plant as each is drawn | `{ source: 'growth-studio', type: 'plant-thumb', id, url }` (`url` is a small JPEG data URL of the plant at mature size) |
+| Parent to studio, to get feature pictures (the planner's feature picker, for the cards on screen) | `{ source: 'area-planner', type: 'feature-thumbs', ids }` (catalog feature ids, at most 200; they go to the front of the picture queue, the first id first) |
+| Studio to parent, one per feature as each is drawn | `{ source: 'growth-studio', type: 'feature-thumb', id, url }` (`url` is the Library card's 176 px JPEG data URL) |
 | Parent to studio, to show a build stage | `{ source: 'area-planner', type: 'stage', stage }` (`'demo'`, `'excavate'`, `'trench'`, `'backfill'`, `'base'`, `'bedding'` or `'finished'`) |
 | Studio to parent, when the person picks a stage in the dock | `{ source: 'growth-studio', type: 'stage', stage }` |
 | Parent to studio, cut away (removed 2026-11-19; ignored, kept so an older parent does no harm; the studio no longer sends it) | `{ source: 'area-planner', type: 'cutaway', on }` |
@@ -614,8 +616,9 @@ Messages use `window.postMessage`:
   - Parent to studio: `{ source: 'area-planner', type: 'approvals', approvals: { on: string[], off: string[] } }`
     (send after `ready` and after every change; `null` means the defaults) and `{ ..., type: 'library', open }`.
   - After `ready` and after each `approvals`, the studio sends `{ type: 'catalog', approvals, plants, features,
-    structures }`: approved plant ids, approved placeable features `{ id, name, group, swap, footprint, options?, sizes?, size?,
-    plantable?, cover?, steps? }` (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
+    structures }`: approved plant ids, approved placeable features `{ id, name, group, swap, footprint, shelf?, maker?, options?, sizes?, size?,
+    plantable?, cover?, steps? }` (`shelf` = the shelf within the group for the planner's feature picker, `featureShelf` in
+    `src/siteplan/featureshelves.ts`; `maker` = the maker of a maker's product) (`sizes` = `{ label, size: [length, depth, height] }[]`, `size` = the standard one's index) and
     `{ cover, calroom }`; after `approvals` it also sends `{ type: 'materials', materials }`, the same list as
     `ready`, now filtered to approved looks.
   - `swap` is the class a feature switches within (`swapClassOf` in `catalog.ts`: "Pergolas and gazebos", "Fire
