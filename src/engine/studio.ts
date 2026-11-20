@@ -1363,15 +1363,37 @@ export class Studio {
   private static readonly TAG_NEAR = 0.9144;
   private static readonly TAG_YAW = THREE.MathUtils.degToRad(30);
   private static readonly TAG_SKIP = new Set(['light', 'lights', 'stringLights']);
-  /** Each action's item footprint (world box), worked out once per build. */
-  private tagBoxes = new WeakMap<FeatureAction, THREE.Box3 | null>();
-  private tagBox(a: FeatureAction): THREE.Box3 | null {
+  /** Each action's item footprint: a box in the item's own frame (so a turned item stays tight) and the matrix that
+   *  takes world points into that frame, worked out once per build. */
+  private tagBoxes = new WeakMap<FeatureAction, { box: THREE.Box3; inv: THREE.Matrix4; scale: number } | null>();
+  private tagBox(a: FeatureAction): { box: THREE.Box3; inv: THREE.Matrix4; scale: number } | null {
     if (this.tagBoxes.has(a)) return this.tagBoxes.get(a) ?? null;
     let root: THREE.Object3D | null = a.anchors[0] ?? null;
     while (root && root.userData?.itemId !== a.itemId) root = root.parent;
-    const box = root ? new THREE.Box3().setFromObject(root) : null;
-    this.tagBoxes.set(a, box && !box.isEmpty() ? box : null);
-    return this.tagBoxes.get(a) ?? null;
+    let out: { box: THREE.Box3; inv: THREE.Matrix4; scale: number } | null = null;
+    if (root) {
+      root.updateWorldMatrix(true, true);
+      const inv = root.matrixWorld.clone().invert(), m = new THREE.Matrix4(), b = new THREE.Box3(), box = new THREE.Box3();
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.geometry) return;
+        if ((mesh as unknown as THREE.InstancedMesh).isInstancedMesh) {
+          const im = mesh as unknown as THREE.InstancedMesh;
+          im.computeBoundingBox();
+          if (!im.boundingBox) return;
+          b.copy(im.boundingBox);
+        } else {
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+          if (!mesh.geometry.boundingBox) return;
+          b.copy(mesh.geometry.boundingBox);
+        }
+        box.union(b.applyMatrix4(m.multiplyMatrices(inv, mesh.matrixWorld)));
+      });
+      const sc = root.getWorldScale(new THREE.Vector3());
+      if (!box.isEmpty()) out = { box, inv, scale: Math.max(1e-6, (Math.abs(sc.x) + Math.abs(sc.z)) / 2) };
+    }
+    this.tagBoxes.set(a, out);
+    return out;
   }
 
   /** The usable thing the walker faces most directly, within 3 ft of it and in plain sight; or null. */
@@ -1379,27 +1401,35 @@ export class Studio {
     if (!this.build) return null;
     const cam = this.camera.position, look = this.controls.target.clone().sub(cam);
     const yaw0 = Math.atan2(look.x, look.z);
-    const w = new THREE.Vector3(), dir = new THREE.Vector3();
+    const w = new THREE.Vector3(), dir = new THREE.Vector3(), camL = new THREE.Vector3();
     const shown = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
     const itemOf = (o: THREE.Object3D | null) => { for (; o; o = o.parent) if (typeof o.userData?.itemId === 'string') return o.userData.itemId as string; return null; };
-    let best: { action: FeatureAction; anchor: THREE.Object3D } | null = null, bestA = Studio.TAG_YAW;
+    // Facing: within 30 degrees side to side, and never wider than the lens shows.
+    const halfH = Math.atan(Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) * this.camera.aspect);
+    let best: { action: FeatureAction; anchor: THREE.Object3D } | null = null, bestA = Math.min(Studio.TAG_YAW, halfH * 0.9);
     for (const a of this.build.features.actions) {
       if (Studio.TAG_SKIP.has(a.key)) continue;
       // Near: within 3 ft of the thing's footprint (side to side), or of the point itself when it has no footprint.
       const box = this.tagBox(a);
       for (const an of a.anchors) {
         an.getWorldPosition(w);
-        const near = box
-          ? Math.hypot(Math.max(box.min.x - cam.x, 0, cam.x - box.max.x), Math.max(box.min.z - cam.z, 0, cam.z - box.max.z))
-          : Math.hypot(w.x - cam.x, w.z - cam.z);
+        let near: number;
+        if (box) {
+          const c = camL.copy(cam).applyMatrix4(box.inv), bb = box.box;
+          near = Math.hypot(Math.max(bb.min.x - c.x, 0, c.x - bb.max.x), Math.max(bb.min.z - c.z, 0, c.z - bb.max.z)) * box.scale;
+        } else near = Math.hypot(w.x - cam.x, w.z - cam.z);
         if (near > Studio.TAG_NEAR) continue;
         dir.subVectors(w, cam);
         const d = dir.length();
         if (d < 0.05) continue;
         dir.divideScalar(d);
         // Facing it: the turn to it, side to side only (a fire pit or grill sits well below the eyes up close).
-        let ang = Math.abs(Math.atan2(w.x - cam.x, w.z - cam.z) - yaw0);
-        if (ang > Math.PI) ang = 2 * Math.PI - ang;
+        // Right above or below the eye (under a pergola, over a counter) counts as facing, without a jittery angle.
+        let ang = 0;
+        if (Math.hypot(w.x - cam.x, w.z - cam.z) > 0.15) {
+          ang = Math.abs(Math.atan2(w.x - cam.x, w.z - cam.z) - yaw0);
+          if (ang > Math.PI) ang = 2 * Math.PI - ang;
+        }
         if (ang >= bestA) continue;
         // Not behind a wall, fence or another thing: the first surface on the way is its own (or nothing).
         this.raycaster.set(cam, dir);
@@ -1432,7 +1462,8 @@ export class Studio {
     const p = an.getWorldPosition(new THREE.Vector3());
     p.y += 0.35;
     p.project(this.camera);
-    if (p.z > 1 || p.z < -1) return off();
+    // Off the screen (looking up or down, or zoomed in): no tag.
+    if (p.z > 1 || p.z < -1 || Math.abs(p.x) > 1.02 || Math.abs(p.y) > 1.02) return off();
     this.tagShown = true;
     const t = { text: this.tagText(a), x: Math.round(((p.x + 1) / 2) * this.container.clientWidth), y: Math.round(((1 - p.y) / 2) * this.container.clientHeight) };
     const key = `${t.text}|${t.x}|${t.y}`;
