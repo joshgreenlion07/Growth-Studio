@@ -228,11 +228,16 @@ Messages use `window.postMessage`:
 - Moss rock by weight (group Accents, swap class Boulders): `moss-rock-double-head` (10-80 lb border stones),
   `moss-rock-garden-boulder` (50-300 lb) and `moss-rock-showpiece-boulder` (800-1,500 lb, standing on end). Each size
   is set from its weight (165 lb a cubic foot, the stone filling half its box; `mossSizeIn`), in the light tan-gray of
-  the job's boulders; the double-head mixes that with buff and dark lichen-crusted stones.
+  the job's boulders; the double-head mixes that with buff and dark lichen-crusted stones. All are drawn in fine detail
+  by `builder/mossrock.ts` (the looks are `builder/groundrock-looks.ts`), as are the Canyon Tech boulder, the plain
+  `boulder`, the boulders round a pond, stream or pondless fall (`builder/rocks.ts`, instanced shapes) and the urn
+  fountains' boulders; a big boulder's mesh is capped (`BOULDER_MAX_SEGMENTS`). Pebbles, cobble, gravel and the four-fall
+  waterfall's own rocks are unchanged.
 - A rock border is an edging line whose look has `rockBorder` (shelf `Rock border`, use `edging`, sent in the looks
   list): `moss-rock-border-double-head` lays double-head moss rock along the line as drawn, one stone at a time (15-80
-  lb, 1-7 in apart, wandering 3 in off the line, now and then a small stone tucked beside a big one), each its own shape
-  seeded by the line's id (`builder/rockborder.ts`). A closed line rings a bed (a dry creek's both banks). Its look
+  lb, 1-7 in apart, wandering 3 in off the line, now and then a small stone tucked beside a big one), each placed, sized
+  and turned from the line's id (`builder/rockborder.ts`), its shape one of twelve moss rock shapes per stone look, drawn
+  as instances. A closed line rings a bed (a dry creek's both banks). Its look
   carries `rockBorder: { lb, stonesPerFt, lbPerFt }` for the parent's takeoff (`rockBorderPerFoot`: about 0.8 stones
   and 36 lb a linear foot) and `sizeText`. The material pointer reports part `stone`.
   The sample **Dry creek bed** shows them all: the cobble mix creek ringed with the border, a showpiece group, garden

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { rng } from '../siteplan/geometry';
 import type { Vec2 } from '../siteplan/types';
+import type { Quality } from '../engine/post';
 import { GLOBAL } from '../engine/foliage';
 import { clamp01, smooth, vnoise } from '../engine/noise';
 import { ledgerStoneSet, patinaBowlSet, pillarStuccoSet } from '../engine/fountain-surfaces';
@@ -355,6 +356,8 @@ function bowlGeometry(): THREE.BufferGeometry {
 }
 
 export interface FountainSink {
+  /** The yard's quality (how fine a boulder's mesh is, builder/mossrock.ts); left out, Balanced. */
+  quality?: Quality;
   /** A static part, merged by material. */
   add(m: THREE.Material, g: THREE.BufferGeometry): void;
   /** An object of its own (water), in the feature's local space. */

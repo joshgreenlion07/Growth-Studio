@@ -1,13 +1,25 @@
 import * as THREE from 'three';
 import { rng } from '../siteplan/geometry';
 import { vnoise } from '../engine/noise';
+import type { Quality } from '../engine/post';
 import { rockMaterial } from './materials';
+import { FIELD_MAX_SEGMENTS, MOSS_ROCK_GRANITE, MOSS_ROCK_SPACING, buildMossRock, mossRockMaterial, type MossRockForm } from './mossrock';
 
-/** Procedural stones: a few shared shapes, placed as instances. */
+/*
+ * Stones placed as instances of a few shared shapes: the plain Boulder of the catalog and the stones of the built water
+ * features (round a pond, along a stream's banks, a fall's spill and cheek stones, the head stack, a bubbler's rock).
+ * The boulders are moss rock in weathered tan granite (builder/mossrock.ts), each shape fitted to the box of the stone it
+ * replaced, so a stone stands where it stood and covers what it covered; the material draws pores and lichen from where
+ * each stone is, so no two show the same. Small loose stones (a pondless fall's cobble basin) keep the plain cobble.
+ */
 
-const variants: THREE.BufferGeometry[] = [];
+const VARIANTS = 5;
+/** Moss rock shapes fitted to each plain shape's box, so a long stream bank does not repeat one stone every fifth. */
+const ALTERNATES = 3;
+const cobbles: THREE.BufferGeometry[] = [];
 
-function rockGeometry(seed: number): THREE.BufferGeometry {
+/** A plain lumpy stone about 1 m across, its foot flattened a little below y = 0 (the cobble, and the boulders' box). */
+function cobbleGeometry(seed: number): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(0.5, 3);
   const p = g.getAttribute('position') as THREE.BufferAttribute;
   const r = rng(`rock${seed}`);
@@ -33,12 +45,51 @@ function rockGeometry(seed: number): THREE.BufferGeometry {
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   g.computeVertexNormals();
+  g.computeBoundingBox();
   return g;
 }
 
+/** The plain cobble shape `i` (of five). */
 export function rockVariant(i: number): THREE.BufferGeometry {
-  if (!variants.length) for (let k = 0; k < 5; k++) variants.push(rockGeometry(k + 1));
-  return variants[((i % variants.length) + variants.length) % variants.length];
+  if (!cobbles.length) for (let k = 0; k < VARIANTS; k++) cobbles.push(cobbleGeometry(k + 1));
+  return cobbles[((i % VARIANTS) + VARIANTS) % VARIANTS];
+}
+
+/**
+ * An instanced boulder's mesh is this much coarser than a lone boulder's at the same quality: one shape is drawn for many
+ * stones, built at about 1 m and scaled down to each (so at the stones' own size it is about as fine as a lone rock's).
+ */
+export const INSTANCED_COARSER = 2.5;
+
+const boulders = new Map<string, THREE.BufferGeometry>();
+
+/**
+ * Boulder shape `i` (alternate `alt`) in moss rock: fitted to the box of plain shape `i` (its length, depth, height and
+ * the part below y = 0), so every stone keeps the place and size it had. Built once per quality and form, when first
+ * needed, and kept; light (FIELD_MAX_SEGMENTS), as one shape is drawn for many stones.
+ */
+export function boulderVariant(i: number, form: MossRockForm, quality: Quality, alt = 0): THREE.BufferGeometry {
+  const v = ((i % VARIANTS) + VARIANTS) % VARIANTS;
+  const key = `${v}:${alt}:${form}:${quality}`;
+  let g = boulders.get(key);
+  if (g) return g;
+  const box = rockVariant(v).boundingBox!;
+  const total = box.max.y - box.min.y;
+  g = buildMossRock({
+    size: [box.max.x - box.min.x, box.max.z - box.min.z, box.max.y],
+    buried: -box.min.y / total,
+    seed: alt ? `field-boulder:${v}:${form}:${alt}` : `field-boulder:${v}:${form}`,
+    moss: true,
+    form,
+    look: MOSS_ROCK_GRANITE,
+    spacing: MOSS_ROCK_SPACING[quality] * INSTANCED_COARSER,
+    maxSegments: FIELD_MAX_SEGMENTS[quality],
+  });
+  // Centered as the plain shape was.
+  g.translate((box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2);
+  g.computeBoundingSphere();
+  boulders.set(key, g);
+  return g;
 }
 
 export interface RockSpot {
@@ -48,19 +99,31 @@ export interface RockSpot {
   size: number;
   rot: number;
   seed: string;
+  /** 'cobble': a small loose stone, kept plain. 'flat': a boulder with a flat top (a fall's spill stone). */
+  kind?: 'cobble' | 'flat';
 }
 
-/** One instanced mesh per rock shape. */
-export function rockField(spots: RockSpot[], name = 'rocks'): THREE.Group {
+/** One instanced mesh per stone shape. `quality`: how fine the boulders' mesh is. */
+export function rockField(spots: RockSpot[], name = 'rocks', quality: Quality = 'balanced'): THREE.Group {
   const group = new THREE.Group();
   group.name = name;
   if (!spots.length) return group;
-  const buckets: RockSpot[][] = [[], [], [], [], []];
-  spots.forEach((s) => buckets[Math.floor(rng(s.seed)() * 5)].push(s));
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), t = new THREE.Vector3();
-  buckets.forEach((list, vi) => {
-    if (!list.length) return;
-    const im = new THREE.InstancedMesh(rockVariant(vi), rockMaterial(), list.length);
+  const buckets = new Map<string, { kind: RockSpot['kind']; v: number; alt: number; list: RockSpot[] }>();
+  for (const s of spots) {
+    // The shape's box is drawn from the seed as it always was, so a stone keeps its proportions; the alternate from
+    // the seed apart, so it does not change them.
+    const v = Math.floor(rng(s.seed)() * VARIANTS);
+    const alt = s.kind === 'cobble' ? 0 : Math.floor(rng(`alt:${s.seed}`)() * ALTERNATES);
+    const key = `${s.kind ?? 'boulder'}:${v}:${alt}`;
+    const b = buckets.get(key) ?? { kind: s.kind, v, alt, list: [] };
+    b.list.push(s);
+    buckets.set(key, b);
+  }
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), t = new THREE.Vector3(), c = new THREE.Color();
+  for (const { kind, v, alt, list } of buckets.values()) {
+    const cobble = kind === 'cobble';
+    const geo = cobble ? rockVariant(v) : boulderVariant(v, kind === 'flat' ? 'flat' : 'rounded', quality, alt);
+    const im = new THREE.InstancedMesh(geo, cobble ? rockMaterial() : mossRockMaterial(MOSS_ROCK_GRANITE), list.length);
     im.castShadow = true;
     im.receiveShadow = true;
     list.forEach((s, i) => {
@@ -70,9 +133,21 @@ export function rockField(spots: RockSpot[], name = 'rocks'): THREE.Group {
       t.set(s.x, s.y, s.z);
       m.compose(t, q, sc);
       im.setMatrixAt(i, m);
+      // Each boulder a little lighter or darker, warmer or cooler than the next of its shape.
+      if (!cobble) {
+        const k = 0.9 + r() * 0.2, w = (r() - 0.5) * 0.08;
+        im.setColorAt(i, c.setRGB(k * (1 + w), k, k * (1 - w)));
+      }
     });
     im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.computeBoundingSphere();
     group.add(im);
-  });
+  }
   return group;
+}
+
+/** Frees a rock field's instance buffers; the shapes are shared and kept for the next yard. */
+export function disposeRockField(field: THREE.Group) {
+  for (const o of field.children) if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
 }

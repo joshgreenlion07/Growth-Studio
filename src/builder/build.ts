@@ -368,12 +368,12 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
     site();
     yield 'construction';
   }
-  let hard = buildHardscape(plan, gm.height, pools);
+  let hard = buildHardscape(plan, gm.height, pools, quality);
   yield 'hardscape';
   const siteC = centroid(plan.site.boundary);
   const structs = buildStructures([...plan.structures, ...ctx.neighbors], siteC, plan);
   yield 'structures';
-  const water = buildWater(plan, gm, mirror, sky, pools);
+  const water = buildWater(plan, gm, mirror, sky, pools, quality);
   // Features and models placed on a composite deck stand on its boards (a hot tub is set into it); lighting
   // fixtures also stand on paving and snap to wall faces (builder/landscapelights.ts).
   const standOn = onDecks(plan, gm.height);
@@ -616,7 +616,7 @@ function* sceneSteps(plan: SitePlan, quality: Quality, mirror: PlanarMirror | nu
       beginMaterialBuild();
       newTextureGeneration();
       const old = hard;
-      hard = buildHardscape(next, gm.height, pools);
+      hard = buildHardscape(next, gm.height, pools, quality);
       root.remove(old.object);
       root.add(hard.object);
       const swap = <T>(list: T[], from: T[], to: T[]) => {

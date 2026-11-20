@@ -2,43 +2,30 @@ import * as THREE from 'three';
 import { featureOption, type FeatureSpec } from '../siteplan/catalog';
 import { featureSize } from '../siteplan/decor';
 import type { FeaturePlacement } from '../siteplan/types';
-import { ROCK_GRAIN_MEAN, rockGrainSet } from '../engine/rock-surfaces';
-import { pbrMaterial } from './materials';
-import { MOSS_ROCK_GRAY, MOSS_ROCK_SPACING, mossRock, mossRockMaterial, type MossRockLook, type MossRockSpec } from './mossrock';
+import { BOULDER_MAX_SEGMENTS, CANYON_CUT, MOSS_ROCK_CANYON, MOSS_ROCK_GRAY, MOSS_ROCK_SPACING, mossRock, mossRockMaterial, type MossRockCut, type MossRockForm, type MossRockLook } from './mossrock';
 import { libraryRockById } from '../siteplan/waterrocks';
 import type { Quality } from '../engine/post';
-import { buildRock, footSink, type GroundAt, type RockLook, type RockShape } from './stonegeo';
-import { BORDER_STONE, GARDEN_BOULDER, MOSS_BOULDER, SHOWPIECE, borderLook } from './groundrock-looks';
+import { footSink, type GroundAt } from './stonegeo';
+import { DOUBLE_HEAD_FORM, GARDEN_BOULDER_FORM, MOSS_BOULDER, SHOWPIECE_FORM, borderLook } from './groundrock-looks';
 import { BOULDER_BURIED, BORDER_BURIED } from '../siteplan/groundrock';
 import { rng } from '../siteplan/geometry';
 
 /*
- * Moss rock and Canyon Tech boulders (siteplan/waterrocks.ts): each one its own shape, seeded by the placement's id, set
- * about a fifth into the ground. The three moss rock shapes of the water features are drawn in fine detail
- * (builder/mossrock.ts: broken, chipped, porous tan-brown stone with pale yellow-green crust lichen, matched to Green
- * Lion's job photos and the moss rock Northern California yards sell). The Canyon Tech boulder and the moss rock sold by
- * weight (siteplan/groundrock.ts) use builder/stonegeo.ts: the Canyon Tech is warm gray and tan, more angular, with
- * rust-orange lichen and little moss.
+ * Moss rock and Canyon Tech boulders (siteplan/waterrocks.ts) and the moss rock sold by weight (siteplan/groundrock.ts):
+ * each one its own shape, seeded by the placement's id, set partly into the ground. All are drawn in fine detail by
+ * builder/mossrock.ts (broken, chipped, porous stone with crust lichen, matched to Green Lion's job photos and the moss
+ * rock Northern California yards sell), each in its own stone: tan-brown or dark gray moss rock; the Canyon Tech warm
+ * gray and tan, angular (more and crisper breaks, the wedge and ridge forms), with rust-orange lichen and little moss;
+ * the moss rock by weight in the light tan-gray of a customer job's finished yard (builder/groundrock-looks.ts).
  */
 
-const CANYON_LOOK: RockLook = {
-  stone: ['#6c6e71', '#78726a', '#5c5e63', '#827868', '#67645e'],
-  streak: '#4d4a47',
-  soil: '#3f3126',
-  lichen: '#b3b8aa',
-  lichenAmount: 0.45,
-  rust: '#9a5a2e',
-  rustAmount: 0.6,
-  moss: ['#6f7f3a', '#586b2f'],
-  mossAmount: 0.15,
-};
+/** `capped`: a stone drawn in many places in a yard, its segments capped for big sizes (BOULDER_MAX_SEGMENTS). */
+type Style = { form: MossRockForm | ((h: number) => MossRockForm); look?: MossRockLook | ((h: number) => MossRockLook); buried?: number; seed?: string; cut?: MossRockCut; capped?: boolean };
 
-/** Crisper: more cuts, sharper edges. */
-const CANYON: RockShape = { squareness: 3.6, cuts: 9, cutDepth: [0.64, 0.86], edge: 0.025, lump: 0.035, rough: 0.02, pocket: 0.05, lean: 4 };
+/** A Canyon Tech boulder's form: mostly a wedge or a ridge, now and then a blocky rounded one. `h` is in [0, 1). */
+const canyonForm = (h: number): MossRockForm => (h < 0.42 ? 'wedge' : h < 0.8 ? 'ridge' : 'rounded');
 
-type Style = { shape: RockShape; look: RockLook | ((h: number) => RockLook); buried?: number } | { form: NonNullable<MossRockSpec['form']>; look?: MossRockLook; buried?: number; seed?: string };
-
-/** Each boulder's build: a moss rock form (builder/mossrock.ts), or a shape and look for builder/stonegeo.ts. */
+/** Each boulder's build: a moss rock form and look (builder/mossrock.ts), a fixed choice or one drawn per placement. */
 const STYLE: Record<string, Style> = {
   'moss-rock-rounded': { form: 'rounded' },
   'moss-rock-tall': { form: 'tall' },
@@ -46,18 +33,12 @@ const STYLE: Record<string, Style> = {
   'moss-rock-rounded-gray': { form: 'rounded', look: MOSS_ROCK_GRAY },
   'moss-rock-tall-gray': { form: 'tall', look: MOSS_ROCK_GRAY },
   'moss-rock-flat-top-gray': { form: 'flat', look: MOSS_ROCK_GRAY },
-  'canyon-tech-boulder': { shape: CANYON, look: CANYON_LOOK },
+  'canyon-tech-boulder': { form: canyonForm, look: MOSS_ROCK_CANYON, cut: CANYON_CUT, capped: true },
   // Moss rock by weight (siteplan/groundrock.ts), in the tan-gray of a customer job's finished yard.
-  'moss-rock-double-head': { shape: BORDER_STONE, look: borderLook, buried: BORDER_BURIED },
-  'moss-rock-garden-boulder': { shape: GARDEN_BOULDER, look: MOSS_BOULDER, buried: BOULDER_BURIED },
-  'moss-rock-showpiece-boulder': { shape: SHOWPIECE, look: MOSS_BOULDER, buried: BOULDER_BURIED },
+  'moss-rock-double-head': { form: DOUBLE_HEAD_FORM, look: borderLook, buried: BORDER_BURIED, capped: true },
+  'moss-rock-garden-boulder': { form: GARDEN_BOULDER_FORM, look: MOSS_BOULDER, buried: BOULDER_BURIED, capped: true },
+  'moss-rock-showpiece-boulder': { form: SHOWPIECE_FORM, look: MOSS_BOULDER, buried: BOULDER_BURIED, capped: true },
 };
-
-/** The one material every boulder shares: the grain texture, tinted by each rock's vertex colors (scaled up for the map's mean). */
-export function boulderMaterial(): THREE.MeshStandardMaterial {
-  const k = 1 / ROCK_GRAIN_MEAN;
-  return pbrMaterial('boulder-grain', rockGrainSet(), { vertexColors: true, color: new THREE.Color().setRGB(k, k, k, THREE.LinearSRGBColorSpace) });
-}
 
 export interface WaterRockContext {
   f: FeaturePlacement;
@@ -71,28 +52,24 @@ export interface WaterRockContext {
   quality?: Quality;
 }
 
-/** A boulder (a moss rock shape or a Canyon Tech boulder), set into the ground at the feature's spot. */
 /** A library rock (siteplan/waterrocks.ts): one rock, its own seed, the same wherever it is placed. */
 function libraryStyle(id: string): Style | undefined {
   const r = libraryRockById.get(id);
   return r ? { form: r.form, look: r.shade === 'gray' ? MOSS_ROCK_GRAY : undefined, seed: `library:${r.code}` } : undefined;
 }
 
+/** A boulder (a moss rock shape, a Canyon Tech boulder or moss rock by weight), set into the ground at the feature's spot. */
 export function buildWaterRock(c: WaterRockContext) {
   const st = STYLE[c.spec.id] ?? libraryStyle(c.spec.id);
   if (!st) return;
   const size = featureSize(c.spec, c.f.size, 0.4);
   const buried = c.lift ? 0.04 : st.buried ?? 0.2, moss = featureOption(c.spec, c.f.options, 'moss');
-  let geo: THREE.BufferGeometry, mat: THREE.Material;
-  if ('form' in st) {
-    geo = mossRock({ size, buried, seed: st.seed ?? c.f.id, moss, form: st.form, look: st.look, spacing: MOSS_ROCK_SPACING[c.quality ?? 'balanced'] });
-    mat = mossRockMaterial(st.look);
-  } else {
-    const look = typeof st.look === 'function' ? st.look(rng(`look:${c.f.id}`)()) : st.look;
-    geo = buildRock({ shape: st.shape, look, size, buried, seed: c.f.id, moss });
-    mat = boulderMaterial();
-  }
+  // A look or form drawn per placement takes the number the old build drew it from, so a saved rock keeps its stone.
+  const look = typeof st.look === 'function' ? st.look(rng(`look:${c.f.id}`)()) : st.look;
+  const form = typeof st.form === 'function' ? st.form(rng(`form:${c.f.id}`)()) : st.form;
+  const q = c.quality ?? 'balanced';
+  const geo = mossRock({ size, buried, seed: st.seed ?? c.f.id, moss, form, look, cut: st.cut, spacing: MOSS_ROCK_SPACING[q], maxSegments: st.capped ? BOULDER_MAX_SEGMENTS[q] : undefined });
   if (c.lift) geo.translate(0, c.lift, 0);
   else geo.translate(0, -footSink(c.ground, size[0], size[1], size[2] * 0.4), 0);
-  c.add(mat, geo);
+  c.add(mossRockMaterial(look), geo);
 }

@@ -10,9 +10,10 @@ import { hasRoughCap } from '../engine/wallfaces';
 import { catalogMaterial, pbrMaterial, plainMaterial, segmentBox } from './materials';
 import { bandGeometry, CURB_REVEAL, CURB_TALL, extendPath, linePath, type LinePath } from './linepath';
 import { mowCurbOutline, mowCurbSink, profileGeometry } from './mowcurb';
-import { rockBorderGeometry } from './rockborder';
-import { boulderMaterial } from './waterrock';
+import { rockBorderStones } from './rockborder';
+import { mossRockMaterial } from './mossrock';
 import type { PoolLayout } from './pools';
+import type { Quality } from '../engine/post';
 import { grayBoardLattice, yardSide } from './decor/fence-gray-lattice';
 import { metalPicketFence } from './decor/fence-metal-picket';
 import { buildDeck } from './deck';
@@ -526,7 +527,8 @@ function padUV(g: THREE.BufferGeometry, r: PadRect) {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
-export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pools: PoolLayout): HardscapeBuild {
+/** `quality`: how fine a rock border's stones are (builder/rockborder.ts). */
+export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pools: PoolLayout, quality: Quality = 'balanced'): HardscapeBuild {
   const group = new THREE.Group();
   group.name = 'hardscape';
   const surfaces: THREE.Mesh[] = [];
@@ -646,7 +648,7 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
   // The finished surfaces curbs and edging stand their reveal above (edgeSurfaces), indexed once for every line.
   const edges = edgeSurfaces(plan.zones, height);
   for (const l of plan.lines) {
-    const o = l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos, housePolys(plan)) : buildLine(l, plan.zones, height, geos, edges);
+    const o = l.kind === 'steps' ? buildSteps(l, plan.zones, height, geos, housePolys(plan)) : buildLine(l, plan.zones, height, geos, edges, quality);
     // The build stages keep fences standing (see applyStage in build.ts).
     o.userData.lineKind = l.kind;
     group.add(o);
@@ -659,6 +661,10 @@ export function buildHardscape(plan: SitePlan, height: (p: Vec2) => number, pool
     dispose() {
       for (const g of geos) g.dispose();
       glowMat.dispose();
+      // Rock borders' instance buffers (their stone shapes are shared and kept).
+      group.traverse((o) => {
+        if ((o as THREE.InstancedMesh).isInstancedMesh && o.userData.part === 'stone') (o as THREE.InstancedMesh).dispose();
+      });
     },
   };
 }
@@ -897,7 +903,7 @@ function buildSteps(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geo
   return g;
 }
 
-function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[], edges: EdgeSurfaces = edgeSurfaces(zones, height)): THREE.Object3D {
+function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos: THREE.BufferGeometry[], edges: EdgeSurfaces = edgeSurfaces(zones, height), quality: Quality = 'balanced'): THREE.Object3D {
   const g = new THREE.Group();
   g.name = `line-${l.id}`;
   const spec = materialById.get(l.catalogId);
@@ -912,9 +918,20 @@ function buildLine(l: LineItem, zones: Zone[], height: (p: Vec2) => number, geos
   // Walls and curbs are one continuous mitered body along the path linePath gives them (moved off
   // the line onto the surface that matters less); fences and steel edging go segment by segment.
   if (l.kind === 'edging' && spec?.rockBorder) {
-    // A rock border: stones laid one by one along the line as drawn (builder/rockborder.ts).
-    const stones = rockBorderGeometry(l, spec.rockBorder, height);
-    if (stones) put('stone', boulderMaterial(), stones);
+    // A rock border: stones laid one by one along the line as drawn (builder/rockborder.ts), one instanced mesh per
+    // stone shape (the shapes are shared and kept, so not in `geos`).
+    for (const st of rockBorderStones(l, spec.rockBorder, height, quality)) {
+      const m = new THREE.InstancedMesh(st.shape, mossRockMaterial(st.look), st.at.length);
+      st.at.forEach((t, i) => m.setMatrixAt(i, t));
+      m.instanceMatrix.needsUpdate = true;
+      m.computeBoundingSphere();
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.userData.itemId = l.id;
+      m.userData.part = 'stone';
+      m.userData.catalogId = l.catalogId;
+      g.add(m);
+    }
   } else if (l.kind === 'wall' || (l.kind === 'edging' && spec?.recipe === 'curb')) {
     const path = linePath(l, zones);
     if (path.pts.length < 2) return g;

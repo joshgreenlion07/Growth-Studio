@@ -6,8 +6,7 @@ import { mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from '../eng
 import { GLOBAL } from '../engine/foliage';
 import { pbrMaterial, plainMaterial } from './materials';
 import { agedCopper, clearFallMaterial, ledMaterial, linkGlow, splashMaterial, type FountainSink } from './pillarfountain';
-import { buildRock, type RockLook, type RockShape } from './stonegeo';
-import { boulderMaterial } from './waterrock';
+import { BOULDER_MAX_SEGMENTS, MOSS_ROCK_SPACING, mossRock, mossRockMaterial, type MossRockLook } from './mossrock';
 import type { UrnGlaze } from '../siteplan/yard';
 import { photoAlbedo } from '../engine/surfaces';
 
@@ -321,49 +320,50 @@ function foamRing(sink: FountainSink, r0: number, r1: number, y: number) {
 /* Rocks and pebbles                                                    */
 /* ------------------------------------------------------------------ */
 
-const CLEAN_TAN: RockLook = {
-  stone: ['#8b7656', '#74603f', '#9c865f', '#64533d', '#806b4b'],
-  streak: '#4a3d2e',
-  soil: '#3f3126',
-  lichen: '#7d7f6e',
-  lichenAmount: 0.2,
-  rust: '#a8531f',
-  rustAmount: 0.05,
+/*
+ * The boulders round the basins, drawn in fine detail (builder/mossrock.ts), clean (no lichen or moss), each look the
+ * stone of its design board: rind the weathered skin, breaks the same stone a little warmer where it split.
+ */
+/** Clean tan-brown stone, as the vase boards' boulders. */
+const CLEAN_TAN: MossRockLook = {
+  rind: ['#67583f', '#5f5037', '#6e5d42', '#5a4b36', '#64543b'],
+  breakFace: ['#6f5e44', '#68573c', '#756447', '#62513a', '#6c5a3f'],
+  iron: ['#a8531f', '#5e3418'],
+  ironAmount: 0.2,
+  pore: '#241e17',
+  lichen: ['#7d7f6e', '#6c6e60', '#33312b', '#a8531f'],
   moss: ['#5c6828', '#435423'],
-  mossAmount: 0,
-};
-const CANYON_DARK: RockLook = {
-  stone: ['#4e4d4a', '#444340', '#58544e', '#3d3c3a', '#524e48'],
-  streak: '#36373a',
   soil: '#3f3126',
-  lichen: '#9a9e93',
-  lichenAmount: 0.2,
-  rust: '#8a5430',
-  rustAmount: 0.25,
+};
+/** Dark charcoal stone with a little rust, the glazed urn's front boulder. */
+const CANYON_DARK: MossRockLook = {
+  rind: ['#3c3a38', '#383734', '#403d39', '#363532', '#3d3b37'],
+  breakFace: ['#43403c', '#3f3d39', '#46433e', '#3c3a36', '#43403c'],
+  iron: ['#8a5430', '#4a2e1a'],
+  ironAmount: 0.4,
+  pore: '#141413',
+  lichen: ['#9a9e93', '#83877c', '#2a2a28', '#8a5430'],
   moss: ['#6f7f3a', '#586b2f'],
-  mossAmount: 0,
-};
-/** Tan granite, as the bubbler board's boulders: gray-tan with warmer patches, a little lichen. */
-const GRANITE_TAN: RockLook = {
-  stone: ['#7f7668', '#6e6559', '#8b8173', '#625a4f', '#786d5f'],
-  streak: '#4a443c',
   soil: '#3f3126',
-  lichen: '#8a8c7e',
-  lichenAmount: 0.18,
-  rust: '#9a6a3f',
-  rustAmount: 0.08,
-  moss: ['#5c6828', '#435423'],
-  mossAmount: 0,
 };
-/** Rounded field boulders, split along a few planes and worn (moss rock's rounded shape, a little softer). */
-const ROUND_BOULDER: RockShape = { squareness: 2.7, cuts: 6, cutDepth: [0.76, 0.93], edge: 0.08, lump: 0.05, rough: 0.025, pocket: 0.07, lean: 4 };
+/** Tan granite, as the bubbler board's boulders: gray-tan with warmer patches. */
+const GRANITE_TAN: MossRockLook = {
+  rind: ['#5f584e', '#5a5348', '#645c52', '#554e45', '#5d554b'],
+  breakFace: ['#675e52', '#61584d', '#6b6356', '#5c5449', '#645b4f'],
+  iron: ['#9a6a3f', '#563b24'],
+  ironAmount: 0.3,
+  pore: '#211e1a',
+  lichen: ['#8a8c7e', '#76786b', '#33322d', '#9a6a3f'],
+  moss: ['#5c6828', '#435423'],
+  soil: '#3f3126',
+};
 
-/** A boulder at (x, z) inches: size [across, deep, high] inches, a quarter of it set into the bed. */
-function boulder(sink: FountainSink, look: RockLook, x: number, z: number, size: [number, number, number], turn: number, seed: string) {
-  const geo = buildRock({ shape: ROUND_BOULDER, look, size: [size[0] * IN, size[1] * IN, size[2] * IN], buried: 0.22, seed, moss: false });
+/** A boulder at (x, z) inches: size [across, deep, high] inches, a quarter of it set into the bed; rounded field stone. */
+function boulder(sink: FountainSink, look: MossRockLook, x: number, z: number, size: [number, number, number], turn: number, seed: string) {
+  const geo = mossRock({ size: [size[0] * IN, size[1] * IN, size[2] * IN], buried: 0.22, seed, moss: false, form: 'rounded', look, spacing: MOSS_ROCK_SPACING[sink.quality ?? 'balanced'], maxSegments: BOULDER_MAX_SEGMENTS[sink.quality ?? 'balanced'] });
   geo.rotateY(turn);
   geo.translate(x * IN, 0, z * IN);
-  sink.add(boulderMaterial(), geo);
+  sink.add(mossRockMaterial(look), geo);
 }
 
 /** An oval outline, inches, with a little wobble so it does not read as drawn with a compass. */
