@@ -24,6 +24,7 @@ import { FLAGSTONE_FEATURES, ROCK_LIBRARY_FEATURES, WATER_ROCK_FEATURES, type Wa
 import { GROUND_ROCK_FEATURES, GROUND_ROCK_MATERIALS, ROCK_BORDER_MATERIALS, type RockBorderSpec } from './groundrock';
 import { FOUR_FALL_DEFAULT_SIZE, FOUR_FALL_SIZES } from './fourfall';
 import { KITCHEN_ISLAND_FEATURES, KITCHEN_PART_FEATURES, type KitchenIsland } from './kitchen';
+import { BLACKSTONE_CART_FEATURES } from './blackstone';
 import { YARD_FEATURES, YARD_SWAP, type UrnGlaze, type YardKind } from './yard';
 import { CORONADO_LOOKS } from './coronado';
 import { PLANTER_BED_FEATURES } from './planterbeds';
@@ -456,6 +457,7 @@ export type FeatureKind =
   | 'kitchenL'
   | 'kitchenIsland'
   | 'kitchenPart'
+  | 'griddleStation'
   | 'hotTub'
   | 'saunaBarrel'
   | 'saunaCube'
@@ -1214,6 +1216,8 @@ export const FEATURES: FeatureSpec[] = [
   F({ id: 'kitchen-straight', name: 'Outdoor kitchen, straight', group: 'Kitchens', kind: 'kitchenStraight', footprint: [3.0, 0.8] }),
   // Islands assembled from the kitchen parts library (siteplan/kitchen.ts, builder/kitchen/).
   ...KITCHEN_ISLAND_FEATURES,
+  // Blackstone griddle cooking stations on their carts (siteplan/blackstone.ts).
+  ...BLACKSTONE_CART_FEATURES,
   F({ id: 'hot-tub', name: 'Hot tub', group: 'Spa and sauna', kind: 'hotTub', footprint: [2.3, 2.3] }),
   // Cal Spas Tropical Plus PPZ-743BC, Patio Plus series (Cal Spas spec sheet and product page): 84 x 84 x 37 in, 43 jets,
   // 6 seats with a cool-off seat. Built by builder/spa-ppz743bc.ts in the finish Green Lion installs; a placement's
@@ -1387,7 +1391,7 @@ export const featureById = new Map([...FEATURES, ...KITCHEN_PART_FEATURES].map((
 const SWAP_CLASS: Record<FeatureKind, string> = {
   pergolaWood: 'Pergolas and gazebos', pergolaLouvered: 'Pergolas and gazebos', gazebo: 'Pergolas and gazebos', umbrella: 'Umbrellas',
   firePit: 'Fire features', fireTable: 'Fire features', firePitLinear: 'Fire features', fireWaterBowl: 'Fire features',
-  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens', kitchenIsland: 'Outdoor kitchens', kitchenPart: 'Kitchen parts',
+  kitchenStraight: 'Outdoor kitchens', kitchenL: 'Outdoor kitchens', kitchenIsland: 'Outdoor kitchens', kitchenPart: 'Kitchen parts', griddleStation: 'Griddle stations',
   hotTub: 'Hot tubs', saunaBarrel: 'Saunas', saunaCube: 'Saunas',
   waterWallPlaster: 'Water walls', waterWallPorcelain: 'Water walls', waterWallStucco: 'Water walls', cedarWaterWall: 'Water walls', pillarWaterWall: 'Water walls', pillarFountain: 'Water features', urnFountain: 'Water features', fourFall: 'Waterfalls', veneerColumn: 'Columns',
   copperBowl: 'Planters', patinaBowl: 'Planters', cortenPlanter: 'Planters', cortenPlanterTall: 'Planters', blackPlanter: 'Planters',

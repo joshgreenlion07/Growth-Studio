@@ -1,4 +1,5 @@
 import type { FeatureOption, FeatureSpec } from './catalog';
+import { BLACKSTONE_BUILT_INS } from './blackstone';
 
 /*
  * Outdoor kitchens, built the way water features are: the parts are made first, here in Growth Studio, and an island is
@@ -179,15 +180,18 @@ for (const [w, overall, cutout, burners, model] of GRILLS) part({
   about: `A ${w} in drop-in gas grill head: a double-walled brushed stainless hood on a rear hinge with a tube handle and a hood thermometer, ${burners} stainless tube burners under flame tamers and hex-rod cooking grates, a control panel with a knob and bezel for each burner and a plain name plate. Option: a rotisserie kit (motor bracket and spit) and an infrared rear burner.`,
   facts: [model, `${burners} burners; propane or natural gas`, '304 brushed stainless', 'Hand tool: lift the hood, light the burners'],
 });
-const GRIDDLES: [number, [number, number, number], [number, number, number], number, number, string][] = [
-  [28, [38.5, 27.5, 15], [38.75, 27.5, 8], 3, 39, 'Blackstone 28 in built-in griddle with hood and insulated jacket (6029 / 6128 propane, 6301 natural gas); cutout from the 6029 manual (minimum cavity)'],
-  [36, [46, 28, 15], [45, 27, 8], 4, 46, 'Blackstone 36 in built-in griddle with hood (typical published size)'],
-];
-for (const [w, overall, cutout, burners, bay, model] of GRIDDLES) part({
-  id: `kitchen-griddle-blackstone-${w}`, family: 'griddle', familyName: 'Blackstone built-in griddle', type: 'griddle', mount: 'dropIn', label: `${w} in`, name: `Blackstone built-in griddle, ${w} in`,
-  overall, cutout, bayIn: bay, burners, knobs: w === 28 ? 4 : burners, nameText: 'BLACKSTONE',
-  about: `Blackstone's ${w} in built-in griddle: a rolled steel cooktop in a stainless surround with a rear grease trough, a black powder-coated hood on a rear hinge, and a brushed stainless front with ${w === 28 ? 4 : burners} black control knobs on chrome bezels (four as on the customer design; check the chosen model). The name is shown as plain text on the hood.`,
-  facts: [model, `Cook surface about ${w === 28 ? '27 1/2 x 21 1/2' : '35 1/2 x 21 1/2'} in; ${burners} burners`, 'Hand tool: lift the hood'],
+// Blackstone's built-in griddles, to its published sizes (siteplan/blackstone.ts); drawn by builder/kitchen/blackstone.ts.
+for (const g of BLACKSTONE_BUILT_INS) part({
+  id: g.id, family: 'griddle', familyName: 'Blackstone built-in griddle', type: 'griddle', mount: 'dropIn', label: g.label, name: `Blackstone built-in griddle, ${g.label}`,
+  overall: g.overall, cutout: g.cutout, bayIn: g.bayIn, burners: g.burners, knobs: g.burners,
+  about: `Blackstone's ${g.cook[0] > 30 ? 36 : 28} in built-in griddle with hood (${g.models})${g.jacket ? ' in its 304 stainless insulating jacket, for a combustible island' : ', for a non-combustible island'}: a brushed stainless hood with black end caps and a tube handle, a black vent band with diamond perforations and the boxed BLACKSTONE badge, a forward-leaning stainless control panel with ${g.burners} charcoal LED-ring knobs and the printed lighting instructions, a ${g.cook[0] === 35.5 ? '35 1/2' : '27 1/2'} x 21 1/2 in cooktop with wind guards, and a rear grease cup. Its front panel stands out of a notch at the counter's front edge.`,
+  facts: [
+    g.source,
+    g.jacket ? `The griddle itself 33 x 29 1/4 x 13 1/4 in, in the jacket` : 'Cavity in a non-combustible island; 36 in clear of combustibles beside it without the insulating jacket (manual)',
+    `Cooking surface ${g.cook[0] === 35.5 ? '35 1/2' : '27 1/2'} x 21 1/2 in; ${g.burners} burners, ${g.burners} LED knobs; ${g.models}`,
+    `${g.lb}; Blackstone publishes no BTU rating`,
+    'Hand tool: lift the hood',
+  ],
 });
 part({
   id: 'kitchen-side-burner-single', family: 'side-burner', familyName: 'Side burner, drop-in', type: 'sideBurner', mount: 'dropIn', label: 'Single', name: 'Side burner, single, drop-in',
@@ -431,7 +435,9 @@ export const FRONT_GAP = 1.5;
 export const standsOnFloor = (p: KitchenPart) => p.type === 'fridge' || p.type === 'iceMaker' || p.type === 'kegerator' || p.type === 'beverage';
 /** How far a drop-in's front panel (grills, griddles, burners) or bowl (sinks) reaches under the counter's top, inches. */
 export function dropBelowTop(p: KitchenPart, thicknessIn: number): number {
-  if (p.type === 'grill' || p.type === 'griddle') return 6.5;
+  if (p.type === 'grill') return 6.5;
+  // A Blackstone griddle stands on its cavity's floor: its panel and jacket reach the cavity's depth.
+  if (p.type === 'griddle') return p.cutout?.[2] ?? 8;
   if (p.type === 'sideBurner' || p.type === 'powerBurner') return 4;
   if (p.type === 'sink') return thicknessIn + (p.cutout?.[2] ?? 7);
   return 0;

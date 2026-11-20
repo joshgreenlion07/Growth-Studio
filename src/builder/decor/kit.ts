@@ -6,6 +6,7 @@ import { clamp01, fbm, vnoise } from '../../engine/noise';
 import { mixRGB, mulRGB, paint, textureSet, type PBRSet, type RGB } from '../../engine/textures';
 import { boxUV, pbrMaterial, plainMaterial } from '../materials';
 import type { FireStyle, Tongue } from '../fire';
+import type { FeatureAction } from '../actions';
 
 /*
  * Shared pieces for the decor builders: what a builder is handed, box helpers in local feature space (front +z,
@@ -28,6 +29,12 @@ export interface DecorContext {
   ceiling?: number;
   /** How far the surface it stands on is above grade: the top of paving it is set on (0 on turf, beds and bare ground). */
   lift?: number;
+  /** Something to use by hand (a heater's switch), registered for this placement. */
+  act?: (a: Omit<FeatureAction, 'itemId'>) => void;
+  /** An action's anchor at a local point. */
+  anchor?: (x: number, y: number, z: number) => THREE.Object3D;
+  /** A material made for this placement alone (a heater's elements, switched on and off): the build disposes of it. */
+  own?: (m: THREE.Material) => void;
 }
 
 export const IN = 0.0254;

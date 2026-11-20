@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { swing } from '../actions';
 import { tubeBurner } from '../fire';
 import { standsOnFloor, type KitchenPart } from '../../siteplan/kitchen';
-import { IN, barHandle, bx, cy, facePlane, namePlate, rbx, slide, stainless, tube, type KitchenMats, type KitchenSink, type Mover } from './kit';
+import { blackstoneBuiltInPart } from './blackstone';
+import { IN, barHandle, bx, cy, rbx, slide, stainless, tube, type KitchenMats, type KitchenSink, type Mover } from './kit';
 
 /*
  * The kitchen parts, drawn to their overall and cutout sizes (siteplan/kitchen.ts). All sizes in inches. Each builder
@@ -445,39 +446,6 @@ function uvFromPositions(g: THREE.BufferGeometry) {
   return g;
 }
 
-function griddle(k: PartCtx): Mover[] {
-  const p = k.part, m = k.mats, add = k.sink.add;
-  const [W0, D, H] = p.overall, [cw, cd, ch] = p.cutout!;
-  // Front and surround at least as wide as the cutout, so no slot of the notch shows beside them.
-  const W = Math.max(W0, cw + 0.25);
-  const x = k.x, top = k.top, n = p.knobs ?? p.burners ?? 3;
-  const zFront = k.edge + 0.5, zBack = zFront - D;
-  add(m.steel, bx(Math.min(cw, W0) - 0.6, ch, zFront - 2.5 - (k.edge - cd + 0.5), x, top - ch, (zFront - 2.5 + k.edge - cd + 0.5) / 2));
-  // Front: a brushed band with black knobs on chrome bezels.
-  const ph = 8, py = top - 6.5;
-  add(m.steel, rbx(W, ph, zFront - k.face, x, py, (zFront + k.face) / 2, 0.3));
-  knobs(add, m, spread(n, Math.min(W - 8, n * 7.5), x), py + 3.6, zFront, true);
-  // The surround: a stainless deck round the cooktop, side and back walls, the rear grease trough.
-  const sz0 = zBack + 1, sz1 = zFront - 1.8;
-  add(m.steel, rbx(W - 0.4, 1.5, sz1 - sz0, x, top, (sz0 + sz1) / 2, 0.15));
-  const pw = W >= 44 ? 35.5 : 27.5, pd = 21.5;
-  const pz = (sz0 + sz1) / 2 + 0.8;
-  add(m.griddle, rbx(pw, 0.4, pd, x, top + 1.5, pz, 0.08));
-  for (const s of [-1, 1]) add(m.steel, rbx(0.35, 1.8, pd + 0.5, x + s * (pw / 2 + 0.2), top + 1.5, pz, 0.08));
-  add(m.steel, rbx(pw + 0.8, 1.8, 0.35, x, top + 1.5, pz - pd / 2 - 0.2, 0.08));
-  add(m.rubber, bx(pw * 0.9, 0.1, 1.1, x, top + 1.52, pz - pd / 2 - 1.1));
-  // The hood: black powder-coated steel on a back hinge, the maker's name as a plain plate on its front.
-  // A full-width hood, about 7 in tall, as on the design.
-  const hw = W - 1.2, hd = sz1 - sz0 - 0.6, hh = Math.max(H - ch - 1.6, 7), hy = top + 1.6, hz0 = sz0 + 0.3;
-  const hood = pivot(k, x, hy, hz0);
-  hood.add(m.black, rbx(hw, hh, hd, x, hy, hz0 + hd / 2, 0.9));
-  hood.add(m.inside, bx(hw - 1.8, 0.05, hd - 1.8, x, hy - 0.06, hz0 + hd / 2));
-  hood.add(m.frame, rbx(hw * 0.5, 0.7, 0.9, x, hy + hh * 0.18, hz0 + hd + 0.25, 0.25));
-  const label = p.nameText ? namePlate(p.nameText) : null;
-  if (label) hood.add(label, facePlane(11.5, 1.45, x, hy + hh * 0.62, hz0 + hd + 0.01));
-  return [{ kind: 'hood', label: 'Griddle hood', rig: swing(hood.group, 'x', -1.3, false), anchor: k.sink.anchor(hood.group, 0, hh * 0.5 * IN, (hd + 1) * IN) }];
-}
-
 function sideBurner(k: PartCtx): Mover[] {
   const p = k.part, m = k.mats, add = k.sink.add;
   const [W, D] = p.overall, [cw, cd, ch] = p.cutout!;
@@ -634,7 +602,7 @@ export function stool(add: Add, m: KitchenMats, part: KitchenPart, x: number, z:
 export function buildPart(k: PartCtx): Mover[] {
   switch (k.part.type) {
     case 'grill': return grill(k);
-    case 'griddle': return griddle(k);
+    case 'griddle': return blackstoneBuiltInPart(k);
     case 'sideBurner':
     case 'powerBurner': return sideBurner(k);
     case 'sink': return sink(k);

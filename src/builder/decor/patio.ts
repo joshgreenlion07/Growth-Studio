@@ -7,10 +7,9 @@ import { pbrMaterial, plainMaterial } from '../materials';
 import { bar, box, IN, rbox, V, type DecorContext } from './kit';
 
 /*
- * The job's covered patio (its photo): a white aluminum dining table with eight gray sling chairs, a 39 in Infratech
- * electric heater on the ceiling (the plan's spec sheet: 39 x 8.19 x 6 in, 4000 W, 240 V, stainless, mounted 96-120 in
- * up), and an eight-blade ceiling fan on a short downrod. The heater and fan hang from the roof of a cover they stand
- * under (its `height`), else at 9 ft.
+ * The job's covered patio (its photo): a white aluminum dining table with eight gray sling chairs and an eight-blade
+ * ceiling fan on a short downrod (the Infratech heater on its ceiling is drawn by infratech.ts). The fan hangs from the
+ * roof of a cover it stands under (its `height`), else at 9 ft.
  */
 
 const DEFAULT_CEILING = 9 * 12 * IN;
@@ -88,24 +87,6 @@ export function diningSling(c: DecorContext) {
   for (const s of [-1, 1]) for (const k of [-1, 0, 1]) slingChair(c, k * 0.68, s * (tw / 2 + 0.22), s > 0 ? Math.PI : 0, frame, sling);
   for (const s of [-1, 1]) slingChair(c, s * (tl / 2 + 0.24), 0, s > 0 ? -Math.PI / 2 : Math.PI / 2, frame, sling);
   void L; void D;
-}
-
-/** The Infratech heater, 39 x 8.19 x 6 in, hung on two brackets just under the ceiling, tilted toward +z. */
-export function patioHeater(c: DecorContext) {
-  const ceil = c.ceiling ?? DEFAULT_CEILING;
-  const steel = plainMaterial('decor:stainless', { color: '#b9bcbf', roughness: 0.3, metalness: 0.9 });
-  const L = 39 * IN, H = 8.19 * IN, Dp = 6 * IN;
-  const glow = new THREE.MeshStandardMaterial({ color: '#3a302a', emissive: new THREE.Color('#ff5a1e'), emissiveIntensity: 0, roughness: 0.5 });
-  c.glow(glow);
-  const tilt = 0.55;
-  const body = rbox(L, Dp, H, 0.008, 0, -Dp / 2, 0, 2);
-  const lamp = box(L - 0.08, 0.008, H * 0.45, 0, -Dp / 2 - 0.004, 0);
-  for (const [m, g] of [[steel, body], [glow, lamp]] as const) {
-    g.rotateX(-tilt);
-    g.translate(0, ceil - 0.11, 0);
-    c.add(m, g);
-  }
-  for (const s of [-1, 1]) c.add(steel, box(0.03, 0.1, 0.05, s * L * 0.38, ceil - 0.1, -0.02));
 }
 
 /** An eight-blade 60 in ceiling fan in oil-rubbed bronze with a light kit, on a 12 in downrod. */

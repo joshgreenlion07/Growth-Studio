@@ -5,7 +5,8 @@ import { cortenTreePanel } from './tree-panel';
 import { firePitLinear } from './fire-pit';
 import { loungeOttoman, loungeSofa } from './lounge';
 import { deckBox } from './deck-box';
-import { ceilingFan, diningSling, patioHeater } from './patio';
+import { ceilingFan, diningSling } from './patio';
+import { infratechHeater } from './infratech';
 
 /**
  * Builds one decor feature (catalog `DECOR_FEATURES`) into the feature builder's parts. A piece set on paving stands on
@@ -27,7 +28,7 @@ export function buildDecor(kind: DecorKind, c0: DecorContext) {
     case 'loungeOttoman': return loungeOttoman(c);
     case 'deckBox': return deckBox(c);
     case 'diningSling': return diningSling(c);
-    case 'patioHeater': return patioHeater(c);
+    case 'patioHeater': return infratechHeater(c);
     case 'ceilingFan': return ceilingFan(c);
   }
 }

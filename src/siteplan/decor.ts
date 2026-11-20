@@ -1,4 +1,5 @@
 import type { FeatureSpec } from './catalog';
+import { INFRATECH_FEATURES } from './infratech';
 
 /*
  * Decor and furniture from a finished Green Lion backyard, drawn to its job photos: tall rectangular corten planters
@@ -52,9 +53,8 @@ export const DECOR_FEATURES: FeatureSpec[] = [
     about: 'A lidded resin storage box in taupe gray, resin wicker panels in a smooth frame, about 48 x 22 x 28 in.' }),
   F({ id: 'dining-set-sling-8', name: 'Dining set, white table and 8 gray sling chairs', group: 'Furniture', kind: 'diningSling', footprint: [3.3, 2.1],
     about: 'An 84 x 40 in white aluminum dining table with eight stacking sling chairs: dark gray aluminum frames, gray textilene slings.' }),
-  F({ id: 'infratech-heater-39', name: 'Infratech patio heater, 39 in, ceiling mounted', group: 'Shade', kind: 'patioHeater', footprint: [39 * IN, 6 * IN], maker: 'Infratech',
-    about: 'An Infratech electric infrared patio heater hung under the patio roof, as on the plan\'s spec sheet.',
-    facts: ['39 in long, 8.19 in high, 6 in deep, 14 lb', '4000 W, 240 V, 16.67 A, medium wave infrared; heats about 80 sq ft', 'Stainless steel; mounted 96 to 120 in above the floor', 'Hung from the roof of the cover it is under (9 ft without one)'] }),
+  // Infratech W / WD series heaters, one a finish (siteplan/infratech.ts).
+  ...INFRATECH_FEATURES,
   F({ id: 'ceiling-fan-8-blade', name: 'Ceiling fan, 8 blade, 60 in', group: 'Shade', kind: 'ceilingFan', footprint: [60 * IN, 60 * IN],
     about: 'An eight-blade outdoor ceiling fan in oil-rubbed bronze with a light kit, on a short downrod under the patio roof.' }),
 ];
