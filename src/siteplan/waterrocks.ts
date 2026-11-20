@@ -46,6 +46,7 @@ const mossFacts = (sizes: FeatureSize[]) => [
   `Medium: about ${boulderWeightLb(sizes[MEDIUM].size)} lb at this shape (estimated from its size; the bill gives 200 - 400 lb); a 4 ft boulder about ${boulderWeightLb(sizes[4].size)} lb`,
   'Sizes are length x depth x the height that shows; about a fifth of the rock is set below the ground',
   'Moss and lichen can be switched off for clean stone',
+  'Drawn in fine detail: pores, pits and lichen down to a millimeter or two up close; the mesh is finest at the Max quality setting',
 ];
 
 /**
@@ -60,15 +61,15 @@ export const FLAG_EDGE_SIZES: FeatureSize[] = [[12, 9], [18, 12], [24, 14], [30,
 export const WATER_ROCK_FEATURES: FeatureSpec[] = [
   F({ id: 'moss-rock-rounded', name: 'Moss rock boulder, rounded', group: 'Water', kind: 'mossRock', footprint: MOSS_ROUNDED_SIZES[MEDIUM].size.slice(0, 2) as [number, number], sizes: MOSS_ROUNDED_SIZES, size: MEDIUM,
     options: [{ key: 'moss', label: 'Moss and lichen', default: true }],
-    about: 'Moss rock boulder, the wide, low, worn-smooth shape: tan, buff and brown stone with gray-green lichen, rust-orange patches and moss on the tops, set partly buried. The rock Green Lion buys from Resource Building Materials as Moss Rock Boulder (medium and head size) and from California Landscape Supply by the pound.',
+    about: 'Moss rock boulder, the wide, low shape: weathered tan-brown stone broken along a few faces, its edges chipped and corners knocked off, porous and pitted all over, with iron stain, pale yellow-green crust lichen on the tops and a little moss, set partly buried. The rock Green Lion buys from Resource Building Materials as Moss Rock Boulder (medium and head size) and from California Landscape Supply by the pound.',
     facts: mossFacts(MOSS_ROUNDED_SIZES) }),
   F({ id: 'moss-rock-tall', name: 'Moss rock boulder, tall', group: 'Water', kind: 'mossRock', footprint: MOSS_TALL_SIZES[MEDIUM].size.slice(0, 2) as [number, number], sizes: MOSS_TALL_SIZES, size: MEDIUM,
     options: [{ key: 'moss', label: 'Moss and lichen', default: true }],
-    about: 'Moss rock boulder, the upright shape: a rock standing on its end, taller than it is wide, with the same tan and brown stone, lichen and moss. Good as the back or the side of a fall.',
+    about: 'Moss rock boulder, the upright shape: a rock standing on its end, taller than it is wide, with steep broken sides; the same porous, chipped tan-brown stone and crust lichen. Good as the back or the side of a fall.',
     facts: mossFacts(MOSS_TALL_SIZES) }),
   F({ id: 'moss-rock-flat-top', name: 'Moss rock boulder, flat-top', group: 'Water', kind: 'mossRock', footprint: MOSS_FLAT_SIZES[MEDIUM].size.slice(0, 2) as [number, number], sizes: MOSS_FLAT_SIZES, size: MEDIUM,
     options: [{ key: 'moss', label: 'Moss and lichen', default: true }],
-    about: 'Moss rock boulder, the long, low shape with a flat top: the rock a stream pours over, or a ledge a fall steps down. Same tan and brown stone, lichen and moss.',
+    about: 'Moss rock boulder, the long, low shape with a flat top: the rock a stream pours over, or a ledge a fall steps down. The same porous, chipped tan-brown stone and crust lichen.',
     facts: mossFacts(MOSS_FLAT_SIZES) }),
   F({ id: 'canyon-tech-boulder', name: 'Canyon Tech boulder', group: 'Water', kind: 'canyonBoulder', footprint: CANYON_SIZES[0].size.slice(0, 2) as [number, number], sizes: CANYON_SIZES, size: 0,
     options: [{ key: 'moss', label: 'Lichen and rust', default: true }],
