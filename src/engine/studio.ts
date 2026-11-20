@@ -118,6 +118,9 @@ export function defaultQuality(): Quality {
   }
 }
 
+/** A start spot chosen in Area Planner: world meters, heading (0 is +z, toward +x) and pitch in radians. */
+export interface StartPose { x: number; z: number; yaw: number; pitch?: number }
+
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 /** Double tap to walk (iPad, walk mode): the second tap within this long (ms) of the first one's lift, and this near (px). */
@@ -1351,6 +1354,61 @@ export class Studio {
     this.nav.pulse();
   }
 
+  /**
+   * A start spot chosen in Area Planner (client mode starts there; null: the automatic start). World meters, heading
+   * `yaw` (0 looks along +z, turning toward +x) and `pitch` (radians, up is positive). Set by the app.
+   */
+  clientStart: StartPose | null = null;
+
+  /** Inside the lot and clear of every house, garage and shed (with a little room). */
+  walkable(x: number, z: number): boolean {
+    if (!this.plan) return false;
+    const lot = this.plan.site.boundary;
+    if (lot.length > 2 && !pointInPolygon([x, z], lot)) return false;
+    return !this.structureAt(x, z);
+  }
+  private structureAt(x: number, z: number) {
+    return (this.plan?.structures ?? []).some((st) => st.kind !== 'cover' && st.polygon.length > 2 && (pointInPolygon([x, z], st.polygon) || distToEdge([x, z], st.polygon) < 0.8));
+  }
+
+  /** The camera as it stands now, for the app to keep as a start spot: world meters, heading and pitch, and the mode. */
+  pose(): StartPose & { y: number; mode: NavMode; inYard: boolean } {
+    const c = this.camera.position, t = this.controls.target;
+    const dx = t.x - c.x, dy = t.y - c.y, dz = t.z - c.z;
+    return { x: c.x, y: c.y, z: c.z, yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, Math.hypot(dx, dz)), mode: this.navMode, inYard: this.walkable(c.x, c.z) };
+  }
+
+  /** Eye and look target for a start spot, at walk height, the pitch kept gentle (at most 20 degrees up or down). */
+  private posePoints(p: StartPose) {
+    const pitch = THREE.MathUtils.clamp(Number.isFinite(p.pitch) ? p.pitch! : -0.12, -0.35, 0.35);
+    const look = new THREE.Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw));
+    const eye = new THREE.Vector3(p.x, 0, p.z);
+    // A spot that ended up in a house or shed after edits steps out the way it faces, like the automatic start.
+    for (let i = 0; i < 200 && this.structureAt(eye.x, eye.z); i++) eye.addScaledVector(look, 0.25);
+    eye.y = this.groundAt(eye.x, eye.z) + EYE_HEIGHT;
+    const target = eye.clone().addScaledVector(look, 3);
+    target.y += Math.tan(pitch) * 3;
+    return { eye, target };
+  }
+
+  /** Whether a start spot is on the lot of the plan shown (else client mode and shots use the automatic start or view). */
+  poseUsable(p: StartPose): boolean {
+    return !!this.plan && Number.isFinite(p.x + p.z + p.yaw) && pointInPolygon([p.x, p.z], this.plan.site.boundary);
+  }
+
+  /** Stand at a start spot in Walk (Area Planner's "Change in 3D"). False when it is off the lot. */
+  goToPose(p: StartPose): boolean {
+    if (!this.plan || !Number.isFinite(p.x + p.z + p.yaw) || !pointInPolygon([p.x, p.z], this.plan.site.boundary)) return false;
+    if (this.navMode !== 'walk') this.setNavMode('walk');
+    this.tween = null;
+    const { eye, target } = this.posePoints(p);
+    this.camera.position.copy(eye);
+    this.controls.target.copy(target);
+    this.camera.lookAt(target);
+    this.invalidate();
+    return true;
+  }
+
   /** Stand at ground level at the edge of the yard, looking across it. */
   private placeWalker() {
     // A glide (double tap to walk) or a view tween still running would pull the camera off the start point.
@@ -1377,6 +1435,13 @@ export class Studio {
     this.camera.position.copy(eye);
     this.controls.target.copy(eye).addScaledVector(look, 3);
     this.controls.target.y -= 0.35; // a slight downward glance
+    // Client mode: the spot the owner chose, when it is still on the lot (else the automatic start above).
+    const cs = this.clientMode ? this.clientStart : null;
+    if (cs && this.plan && pointInPolygon([cs.x, cs.z], this.plan.site.boundary)) {
+      const p = this.posePoints(cs);
+      this.camera.position.copy(p.eye);
+      this.controls.target.copy(p.target);
+    }
     this.camera.fov = 60;
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(this.controls.target);
@@ -2416,10 +2481,12 @@ export class Studio {
    * view; an unknown id is the Overview) under one light mood, at a fixed shape, as a JPEG. Drawn off screen like the
    * cover; the light is put back right after, so the live view shows the mood it had. Calls wait for each other.
    */
-  shot(opts: { view?: string; mood?: Mood; width?: number; aspect?: number; quality?: number }): Promise<Blob> {
+  shot(opts: { view?: string; mood?: Mood; width?: number; aspect?: number; quality?: number; pose?: StartPose }): Promise<Blob> {
     return this.queued(async () => {
       await this.built();
-      const v = this.views.find((x) => x.id === opts.view) ?? this.views[0];
+      // A start spot (`pose`) is drawn from where a client would stand there, else a generated view.
+      const pp = opts.pose && this.plan && pointInPolygon([opts.pose.x, opts.pose.z], this.plan.site.boundary) ? this.posePoints(opts.pose) : null;
+      const v = pp ? { eye: pp.eye, target: pp.target, fov: 60 } : this.views.find((x) => x.id === opts.view) ?? this.views[0];
       const aspect = Number.isFinite(opts.aspect) ? Math.min(3, Math.max(0.5, opts.aspect!)) : 1.5;
       // At most 2400 px either way.
       const width = Math.min(2400, Math.round(2400 * aspect), Math.max(320, Math.round(Number.isFinite(opts.width) ? opts.width! : 1600)));

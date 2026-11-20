@@ -21,7 +21,7 @@ import { SceneControls } from './scenecontrols';
 import logoUrl from './brand/logo-compact.png';
 import { initSecondScreen } from './secondscreen';
 import { getApprovals, setApprovals } from '../siteplan/approval';
-import { Studio } from '../engine/studio';
+import { Studio, type StartPose } from '../engine/studio';
 // Procedural textures are painted in a worker from here on (see engine/texture-jobs.ts).
 import { onTexturesChanged, setTextureRenderer } from '../engine/texture-jobs';
 import type { MeasureMode } from '../engine/measure';
@@ -149,6 +149,14 @@ if (EMBED_CLIENT) {
     if (e.key === 'Escape' && embedOrigin && !e.repeat) window.parent.postMessage({ source: 'growth-studio', type: 'key', key: 'Escape' }, embedOrigin);
     if (!CLIENT_MOVE_KEYS.has(e.key.toLowerCase()) || e.ctrlKey || e.metaKey || e.altKey) e.stopImmediatePropagation();
   }, true);
+}
+/** A start spot from a message, checked: finite numbers only, else null. */
+function startPose(v: unknown): StartPose | null {
+  const p = v as { x?: unknown; z?: unknown; yaw?: unknown; pitch?: unknown } | null;
+  if (!p || typeof p !== 'object') return null;
+  const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1e5;
+  if (!n(p.x) || !n(p.z) || !n(p.yaw)) return null;
+  return { x: p.x as number, z: p.z as number, yaw: p.yaw as number, ...(n(p.pitch) ? { pitch: p.pitch as number } : {}) };
 }
 function clientTime(t: string) {
   if (!studio) return;
@@ -1239,6 +1247,16 @@ let embedTimer = 0;
 let embedOrigin = '';
 let embedBooted = false;
 let embedBuilt = false;
+/** A plan handed to the studio and not yet on screen (between setPlan and its promise). */
+let embedShowing = false;
+/** A go-pose waiting for the yard being built. */
+let embedGoPose: { pose: StartPose; origin: string } | null = null;
+/** The camera is not on the parent's current yard: a plan pending or building, or the Library's sample showing. */
+const embedBusy = () => !!embedPending || embedShowing || libraryOpen();
+function goPoseNow(p: StartPose | null, origin: string) {
+  const ok = !!(p && studio && embedBuilt && !embedBusy() && studio.goToPose(p));
+  window.parent.postMessage({ source: 'growth-studio', type: 'go-pose', ok }, origin);
+}
 /** Uploaded files already asked for since the last plan, so a rebuild does not ask twice. */
 const embedAsked = new Set<string>();
 
@@ -1326,16 +1344,38 @@ function onEmbedMessage(e: MessageEvent) {
     );
     return;
   }
+  if (d.type === 'pose') {
+    // Where the camera stands now (Area Planner's "Set client start here"): world meters, heading, pitch, mode.
+    const origin = e.origin, id = typeof d.id === 'string' ? d.id.slice(0, 40) : '';
+    // Not while the Library's sample is showing or a newer plan is still on its way: the camera is not on this yard.
+    if (!studio || !embedBuilt || embedBusy()) return window.parent.postMessage({ source: 'growth-studio', type: 'pose', id, ok: false, message: 'The 3D view is not ready yet.' }, origin);
+    return window.parent.postMessage({ source: 'growth-studio', type: 'pose', id, ok: true, ...studio.pose() }, origin);
+  }
+  if (d.type === 'start') {
+    // Client mode: the start spot the owner chose (null: the automatic start). Sent before the plan.
+    if (studio) studio.clientStart = startPose((d as { pose?: unknown }).pose);
+    return;
+  }
+  if (d.type === 'go-pose') {
+    // Stand at a start spot in Walk (Area Planner's "Change in 3D").
+    // One that arrives while a plan is pending or building waits for that yard to be shown (applyEmbedPlan).
+    const p = startPose((d as { pose?: unknown }).pose);
+    if (p && studio && (embedPending || embedShowing) && !libraryOpen()) { embedGoPose = { pose: p, origin: e.origin }; return; }
+    goPoseNow(p, e.origin);
+    return;
+  }
   if (d.type === 'shot') {
     // A rendering for a client page: one generated view under one light mood, 3:2 unless `aspect` says otherwise.
     // { view, mood, w, aspect, id } -> { type: 'shot', id, ok, data: Blob (JPEG) } or { ..., ok: false, message }.
-    const origin = e.origin, q = d as { view?: unknown; mood?: unknown; w?: unknown; aspect?: unknown; id?: unknown };
+    const origin = e.origin, q = d as { view?: unknown; mood?: unknown; w?: unknown; aspect?: unknown; id?: unknown; pose?: unknown };
+    const sp = startPose(q.pose);
     const id = typeof q.id === 'string' ? q.id.slice(0, 40) : '';
     const fail = (message: string) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: false, message }, origin);
     if (!studio || !embedBuilt) return fail('The 3D view is not ready yet.');
     const mood = MOODS.some((m) => m.id === q.mood) ? (q.mood as Mood) : undefined;
-    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5 }).then(
-      (data) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: true, data }, origin),
+    studio.shot({ view: typeof q.view === 'string' ? q.view.slice(0, 80) : undefined, mood, width: typeof q.w === 'number' && Number.isFinite(q.w) ? q.w : 1600, aspect: typeof q.aspect === 'number' && Number.isFinite(q.aspect) ? q.aspect : 1.5, pose: sp ?? undefined }).then(
+      // `posed`: the picture is from the start spot asked for (false: it was off the lot, so the view was used).
+      (data) => window.parent.postMessage({ source: 'growth-studio', type: 'shot', id, ok: true, data, posed: !!sp && !!studio?.poseUsable(sp) }, origin),
       (err) => fail(err instanceof Error ? err.message : String(err)),
     );
     return;
@@ -1389,6 +1429,16 @@ function applyEmbedPlan() {
       return;
     }
     const shown = studio.setPlan(plan, embedBuilt && !next.refit && (sameLot || sameFrame));
+    embedShowing = true;
+    const done = () => {
+      embedShowing = false;
+      // A go-pose that waited for this yard (see onEmbedMessage).
+      const g = embedGoPose;
+      embedGoPose = null;
+      if (g && !embedPending) goPoseNow(g.pose, g.origin);
+      else if (g) embedGoPose = g;
+    };
+    shown.then(done, done);
     embedLastFrame = next.frame;
     embedBuilt = true;
     const utilities = (plan.utilities?.lines.length ?? 0) + (plan.utilities?.points.length ?? 0);
