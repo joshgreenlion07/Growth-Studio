@@ -114,8 +114,9 @@ export interface MossRockLook {
   rind: string[];
   /** Breaks: buff, tan and orange-tan. */
   breakFace: string[];
-  /** Iron stain, and its darker rim. */
+  /** Iron stain, and its darker rim; how much of it (1 the tan rock's, less for a stone with little iron). */
   iron: [string, string];
+  ironAmount?: number;
   /** The dark inside a pocket. */
   pore: string;
   /** Lichens: the pale yellow-green crust, the gray-green crust, the dark brown-black crust and the orange dots. */
@@ -131,6 +132,22 @@ export const MOSS_ROCK_TAN: MossRockLook = {
   iron: ['#744627', '#4e2f1b'],
   pore: '#2c241d',
   lichen: ['#8f9566', '#737a5a', '#34302a', '#99592a'],
+  moss: ['#5b6a26', '#414f1d'],
+  soil: '#3f3126',
+};
+
+/**
+ * Dark gray moss rock: charcoal-gray stone (the darker moss rock stacked in the yards' bins, and about a quarter of the
+ * moss rock in a customer job's finished yard), its breaks a lighter, slightly warm gray, a little rust, and the same
+ * pale yellow-green crust lichen, which stands out more on the dark stone.
+ */
+export const MOSS_ROCK_GRAY: MossRockLook = {
+  rind: ['#32322e', '#2a2b27', '#3a3a35', '#252522', '#34332f'],
+  breakFace: ['#403f3a', '#383632', '#47453f', '#302f2a', '#3f3d37'],
+  iron: ['#55402a', '#2b1f14'],
+  ironAmount: 0.6,
+  pore: '#141312',
+  lichen: ['#868b68', '#6c725a', '#1f1e1c', '#99592a'],
   moss: ['#5b6a26', '#414f1d'],
   soil: '#3f3126',
 };
@@ -214,6 +231,43 @@ function makeSphere(n: number) {
 }
 
 /**
+ * What makes one rock unlike the next of its kind, as in a pile of real moss rock: a little lighter or darker, warmer
+ * or cooler, rougher or smoother, more or fewer pockets and chips, nearly bare of lichen or crusted with it, more or
+ * less rust, dark crust, orange dots and moss. Drawn from its own seed, so the rock's breaks are not changed by it.
+ */
+interface Character {
+  tone: number;
+  warm: number;
+  rough: number;
+  porous: number;
+  chipped: number;
+  lichen: number;
+  dark: number;
+  orange: number;
+  iron: number;
+  moss: number;
+}
+
+function character(seed: string): Character {
+  // The salt puts the approved up-close sample rock (id 'moss-rock') near the middle of every range.
+  const r = rng(`mosschar3803:${seed}`);
+  const lich = r();
+  return {
+    tone: 0.84 + 0.32 * r(),
+    warm: (r() - 0.5) * 0.14,
+    rough: 0.8 + 0.45 * r(),
+    porous: 0.5 + r(),
+    chipped: 0.7 + 0.6 * r(),
+    // Some rocks nearly bare, most partly crusted, a few covered.
+    lichen: lich < 0.15 ? -0.16 : lich > 0.85 ? 0.14 : (lich - 0.5) * 0.18,
+    dark: 0.3 + 1.4 * r(),
+    orange: 0.2 + 1.6 * r(),
+    iron: 0.5 + r(),
+    moss: (r() - 0.5) * 0.12,
+  };
+}
+
+/**
  * Build the boulder with x and z centered, the ground at y = 0 and its top at `size[2]`; the buried part reaches
  * below the ground. Carries `color` (the stone, shaded) and `rkA` (lichen, dark crust and orange dot cover, and the
  * shading, for the material's shader).
@@ -222,6 +276,7 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
   const look = spec.look ?? MOSS_ROCK_TAN;
   const { size } = spec;
   const r = rng(`mossrock:${spec.seed}`);
+  const ch = character(spec.seed);
   const seed = Math.floor(r() * 1e6);
   const total = size[2] / (1 - spec.buried);
   const half = [size[0] / 2, total / 2, size[1] / 2];
@@ -289,9 +344,9 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
     // Grain: rough everywhere, rougher and crumblier along the edges.
     const grain = (fbm3f(px * 38 + oz, py * 38 + ox, pz * 38 + oy, 3, seed + 24) - 0.5) * 0.0036;
     const crumb = spacing < 0.005 ? 1 - Math.abs(noise3f(px * 95 + ox, py * 95 + oy, pz * 95 + oz, seed + 25) * 2 - 1) - 0.5 : 0;
-    disp += grain * (1 + 2.5 * edge) + crumb * 0.0014 * (1 + 3 * edge);
+    disp += (grain * (1 + 2.5 * edge) + crumb * 0.0014 * (1 + 3 * edge)) * ch.rough;
     // Knobby, uneven faces at a few centimeters.
-    disp += (fbm3f(px * 14 + ox, py * 14 + oz, pz * 14 + oy, 2, seed + 29) - 0.5) * 0.006;
+    disp += (fbm3f(px * 14 + ox, py * 14 + oz, pz * 14 + oy, 2, seed + 29) - 0.5) * 0.006 * ch.rough;
     // The breaks are rougher than the rind: hackly ripples, and small stepped ledges where the split ran in steps.
     if (brk > 0.01) {
       const rip = (fbm3f(px * 22 + oy, py * 22 + oz, pz * 22 + ox, 3, seed + 27) - 0.5) * 0.008;
@@ -299,7 +354,7 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
       const st = (px * sd[0] + py * sd[1] + pz * sd[2]) * 45 + (fbm3f(px * 10 + ox, py * 10 + oy, pz * 10 + oz, 2, seed + 28) - 0.5) * 4;
       const saw = Math.floor(st) + smooth(0.72, 1, st - Math.floor(st)) - st;
       const where = smooth(0.42, 0.58, fbm3f(px * 4 + oz, py * 4 + ox, pz * 4 + oy, 2, seed + 30));
-      disp += brk * (rip + saw * 0.0034 * where);
+      disp += brk * (rip + saw * 0.0034 * where) * ch.rough;
     }
     // Chipped edges: shell-shaped bites out of the line where two faces meet, from big chunks knocked off the corners
     // to small crumbs. A chip shows fresh stone, so it takes the break's colors.
@@ -309,6 +364,7 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
       chip += edge * pits(px + ox, py + oy, pz + oz, 0.05, 0.9, 0.38, 0.66, 0.7, seed + 31);
       chip += edge * pits(px + oy, py + oz, pz + ox, 0.022, 0.8, 0.32, 0.55, 0.65, seed + 32);
       if (spacing < 0.004) chip += edge * pits(px + oz, py + ox, pz + oy, 0.012, 0.4, 0.3, 0.5, 0.35, seed + 35);
+      chip *= ch.chipped;
       disp -= chip;
       brk = Math.max(brk, smooth(0.0008, 0.005, chip));
     }
@@ -318,8 +374,8 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
     const zone = smooth(0.32, 0.72, fbm3f(qx * 3.5 + 40, qy * 3.5, qz * 3.5 + 11, 3, seed + 41));
     let pore = 0;
     if (zone > 0.02) {
-      pore += pits(px + oy, py + oz, pz + ox, 0.06, 0.14 * zone, 0.12, 0.28, 0.8, seed + 51);
-      if (spacing < 0.0055) pore += pits(px + oz, py + ox, pz + oy, 0.022, 0.24 * zone, 0.14, 0.3, 0.6, seed + 52);
+      pore += pits(px + oy, py + oz, pz + ox, 0.06, Math.min(1, 0.14 * zone * ch.porous), 0.12, 0.28, 0.8, seed + 51);
+      if (spacing < 0.0055) pore += pits(px + oz, py + ox, pz + oy, 0.022, Math.min(1, 0.24 * zone * ch.porous), 0.14, 0.3, 0.6, seed + 52);
     }
     disp -= pore;
     poreAt[i] = pore;
@@ -358,8 +414,8 @@ export function buildMossRock(spec: MossRockSpec): THREE.BufferGeometry {
   relax(geo, 2);
 
   const cav = cavity(geo);
-  const moss = spec.moss ? mossCushions(geo, cav, size[2], seed) : null;
-  paint(geo, look, { breakAt, poreAt, edgeAt, cav, moss, lichen: spec.moss }, seed);
+  const moss = spec.moss ? mossCushions(geo, cav, size[2], seed, ch.moss) : null;
+  paint(geo, look, { breakAt, poreAt, edgeAt, cav, moss, lichen: spec.moss }, seed, ch);
   return geo;
 }
 
@@ -489,7 +545,7 @@ function cavity(geo: THREE.BufferGeometry): { fine: Float32Array; broad: Float32
 }
 
 /** Moss: cushions in the hollows of the top and low on the shaded side, pushed out as puffy clumps. 0 to 1 per point. */
-function mossCushions(geo: THREE.BufferGeometry, cav: { broad: Float32Array }, height: number, seed: number): Float32Array {
+function mossCushions(geo: THREE.BufferGeometry, cav: { broad: Float32Array }, height: number, seed: number, more: number): Float32Array {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
   const out = new Float32Array(pos.count);
@@ -499,7 +555,7 @@ function mossCushions(geo: THREE.BufferGeometry, cav: { broad: Float32Array }, h
     const patch = fbm3f(x * 9 + 3, y * 9, z * 9 + 8, 4, seed + 71);
     const hollow = Math.max(0, cav.broad[i]);
     const north = Math.max(0, -nrm.getZ(i)) * (1 - smooth(0.05, 0.4 * height, y));
-    const v = patch + 0.3 * Math.max(0, up - 0.35) + 0.35 * hollow + 0.2 * north - 0.9;
+    const v = patch + 0.3 * Math.max(0, up - 0.35) + 0.35 * hollow + 0.2 * north - 0.9 + more;
     out[i] = smooth(0.0, 0.06, v) * smooth(-0.02, 0.03, y);
   }
   const p = pos.array as Float32Array;
@@ -536,7 +592,7 @@ function pick(cols: THREE.Color[], t: number, out: THREE.Color) {
 }
 
 /** The stone's colors and baked shading per point, and where the shader draws lichen (`rkA`). */
-function paint(geo: THREE.BufferGeometry, look: MossRockLook, f: Fields, seed: number) {
+function paint(geo: THREE.BufferGeometry, look: MossRockLook, f: Fields, seed: number, ch: Character) {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
   const rind = look.rind.map(col), brk = look.breakFace.map(col);
@@ -553,10 +609,15 @@ function paint(geo: THREE.BufferGeometry, look: MossRockLook, f: Fields, seed: n
     pick(rind, fbm3f(x * 4 + 5, y * 4, z * 4 + 9, 3, seed + 1), c);
     pick(brk, fbm3f(x * 5 + 2, y * 5 + 7, z * 5, 3, seed + 3), c2);
     c.lerp(c2, b);
+    // This rock's own tone: a little lighter or darker, warmer or cooler.
+    c.multiplyScalar(ch.tone);
+    c.r *= 1 + ch.warm;
+    c.b *= 1 - ch.warm;
     // Iron stain: orange-tan clouds, mostly on the breaks, darker at their rims, and seeping in along the edges.
     const ir = fbm3f(x * 7 + 30, y * 7, z * 7 + 3, 4, seed + 4);
-    mix(c, iron, (smooth(0.54, 0.7, ir) * (0.3 + 0.7 * b) + f.edgeAt[i] * 0.1) * 0.38);
-    mix(c, ironDark, smooth(0.6, 0.64, ir) * (1 - smooth(0.66, 0.72, ir)) * 0.3 * b);
+    const ironK = (look.ironAmount ?? 1) * ch.iron;
+    mix(c, iron, (smooth(0.54, 0.7, ir) * (0.3 + 0.7 * b) + f.edgeAt[i] * 0.1) * 0.38 * ironK);
+    mix(c, ironDark, smooth(0.6, 0.64, ir) * (1 - smooth(0.66, 0.72, ir)) * 0.3 * b * ironK);
     // Mottling at a few centimeters.
     c.multiplyScalar(0.9 + 0.2 * fbm3f(x * 26 + 1, y * 26, z * 26 + 2, 2, seed + 14) + (noise3f(x * 70, y * 70, z * 70, seed + 15) - 0.5) * 0.08);
     const mo = f.moss ? f.moss[i] : 0;
@@ -589,9 +650,9 @@ function paint(geo: THREE.BufferGeometry, look: MossRockLook, f: Fields, seed: n
       const clear = (1 - Math.min(1, mo * 2)) * smooth(0.03, 0.09, y);
       const wq = fbm3f(x * 9, y * 9 + 3, z * 9, 2, seed + 6) - 0.5;
       const field = fbm3f(x * 4.5 + wq, y * 4.5 - wq, z * 4.5 + wq, 4, seed + 7) + 0.24 * Math.max(0, up) - 0.12 * b - 0.12 * Math.max(0, broad);
-      rk[i * 4] = smooth(0.4, 0.68, field) * clear;
-      rk[i * 4 + 1] = smooth(0.55, 0.72, fbm3f(x * 7 + 50, y * 7, z * 7, 3, seed + 16)) * (0.25 + 0.75 * Math.max(0, up)) * (1 - 0.7 * b) * clear;
-      rk[i * 4 + 2] = smooth(0.56, 0.72, fbm3f(x * 6 + 90, y * 6, z * 6, 3, seed + 17)) * (0.35 + 0.4 * (1 - Math.abs(up))) * clear;
+      rk[i * 4] = smooth(0.4, 0.68, field + ch.lichen) * clear;
+      rk[i * 4 + 1] = Math.min(1, smooth(0.55, 0.72, fbm3f(x * 7 + 50, y * 7, z * 7, 3, seed + 16)) * (0.25 + 0.75 * Math.max(0, up)) * (1 - 0.7 * b) * clear * ch.dark);
+      rk[i * 4 + 2] = Math.min(1, smooth(0.56, 0.72, fbm3f(x * 6 + 90, y * 6, z * 6, 3, seed + 17)) * (0.35 + 0.4 * (1 - Math.abs(up))) * clear * ch.orange);
     }
     rk[i * 4 + 3] = shade;
   }
@@ -606,7 +667,8 @@ const glslColor = (hex: string) => {
   return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`;
 };
 
-let material: THREE.MeshStandardMaterial | null = null;
+/** One material per lichen palette (the stone's own colors are in the vertices). */
+const materials = new Map<string, THREE.MeshStandardMaterial>();
 
 /**
  * The moss rock's material. The stone's colors and shading come in the vertices; the shader draws the sand grain, the
@@ -614,7 +676,9 @@ let material: THREE.MeshStandardMaterial | null = null;
  * texture seams. Each layer fades to its average where a pixel is bigger than it.
  */
 export function mossRockMaterial(look: MossRockLook = MOSS_ROCK_TAN): THREE.MeshStandardMaterial {
-  if (material) return material;
+  const key = look.lichen.join(',');
+  const had = materials.get(key);
+  if (had) return had;
   const [la, lb, ld, lo] = look.lichen.map(glslColor);
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
   m.onBeforeCompile = (s) => {
@@ -729,7 +793,7 @@ diffuseColor.rgb = rkStone;`,
 }`,
       );
   };
-  m.customProgramCacheKey = () => 'mossrock-9';
-  material = m;
+  m.customProgramCacheKey = () => `mossrock-9:${key}`;
+  materials.set(key, m);
   return m;
 }
