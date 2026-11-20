@@ -760,7 +760,7 @@ Messages use `window.postMessage`:
 
 Sound effects generated with ElevenLabs.
 
-`src/engine/audio.ts` (Web Audio) gives the 3D scenes sound; the clips are in `public/sounds/` (about 0.68 MB in all;
+**Sound is off for now** (`SOUND_ENABLED = false` in `src/engine/audio.ts`, 2026-11-19): no audio context is made and the Sound button and Volume slider are hidden; set it to true to bring them back. `src/engine/audio.ts` (Web Audio) gives the 3D scenes sound; the clips are in `public/sounds/` (about 0.68 MB in all;
 the single-file build `npm run build:artifact` embeds them as base64 in `#sound-data`, the normal build copies them to
 `sounds/`).
 

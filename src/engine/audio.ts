@@ -133,6 +133,13 @@ function inside(poly: Vec2[], x: number, z: number): boolean {
   return c;
 }
 
+/**
+ * Sound is switched off for now (2026-11-19, the owner's request): no audio context is made, nothing listens for the
+ * first gesture, and the app hides the Sound button and the Volume slider (they follow `available`). Everything else is
+ * kept; set this to true to bring sound back.
+ */
+export const SOUND_ENABLED = false;
+
 export class SceneAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -182,7 +189,7 @@ export class SceneAudio {
     } catch {
       /* no storage: the defaults */
     }
-    if (typeof window === 'undefined' || !(window.AudioContext || (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext)) {
+    if (!SOUND_ENABLED || typeof window === 'undefined' || !(window.AudioContext || (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext)) {
       this.failed = true;
       return;
     }

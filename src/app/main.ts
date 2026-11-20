@@ -341,7 +341,7 @@ function initQuickTools(s: Studio) {
     }
   };
   // Sound (engine/audio.ts): a button over the 3D view and a volume slider, kept between visits. It starts only after
-  // the first click or key, as browsers require.
+  // the first click or key, as browsers require. Both are hidden while sound is off (SOUND_ENABLED in audio.ts).
   const sound = s.audio;
   const soundBtn = $<HTMLButtonElement>('#btn-sound'), volume = $<HTMLInputElement>('#volume');
   if (sound?.available) {
