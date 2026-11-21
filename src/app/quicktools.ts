@@ -154,7 +154,7 @@ const TOOLS: QuickTool[] = [
     get down() { return placesOnly ? 'Previous place' : 'Previous view'; },
     status: () => (placesOnly ? 'The team\'s places' : 'Saved camera views'),
     // While the yard is being built a step is skipped without a word (the chip keeps its status).
-    act: (dir, s) => s.stepView(dir) || (s.stepBusy() ? (placesOnly ? 'The team\'s places' : 'Saved camera views') : placesOnly ? 'No places yet' : 'No saved views'),
+    act: (dir, s) => s.stepView(dir) || (s.stepBusy() ? (placesOnly ? 'The team\'s places' : 'Saved camera views') : placesOnly ? (s.places.length ? 'No place is on the yard now' : 'No places yet') : 'No saved views'),
   },
 ];
 

@@ -1529,6 +1529,9 @@ export class Studio {
     } else {
       this.placeWalker();
       this.setNavMode('walk');
+      // Back at the walk start: that is place 0 when it is the team's client start, else no place, so stepping goes on
+      // from there (Next: the first place after it, or the first place).
+      this.placeIndex = this.clientStart && this.places[0]?.pose === this.clientStart ? 0 : -1;
     }
     this.nav.pulse();
   }
@@ -2073,7 +2076,10 @@ export class Studio {
     // now is passed over).
     const np = this.clientMode ? 0 : this.places.length, n = np + (this.placesOnly ? 0 : this.views.length);
     if (!n) return '';
-    let at = this.placeIndex >= 0 && this.placeIndex < np ? this.placeIndex : np + this.viewIndex;
+    const onPlace = this.placeIndex >= 0 && this.placeIndex < np;
+    // Places only and not on a place (a new yard with no start spot, after Home, a new list): Next starts at the first
+    // place and Previous at the last.
+    let at = onPlace ? this.placeIndex : this.placesOnly ? (d > 0 ? n - 1 : 0) : np + this.viewIndex;
     for (let i = 0; i < n; i++) {
       at = (at + d + n) % n;
       if (at < np) {
@@ -2088,6 +2094,12 @@ export class Studio {
       return this.views[this.viewIndex].label;
     }
     return '';
+  }
+
+  /** A new list of the team's places: every index may have moved, so stepping starts over from the first. */
+  setPlaces(list: { label: string; pose: StartPose }[]) {
+    this.places = list;
+    this.placeIndex = -1;
   }
 
   /** The camera was put at place `i` some other way (a go-pose): stepping goes on from it. */

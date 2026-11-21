@@ -126,8 +126,6 @@ function setViewer(on: boolean) {
   // View-only: no Library, so a held View is a plain tap (use).
   if (studio) studio.nav.onLibrary = embedViewer ? null : libraryHold;
   quick?.setSkip(embedViewer ? ['mark'] : []);
-  // The empty Places hint is for accounts that can add a waypoint; view-only accounts see no Places control then.
-  if (PLACES_ONLY) renderViews();
 }
 if (embedViewer) document.documentElement.classList.add('viewer');
 
@@ -498,18 +496,18 @@ function renderViews() {
 
 /**
  * Places only (see PLACES_ONLY): one Places menu with the client start, if set, and the waypoints in their order. With
- * none, a short hint where to add one (only for accounts that can; a view-only account sees nothing).
+ * none, a short neutral hint (the same for every account: not every account can add a waypoint).
  */
 function renderPlaces(box: HTMLElement) {
   box.classList.add('places-only');
   box.setAttribute('aria-label', 'Places');
   const places = studio?.places ?? [];
-  if (!studio || (!places.length && embedViewer)) return;
+  if (!studio) return;
   const cap = h('span', { class: 'sc-cap', title: 'Places' });
   cap.innerHTML = PLACE_ICON;
   box.append(cap);
   if (!places.length) {
-    box.append(h('span', { class: 'places-empty', text: 'No places yet: add a waypoint in the 3D panel' }));
+    box.append(h('span', { class: 'places-empty', text: 'No places yet' }));
     return;
   }
   const pick = h('select', { id: 'place-select', 'aria-label': 'Go to a place', title: 'Go to a place (the client start and the waypoints)' }, h('option', { value: '', text: 'Places' }));
@@ -522,7 +520,10 @@ function renderPlaces(box: HTMLElement) {
     const i = Number(v);
     // Not while a plan is on its way or being built (or the Library's sample shows): the camera is not on this yard.
     if (embedBusy()) return toast('Still building the 3D view. Try again in a moment.', 'warn');
-    if (studio && !studio.goToPlace(i)) toast(`${places[i]?.label ?? 'That place'} is outside the yard now.`, 'warn');
+    // The list as it is now, read once: the place named in a warning is the one gone to.
+    const p = studio?.places[i];
+    if (!studio || !p) return;
+    if (!studio.goToPlace(i)) toast(`${p.label} is outside the yard now.`, 'warn');
   });
   box.append(pick);
 }
@@ -1297,10 +1298,12 @@ function initFullscreen() {
     btn.querySelector('.lbl')!.textContent = on ? 'Exit full screen' : 'Start full screen';
     // In full screen the button leaves the toolbar for the top right corner of the view, where it stays when the
     // other buttons hide (page.html, #fs-group.fs-out); back in the toolbar, it is where it was.
+    // Moving it drops keyboard focus; give it back.
+    const hadFocus = document.activeElement === btn;
     if (on) $('#scene').append(fsGroup);
     else $('#scene-tools').append(fsGroup);
     fsGroup.classList.toggle('fs-out', on);
-    btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Enter full screen');
+    if (hadFocus) btn.focus({ preventScroll: true });
     btn.setAttribute('aria-pressed', String(on));
     cancelAnimationFrame(raf);
     last = -1;
@@ -1518,7 +1521,7 @@ function onEmbedMessage(e: MessageEvent) {
       return pose ? { label: label || 'Place', pose } : null;
     }).filter((x): x is { label: string; pose: StartPose } => !!x);
     studio.clientStart = start;
-    studio.places = [...(start ? [{ label: 'Client start', pose: start }] : []), ...list];
+    studio.setPlaces([...(start ? [{ label: 'Client start', pose: start }] : []), ...list]);
     renderViews();
     return;
   }
@@ -1810,10 +1813,37 @@ window.addEventListener('keydown', (e) => {
   e.preventDefault();
 }, true);
 
+/**
+ * Where Save image sits in the dock: at the end of the first row (after Build stage and Growth) when it fits there and
+ * Light does not, which saves a row on a laptop; otherwise last, at the end of the last row. It is moved in the page
+ * itself (not by CSS order), so the tab order follows what is seen.
+ */
+function placeSaveImage() {
+  const dock = $('.dock');
+  const save = $('.dock-end', dock);
+  const groups = [...dock.children].filter((e) => e !== save) as HTMLElement[];
+  const [build, growth, light] = groups;
+  if (!build || !growth || !light) return;
+  const place = () => {
+    const cs = getComputedStyle(dock);
+    const room = dock.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (room <= 0) return;
+    const gap = parseFloat(cs.columnGap) || 0;
+    const w = (e: HTMLElement) => e.getBoundingClientRect().width;
+    const row1 = w(build) + gap + w(growth);
+    const early = row1 + gap + w(save) <= room && row1 + gap + w(light) > room;
+    const want = early ? light : null;
+    if (save.nextElementSibling !== want) dock.insertBefore(save, want);
+  };
+  new ResizeObserver(place).observe(dock);
+  place();
+}
+
 function initEmbed() {
   initDock();
-  // Save image is the one top-bar action kept; it moves into the dock.
+  // Save image is the one top-bar action kept; it moves into the dock (see placeSaveImage).
   $('.dock').append(h('div', { class: 'dock-group dock-end' }, $('#btn-image')));
+  placeSaveImage();
   embedNote(EMBED_EMPTY_NOTE);
   window.addEventListener('message', onEmbedMessage);
   // `i` belongs to the parent page (its info panel); pass it on, since the 3D view has the keyboard after a click.
