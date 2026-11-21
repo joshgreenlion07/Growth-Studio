@@ -33,7 +33,7 @@ import type { Quality } from '../engine/post';
 import { PlanEditor, type Tool } from './planeditor';
 import { prepareImage, readPlan, type SourceKind } from './reader';
 import { pdfFirstPage } from './pdf';
-import { QuickTools } from './quicktools';
+import { QuickTools, quickPlacesOnly } from './quicktools';
 import { TouchControls } from './touchcontrols';
 
 /* ------------------------------------------------------------------ */
@@ -126,6 +126,8 @@ function setViewer(on: boolean) {
   // View-only: no Library, so a held View is a plain tap (use).
   if (studio) studio.nav.onLibrary = embedViewer ? null : libraryHold;
   quick?.setSkip(embedViewer ? ['mark'] : []);
+  // The empty Places hint is for accounts that can add a waypoint; view-only accounts see no Places control then.
+  if (PLACES_ONLY) renderViews();
 }
 if (embedViewer) document.documentElement.classList.add('viewer');
 
@@ -138,6 +140,13 @@ if (embedViewer) document.documentElement.classList.add('viewer');
  * address) and `time` (morning, afternoon, sunset, night).
  */
 const EMBED_CLIENT = EMBED && new URLSearchParams(location.search).get('client') === '1';
+/**
+ * Places only (owner's request, 2026-11-21): the team's 3D view inside Area Planner (an embed, not client mode) lists
+ * only the team's places (the client start and the waypoints, see the `places` message) in its Places menu, and the
+ * controller and keys step through those alone; the generated camera views are left out. The standalone studio keeps
+ * its Views.
+ */
+const PLACES_ONLY = EMBED && !EMBED_CLIENT;
 if (EMBED_CLIENT) {
   embedViewer = true;
   document.documentElement.classList.add('viewer', 'client');
@@ -272,6 +281,8 @@ function bootStudio() {
     return;
   }
   studio.onViewsChanged = renderViews;
+  studio.placesOnly = PLACES_ONLY;
+  quickPlacesOnly(PLACES_ONLY);
   // Stepping (the Views quick tool) waits while a plan is on its way or being built: the camera is not on that yard.
   studio.stepBusy = () => EMBED && (!!embedPending || embedShowing);
   // Painted maps are uploaded through the view's renderer a slice per frame (see texture-jobs.ts).
@@ -427,10 +438,13 @@ function applyPlan(refit: boolean) {
 
 const VIEW_ICON = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h3l1.6-2.5h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13.2" r="3.3"/></svg>';
 
+const PLACE_ICON = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>';
+
 /** The camera views over the 3D view: a row of buttons, or one menu when the view is narrow (page.html). */
 function renderViews() {
   const box = $('#views');
   box.replaceChildren();
+  if (PLACES_ONLY) return renderPlaces(box);
   const views = studio?.views ?? [];
   // The team's places (see the `places` message), never in client mode.
   const places = EMBED_CLIENT ? [] : (studio?.places ?? []);
@@ -479,6 +493,37 @@ function renderViews() {
   }
   if (vg !== pick) pick.append(vg);
   pick.addEventListener('change', () => pickGo(pick));
+  box.append(pick);
+}
+
+/**
+ * Places only (see PLACES_ONLY): one Places menu with the client start, if set, and the waypoints in their order. With
+ * none, a short hint where to add one (only for accounts that can; a view-only account sees nothing).
+ */
+function renderPlaces(box: HTMLElement) {
+  box.classList.add('places-only');
+  box.setAttribute('aria-label', 'Places');
+  const places = studio?.places ?? [];
+  if (!studio || (!places.length && embedViewer)) return;
+  const cap = h('span', { class: 'sc-cap', title: 'Places' });
+  cap.innerHTML = PLACE_ICON;
+  box.append(cap);
+  if (!places.length) {
+    box.append(h('span', { class: 'places-empty', text: 'No places yet: add a waypoint in the 3D panel' }));
+    return;
+  }
+  const pick = h('select', { id: 'place-select', 'aria-label': 'Go to a place', title: 'Go to a place (the client start and the waypoints)' }, h('option', { value: '', text: 'Places' }));
+  places.forEach((p, i) => pick.append(h('option', { value: String(i), text: p.label })));
+  pick.addEventListener('change', () => {
+    const v = pick.value;
+    pick.value = '';
+    pick.blur();
+    if (!v) return;
+    const i = Number(v);
+    // Not while a plan is on its way or being built (or the Library's sample shows): the camera is not on this yard.
+    if (embedBusy()) return toast('Still building the 3D view. Try again in a moment.', 'warn');
+    if (studio && !studio.goToPlace(i)) toast(`${places[i]?.label ?? 'That place'} is outside the yard now.`, 'warn');
+  });
   box.append(pick);
 }
 
@@ -1201,6 +1246,7 @@ const hmPos = (ft: number) => Math.sqrt(Math.min(HM_MAX_FT, Math.max(0, ft)) / H
 function initFullscreen() {
   const pane = $('section.scene-pane');
   const btn = $<HTMLButtonElement>('#btn-fullscreen');
+  const fsGroup = $('#fs-group');
   const scale = $('#hm-scale'), mark = $('#hm-mark'), value = $('#hm-value');
   for (const ft of [0, 10, 25, 50, 100, 200, 400, 700]) {
     const t = h('div', { class: 'hm-tick', text: `${ft} ft` });
@@ -1248,7 +1294,12 @@ function initFullscreen() {
         pose = null;
       }
     }
-    btn.querySelector('.lbl')!.textContent = on ? 'Exit full screen' : 'Full screen';
+    btn.querySelector('.lbl')!.textContent = on ? 'Exit full screen' : 'Start full screen';
+    // In full screen the button leaves the toolbar for the top right corner of the view, where it stays when the
+    // other buttons hide (page.html, #fs-group.fs-out); back in the toolbar, it is where it was.
+    if (on) $('#scene').append(fsGroup);
+    else $('#scene-tools').append(fsGroup);
+    fsGroup.classList.toggle('fs-out', on);
     btn.setAttribute('aria-label', on ? 'Exit full screen' : 'Enter full screen');
     btn.setAttribute('aria-pressed', String(on));
     cancelAnimationFrame(raf);
@@ -1455,7 +1506,8 @@ function onEmbedMessage(e: MessageEvent) {
   }
   if (d.type === 'places') {
     // The team's places (Area Planner's client start and waypoints, all of them): { start, list: [{ name, pose }] }.
-    // Listed first in the Views menu and the Views quick tool; Walk starts at `start`. Client mode has its own Places.
+    // In the team's 3D view (PLACES_ONLY) they are the whole Places menu and all the Views quick tool steps through;
+    // Walk starts at `start`. Client mode has its own Places.
     if (EMBED_CLIENT || !studio) return;
     const q = d as { start?: unknown; list?: unknown };
     const start = startPose(q.start);

@@ -20,7 +20,7 @@ export const IDLE_MS = 2500;
 export const SHOW_MS = 4000;
 
 /** The parts that hide, and where the pointer counts as being "over the controls". */
-const PARTS = '#views, .scene-tools, #nav-hint, #height-meter';
+const PARTS = '#views, .scene-tools, #fs-group, #nav-hint, #height-meter';
 /** Touch controls that never hide and never wake the rest. */
 const STAY = '.tc-stick, .tc-rise, .tc-bar';
 

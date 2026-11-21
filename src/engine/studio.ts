@@ -1544,6 +1544,11 @@ export class Studio {
    * the Views quick tool before the generated views. Set by the app; never used in client mode (its parent has its own).
    */
   places: { label: string; pose: StartPose }[] = [];
+  /**
+   * Places only (the team's 3D view inside Area Planner, owner's request 2026-11-21): stepping goes through the places
+   * alone, never the generated camera views. Set by the app.
+   */
+  placesOnly = false;
   /** The place last gone to by stepping (-1: a generated view, see viewIndex). */
   private placeIndex = -1;
   /** True while the app has a plan on its way (stepping is skipped then). Set by the app. */
@@ -2064,8 +2069,9 @@ export class Studio {
   /** The next (1) or previous (-1) saved view. The name of the view it goes to, or '' when there are none. */
   stepView(d: 1 | -1): string {
     if (this.stepBusy()) return '';
-    // The team's places first, then the generated views, round and round (a place off the lot now is passed over).
-    const np = this.clientMode ? 0 : this.places.length, n = np + this.views.length;
+    // The team's places first, then the generated views (none with placesOnly), round and round (a place off the lot
+    // now is passed over).
+    const np = this.clientMode ? 0 : this.places.length, n = np + (this.placesOnly ? 0 : this.views.length);
     if (!n) return '';
     let at = this.placeIndex >= 0 && this.placeIndex < np ? this.placeIndex : np + this.viewIndex;
     for (let i = 0; i < n; i++) {
@@ -2089,7 +2095,7 @@ export class Studio {
     if (i >= 0 && i < this.places.length) this.placeIndex = i;
   }
 
-  /** Go to one of the team's places (the Views menu). False when it is off the lot. */
+  /** Go to one of the team's places (the Places menu). False when it is off the lot. */
   goToPlace(i: number): boolean {
     const p = this.places[i];
     if (!p || !this.travelToPlace(p.pose)) return false;

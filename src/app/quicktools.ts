@@ -42,6 +42,12 @@ interface QuickTool {
   picked?: (s: Studio) => void;
 }
 
+/** The views tool names places, not views (see Studio.placesOnly). Set by the app with quickPlacesOnly. */
+let placesOnly = false;
+export function quickPlacesOnly(on: boolean) {
+  placesOnly = on;
+}
+
 /** Stages from the surface down: Finished, Sand, Base rock, Backfill, Trench, Excavate, Demo. */
 const DIG = [...BUILD_STAGES].reverse();
 const stageLabel = (id: BuildStage) => BUILD_STAGES.find((s) => s.id === id)?.label ?? id;
@@ -141,13 +147,14 @@ const TOOLS: QuickTool[] = [
     },
   },
   {
+    // With Studio.placesOnly (the team's 3D view in Area Planner) the tool steps through the places alone, and says so.
     id: 'views',
-    name: 'Views',
-    up: 'Next view',
-    down: 'Previous view',
-    status: () => 'Saved camera views',
+    get name() { return placesOnly ? 'Places' : 'Views'; },
+    get up() { return placesOnly ? 'Next place' : 'Next view'; },
+    get down() { return placesOnly ? 'Previous place' : 'Previous view'; },
+    status: () => (placesOnly ? 'The team\'s places' : 'Saved camera views'),
     // While the yard is being built a step is skipped without a word (the chip keeps its status).
-    act: (dir, s) => s.stepView(dir) || (s.stepBusy() ? 'Saved camera views' : 'No saved views'),
+    act: (dir, s) => s.stepView(dir) || (s.stepBusy() ? (placesOnly ? 'The team\'s places' : 'Saved camera views') : placesOnly ? 'No places yet' : 'No saved views'),
   },
 ];
 
