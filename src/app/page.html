@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Arimo:wght@400;700&family=Tinos:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Arimo:wght@400;700&family=Tinos:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a site-plan workbench. Plan and inspector on the left, the 3D scene fills the rest,
    with one solid control dock along its bottom edge. */
@@ -146,22 +146,51 @@ section.scene-pane { position: relative; min-width: 0; min-height: 0; background
 #updating { position: absolute; z-index: 3; right: 12px; bottom: 10px; background: rgba(20, 24, 22, 0.72); color: #f4f3ef; font-size: 12px; padding: 3px 8px; border-radius: 3px; }
 #loading, #scene-error { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); padding: 24px; text-align: center; }
 #scene-error { background: var(--paper); }
-.dock { max-height: 45vh; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: flex-end; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--panel); border-top: 1px solid var(--line); }
-.dock-group { display: grid; gap: 5px; min-width: 0; }
-.dock-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-2); display: flex; justify-content: space-between; gap: 10px; }
-.dock-label output { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; color: var(--ink); }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; border-right: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
-.seg button:last-child { border-right: 0; }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-.growth { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-#growth { width: 170px; accent-color: var(--accent); }
-.cam { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-.cam input[type="range"] { width: 90px; accent-color: var(--accent); }
+/* The control dock under the 3D view (owner's request, 2026-11-21): the Green Lion website's Charcoal Split look, in
+   either color scheme. A Charcoal panel under a 3 px Leaf green rule; section labels as the site's eyebrows (small
+   tracked uppercase Arimo after a short Leaf green rule) with the reading in Tinos italic Lime; segmented choices as
+   quiet Warm white words on Charcoal, the chosen one Leaf green with Charcoal text; Save image as the site's dark-area
+   button. Same controls and ids as before. Hidden in full screen and in client mode. */
+.dock {
+  --dk-bg: #202321; --dk-2: #2E322F; --dk-ink: #F5F2EA; --dk-ink-2: rgba(245, 242, 234, 0.74); --dk-muted: #D8D3C6; --dk-line: rgba(245, 242, 234, 0.16);
+  max-height: 45vh; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 7px 24px; align-items: flex-end;
+  padding-block: 8px 10px; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px));
+  background: var(--dk-bg); color: var(--dk-ink); border-top: 3px solid var(--gl-leaf); font: 400 13px/1.3 var(--font-brand); color-scheme: dark;
+}
+.dock-group { display: grid; gap: 6px; min-width: 0; }
+.dock-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font: 700 10.5px/1 var(--font-brand); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dk-muted); }
+.dock-label > span { display: inline-flex; align-items: center; gap: 8px; }
+.dock-label > span::before { content: ""; width: 16px; height: 2px; background: var(--gl-leaf); flex: none; }
+.dock-label output { font: italic 400 13px/1 var(--font-book); letter-spacing: 0; text-transform: none; color: var(--gl-lime); }
+/* Hairlines between the choices are the gap over the line color, so a narrow screen can wrap a row cleanly. */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 1px; max-width: 100%; border: 1px solid var(--dk-line); border-radius: 3px; overflow: hidden; background: var(--dk-line); }
+.seg button { flex: 1 0 auto; border: 0; background: var(--dk-2); color: var(--dk-ink-2); padding: 0 10px; height: 28px; cursor: pointer; font: 400 13px/1 var(--font-brand); white-space: nowrap; transition: background-color 0.14s, color 0.14s; }
+.seg button:hover { background: #383C39; color: var(--dk-ink); }
+.seg button[aria-pressed="true"] { background: var(--gl-leaf); color: var(--gl-charcoal); font-weight: 700; }
+.dock button:focus-visible, .dock select:focus-visible, .dock input:focus-visible { outline: 2px solid var(--gl-lime); outline-offset: 1px; }
+.growth { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dock input[type="range"] { accent-color: var(--gl-leaf); }
+.dock input[type="checkbox"] { accent-color: var(--gl-leaf); width: 15px; height: 15px; margin: 0; }
+#growth { width: 170px; }
+.dock select { -webkit-appearance: none; appearance: none; height: 28px; padding: 0 26px 0 10px; border: 1px solid var(--dk-line); border-radius: 3px; background: var(--dk-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%237DC00F' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center / 11px; color: var(--dk-ink); font: 400 13px/1 var(--font-brand); cursor: pointer; }
+.dock select:hover { border-color: rgba(245, 242, 234, 0.4); }
+.dock select option { color: var(--gl-charcoal); background: var(--gl-warm); }
+.cam { display: flex; gap: 6px 13px; align-items: center; flex-wrap: wrap; min-height: 28px; font-size: 13px; color: var(--dk-ink-2); }
+.cam .check { gap: 6px; }
+.cam input[type="range"] { width: 90px; }
+/* Save image: the website's button for dark areas. */
+.dock #btn-image { height: 32px; padding: 0 16px; border: 0; border-radius: 3px; background: var(--gl-leaf); color: var(--gl-charcoal); font: 700 12px/1 var(--font-brand); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.dock #btn-image:hover { background: var(--gl-lime); border-color: transparent; }
+.dock #btn-image:disabled { opacity: 0.55; cursor: default; }
+/* Touch (iPad): 40 px targets (Area Planner's small touch buttons), so the 3D view keeps its room. */
+html.touch-ui .seg button, html.touch-ui .dock select, html.touch-ui .dock #btn-image { height: 40px; }
+html.touch-ui .seg button { padding: 0 12px; }
+html.touch-ui .dock input[type="checkbox"] { width: 20px; height: 20px; }
+html.touch-ui .cam, html.touch-ui .cam .check { min-height: 40px; }
 
 /* Library: a panel over the left of the 3D view; the view itself shows the chosen product. */
 .library { position: absolute; z-index: 6; left: 0; top: 0; bottom: 0; width: min(420px, 100%); display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); color: var(--ink); font-size: 13px; }
-html.library-open .dock, html.library-open #views, html.library-open .scene-tools, html.library-open #stage-card, html.library-open #embed-note, html.library-open #nav-hint, html.library-open .quick-hud, html.library-open .quick-aim, html.library-open .tape-label, html.library-open #height-meter { display: none !important; }
+html.library-open .dock, html.library-open #views, html.library-open .scene-tools, html.library-open #fs-group, html.library-open #stage-card, html.library-open #embed-note, html.library-open #nav-hint, html.library-open .quick-hud, html.library-open .quick-aim, html.library-open .tape-label, html.library-open #height-meter { display: none !important; }
 html.library-open section.scene-pane { grid-template-rows: 1fr; }
 html.library-open aside.plan-pane, html.library-open #mobile-tabs { display: none !important; }
 html.library-open main.work { grid-template-columns: minmax(0, 1fr); }
@@ -215,7 +244,7 @@ section.scene-pane.fs .library .lib-tabs, section.scene-pane.fs .library .lib-bo
 .library.lib-hold { visibility: hidden; }
 .library.lib-over { z-index: 8; }
 /* While the book plays, the buttons step out of the way as they do when idle. */
-html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #nav-hint, html.lib-anim #height-meter, html.lib-anim .tc-root { opacity: 0; visibility: hidden; pointer-events: none; }
+html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #fs-group, html.lib-anim #nav-hint, html.lib-anim #height-meter, html.lib-anim .tc-root { opacity: 0; visibility: hidden; pointer-events: none; }
 .lib-book { position: absolute; inset: 0; z-index: 7; pointer-events: none; overflow: hidden; }
 .lib-book[hidden] { display: none; }
 .bk-scrim { position: absolute; inset: 0; background: rgba(32, 35, 33, 0.6); opacity: 0; }
@@ -272,13 +301,13 @@ html.lib-anim #views, html.lib-anim .scene-tools, html.lib-anim #nav-hint, html.
 .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ic .ic-off { display: none; }
 /* A switch that is on: a lime icon on a faint lime wash; off, the label steps back. */
-.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"]:not(#btn-fullscreen) { background: rgba(175, 228, 20, 0.14); }
-.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"]:not(#btn-fullscreen) .ic { color: var(--gl-lime); }
+.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"] { background: rgba(175, 228, 20, 0.14); }
+.sc-group:not(.sc-seg) > .sc-btn[aria-pressed="true"] .ic { color: var(--gl-lime); }
 .sc-group:not(.sc-seg) > .sc-btn[aria-pressed="false"] .lbl { color: var(--sc-ink-2); }
 /* The chosen segment (movement, measurements, camera view): Leaf green with Charcoal text. */
 .sc-seg .sc-btn[aria-pressed="true"], #views .sc-btn[aria-pressed="true"] { background: var(--gl-leaf); color: var(--gl-charcoal); }
-#btn-sound[aria-pressed="false"] .ic-on, #btn-fullscreen[aria-pressed="true"] .ic-on { display: none; }
-#btn-sound[aria-pressed="false"] .ic-off, #btn-fullscreen[aria-pressed="true"] .ic-off { display: inline; }
+#btn-sound[aria-pressed="false"] .ic-on { display: none; }
+#btn-sound[aria-pressed="false"] .ic-off { display: inline; }
 .sc-cap, .sc-cap-txt { display: inline-flex; align-items: center; gap: 6px; color: var(--sc-ink-2); font: 700 10.5px/1 var(--font-brand); letter-spacing: 0.09em; text-transform: uppercase; white-space: nowrap; }
 .sc-cap { padding: 0 7px 0 9px; }
 .sc-sep { width: 1px; align-self: stretch; margin: 7px 3px; background: var(--sc-line); }
@@ -303,12 +332,12 @@ html.embed.viewer .scene-tools > .sc-group:first-child { display: none; }
 /* Narrower views: the switches keep their icon and drop the word (the title still names them); the camera views
    become one menu. */
 @container scene (max-width: 1700px) {
-  #btn-second .lbl, #btn-touch .lbl, #btn-focus .lbl, #btn-wind .lbl, #btn-sound .lbl, #btn-plants .lbl, #btn-fullscreen .lbl, #measure-modes .sc-cap .lbl, #stage-pick .sc-cap-txt { display: none; }
-  #btn-second, #btn-touch, #btn-focus, #btn-wind, #btn-sound, #btn-plants, #btn-fullscreen { padding: 0; width: var(--sc-h); }
+  #btn-second .lbl, #btn-touch .lbl, #btn-focus .lbl, #btn-wind .lbl, #btn-sound .lbl, #btn-plants .lbl, #measure-modes .sc-cap .lbl, #stage-pick .sc-cap-txt { display: none; }
+  #btn-second, #btn-touch, #btn-focus, #btn-wind, #btn-sound, #btn-plants { padding: 0; width: var(--sc-h); }
   #measure-modes .sc-cap { padding: 0 4px 0 8px; }
 }
 @container scene (max-width: 1300px) {
-  #views > .sc-btn, #place-select { display: none; }
+  #views:not(.places-only) > .sc-btn, #views:not(.places-only) #place-select { display: none; }
   #view-select { display: block; }
 }
 @container scene (max-width: 900px) {
@@ -317,6 +346,26 @@ html.embed.viewer .scene-tools > .sc-group:first-child { display: none; }
   #nav-modes .sc-btn, #btn-library { padding: 0; width: var(--sc-h); }
   .scene-tools { max-width: calc(60% - 18px); gap: 6px; }
 }
+
+/* Places only (the team's 3D view in Area Planner, app/main.ts PLACES_ONLY): a pin and one Places menu, or a hint. */
+#views.places-only #place-select { min-width: 170px; max-width: 100%; }
+.places-empty { padding: 0 12px 0 2px; color: var(--sc-ink-2); font: 400 12.5px/1.3 var(--font-brand); white-space: normal; }
+
+/* Full screen (owner's request, 2026-11-21): one labeled button, Start full screen, where the corner icon was; the
+   website's dark-area button (Leaf green, Charcoal text, uppercase, letter-spaced). In full screen it reads Exit full
+   screen with an X and moves to the top right corner of the view (app/main.ts adds .fs-out), where it stays while the
+   other buttons hide; the toolbar moves down a row to make room. */
+#fs-group { display: flex; pointer-events: auto; }
+#btn-fullscreen { display: inline-flex; align-items: center; gap: 8px; height: calc(var(--sc-h) + 8px); padding: 0 16px 0 13px; border: 0; border-radius: 3px; background: var(--gl-leaf); color: var(--gl-charcoal); font: 700 12px/1 var(--font-brand); letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); transition: background-color 0.16s, transform 0.12s var(--sc-ease); }
+#btn-fullscreen:hover { background: var(--gl-lime); }
+#btn-fullscreen:active { transform: scale(0.96); }
+#btn-fullscreen:focus-visible { outline: 2px solid var(--gl-warm); outline-offset: 2px; }
+#btn-fullscreen .ic { stroke-width: 2.2; }
+#btn-fullscreen[aria-pressed="true"] .ic-on { display: none; }
+#btn-fullscreen[aria-pressed="true"] .ic-off { display: inline; }
+#fs-group.fs-out { position: absolute; z-index: 5; top: 12px; right: 12px; }
+section.scene-pane.fs .scene-tools { top: calc(12px + var(--sc-h) + 8px + 10px); }
+@container scene (max-width: 520px) { #btn-fullscreen { padding: 0 12px 0 10px; letter-spacing: 0.08em; font-size: 11px; } }
 
 /* Auto-hide (app/scenecontrols.ts sets html.ui-idle): off the top, off the bottom, off the right edge. */
 #views, .scene-tools, #nav-hint, #height-meter { transition: opacity var(--sc-ms) ease, transform var(--sc-ms) var(--sc-ease), visibility 0s linear 0s; }
@@ -332,7 +381,7 @@ html.ui-idle #scene { cursor: none; }
 section.scene-pane.fs #nav-hint { display: flex; }
 #nav-hint kbd { display: inline-block; min-width: 1.5em; padding: 0 5px; border-radius: 5px; background: rgba(245, 242, 234, 0.12); border: 1px solid rgba(245, 242, 234, 0.18); color: var(--sc-ink); font: 500 11px/1.45 var(--font-mono); text-align: center; }
 section.scene-pane.fs #stage-card { bottom: 86px; }
-#height-meter { position: absolute; z-index: 3; right: 14px; top: 128px; bottom: 64px; width: 78px; display: none; pointer-events: none; color: var(--sc-ink); font-family: var(--font-mono); font-size: 11px; }
+#height-meter { position: absolute; z-index: 3; right: 14px; top: calc(12px + 3 * (var(--sc-h) + 16px) + 10px); bottom: 64px; width: 78px; display: none; pointer-events: none; color: var(--sc-ink); font-family: var(--font-mono); font-size: 11px; }
 section.scene-pane.fs #height-meter { display: block; }
 .hm-scale { position: absolute; right: 0; top: 0; bottom: 46px; width: 6px; background: rgba(32, 35, 33, 0.55); border-radius: 3px; box-shadow: inset 0 0 0 1px var(--sc-line); }
 .hm-tick { position: absolute; right: 12px; transform: translateY(50%); white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75); }
@@ -503,7 +552,7 @@ html.embed .dock { max-height: 50vh; overflow: auto; }
 /* View-only embed on a phone (Area Planner's client page): the 3D view keeps most of the screen; the dock scrolls. */
 @media (max-width: 600px) { html.embed.viewer .dock { max-height: 30vh; max-height: 30dvh; } }
 /* Client mode (?client=1): only the 3D view, and the joystick in touch mode; the parent page has the menu. */
-html.client .dock, html.client #views, html.client .scene-tools, html.client #stage-card, html.client #embed-note,
+html.client .dock, html.client #views, html.client .scene-tools, html.client #fs-group, html.client #stage-card, html.client #embed-note,
 html.client #updating, html.client #loading, html.client #library, html.client #library-book, html.client #nav-hint,
 html.client .quick-hud, html.client .quick-aim, html.client .tape-label, html.client #height-meter, html.client .measure-label,
 html.client .tc-bar, html.client .tc-rise, html.client .ss-float, html.client #toast, html.client .toast { display: none !important; }
@@ -609,8 +658,8 @@ html.client .tc-knob { width: 46px; height: 46px; margin: -23px 0 0 -23px; backg
               <button id="btn-sound" class="sc-btn" type="button" aria-label="Sound" aria-pressed="true" title="Sound on or off: ambience for the time of day, water, fire and spa. Sound effects generated with ElevenLabs."><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path class="ic-on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/><path class="ic-off" d="m16 9.5 5 5m0-5-5 5"/></svg><span class="lbl">Sound</span></button>
             </div>
             <label id="stage-pick" class="sc-group" title="Build stage: demo, excavation, trenches, backfill, base rock, sand, finished ([ and ] step through them)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 9 4.5-9 4.5L3 8z"/><path d="m3 12 9 4.5 9-4.5M3 16l9 4.5 9-4.5"/></svg><span class="sc-cap-txt">Stage</span><select id="stage-select" aria-label="Build stage"></select></label>
-            <div class="sc-group" role="group" aria-label="Full screen">
-              <button id="btn-fullscreen" class="sc-btn" type="button" aria-label="Enter full screen" aria-pressed="false" title="Full screen (F)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path class="ic-on" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="ic-off" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><span class="lbl">Full screen</span></button>
+            <div id="fs-group" role="group" aria-label="Full screen">
+              <button id="btn-fullscreen" type="button" aria-pressed="false" title="Full screen (F; Esc leaves it)"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path class="ic-on" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="ic-off" d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg><span class="lbl">Start full screen</span></button>
             </div>
           </div>
           <div id="nav-hint"><span class="nh-row"><kbd>W A S D</kbd> move · drag to look · <kbd>Shift</kbd> faster · <kbd>V</kbd> walk / fly · <kbd>Q</kbd> <kbd>E</kbd> down / up when flying · wheel zooms · <kbd>M</kbd> measurements · <kbd>N</kbd> plant labels · <kbd>P</kbd> material pointer · <kbd>L</kbd> lock its material · <kbd>,</kbd> <kbd>.</kbd> pick a quick tool · <kbd>=</kbd> <kbd>-</kbd> use it · <kbd>Esc</kbd> exit · move the mouse to bring the buttons back</span><span class="nh-row">Controller: <kbd>X</kbd> measurements · <kbd>B</kbd> plant labels · <kbd>Y</kbd> pointer · <kbd>A</kbd> walk / fly · <kbd>Menu</kbd> home, hold to show the buttons · <kbd>View</kbd> use, hold for the Library · D-pad <kbd>◀ ▶</kbd> quick tool · <kbd>▲ ▼</kbd> use it</span></div>
