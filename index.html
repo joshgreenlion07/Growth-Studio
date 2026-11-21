@@ -6,6 +6,11 @@
 <div id="page-root"></div>
 <script type="module">
   import page from './src/app/page.html?raw';
+  // Client mode (Area Planner's client link): hide every studio control before the page markup shows, so the
+  // controls never flash while main.ts loads (main.ts sets the same classes again).
+  const q = new URLSearchParams(location.search);
+  if (q.get('embed') === '1') document.documentElement.classList.add('embed');
+  if (q.get('embed') === '1' && q.get('client') === '1') document.documentElement.classList.add('viewer', 'client');
   document.getElementById('page-root').outerHTML = page;
   await import('./src/app/main.ts');
 </script>
